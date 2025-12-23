@@ -1,0 +1,162 @@
+import { getServiceClient } from "./client.ts";
+import { bucketLabel, decideTrade, computeBearPauseAt } from "./lth_pvr_logic.ts";
+// --- Helpers -------------------------------------------------
+async function getCI(sb, dateStr) {
+  const { data, error } = await sb.from("ci_bands_daily").select("*").eq("date", dateStr).order("fetched_at", {
+    ascending: false
+  }).limit(1);
+  if (error) throw new Error(`CI query failed: ${error.message}`);
+  return data && data[0] ? data[0] : null;
+}
+// --- Handler -------------------------------------------------
+Deno.serve(async (_req)=>{
+  const started = Date.now();
+  try {
+    const sb = getServiceClient(); // lth_pvr schema
+    const org_id = Deno.env.get("ORG_ID");
+    if (!org_id) {
+      console.error("ORG_ID missing");
+      return new Response("ORG_ID missing", {
+        status: 500
+      });
+    }
+    // signal = yesterday (UTC); trade = today
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const signalDate = new Date(today.getTime() - 24 * 3600 * 1000);
+    const signalStr = signalDate.toISOString().slice(0, 10);
+    const tradeStr = today.toISOString().slice(0, 10);
+    // CI + momentum
+    const ci = await getCI(sb, signalStr);
+    if (!ci) {
+      console.error(`CI bands unavailable for ${signalStr}`);
+      return new Response(`CI bands unavailable for ${signalStr}`, {
+        status: 500
+      });
+    }
+    const { data: hist, error: hErr } = await sb.from("ci_bands_daily").select("date, btc_price").lte("date", signalStr).order("date", {
+      ascending: false
+    }).limit(6);
+    if (hErr) throw new Error(`CI history query failed: ${hErr.message}`);
+    let roc5 = 0;
+    if (hist && hist.length >= 6) {
+      const pxT = Number(hist[0].btc_price ?? 0);
+      const pxT5 = Number(hist[5].btc_price ?? 0);
+      roc5 = pxT5 > 0 ? pxT / pxT5 - 1 : 0;
+    }
+    const px = Number(ci.btc_price ?? 0);
+    // If we start mid-pause and there's no prior state, we need today's pause flag.
+    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr);
+    // Active customers for this org (lth_pvr schema)
+    let custs = null;
+    {
+      // primary: lth_pvr.customer_strategies
+      let q = await sb.from("customer_strategies").select("customer_id, strategy_version_id").eq("org_id", org_id).eq("live_enabled", true);
+      // optional fallback: if you later expose a public view
+      if (q.error && /does not exist/i.test(q.error.message)) {
+        q = await sb.from("active_customer_strategies_v").select("customer_id, strategy_version_id").eq("org_id", org_id);
+      }
+      if (q.error) throw new Error(`customer_strategies query failed: ${q.error.message}`);
+      custs = q.data ?? [];
+    }
+    console.info(`ef_generate_decisions: ${signalStr} px=${px} roc5=${roc5.toFixed(4)} pauseNow=${pauseNow} custs=${custs?.length ?? 0}`);
+    // Strategy versions map
+    const svIds = Array.from(new Set((custs ?? []).map((c)=>c.strategy_version_id).filter(Boolean)));
+    const svMap = new Map();
+    if (svIds.length) {
+      const { data: svs, error: svErr } = await sb.from("strategy_versions").select("strategy_version_id,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11").in("strategy_version_id", svIds);
+      if (svErr) throw new Error(`strategy_versions query failed: ${svErr.message}`);
+      for (const s of svs ?? [])svMap.set(String(s.strategy_version_id), s);
+    }
+    const DEFAULT_B = {
+      B1: 0.22796,
+      B2: 0.21397,
+      B3: 0.19943,
+      B4: 0.18088,
+      B5: 0.12229,
+      B6: 0.00157,
+      B7: 0.00200,
+      B8: 0.00441,
+      B9: 0.01287,
+      B10: 0.03300,
+      B11: 0.09572
+    };
+    let wrote = 0;
+    for (const c of custs ?? []){
+      const sv = svMap.get(String(c.strategy_version_id)) ?? {};
+      const B = {
+        B1: Number(sv.b1 ?? DEFAULT_B.B1),
+        B2: Number(sv.b2 ?? DEFAULT_B.B2),
+        B3: Number(sv.b3 ?? DEFAULT_B.B3),
+        B4: Number(sv.b4 ?? DEFAULT_B.B4),
+        B5: Number(sv.b5 ?? DEFAULT_B.B5),
+        B6: Number(sv.b6 ?? DEFAULT_B.B6),
+        B7: Number(sv.b7 ?? DEFAULT_B.B7),
+        B8: Number(sv.b8 ?? DEFAULT_B.B8),
+        B9: Number(sv.b9 ?? DEFAULT_B.B9),
+        B10: Number(sv.b10 ?? DEFAULT_B.B10),
+        B11: Number(sv.b11 ?? DEFAULT_B.B11)
+      };
+      // prior state (< signal date)
+      const { data: prevs, error: pErr } = await sb.from("customer_state_daily").select("bear_pause,was_above_p1,was_above_p15,r1_armed,r15_armed").eq("org_id", org_id).eq("customer_id", c.customer_id).lt("date", signalStr).order("date", {
+        ascending: false
+      }).limit(1);
+      if (pErr) throw new Error(`customer_state_daily query failed: ${pErr.message}`);
+      const prev = prevs?.[0] ? {
+        bear_pause: !!prevs[0].bear_pause,
+        was_above_p1: !!prevs[0].was_above_p1,
+        was_above_p15: !!prevs[0].was_above_p15,
+        r1_armed: !!prevs[0].r1_armed,
+        r15_armed: !!prevs[0].r15_armed
+      } : {
+        // No previous state: seed from historical pause computation
+        bear_pause: !!pauseNow,
+        was_above_p1: false,
+        was_above_p15: false,
+        r1_armed: true,
+        r15_armed: true
+      };
+      const { action, pct, rule, note, state } = decideTrade(px, ci, roc5, prev, B);
+      const band_bucket = bucketLabel(px, ci);
+      // decisions upsert
+      const up = await sb.from("decisions_daily").upsert({
+        org_id,
+        customer_id: c.customer_id,
+        signal_date: signalStr,
+        trade_date: tradeStr,
+        price_usd: px,
+        band_bucket,
+        action,
+        amount_pct: Number.isFinite(pct) && pct >= 0 ? pct : 0,
+        rule,
+        note,
+        strategy_version_id: c.strategy_version_id
+      }, {
+        onConflict: "org_id,customer_id,trade_date"
+      });
+      if (up.error) throw new Error(`decisions_daily upsert failed: ${up.error.message}`);
+      // state upsert (best-effort)
+      const st = await sb.from("customer_state_daily").upsert({
+        org_id,
+        customer_id: c.customer_id,
+        date: signalStr,
+        bear_pause: !!state.bear_pause,
+        was_above_p1: !!state.was_above_p1,
+        was_above_p15: !!state.was_above_p15,
+        r1_armed: !!state.r1_armed,
+        r15_armed: !!state.r15_armed
+      }, {
+        onConflict: "org_id,customer_id,date"
+      });
+      if (st.error) console.error("state upsert err", st.error);
+      wrote++;
+    }
+    console.info(`ef_generate_decisions done: wrote=${wrote} in ${Date.now() - started}ms`);
+    return new Response("ok");
+  } catch (e) {
+    console.error("ef_generate_decisions error:", e?.message ?? e, e?.stack ?? "");
+    return new Response(`error: ${e?.message ?? "unknown"}`, {
+      status: 500
+    });
+  }
+});
