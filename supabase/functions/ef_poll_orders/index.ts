@@ -1,0 +1,204 @@
+// ef_poll_orders/index.ts
+// Poll open VALR orders for each exchange_account and:
+// 1) Update status (submitted / filled / cancelled)
+// 2) If a LIMIT order is older than 5 minutes OR price moved > 0.25%
+//    then cancel it and place a fallback MARKET order for the remaining qty.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { getOrderSummaryByCustomerOrderId, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
+// --- Supabase client (lth_pvr schema) ---
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  db: {
+    schema: "lth_pvr"
+  }
+});
+// --- Fallback config ---
+const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
+const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
+Deno.serve(async (_req)=>{
+  // 1) Load all open exchange_orders joined to their exchange_accounts
+  const { data: orders, error } = await supabase.from("exchange_orders").select(`
+      exchange_order_id,
+      org_id,
+      exchange_account_id,
+      intent_id,
+      ext_order_id,
+      pair,
+      side,
+      price,
+      qty,
+      status,
+      submitted_at,
+      raw,
+      exchange_accounts:exchange_account_id (
+        subaccount_id
+      )
+    `).eq("status", "submitted");
+
+  if (error) {
+    console.error("ef_poll_orders: failed to load exchange_orders", error);
+    return new Response(JSON.stringify({
+      error: "failed to load exchange_orders"
+    }), {
+      status: 500
+    });
+  }
+  if (!orders || orders.length === 0) {
+    return new Response(JSON.stringify({
+      processed: 0
+    }), {
+      status: 200
+    });
+  }
+  let processed = 0;
+  for (const o of orders){
+    const acct = o.exchange_accounts;
+    const subaccountId = acct?.subaccount_id ?? undefined;
+    if (!subaccountId) {
+      console.warn(`ef_poll_orders: no subaccount_id for exchange_account_id=${o.exchange_account_id}, skipping`);
+      continue;
+    }
+    const pair = o.pair;
+    const side = o.side.toUpperCase();
+    let summary;
+    try {
+      summary = await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId);
+
+    } catch (err) {
+      console.error(`ef_poll_orders: VALR poll failed for customerOrderId (intent_id)=${o.intent_id}`, err);
+      continue;
+    }
+    const last = Array.isArray(summary) ? summary[0] : summary;
+    if (!last) {
+      console.warn(`ef_poll_orders: no VALR summary returned for intent_id=${o.intent_id}`);
+      continue;
+    }
+    const valrStatus = last.orderStatusType || last.orderStatus || last.status || "";
+    let newStatus = o.status ?? "submitted";
+    if (valrStatus === "Cancelled") newStatus = "cancelled";
+    else if (valrStatus === "Filled") newStatus = "filled";
+    else newStatus = "submitted";
+    // Prepare merged raw payload
+    const mergedRaw = {
+      ...o.raw ?? {},
+      valr: {
+        ...o.raw?.valr ?? {},
+        id: last.id,
+        customerOrderId: last.customerOrderId,
+        orderStatusType: valrStatus,
+        ...last
+      },
+      valrLast: last
+    };
+    // ------------------------------------------------------------------
+    // 2. Fallback logic: if still submitted AND not already a fallback
+    // ------------------------------------------------------------------
+    const isFallbackMarket = Boolean(o.raw?.fallbackFrom);
+    if (newStatus === "submitted" && !isFallbackMarket) {
+      const submittedAt = o.submitted_at ? new Date(o.submitted_at) : null;
+      const ageMs = submittedAt ? Date.now() - submittedAt.getTime() : 0;
+      let shouldFallback = false;
+      let marketPrice = null;
+      // (a) Age condition
+      if (ageMs >= MAX_AGE_MS) {
+        shouldFallback = true;
+        console.log(`ef_poll_orders: order ${o.exchange_order_id} older than 5 minutes – converting to market`);
+      } else {
+        // (b) Price move condition
+        try {
+          marketPrice = await getMarketPrice(pair);
+          const limitPrice = Number(o.price);
+          if (limitPrice > 0 && marketPrice > 0) {
+            const relMove = Math.abs(marketPrice - limitPrice) / limitPrice;
+            if (relMove >= PRICE_MOVE_THRESHOLD) {
+              shouldFallback = true;
+              console.log(`ef_poll_orders: order ${o.exchange_order_id} price moved ${(relMove * 100).toFixed(3)}% – converting to market`);
+            }
+          }
+        } catch (err) {
+          console.error("ef_poll_orders: failed to fetch market price for fallback check", err);
+        }
+      }
+      if (shouldFallback) {
+        const originalQty = Number(last.originalQuantity ?? o.qty ?? 0);
+        const executedQty = Number(last.totalExecutedQuantity ?? 0);
+        const remainingQty = originalQty - executedQty;
+        if (remainingQty > 0) {
+          // 2.a Cancel the stale LIMIT order on VALR
+          try {
+            await cancelOrderById(last.id, pair, subaccountId);
+          } catch (err) {
+            console.error(`ef_poll_orders: failed to cancel stale limit order ${last.id}`, err);
+          }
+          // 2.b Place a MARKET order for the remaining quantity
+          const usePrice = marketPrice ?? Number(last.price ?? o.price ?? 0);
+          let amount;
+          if (side === "BUY") {
+            // BUY: amount is quote (USDT)
+            amount = (remainingQty * usePrice).toFixed(2);
+          } else {
+            // SELL: amount is base (BTC)
+            amount = remainingQty.toString();
+          }
+          try {
+            const marketOrder = await placeMarketOrder(pair, side, amount, o.intent_id, subaccountId);
+
+            const { error: insertError } = await supabase.from("exchange_orders").insert({
+              org_id: o.org_id,
+              exchange_account_id: o.exchange_account_id,
+              intent_id: o.intent_id,
+              ext_order_id: marketOrder.id,
+              pair,
+              side,
+              price: usePrice,
+              qty: remainingQty,
+              status: "submitted",
+              submitted_at: new Date().toISOString(),
+              raw: {
+                fallbackFrom: o.ext_order_id,
+                valr: marketOrder
+              }
+            });
+            if (insertError) {
+              console.error("ef_poll_orders: failed to insert fallback market order", insertError);
+            }
+          } catch (err) {
+            console.error("ef_poll_orders: failed to place fallback market order", err);
+          }
+          // 2.c Mark the original limit order as cancelled locally
+          const { error: updateOldError } = await supabase.from("exchange_orders").update({
+            status: "cancelled",
+            updated_at: new Date().toISOString(),
+            raw: mergedRaw
+          }).eq("exchange_order_id", o.exchange_order_id);
+          if (updateOldError) {
+            console.error("ef_poll_orders: failed to mark original limit order as cancelled", updateOldError);
+          }
+          processed++;
+          continue;
+        }
+      }
+    }
+    // ------------------------------------------------------------------
+    // 3. Normal status update (no fallback triggered)
+    // ------------------------------------------------------------------
+    if (newStatus !== o.status || !o.raw?.valrLast || o.raw?.valrLast?.orderUpdatedAt !== last.orderUpdatedAt) {
+      const { error: updateError } = await supabase.from("exchange_orders").update({
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+        raw: mergedRaw
+      }).eq("exchange_order_id", o.exchange_order_id);
+      if (updateError) {
+        console.error(`ef_poll_orders: failed to update exchange_order_id=${o.exchange_order_id}`, updateError);
+        continue;
+      }
+    }
+    processed++;
+  }
+  return new Response(JSON.stringify({
+    processed
+  }), {
+    status: 200
+  });
+});
