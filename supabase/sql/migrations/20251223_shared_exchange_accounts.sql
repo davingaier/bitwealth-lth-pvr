@@ -1,20 +1,20 @@
--- 1) Shared exchange_accounts table in public schema
+-- 1) Create shared exchange_accounts table in public schema
 create table if not exists public.exchange_accounts (
   exchange_account_id uuid not null default gen_random_uuid(),
-  org_id uuid not null,
-  exchange text not null default 'VALR'::text,
-  label text null,
-  is_omnibus boolean not null default true,
-  subaccount_ref text null,
-  subaccount_id text null,
-  status text not null default 'active'::text,
-  notes text null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz null,
+  org_id              uuid not null,
+  exchange            text not null default 'VALR'::text,
+  label               text,
+  is_omnibus          boolean not null default true,
+  subaccount_ref      text,
+  subaccount_id       text,
+  status              text not null default 'active',
+  notes               text,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz,
   constraint exchange_accounts_pkey primary key (exchange_account_id)
 );
 
--- 2) Backfill from existing lth_pvr.exchange_accounts (if any rows exist)
+-- 2) Backfill from existing lth_pvr.exchange_accounts (if rows exist)
 insert into public.exchange_accounts (
   exchange_account_id,
   org_id,
@@ -37,12 +37,12 @@ select
 from lth_pvr.exchange_accounts
 on conflict (exchange_account_id) do nothing;
 
--- 3) Move foreign keys off lth_pvr.exchange_accounts and onto public.exchange_accounts
+-- 3) Move any foreign keys off lth_pvr.exchange_accounts onto public.exchange_accounts
 do $$
 declare
   r record;
 begin
-  -- Drop any existing FKs that reference lth_pvr.exchange_accounts
+  -- Drop all FKs that reference lth_pvr.exchange_accounts
   for r in
     select conname, conrelid::regclass as tbl
     from pg_constraint
@@ -85,12 +85,11 @@ begin
   end if;
 end$$;
 
--- 4) Replace lth_pvr.exchange_accounts table with a view over the shared table
--- (so any existing SELECTs against lth_pvr.exchange_accounts keep working)
-drop view if exists lth_pvr.exchange_accounts;
+-- 4) Replace lth_pvr.exchange_accounts TABLE with a VIEW over the shared table
+
 drop table if exists lth_pvr.exchange_accounts;
 
-create view lth_pvr.exchange_accounts as
+create or replace view lth_pvr.exchange_accounts as
 select
   exchange_account_id,
   org_id,
@@ -103,7 +102,8 @@ select
 from public.exchange_accounts
 where exchange = 'VALR';
 
--- 5) RLS for public.exchange_accounts (browser clients)
+-- 5) Enable RLS and add org-based policies on public.exchange_accounts
+
 alter table public.exchange_accounts enable row level security;
 
 do $$
