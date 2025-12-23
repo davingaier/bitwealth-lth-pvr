@@ -16,9 +16,17 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 // --- Fallback config ---
 const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
+
+// Cache subaccount lookups per exchange_account_id so we don't hit the DB
+// repeatedly for the same account within a single run.
+const subaccountCache = new Map<string, string | null>();
+
 Deno.serve(async (_req)=>{
-  // 1) Load all open exchange_orders joined to their exchange_accounts
-  const { data: orders, error } = await supabase.from("exchange_orders").select(`
+  // 1) Load all open exchange_orders (we'll look up subaccount_id separately)
+  const { data: orders, error } = await supabase
+    .from("exchange_orders")
+    .select(
+      `
       exchange_order_id,
       org_id,
       exchange_account_id,
@@ -30,11 +38,10 @@ Deno.serve(async (_req)=>{
       qty,
       status,
       submitted_at,
-      raw,
-      exchange_accounts:exchange_account_id (
-        subaccount_id
-      )
-    `).eq("status", "submitted");
+      raw
+    `,
+    )
+    .eq("status", "submitted");
 
   if (error) {
     console.error("ef_poll_orders: failed to load exchange_orders", error);
@@ -52,13 +59,43 @@ Deno.serve(async (_req)=>{
     });
   }
   let processed = 0;
-  for (const o of orders){
-    const acct = o.exchange_accounts;
-    const subaccountId = acct?.subaccount_id ?? undefined;
+  for (const o of (orders ?? [])){
+
+    // Look up VALR subaccount_id for this exchange_account_id from the shared
+    // public.exchange_accounts table. We cache lookups per run to avoid
+    // hammering the DB when multiple orders share the same account.
+    let subaccountId: string | null = null;
+
+    if (subaccountCache.has(o.exchange_account_id)) {
+      subaccountId = subaccountCache.get(o.exchange_account_id) ?? null;
+    } else {
+      const { data: exAcc, error: exErr } = await supabase
+        .schema("public")
+        .from("exchange_accounts")
+        .select("subaccount_id")
+        .eq("exchange_account_id", o.exchange_account_id)
+        .limit(1)
+        .single();
+
+      if (exErr) {
+        console.error(
+          `ef_poll_orders: exchange_accounts lookup failed for exchange_account_id=${o.exchange_account_id}`,
+          exErr,
+        );
+        continue;
+      }
+
+      subaccountId = exAcc?.subaccount_id ?? null;
+      subaccountCache.set(o.exchange_account_id, subaccountId);
+    }
+
     if (!subaccountId) {
-      console.warn(`ef_poll_orders: no subaccount_id for exchange_account_id=${o.exchange_account_id}, skipping`);
+      console.warn(
+        `ef_poll_orders: no subaccount_id for exchange_account_id=${o.exchange_account_id}, skipping`,
+      );
       continue;
     }
+
     const pair = o.pair;
     const side = o.side.toUpperCase();
     let summary;
