@@ -254,18 +254,23 @@ Deno.serve(async (req: Request) => {
     })
     .select();
 
-  // If today's row is still missing, try a 1-day refetch once.
+  // If yesterday's row is still missing, try a 1-day refetch once.
+  // CI bands are always for dates < today, so "yesterday" is the
+  // latest date we expect to exist.
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 1); // yesterday in UTC
+    const expectedDate = d.toISOString().slice(0, 10);
+
     const chk = await sb.from("ci_bands_daily")
       .select("date")
       .eq("org_id", org_id)
       .eq("mode", mode)
-      .eq("date", today)
+      .eq("date", expectedDate)
       .maybeSingle();
 
     if (!chk.data) {
-      console.warn("today missing, refetching 1 day window");
+      console.warn("latest CI day missing (yesterday), refetching 1 day window");
       const url1d =
         `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=${
           encodeURIComponent(mode)
@@ -285,11 +290,12 @@ Deno.serve(async (req: Request) => {
         } else {
           await logAlert(
             "warn",
-            "Self-heal refetch (1-day window) returned no data",
+            "Self-heal refetch (1-day window) returned no data for expected CI date",
             {
               org_id,
               mode,
               url: url1d,
+              expectedDate,
             },
             org_id,
           );
@@ -303,6 +309,7 @@ Deno.serve(async (req: Request) => {
             org_id,
             mode,
             url: url1d,
+            expectedDate,
             error: String((e as any)?.message ?? e),
           },
           org_id,
