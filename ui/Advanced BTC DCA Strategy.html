@@ -177,6 +177,23 @@
       border-color:#fecaca;        /* rose-200 */
     }
 
+    /* Alerts severities */
+    .status-pill.info{
+      background:#dbeafe;          /* blue-100 */
+      color:#1e3a8a;               /* blue-900 */
+      border-color:#bfdbfe;        /* blue-200 */
+    }
+    .status-pill.warn{
+      background:#fef3c7;          /* amber-100 */
+      color:#92400e;               /* amber-900 */
+      border-color:#fde68a;        /* amber-200 */
+    }
+    .status-pill.critical{
+      background:#fee2e2;          /* red-100 */
+      color:#7f1d1d;               /* red-900 */
+      border-color:#fecaca;        /* red-200 */
+    }
+
     /* non-actioned / below min etc. */
     .status-pill.skipped{
       background:#e5e7eb;          /* gray-200 */
@@ -2048,6 +2065,36 @@
           <thead><tr><th>Email</th><th>Role</th><th>Added</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+
+      <!-- Alerts card -->
+      <div class="card" id="alertsCard">
+        <h3>System Alerts</h3>
+        <p class="small-muted">Open alerts across all strategies for your organisation.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;">
+          <button id="alertsRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <label style="display:flex;align-items:center;font-size:.8rem;gap:.35rem;">
+            <input id="alertsOpenOnlyChk" type="checkbox" checked>
+            <span>Show only open alerts</span>
+          </label>
+        </div>
+        <div class="table-scroll" id="alertsTableContainer">
+          <table id="alertsTable">
+            <thead>
+              <tr>
+                <th style="min-width:140px;">Created</th>
+                <th style="min-width:90px;">Severity</th>
+                <th style="min-width:140px;">Component</th>
+                <th>Message</th>
+                <th style="min-width:140px;">Resolved</th>
+                <th style="min-width:80px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">No alerts.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </main>
@@ -5431,6 +5478,150 @@
     // Load once on page open
     loadExecutedLast7Days();
   })();
+
+  // --- Alerts card (Administration module) ---
+  (() => {
+    const tableBody   = document.querySelector('#alertsTable tbody');
+    const refreshBtn  = document.getElementById('alertsRefreshBtn');
+    const openOnlyChk = document.getElementById('alertsOpenOnlyChk');
+
+    if (!tableBody || !refreshBtn) return;
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch] || ch));
+    }
+
+    function severityClass(sev) {
+      const s = String(sev || '').toLowerCase();
+      if (s === 'critical') return 'critical';
+      if (s === 'error')    return 'error';
+      if (s === 'warn' || s === 'warning') return 'warn';
+      return 'info';
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString();
+    }
+
+    async function loadAlerts() {
+      tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+      const onlyOpen = !openOnlyChk || openOnlyChk.checked;
+
+      const { data, error } = await supabaseClient.rpc('list_lth_alert_events', {
+        p_only_open: onlyOpen,
+        p_limit: 50
+      });
+
+      if (error) {
+        console.error('loadAlerts error', error);
+        tableBody.innerHTML =
+          '<tr><td colspan="6" class="error">Failed to load alerts: ' +
+          escapeHtml(error.message || String(error)) +
+          '</td></tr>';
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        tableBody.innerHTML =
+          '<tr><td colspan="6" class="muted">No alerts.</td></tr>';
+        return;
+      }
+
+      const rowsHtml = data.map((row) => {
+        const created  = fmtDate(row.created_at);
+        const resolved = row.resolved_at ? fmtDate(row.resolved_at) : '';
+        const sevClass = severityClass(row.severity);
+        const sevLabel = escapeHtml(row.severity || '');
+        const component = escapeHtml(row.component || '');
+        const message   = escapeHtml(row.message || '');
+
+        const resolveBtn = row.resolved_at
+          ? ''
+          : '<button type="button" class="btn btn-secondary-sm js-alert-resolve">Resolve</button>';
+
+        return `
+          <tr data-alert-id="${row.alert_id}">
+            <td>${created}</td>
+            <td><span class="status-pill ${sevClass}">${sevLabel}</span></td>
+            <td>${component}</td>
+            <td>${message}</td>
+            <td>${resolved}</td>
+            <td>${resolveBtn}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tableBody.innerHTML = rowsHtml;
+    }
+
+    async function handleResolveClick(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest('.js-alert-resolve');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      if (!tr) return;
+      const alertId = tr.getAttribute('data-alert-id');
+      if (!alertId) return;
+
+      const note =
+        window.prompt('Optional note to attach when resolving this alert:', '') || null;
+
+      btn.setAttribute('disabled', 'true');
+      btn.textContent = 'Resolving…';
+
+      const { error } = await supabaseClient.rpc('resolve_lth_alert_event', {
+        p_alert_id: alertId,
+        p_resolved_by: 'ui-admin',
+        p_resolution_note: note
+      });
+
+      if (error) {
+        console.error('resolve alert error', error);
+        window.alert('Failed to resolve alert: ' + (error.message || String(error)));
+        btn.removeAttribute('disabled');
+        btn.textContent = 'Resolve';
+        return;
+      }
+
+      await loadAlerts();
+    }
+
+    refreshBtn.addEventListener('click', loadAlerts);
+    if (openOnlyChk) openOnlyChk.addEventListener('change', loadAlerts);
+    tableBody.addEventListener('click', handleResolveClick);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // lazy-load when Admin tab is first visible
+      const adminModule = document.getElementById('adminModule');
+      if (!adminModule) {
+        loadAlerts();
+        return;
+      }
+      if (!adminModule.classList.contains('hidden')) {
+        loadAlerts();
+        return;
+      }
+      const observer = new MutationObserver(() => {
+        if (!adminModule.classList.contains('hidden')) {
+          observer.disconnect();
+          loadAlerts();
+        }
+      });
+      observer.observe(adminModule, { attributes: true, attributeFilter: ['class'] });
+    });
+  })();
+
   </script>
 </body>
 </html>
