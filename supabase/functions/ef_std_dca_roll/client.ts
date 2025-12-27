@@ -6,9 +6,7 @@ export function getServiceClient() {
     Deno.env.get("SUPABASE_URL") ??
     Deno.env.get("SB_URL"); // optional legacy
 
-  const key =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SB_SERVICE_ROLE_KEY"); // fallback
+  const key = Deno.env.get("Secret Key");
 
   if (!url || !key) {
     throw new Error("Missing SUPABASE_URL or a service role key env var");

@@ -4,13 +4,13 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // --- Project secrets (you configured custom names) ---
 const SUPABASE_URL = Deno.env.get("SB_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("Secret Key");
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.warn("SB_URL / SB_SERVICE_ROLE_KEY not set. Falling back to SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.");
+  console.warn("SB_URL / Secret Key not set. Falling back to SUPABASE_URL / Secret Key.");
 }
 // Fallbacks just in case your project uses the default names elsewhere
 const URL_FALLBACK = Deno.env.get("SUPABASE_URL");
-const KEY_FALLBACK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const KEY_FALLBACK = Deno.env.get("Secret Key");
 const ADMIN = createClient(SUPABASE_URL || URL_FALLBACK, SUPABASE_SERVICE_ROLE_KEY || KEY_FALLBACK, {
   auth: {
     persistSession: false

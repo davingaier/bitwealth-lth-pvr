@@ -16,9 +16,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const SERVICE_ROLE = Deno.env.get("Secret Key");
   if (!SUPABASE_URL || !SERVICE_ROLE) {
-    return json({ error: "Missing function secrets: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }, 500);
+    return json({ error: "Missing function secrets: SUPABASE_URL or Secret Key" }, 500);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE);

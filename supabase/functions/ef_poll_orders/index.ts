@@ -9,7 +9,7 @@ import { logAlert } from "./alerting.ts";
 
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = Deno.env.get("Secret Key");
 const supabase = createClient(supabaseUrl, supabaseKey, {
   db: {
     schema: "lth_pvr"

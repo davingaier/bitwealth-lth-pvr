@@ -13,8 +13,8 @@ const CORS = {
 
 /* ENV */
 const URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-if (!URL || !KEY) throw new Error("Missing SB_URL/SB_SERVICE_ROLE_KEY");
+const KEY = Deno.env.get("Secret Key");
+if (!URL || !KEY) throw new Error("Missing SB_URL/Secret Key");
 const sb = createClient(URL, KEY);
 
 /* Your schema column name */
