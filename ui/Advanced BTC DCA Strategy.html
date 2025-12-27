@@ -4819,6 +4819,13 @@
     async function adminLoadOrgs(){
       const sel = document.getElementById('adminOrgSelect');
       if(!sel) return;
+      // Check if authenticated
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.user) {
+        console.warn('[ADMIN] Not authenticated, skipping org load');
+        sel.innerHTML = '<option value="">Sign in to view orgs</option>';
+        return;
+      }
       const { data, error } = await window.supabaseClient.rpc('my_orgs');
       if(error){ console.error('[ADMIN] my_orgs error:', error); sel.innerHTML = '<option value="">No orgs</option>'; return; }
 
@@ -4837,6 +4844,13 @@
       const orgSel = document.getElementById('adminOrgSelect');
       const tb = document.querySelector('#adminMembersTable tbody');
       if(!orgSel || !tb) return;
+      // Check if authenticated
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.user) {
+        console.warn('[ADMIN] Not authenticated, skipping members load');
+        tb.innerHTML = '<tr><td colspan="3">Please sign in to view members</td></tr>';
+        return;
+      }
 
       const orgId = orgSel.value;
       if(!orgId){ tb.innerHTML = '<tr><td colspan="4">Select an organisation.</td></tr>'; return; }
@@ -5313,18 +5327,22 @@
         return { first: data?.first_names || '', last: data?.last_name || '' };
       }
       async function fetchNarrativeFor(type, customerId){
-        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
-        const EDGE_FUNCTION_NARRATIVE = 'chart-narrative';
         try{
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/${EDGE_FUNCTION_NARRATIVE}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ customer_id: customerId, report_type: type })
+          // Use Supabase client to automatically include authentication
+          if (!window.supabaseClient) {
+            console.warn('[Narrative] Supabase client not ready');
+            return 'Narrative unavailable for this chart.';
+          }
+          const { data, error } = await window.supabaseClient.functions.invoke('chart-narrative', {
+            body: { customer_id: customerId, report_type: type }
           });
-          if (!res.ok) throw new Error(await res.text());
-          const out = await res.json(); // expect { text } or { html }
-          return (out.text || out.html || 'Narrative unavailable for this chart.');
-        }catch(_){
+          if (error) {
+            console.error('[Narrative] Error:', error);
+            return 'Narrative unavailable for this chart.';
+          }
+          return (data?.text || data?.html || 'Narrative unavailable for this chart.');
+        }catch(err){
+          console.error('[Narrative] Exception:', err);
           return 'Narrative unavailable for this chart.';
         }
       }
