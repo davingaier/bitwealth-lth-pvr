@@ -389,7 +389,7 @@
     <a href="#reports-module">Portfolio Performance Reporting</a>
     <a href="#backtest-module">Strategy Back-Testing</a>
     <a href="#finance-module">Finance</a>
-    <a href="#admin-module">Administration</a>
+    <a href="#admin-module">Administration<span class="alert-badge zero" id="alertBadge">0</span></a>
   </nav>
 
   <!-- Org / portfolio context (shared across modules) -->
@@ -2071,12 +2071,24 @@
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
         <p class="small-muted">Open alerts across all strategies for your organisation.</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
           <button id="alertsRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
           <label style="display:flex;align-items:center;font-size:.8rem;gap:.35rem;">
             <input id="alertsOpenOnlyChk" type="checkbox" checked>
             <span>Show only open alerts</span>
           </label>
+          <label style="display:flex;align-items:center;font-size:.8rem;gap:.35rem;">
+            <input id="alertsAutoRefreshChk" type="checkbox">
+            <span>Auto-refresh (30s)</span>
+          </label>
+          <select id="alertsComponentFilter" class="context-select" style="min-width:200px;height:36px;">
+            <option value="">All Components</option>
+            <option value="ef_fetch_ci_bands">ef_fetch_ci_bands</option>
+            <option value="ef_generate_decisions">ef_generate_decisions</option>
+            <option value="ef_create_order_intents">ef_create_order_intents</option>
+            <option value="ef_execute_orders">ef_execute_orders</option>
+            <option value="ef_poll_orders">ef_poll_orders</option>
+          </select>
         </div>
         <div class="table-scroll" id="alertsTableContainer">
           <table id="alertsTable">
@@ -5484,8 +5496,13 @@
     const tableBody   = document.querySelector('#alertsTable tbody');
     const refreshBtn  = document.getElementById('alertsRefreshBtn');
     const openOnlyChk = document.getElementById('alertsOpenOnlyChk');
+    const autoRefreshChk = document.getElementById('alertsAutoRefreshChk');
+    const componentFilter = document.getElementById('alertsComponentFilter');
+    const alertBadge = document.getElementById('alertBadge');
 
     if (!tableBody || !refreshBtn) return;
+
+    let autoRefreshInterval = null;
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return '';
@@ -5516,11 +5533,18 @@
     async function loadAlerts() {
       tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
       const onlyOpen = !openOnlyChk || openOnlyChk.checked;
+      const component = componentFilter ? componentFilter.value : '';
 
       const { data, error } = await supabaseClient.rpc('list_lth_alert_events', {
         p_only_open: onlyOpen,
-        p_limit: 50
+        p_limit: 100
       });
+
+      // Filter by component on client side if specified
+      let filteredData = data;
+      if (data && component) {
+        filteredData = data.filter(row => row.component === component);
+      }
 
       if (error) {
         console.error('loadAlerts error', error);
@@ -5531,13 +5555,24 @@
         return;
       }
 
-      if (!data || data.length === 0) {
+      // Update badge with open alert count (unfiltered)
+      if (alertBadge && data) {
+        const openCount = data.filter(row => !row.resolved_at).length;
+        alertBadge.textContent = String(openCount);
+        if (openCount === 0) {
+          alertBadge.classList.add('zero');
+        } else {
+          alertBadge.classList.remove('zero');
+        }
+      }
+
+      if (!filteredData || filteredData.length === 0) {
         tableBody.innerHTML =
           '<tr><td colspan="6" class="muted">No alerts.</td></tr>';
         return;
       }
 
-      const rowsHtml = data.map((row) => {
+      const rowsHtml = filteredData.map((row) => {
         const created  = fmtDate(row.created_at);
         const resolved = row.resolved_at ? fmtDate(row.resolved_at) : '';
         const sevClass = severityClass(row.severity);
@@ -5597,8 +5632,20 @@
       await loadAlerts();
     }
 
+    function toggleAutoRefresh() {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+      if (autoRefreshChk && autoRefreshChk.checked) {
+        autoRefreshInterval = setInterval(loadAlerts, 30000);
+      }
+    }
+
     refreshBtn.addEventListener('click', loadAlerts);
     if (openOnlyChk) openOnlyChk.addEventListener('change', loadAlerts);
+    if (autoRefreshChk) autoRefreshChk.addEventListener('change', toggleAutoRefresh);
+    if (componentFilter) componentFilter.addEventListener('change', loadAlerts);
     tableBody.addEventListener('click', handleResolveClick);
 
     document.addEventListener('DOMContentLoaded', () => {
