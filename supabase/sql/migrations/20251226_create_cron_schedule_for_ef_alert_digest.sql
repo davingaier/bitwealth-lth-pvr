@@ -9,17 +9,17 @@ where exists (
   where jobname = 'lth_pvr_alert_digest_daily'
 );
 
--- Schedule ef_alert_digest daily at 06:00 UTC (08:00 SAST)
+-- Schedule ef_alert_digest daily at 05:00 UTC (07:00 SAST)
 select
   cron.schedule(
     'lth_pvr_alert_digest_daily',
-    '0 6 * * *',        -- 06:00 UTC
+    '0 5 * * *',        -- 05:00 UTC = 07:00 SAST
     $$
     select net.http_post(
-      url := '%%FUNCTIONS_URL%%/ef_alert_digest',
+      url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_alert_digest',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer %%SERVICE_ROLE_KEY%%'
+        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcwMzU1NTM4NiwiZXhwIjoyMDE5MTMxMzg2fQ.yUMfDe9GSL1o5jG-9EHPl0P1yT0LdqsOHPqTpyJilLY'
       ),
       body := jsonb_build_object(
         'org_id', 'b0a77009-03b9-44a1-ae1d-34f157d44a8b'::uuid
