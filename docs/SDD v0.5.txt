@@ -1,0 +1,420 @@
+Here’s a consolidated SDD_v0.4 you can drop into version control (as SDD_v0.4.md or turn into a DOCX). It rolls v0.1, v0.2 and v0.3 into one doc and folds in the three new requirements:
+•	Shared public.exchange_accounts
+•	End-to-end alerting for the LTH_PVR pipeline
+•	Customer Maintenance UI for portfolios + exchange accounts with VALR subaccount_id handling and status mirroring
+________________________________________
+BitWealth – LTH PVR BTC DCA
+Solution Design Document – Version 0.4
+Author: Dav / GPT
+Status: Working design – supersedes SDD_v0.3
+Last updated: v0.4
+________________________________________
+0. Change Log
+v0.4 (current)
+Purpose
+•	Consolidate SDD v0.1, v0.2 and v0.3 into a single, end-to-end design so you don’t have to flip between versions.
+•	Align the SDD with Build Plan v0.4.
+Key changes
+1.	Shared Exchange Accounts
+o	Introduced a global public.exchange_accounts table as the single source of truth for VALR accounts/subaccounts across all strategies (LTH_PVR, ADV_DCA, future ones).
+o	LTH-specific lth_pvr.exchange_accounts becomes either:
+	A migrated/legacy table whose rows are moved into public.exchange_accounts, or
+	A view over public.exchange_accounts with any extra LTH-specific columns.
+o	public.customer_portfolios.exchange_account_id points to this shared table.
+2.	Alert System for LTH_PVR Pipeline
+o	Extended the “Monitoring & Alerts” design into a full alert system:
+	Watches EF runs, cron schedules, and key data health checks (e.g., missing CI bands, gaps in balances).
+	Writes alerts to a dedicated table and sends notifications (e.g. email / Slack).
+3.	Customer Maintenance → Portfolios & Exchange Accounts
+o	Documented the UI and data model for allocating portfolios/strategies to customers via public.customer_portfolios and public.exchange_accounts.
+o	Added the design for:
+	A helper to fetch the hidden VALR subaccount_id via EF.
+	A field to capture subaccount_id and persist it in public.exchange_accounts.
+	Automatic mirroring of public.customer_details.status → public.customer_portfolios.status so trading stops as soon as a customer becomes non-active.
+4.	Ledger & Balances flow marked complete
+o	Captured the now-implemented path:
+v_fills_with_customer → ef_post_ledger_and_balances → lth_pvr.ledger_lines → lth_pvr.balances_daily, and the lth_pvr_list_ledger_and_balances RPC used by the UI.
+________________________________________
+v0.3 (recap)
+•	Added detailed design for:
+o	lth_pvr.v_fills_with_customer, lth_pvr.ledger_lines, lth_pvr.exchange_funding_events, lth_pvr.balances_daily.
+o	ef_post_ledger_and_balances and the canonical flow from decisions → intents → orders → fills → ledger → balances.
+•	Synced VALR behaviour with updated fallback logic (limit → market after timeout / price move).
+v0.2 (recap)
+•	First full solution design:
+o	Strategy logic and CI bands.
+o	Back-testing architecture (lth_pvr_bt schema).
+o	Decision engine, order intents, VALR integration (high level).
+o	Security / RLS.
+o	High-level UI layout.
+v0.1 (recap)
+•	Deep dive into back-testing logic (ef_bt_execute, bt_runs, bt_results_daily, bt_orders, bt_ledger, bt_std_dca_*, v_bt_results_annual).
+________________________________________
+1. System Overview
+1.1 Business Goal
+BitWealth offers a BTC accumulation service based on the LTH PVR BTC DCA strategy:
+•	Allocate more aggressively when BTC is cheap relative to Long-Term Holder PVR bands.
+•	Allocate defensively when BTC is expensive or momentum is negative.
+•	Track performance vs a Standard BTC DCA benchmark and charge performance fees on outperformance.
+The same logic powers a back-tester used for validation, customer proposals, and reporting.
+1.2 High-Level Architecture
+Core stack (unchanged from v0.2, with small refinements):
+•	Supabase / Postgres
+o	lth_pvr schema → live trading, decisions, orders, ledger, balances, benchmark, fees.
+o	lth_pvr_bt schema → back-testing (runs, simulated ledger, results, benchmark).
+o	public schema → shared entities (customers, portfolios, strategies, exchange_accounts, orgs).
+•	Edge Functions (Deno / TypeScript)
+o	ef_fetch_ci_bands – CI bands ingestion.
+o	ef_generate_decisions – daily decisions engine.
+o	ef_create_order_intents – decision → tradable order sizing.
+o	ef_execute_orders – sends orders to VALR.
+o	ef_poll_orders – tracks order status and fills; applies fallback.
+o	ef_post_ledger_and_balances – rolls fills & funding to ledger and balances.
+o	ef_std_dca_roll – standard DCA benchmark.
+o	ef_fee_monthly_close – monthly performance fees.
+o	ef_bt_execute – back-test runner.
+•	Database functions
+o	Utility / orchestration (call_edge, upsert_cron).
+o	Carry bucket helpers (fn_carry_add, fn_carry_peek, fn_carry_consume).
+o	Capital helper (fn_usdt_available_for_trading).
+•	Front-end
+o	Single HTML/JS admin console (Advanced BTC DCA Strategy.html) with multiple modules (Customer Maintenance, Balance Maintenance, Transactions, Reporting, Back-Testing, Finance, Administration).
+o	Global context bar: Organisation, Customer, Active Portfolio / Strategy.
+•	Scheduling
+o	pg_cron jobs for CI bands, decisions, intents, execution, polling, ledger rollup, standard DCA rollup, and monthly fee close.
+•	Exchange
+o	VALR REST API, single primary API key/secret in env variables.
+o	Per-customer routing via subaccount_id (now in shared public.exchange_accounts).
+________________________________________
+2. Core Domains
+This section summarises the main domains and where they live in the schema.
+2.1 CI & Market Data
+•	Tables
+o	lth_pvr.ci_bands_daily
+	Daily CI LTH PVR bands and BTC price.
+	Used by both live trading and back-testing.
+o	Optional BTC price tables (e.g., daily_data or a dedicated price table) for valuations.
+•	EF
+o	ef_fetch_ci_bands – fetches CI bands & prices and upserts daily rows based on a moving “yesterday” date, plus backfill routines.
+2.2 Strategy Configuration & State
+•	Core objects
+o	lth_pvr.strategy_versions – defines LTH PVR band weights, momentum parameters, and retrace rules per version.
+o	Strategy-specific config tables (e.g., min order size, retrace toggles).
+•	Global catalogue
+o	public.strategies – one row per strategy you offer (ADV_DCA, LTH_PVR, future GRID…):
+	strategy_code (PK, e.g. 'ADV_DCA', 'LTH_PVR').
+	name (display name).
+	description, schema_name, etc.
+2.3 Customers & Portfolios
+•	Customers
+o	public.customer_details – core person/entity record; contains org_id, status (active, offboarded, etc.), and contact details.
+•	Portfolios
+o	public.customer_portfolios – global portfolio table:
+	portfolio_id (PK).
+	org_id, customer_id.
+	strategy_code (FK → public.strategies.strategy_code).
+	exchange (currently 'VALR').
+	exchange_account_id (FK → public.exchange_accounts.exchange_account_id).
+	exchange_subaccount (label) – optional.
+	base_asset, quote_asset (BTC/USDT).
+	status (e.g. active, paused, inactive).
+	created_at, updated_at.
+This serves as the global routing key for the UI: the “Active Portfolio / Strategy” dropdown selects one row here, and all downstream queries use portfolio_id.
+2.4 Exchange Integration & Shared Exchange Accounts
+2.4.1 Shared Exchange Accounts (new in v0.4)
+•	Table: public.exchange_accounts
+o	exchange_account_id (PK, UUID).
+o	org_id.
+o	exchange (e.g. 'VALR').
+o	label (e.g. “Main VALR”, “LTH PVR Test”).
+o	subaccount_id – VALR internal subaccount ID used in X-VALR-SUB-ACCOUNT-ID.
+o	Optional metadata (notes, tags) and timestamps.
+•	Relationship
+o	public.customer_portfolios.exchange_account_id → public.exchange_accounts.exchange_account_id.
+o	For LTH PVR only, lth_pvr.exchange_accounts can be:
+	Migrated away and removed or
+	Replaced with a view over public.exchange_accounts that adds LTH-specific columns.
+2.4.2 Orders and Fills
+•	Tables
+o	lth_pvr.exchange_orders – VALR orders per portfolio:
+	order_id, intent_id, portfolio_id, symbol, side, price, qty, status, raw JSON payloads.
+o	lth_pvr.order_fills – individual fills with quantities, prices, fees; used by the ledger.
+•	VALR client
+o	Shared valrClient helper:
+	Injects X-VALR-API-KEY from env.
+	Adds X-VALR-SUB-ACCOUNT-ID from public.exchange_accounts.subaccount_id given portfolio_id.
+	HMAC signs timestamp + verb + path + body + subaccount_id.
+2.5 Decisions & Order Intents
+•	Tables
+o	lth_pvr.decisions_daily – per-customer daily decision: band bucket, action (BUY, SELL, HOLD), and allocation percentage.
+o	lth_pvr.order_intents – tradeable intents:
+	intent_id, org_id, portfolio_id, trade_date, side, pair, amount_pct, status, idempotency_key.
+•	EFs
+o	ef_generate_decisions – uses CI bands, price and strategy config to populate decisions_daily.
+o	ef_create_order_intents – sizes orders for each active portfolio, respecting:
+	fn_usdt_available_for_trading.
+	Minimum order size and carry buckets.
+2.6 Ledger & Performance
+•	Tables (live, LTH PVR)
+o	lth_pvr.v_fills_with_customer – view that joins order_fills → exchange_orders → order_intents → portfolios/customers.
+o	lth_pvr.exchange_funding_events – deposits/withdrawals, internal transfers, fees not captured at fill level.
+o	lth_pvr.ledger_lines – canonical event ledger:
+	org_id, customer_id, portfolio_id, asset (BTC/USDT).
+	trade_date, event_type (trade, fee, deposit, withdrawal, fee_settlement, etc.).
+	amount_btc, amount_usdt, plus optional note.
+o	lth_pvr.balances_daily – daily holdings per portfolio & asset:
+	balance_btc, balance_usdt, nav_usd, contribution aggregates, ROI, etc.
+•	RPC (UI)
+o	public.lth_pvr_list_ledger_and_balances(from_date, portfolio_id, to_date) returns:
+	event_date, event_type, btc_delta, usdt_delta, note.
+o	Used by the LTH PVR – Ledger & Balances card in the Customer Balance Maintenance module.
+2.7 Back-Testing Domain (LTH_PVR vs Std DCA)
+•	Tables / Views (from v0.1/v0.2):
+o	lth_pvr_bt.bt_runs – one row per back-test run:
+	bt_run_id, org_id, date range, upfront/monthly contributions, maker fees (bps), status, timestamps, error.
+o	lth_pvr_bt.bt_results_daily – daily LTH PVR balances & performance:
+	btc_balance, usdt_balance, nav_usd, contrib_*_usdt_cum, ROI %, CAGR %.
+o	lth_pvr_bt.bt_std_dca_balances – same structure, but for the Standard DCA benchmark.
+o	lth_pvr_bt.bt_ledger / bt_std_dca_ledger – simulated trades and fees.
+o	lth_pvr_bt.bt_orders – synthetic “orders” for traceability.
+o	lth_pvr_bt.v_bt_results_annual – rolled-up annual view for both strategies (used by yearly tables).
+•	EF: ef_bt_execute
+o	Reads CI bands and strategy config for [start_date, end_date].
+o	Applies contributions & fees each month.
+o	Runs LTH PVR decision logic per trade day.
+o	Simulates trades and fees for:
+	LTH PVR portfolio.
+	Standard DCA comparator.
+o	Tracks balances, NAV, ROI, CAGR over time.
+o	Bulk-inserts into the bt_* tables and updates bt_runs.status and finished_at.
+________________________________________
+3. Daily Live-Trading Flow
+This section describes the “happy path” for a live trading day.
+3.1 Timeline (UTC)
+1.	03:00 – Fetch CI bands & price
+o	pg_cron calls ef_fetch_ci_bands.
+o	Inserts/updates ci_bands_daily for the prior calendar day.
+2.	03:05 – Generate decisions
+o	ef_generate_decisions:
+	Uses latest CI bands, price, and strategy_versions.
+	Writes rows to decisions_daily per active portfolio (public.customer_portfolios.status = 'active').
+3.	03:10 – Create order intents
+o	ef_create_order_intents:
+	Consumes decisions_daily.
+	Computes USDT budget from fn_usdt_available_for_trading.
+	Applies LTH PVR allocation logic (bands, retrace, momentum).
+	Writes order_intents with status='pending'.
+4.	03:15 – Execute orders
+o	ef_execute_orders:
+	Groups eligible order_intents.
+	Looks up exchange_account_id → public.exchange_accounts.subaccount_id for routing.
+	Sends limit orders to VALR with appropriate HMAC signature.
+5.	03:15–all day – Poll orders & fallback
+o	ef_poll_orders (cron every minute):
+	Fetches VALR order status and fills.
+	Writes exchange_orders and order_fills.
+	Applies fallback: if a limit order is unfilled/partially filled for >5 minutes or price moves >0.25%, cancel and market the remainder.
+6.	03:30 (or overnight batch) – Post ledger & balances
+o	ef_post_ledger_and_balances:
+	Reads v_fills_with_customer + exchange_funding_events.
+	Produces ledger_lines events.
+	Rolls them into balances_daily for each portfolio and asset.
+7.	Overnight / end-of-day
+o	ef_std_dca_roll updates Standard DCA benchmark balances.
+o	ef_fee_monthly_close (monthly) calculates performance fees from v_monthly_returns.
+________________________________________
+4. Back-Testing Architecture
+Back-testing reuses the same core decision logic as live trading, but runs on historical CI bands and prices and writes into the lth_pvr_bt schema.
+4.1 Inputs
+•	Upfront and monthly USDT contributions.
+•	Trade & contribution fee percents (bps).
+•	Date range.
+•	Strategy config (bands, momentum, retrace flags).
+4.2 Process
+•	ef_bt_execute:
+o	Creates a bt_runs row (status='pending') and calls the EF with its ID.
+o	Iterates over each trade date:
+	Runs decision logic (same as live).
+	Applies contributions and fees.
+	Simulates trades for LTH PVR and Std DCA.
+o	Appends ledger, orders, daily results to in-memory arrays and bulk-inserts into:
+	bt_ledger, bt_orders, bt_results_daily, bt_std_dca_ledger, bt_std_dca_balances.
+o	Updates bt_runs with final NAV/ROI/CAGR summary.
+4.3 Outputs
+•	Daily time-series for both portfolios (balances & NAV).
+•	Annual summary via v_bt_results_annual with:
+o	btc_price, total_investment, btc_holdings, usd_holdings, nav_usd, ROI %, CAGR % for LTH PVR and Std DCA.
+•	Feeds the Strategy Back-Testing UI (charts + tables + PDF export).
+________________________________________
+5. Security & RLS Model
+BitWealth is multi-tenant at organisation level; RLS is centred around org_id.
+5.1 Organisation & Identity
+•	One or more organisations per environment; initially just your own.
+•	A helper RPC public.my_orgs maps the authenticated user to allowed org_id values (via membership tables such as org_members / organizations).
+•	Edge Functions use the service role key and bypass RLS by design.
+5.2 RLS Principles
+•	Every table queried directly by the browser has:
+o	An org_id column.
+o	RLS enabled.
+o	Policies that restrict rows to org_id ∈ my_orgs() for that user.
+•	Sensitive write tables (orders, ledger, balances, back-tests) are only written via EFs using the service role key.
+5.3 Example Policies
+•	Back-test results (lth_pvr_bt.bt_results_daily):
+•	ALTER TABLE lth_pvr_bt.bt_results_daily ENABLE ROW LEVEL SECURITY;
+•	
+•	CREATE POLICY org_members_can_read_bt_results_daily
+•	ON lth_pvr_bt.bt_results_daily
+•	FOR SELECT
+•	USING (org_id IN (SELECT id FROM public.my_orgs()));
+•	Similar patterns apply to:
+o	lth_pvr_bt.bt_runs, bt_std_dca_balances, bt_orders, bt_ledger, bt_std_dca_ledger.
+o	Live views: lth_pvr.v_customer_portfolio_daily, lth_pvr.v_compare_portfolio_daily, lth_pvr.v_monthly_returns.
+5.4 New RLS Considerations (v0.4)
+•	public.exchange_accounts
+o	RLS keyed on org_id and my_orgs.
+o	Service role (EFs) can see any row when building VALR requests.
+•	public.customer_portfolios
+o	RLS ensures each org only sees its own portfolios.
+o	UI always filters by org_id from the global context bar.
+________________________________________
+6. UI Integration
+The HTML/JS file acts as an admin console over the data model and EFs.
+6.1 Global Context Bar
+At the top of strategy-sensitive modules (Customer Balance Maintenance, Customer Transactions, Portfolio Performance Reporting):
+•	Organisation dropdown – driven by public.my_orgs().
+•	Customer dropdown – lists public.customer_details filtered by org_id.
+•	Active Portfolio / Strategy dropdown – lists public.v_customer_portfolios_expanded for the selected org & customer, ordered by created_at.
+The UI stores the selected:
+•	org_id,
+•	customer_id,
+•	portfolio_id,
+•	strategy_code.
+All strategy-specific cards read these from a shared state object.
+6.2 Customer Maintenance
+This module is the people & portfolios screen.
+Existing responsibilities
+•	Maintain customer_details (name, contact details, KYC, etc.).
+New responsibilities (v0.4)
+1.	Portfolios / Strategies panel per customer
+o	Shows a grid for public.customer_portfolios:
+Strategy	Exchange	Subaccount	Status	Since
+o	Backed by a view joining customer_portfolios, strategies, and exchange_accounts.
+2.	Create / Edit Portfolio
+o	“Add Portfolio” flow:
+	Select strategy_code (ADV_DCA, LTH_PVR, …).
+	Select or create an exchange account (public.exchange_accounts).
+	Choose base/quote (BTC/USDT).
+	Set status = 'active'.
+o	Saves a new row in public.customer_portfolios.
+3.	Manage Exchange Accounts
+o	Accessed from a dialog or nested panel:
+	Lists public.exchange_accounts for the org.
+	Allows editing label, status, subaccount_id.
+o	Fetch VALR subaccount_id button:
+	Calls an EF (e.g. ef_valr_sync_subaccounts) that:
+	Uses env VALR credentials to fetch available subaccounts (ID + label).
+	Returns them to the UI.
+	UI lets you pick one and writes the subaccount_id into public.exchange_accounts.
+4.	Customer status mirroring
+o	When public.customer_details.status transitions from active to any non-active status:
+	A DB trigger or scheduled maintenance job updates public.customer_portfolios.status for that customer to inactive (or similar).
+	Trading EFs only consider portfolios with status='active'.
+6.3 Customer Balance Maintenance
+This module is two lanes in one: ADV DCA and LTH PVR.
+•	Shared top controls:
+o	Organisation / Customer / Portfolio (from the context bar).
+o	Date range.
+•	Lane A – Advanced BTC DCA
+o	Cards using real_exchange_txs, exchange_daily_balances, drift views.
+o	Only shown when strategy_code = 'ADV_DCA'.
+•	Lane B – LTH PVR BTC DCA
+o	LTH PVR – Ledger & Balances card:
+	Uses lth_pvr_list_ledger_and_balances(from_date, portfolio_id, to_date).
+	Displays ledger events and derived balances for the selected portfolio.
+	“Recalculate balances” button can call ef_post_ledger_and_balances for a date range (optional).
+o	Future cards may include fee/funding summaries or CI band overlays.
+o	Only shown when strategy_code = 'LTH_PVR'.
+6.4 Customer Transactions
+This module is strategy-specific and focused on intents and orders, not individual customers.
+•	Uses only:
+o	Organisation and Active Portfolio / Strategy from the context bar.
+o	Shows:
+	Daily rule execution (“Run Daily Rules”).
+	Intent creation preview (order_intents).
+	VALR execution and recent orders (exchange_orders, order_fills).
+o	Global view (e.g., “all customers on this strategy”) can be implemented by ignoring customer_id and filtering by strategy_code + org_id.
+6.5 Portfolio Performance Reporting
+•	Uses:
+o	lth_pvr.v_customer_portfolio_daily for live LTH PVR NAV, BTC/USDT balances, and ROI.
+o	lth_pvr.v_compare_portfolio_daily for LTH vs Std DCA comparison.
+•	Shows:
+o	NAV over time, ROI %, Max Drawdown (future).
+o	Comparisons vs Std DCA; aggregated metrics per year.
+6.6 Strategy Back-Testing
+•	Uses:
+o	bt_runs, bt_results_daily, bt_std_dca_balances, v_bt_results_annual.
+•	UI:
+o	Form with strategy selection, date range, contributions, fees.
+o	“Run back-test” → inserts into bt_runs and calls ef_bt_execute.
+o	Charts:
+	Holdings, Portfolio Value, ROI, Annualised Growth, plus comparatives.
+o	Yearly table driving PDF export.
+6.7 Finance / Administration
+•	Finance
+o	Views over v_monthly_returns, fee_configs, fees_monthly, fee_invoices supporting a monthly fee dashboard.
+•	Administration
+o	Cron and job status overview (using runs table).
+o	Configuration toggles (e.g. pause all trading for an org, global fee rates, etc.).
+________________________________________
+7. Monitoring, Alerting & Ops (enhanced)
+7.1 Runs & Cron Metadata
+•	Tables
+o	lth_pvr.runs – each EF invocation writes a row with:
+	run_id, org_id, function_name, payload, status, started_at, finished_at, error.
+•	Cron
+o	upsert_cron functions used to define/maintain schedules for all EFs.
+7.2 Alert System (new in v0.4)
+Goal: Notify you whenever any part of the LTH_PVR pipeline (or future strategies) fails or misbehaves.
+1.	Alert conditions
+o	Any runs.status = 'error'.
+o	Missing cron executions:
+	e.g. no ef_fetch_ci_bands run for today by 04:00 UTC.
+o	Data anomalies:
+	Missing ci_bands_daily for yesterday.
+	Gaps in balances_daily (no row for an active portfolio on a trading day).
+	Excessive fallback usage or repeated execution errors for a specific portfolio.
+2.	Alert pipeline
+o	New table monitoring.alerts:
+	alert_id, org_id, alert_type, severity, message, context_json, created_at, acknowledged_at.
+o	New EF ef_monitor_lth_pvr (runs every few minutes via upsert_cron):
+	Queries runs, cron metadata, and key tables.
+	Inserts rows into monitoring.alerts if it detects issues.
+	Sends notifications via email or Slack webhooks.
+3.	Ops UI
+o	Simple “Alerts & Monitoring” card under Administration:
+	Table of recent alerts with filters by severity, org, strategy.
+	Links to deep-dive pages (e.g. bt_runs for back-test errors, exchange_orders for trading errors).
+4.	Runbooks
+o	For each major alert type, maintain a short “runbook”:
+	What it means.
+	Immediate steps (e.g., rerun a specific EF, inspect VALR orders).
+	Data validation queries.
+________________________________________
+8. Open Questions & Future Enhancements
+•	Precise fee and tax handling across jurisdictions (still out of scope here).
+•	Support for non-BTC strategies.
+•	Customer-facing portal vs internal admin only.
+•	Additional risk metrics and portfolio analytics (Sharpe, Max Drawdown, time in band, etc.).
+________________________________________
+If you’re happy with this SDD_v0.4 structure, the next move can be:
+•	You save it as SDD_v0.4.docx / .md in your repo, and
+•	We start using it + Build Plan_v0.4 as the single source of truth while we implement the next milestones (shared exchange_accounts, Customer Maintenance portfolio UI, and the alert system).
+
+Version 0.5 – Implemented Alerting Components for LTH PVR (generated 2025-12-26)
+- Data model – lth_pvr.alert_events: alert_id (uuid, PK), created_at (timestamptz, default now()), component (text), severity (text with check constraint over ['info','warn','error','critical']), org_id (uuid), customer_id (bigint, nullable), portfolio_id (uuid, nullable), message (text), context (jsonb, default '{}'::jsonb), resolved_at (timestamptz, nullable), resolved_by (text, nullable), resolution_note (text, nullable). Primary index on alert_id plus secondary indexes on created_at DESC and (severity, created_at) for unresolved alerts.
+- Guard log – lth_pvr.ci_bands_guard_log: lightweight table to capture each run of the CI bands guard, including a did_call flag (whether the Edge Function was actually invoked), HTTP status, and raw details jsonb. Used only for troubleshooting / audit – not surfaced directly in the UI.
+- Guard function – lth_pvr.ensure_ci_bands_today(): scheduled every 30 minutes. It calculates yesterday's UTC date, checks lth_pvr.ci_bands_daily for the (org_id, date = yesterday, mode = 'static') row, and exits early if present. If missing, it calls ef_fetch_ci_bands via pg_net.http_post with a small JSON payload { guard: true, org_id }, then logs the status + body into ci_bands_guard_log. Any unexpected SQL exceptions are caught and also logged with a synthetic status code 599.
+- Edge Function – ef_fetch_ci_bands: in guard mode it fetches a short CI window, normalises the payload into the lth_pvr.ci_bands_daily schema, and upserts by (org_id, date, mode). It includes a self-heal branch that attempts a 1-day refetch if 'today' is missing, but this no longer produces the earlier 'today missing' warning in normal operation (because CI never has same-day data).
+- Alert digest – ef_alert_digest: reads lth_pvr.alert_events for a given org_id, filters for new unresolved error/critical rows since the last run (or in the last N hours), and sends a single summary email using the configured mail provider. A daily cron job triggers this Edge Function via pg_net.http_post, using configuration values stored as database settings / secrets rather than embedding keys in the SQL itself.
+- Alerts UI – A compact Alerts card in the BitWealth web UI requests the latest open alerts (backed by lth_pvr.alert_events) and allows the operator to mark them as resolved/acknowledged with an optional resolution note. This provides the first end‑to‑end monitoring loop for the LTH PVR CI bands ingestion path.
+Planned next step: extend this alerting pattern to the remaining LTH PVR components (VALR order lifecycle, back-testing execution, statement/fee pipelines, and scheduled jobs) so that all critical failures surface via lth_pvr.alert_events and appear both in the Alerts UI card and the daily ef_alert_digest email.
