@@ -25,9 +25,16 @@ const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
 // repeatedly for the same account within a single run.
 const subaccountCache = new Map<string, string | null>();
 
-Deno.serve(async (_req)=>{
-  // 1) Load all open exchange_orders (we'll look up subaccount_id separately)
-  const { data: orders, error } = await supabase
+Deno.serve(async (_req: Request)=>{
+  // --- ENHANCED: Support for targeted polling and WebSocket fallback ---
+  // Query parameters can specify specific order_ids for targeted polling
+  const url = new URL(_req.url);
+  const targetOrderIdsParam = url.searchParams.get("order_ids");
+  const targetOrderIds = targetOrderIdsParam ? targetOrderIdsParam.split(",") : null;
+
+  // 1) Load open exchange_orders requiring polling
+  // If WebSocket monitoring is active, we only poll orders that haven't been updated recently
+  let query = supabase
     .from("exchange_orders")
     .select(
       `
@@ -42,10 +49,27 @@ Deno.serve(async (_req)=>{
       qty,
       status,
       submitted_at,
+      ws_monitored_at,
+      last_polled_at,
+      poll_count,
       raw
     `,
     )
     .eq("status", "submitted");
+
+  // If specific order_ids provided (targeted polling), filter to those
+  if (targetOrderIds && targetOrderIds.length > 0) {
+    query = query.in("intent_id", targetOrderIds);
+    console.log(`ef_poll_orders: Targeted polling for ${targetOrderIds.length} specific orders`);
+  } else {
+    // Safety net: only poll orders that haven't been polled in last 2 minutes
+    // or never polled, to avoid redundant API calls with WebSocket
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    query = query.or(`last_polled_at.is.null,last_polled_at.lt.${twoMinutesAgo}`);
+    console.log("ef_poll_orders: Safety net polling for stale orders");
+  }
+
+  const { data: orders, error } = await query;
 
   if (error) {
     console.error("ef_poll_orders: failed to load exchange_orders", error);
@@ -279,6 +303,9 @@ Deno.serve(async (_req)=>{
           const { error: updateOldError } = await supabase.from("exchange_orders").update({
             status: "cancelled",
             updated_at: new Date().toISOString(),
+            last_polled_at: new Date().toISOString(),
+            poll_count: (o.poll_count ?? 0) + 1,
+            requires_polling: false, // Order complete
             raw: mergedRaw
           }).eq("exchange_order_id", o.exchange_order_id);
           if (updateOldError) {
@@ -294,14 +321,23 @@ Deno.serve(async (_req)=>{
     // 3. Normal status update (no fallback triggered)
     // ------------------------------------------------------------------
     if (newStatus !== o.status || !o.raw?.valrLast || o.raw?.valrLast?.orderUpdatedAt !== last.orderUpdatedAt) {
+      const requiresMorePolling = newStatus === "submitted"; // Only keep polling if still open
+      
       const { error: updateError } = await supabase.from("exchange_orders").update({
         status: newStatus,
         updated_at: new Date().toISOString(),
+        last_polled_at: new Date().toISOString(),
+        poll_count: (o.poll_count ?? 0) + 1,
+        requires_polling: requiresMorePolling,
         raw: mergedRaw
       }).eq("exchange_order_id", o.exchange_order_id);
       if (updateError) {
         console.error(`ef_poll_orders: failed to update exchange_order_id=${o.exchange_order_id}`, updateError);
         continue;
+      }
+      
+      if (!requiresMorePolling) {
+        console.log(`ef_poll_orders: order ${o.exchange_order_id} complete (${newStatus}), stopped polling`);
       }
     }
     processed++;
