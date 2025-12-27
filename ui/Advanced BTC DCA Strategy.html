@@ -2143,11 +2143,16 @@
     let supabaseClient = null;
     if (hasSupabase) {
       const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
-      // TODO: Replace with your new Publishable Key from Supabase Dashboard
       const PUBLISHABLE_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
 
       try {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY);
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        });
         window.supabaseClient = supabaseClient; // expose globally for Admin module
       } catch (e) {
         console.error(e);
