@@ -2159,10 +2159,14 @@
         supabaseClient.auth.onAuthStateChange((event, session) => {
           console.log('[Auth] State changed:', event, session?.user?.email);
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // User just signed in or token refreshed - reload data if on import page
+            // User just signed in or token refreshed - reload data
             if (location.hash === '#import-module' || !location.hash) {
               clearInlineError('inlineError');
               loadExistingDates();
+            }
+            // Reload alerts if the loadAlerts function exists
+            if (typeof window.loadAlerts === 'function') {
+              window.loadAlerts();
             }
           }
         });
@@ -5589,6 +5593,21 @@
     }
 
     async function loadAlerts() {
+      // Check if authenticated first
+      if (!supabaseClient) {
+        tableBody.innerHTML = '<tr><td colspan="6">Loading Supabase client…</td></tr>';
+        return;
+      }
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Please sign in via Administration tab to view alerts.</td></tr>';
+        if (alertBadge) {
+          alertBadge.textContent = '0';
+          alertBadge.classList.add('zero');
+        }
+        return;
+      }
+      
       tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
       const onlyOpen = !openOnlyChk || openOnlyChk.checked;
       const component = componentFilter ? componentFilter.value : '';
@@ -5706,24 +5725,20 @@
     if (componentFilter) componentFilter.addEventListener('change', loadAlerts);
     tableBody.addEventListener('click', handleResolveClick);
 
+    // Expose loadAlerts globally so auth handler can call it
+    window.loadAlerts = loadAlerts;
+
+    // Don't auto-load alerts on DOMContentLoaded anymore - wait for authentication
+    // The auth state change handler will call loadAlerts() after sign-in
     document.addEventListener('DOMContentLoaded', () => {
-      // lazy-load when Admin tab is first visible
-      const adminModule = document.getElementById('adminModule');
-      if (!adminModule) {
-        loadAlerts();
-        return;
+      // Check if already authenticated and load
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadAlerts();
+          }
+        });
       }
-      if (!adminModule.classList.contains('hidden')) {
-        loadAlerts();
-        return;
-      }
-      const observer = new MutationObserver(() => {
-        if (!adminModule.classList.contains('hidden')) {
-          observer.disconnect();
-          loadAlerts();
-        }
-      });
-      observer.observe(adminModule, { attributes: true, attributeFilter: ['class'] });
     });
   })();
 
