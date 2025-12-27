@@ -2154,6 +2154,18 @@
           }
         });
         window.supabaseClient = supabaseClient; // expose globally for Admin module
+        
+        // Listen for authentication changes and reload data
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+          console.log('[Auth] State changed:', event, session?.user?.email);
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            // User just signed in or token refreshed - reload data if on import page
+            if (location.hash === '#import-module' || !location.hash) {
+              clearInlineError('inlineError');
+              loadExistingDates();
+            }
+          }
+        });
       } catch (e) {
         console.error(e);
         showInlineError('reportsError','Could not initialize Supabase client.');
@@ -2246,6 +2258,13 @@
     let existingDates=new Set(),previewRows=[];
     async function loadExistingDates(){
       if(!supabaseClient){return;}
+      // Check if user is authenticated
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        console.warn('[Import] User not authenticated. Please sign in via Administration tab.');
+        showInlineError('inlineError','Please sign in via the Administration tab to access data.');
+        return;
+      }
       const res=await supabaseClient.from('daily_data').select('date_closing');
       if(res.error){console.error(res.error);showInlineError('inlineError','Error loading existing dates: '+res.error.message);return;}
       existingDates=new Set(res.data.map(r=>normalizeDate(r.date_closing)));
