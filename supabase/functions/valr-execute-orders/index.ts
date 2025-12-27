@@ -15,7 +15,7 @@ const cors = (req)=>{
   };
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SB_KEY = Deno.env.get("Secret Key");
 const PAIR = "BTCUSDT";
 async function signVALR(ts, method, path, body, secret) {
   const enc = new TextEncoder();

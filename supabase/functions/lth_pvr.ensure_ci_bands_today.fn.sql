@@ -16,13 +16,13 @@ declare
   -- service role key from vault
   v_service_key text;
 begin
-  -- Get service role key from vault
+  -- Get service role key from vault (UPDATED: now uses 'Secret Key')
   select decrypted_secret into v_service_key 
   from vault.decrypted_secrets 
-  where name = 'service_role_key';
+  where name = 'Secret Key';
   
   if v_service_key is null then
-    raise exception 'service_role_key not found in vault';
+    raise exception 'Secret Key not found in vault';
   end if;
   
   --------------------------------------------------------------------

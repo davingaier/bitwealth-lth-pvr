@@ -2,7 +2,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const SERVICE_ROLE = Deno.env.get('Secret Key');
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
