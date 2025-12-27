@@ -1,0 +1,30 @@
+# Environment variables - DO NOT COMMIT
+.env
+.env.local
+.env.*.local
+.env.production
+
+# API Keys and Secrets
+*.key
+*.pem
+secrets.txt
+replacements.txt
+
+# Supabase
+.branches
+.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/

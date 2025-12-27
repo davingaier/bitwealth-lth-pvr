@@ -473,9 +473,9 @@ await logAlert(
 ```toml
 # supabase/config.toml
 [edge_runtime.secrets]
-RESEND_API_KEY = "re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc"
+RESEND_API_KEY = "[your-resend-api-key]"
 ALERT_EMAIL_FROM = "alerts@bitwealth.co.za"
-ALERT_EMAIL_TO = "davin.gaier@gmail.com"
+ALERT_EMAIL_TO = "your-email@example.com"
 ```
 
 **Schedule:**
@@ -1116,9 +1116,9 @@ VALR_API_KEY="[primary_api_key]"
 VALR_API_SECRET="[primary_api_secret]"
 
 # Alert Digest (NEW)
-RESEND_API_KEY="re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc"
+RESEND_API_KEY="[your-resend-api-key]"
 ALERT_EMAIL_FROM="alerts@bitwealth.co.za"
-ALERT_EMAIL_TO="davin.gaier@gmail.com"
+ALERT_EMAIL_TO="your-email@example.com"
 
 # CryptoQuant API
 CRYPTOQUANT_API_KEY="[api_key]"
@@ -1127,9 +1127,9 @@ CRYPTOQUANT_API_KEY="[api_key]"
 **Setting Secrets:**
 ```bash
 cd /path/to/bitwealth-lth-pvr
-supabase secrets set RESEND_API_KEY=re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc \
+supabase secrets set RESEND_API_KEY=[your-resend-api-key] \
   ALERT_EMAIL_FROM="alerts@bitwealth.co.za" \
-  ALERT_EMAIL_TO="davin.gaier@gmail.com"
+  ALERT_EMAIL_TO="your-email@example.com"
 ```
 
 ### 8.2 Edge Function Deployment
