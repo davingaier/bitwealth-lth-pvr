@@ -2168,6 +2168,14 @@
             if (typeof window.loadAlerts === 'function') {
               window.loadAlerts();
             }
+            // Reload customers if the loadCustomers function exists
+            if (typeof window.loadCustomers === 'function') {
+              window.loadCustomers();
+            }
+            // Reload org context if function exists
+            if (typeof window.loadOrgContext === 'function') {
+              window.loadOrgContext();
+            }
           }
         });
       } catch (e) {
@@ -2293,6 +2301,14 @@
     }
     async function importRows(){
       if(!window.supabaseClient){ showInlineError('inlineError','Supabase not available.'); return; }
+      
+      // Check if authenticated
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.user) {
+        showInlineError('inlineError', 'Please sign in to import data.');
+        return;
+      }
+      
       function toBool(v){ if(typeof v==='boolean')return v; const s=String(v==null?'':v).trim().toLowerCase(); return s==='true'||s==='1'||s==='yes'||s==='y'; }
       clearInlineError('inlineError');
 
@@ -2652,6 +2668,13 @@
 
       if (!supabaseClient){
         showInlineError(errId, 'Supabase client not available in this environment.');
+        return;
+      }
+      
+      // Check if authenticated
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        showInlineError(errId, 'Please sign in to run backtests.');
         return;
       }
 
@@ -3502,6 +3525,16 @@
         orgSel.disabled=true; portSel.disabled=true;
         return;
       }
+      
+      // Check if authenticated
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        orgSel.innerHTML='<option value="">Sign in to load organisations</option>';
+        portSel.innerHTML='<option value="">Sign in first</option>';
+        orgSel.disabled=true; portSel.disabled=true;
+        console.warn('[Context] Not authenticated, skipping org context load');
+        return;
+      }
 
       try{
         // orgs (best-effort; portfolios do NOT depend on this)
@@ -3681,6 +3714,17 @@
         if(txSel) setNativeOptions(txSel,msg);
         if(editSel) setNativeOptions(editSel,msg);
         showInlineError('reportsError','Supabase not available.');
+        return;
+      }
+      // Check if authenticated
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        const msg='<option value="">Sign in to load customers</option>';
+        if(sel) setNativeOptions(sel,msg);
+        if(btSel) setNativeOptions(btSel,msg);
+        if(txSel) setNativeOptions(txSel,msg);
+        if(editSel) setNativeOptions(editSel,msg);
+        console.warn('[Reports] Not authenticated, skipping customer load');
         return;
       }
       const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000));
