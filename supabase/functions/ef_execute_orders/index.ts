@@ -1,5 +1,7 @@
 import { getServiceClient } from "./client.ts";
 import { placeLimitOrder } from "./valrClient.ts";
+import { logAlert } from "./alerting.ts";
+
 Deno.serve(async ()=>{
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
@@ -23,87 +25,198 @@ Deno.serve(async ()=>{
       status: 200
     });
   }
+  
+  let successCount = 0;
+  let errorCount = 0;
+  
   for (const i of intents ?? []){
-    // find customer's exchange_account_id
-    const { data: cs } = await sb.from("customer_strategies").select("exchange_account_id").eq("org_id", org_id).eq("customer_id", i.customer_id).order("effective_from", {
-      ascending: false
-    }).limit(1);
-    const exchange_account_id = cs?.[0]?.exchange_account_id ?? null;
-    if (!exchange_account_id) {
-      console.warn(`No exchange_account_id for customer ${i.customer_id}, skipping intent ${i.intent_id}`);
-      continue;
-    }
-    // Look up VALR subaccount ID for this exchange account
-    const { data: exAcc, error: exErr } = await sb.from("exchange_accounts").select("subaccount_id").eq("org_id", org_id).eq("exchange_account_id", exchange_account_id).limit(1).single();
-    if (exErr) {
-      console.error("exchange_accounts lookup failed", exErr);
-      continue;
-    }
-    const subaccountId = exAcc?.subaccount_id ?? null;
-    if (!subaccountId) {
-      console.warn(`No subaccount_id for exchange_account_id ${exchange_account_id}, skipping intent ${i.intent_id}`);
-      continue;
-    }
-    // --- PLACE LIMIT ORDER on VALR ---
-    const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";
-    const pair = "BTCUSDT"; // VALR pair code (vs "BTC/USDT" internal) 
-    const priceStr = String(i.limit_price);
-    const qtyStr = String(i.amount);
-    let valrResp;
     try {
-      valrResp = await placeLimitOrder({
-        side,
-        pair,
-        price: priceStr,
-        quantity: qtyStr,
-        customerOrderId: i.intent_id,
-        timeInForce: "GTC",
-        postOnly: false
-      }, subaccountId);
-    } catch (e) {
-      console.error("VALR place order failed", e);
-      await sb.from("exchange_orders").insert({
+      // find customer's exchange_account_id
+      const { data: cs } = await sb.from("customer_strategies").select("exchange_account_id").eq("org_id", org_id).eq("customer_id", i.customer_id).order("effective_from", {
+        ascending: false
+      }).limit(1);
+      const exchange_account_id = cs?.[0]?.exchange_account_id ?? null;
+      if (!exchange_account_id) {
+        console.warn(`No exchange_account_id for customer ${i.customer_id}, skipping intent ${i.intent_id}`);
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          "error",
+          `No exchange account configured for customer ${i.customer_id}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            trade_date: todayDate
+          },
+          org_id,
+          i.customer_id
+        );
+        errorCount++;
+        continue;
+      }
+      // Look up VALR subaccount ID for this exchange account
+      const { data: exAcc, error: exErr } = await sb.from("exchange_accounts").select("subaccount_id").eq("org_id", org_id).eq("exchange_account_id", exchange_account_id).limit(1).single();
+      if (exErr) {
+        console.error("exchange_accounts lookup failed", exErr);
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          "error",
+          `Exchange account lookup failed: ${exErr.message}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            exchange_account_id,
+            error: exErr.message
+          },
+          org_id,
+          i.customer_id
+        );
+        errorCount++;
+        continue;
+      }
+      const subaccountId = exAcc?.subaccount_id ?? null;
+      if (!subaccountId) {
+        console.warn(`No subaccount_id for exchange_account_id ${exchange_account_id}, skipping intent ${i.intent_id}`);
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          "critical",
+          `No VALR subaccount mapped for exchange_account_id ${exchange_account_id}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            exchange_account_id,
+            trade_date: todayDate
+          },
+          org_id,
+          i.customer_id
+        );
+        errorCount++;
+        continue;
+      }
+      // --- PLACE LIMIT ORDER on VALR ---
+      const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";
+      const pair = "BTCUSDT"; // VALR pair code (vs "BTC/USDT" internal) 
+      const priceStr = String(i.limit_price);
+      const qtyStr = String(i.amount);
+      let valrResp;
+      try {
+        valrResp = await placeLimitOrder({
+          side,
+          pair,
+          price: priceStr,
+          quantity: qtyStr,
+          customerOrderId: i.intent_id,
+          timeInForce: "GTC",
+          postOnly: false
+        }, subaccountId);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error("VALR place order failed", e);
+        
+        // Check if it's a rate limit error
+        const isRateLimit = errMsg.toLowerCase().includes("rate limit") || errMsg.includes("429");
+        const severity = isRateLimit ? "warn" : "error";
+        
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          severity,
+          `VALR order placement failed: ${errMsg}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            side,
+            pair,
+            price: priceStr,
+            quantity: qtyStr,
+            error: errMsg,
+            rate_limited: isRateLimit
+          },
+          org_id,
+          i.customer_id
+        );
+        
+        await sb.from("exchange_orders").insert({
+          org_id,
+          exchange_account_id,
+          intent_id: i.intent_id,
+          pair: "BTC/USDT",
+          side,
+          price: i.limit_price,
+          qty: i.amount,
+          status: "error",
+          raw: {
+            error: errMsg
+          }
+        });
+        await sb.from("order_intents").update({
+          status: "error"
+        }).eq("intent_id", i.intent_id);
+        errorCount++;
+        continue;
+      }
+      const extId = valrResp?.orderId ?? valrResp?.id;
+      const eo = await sb.from("exchange_orders").insert({
         org_id,
         exchange_account_id,
         intent_id: i.intent_id,
+        ext_order_id: extId,
         pair: "BTC/USDT",
         side,
         price: i.limit_price,
         qty: i.amount,
-        status: "error",
+        status: "submitted",
         raw: {
-          error: String(e?.message ?? e)
+          valr: valrResp,
+          subaccountId
         }
       });
-      await sb.from("order_intents").update({
-        status: "error"
-      }).eq("intent_id", i.intent_id);
-      continue;
-    }
-    const extId = valrResp?.orderId ?? valrResp?.id;
-    const eo = await sb.from("exchange_orders").insert({
-      org_id,
-      exchange_account_id,
-      intent_id: i.intent_id,
-      ext_order_id: extId,
-      pair: "BTC/USDT",
-      side,
-      price: i.limit_price,
-      qty: i.amount,
-      status: "submitted",
-      raw: {
-        valr: valrResp,
-        subaccountId
+      if (eo.error) {
+        console.error(eo.error);
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          "error",
+          `Failed to insert exchange_order: ${eo.error.message}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            ext_order_id: extId,
+            error: eo.error.message
+          },
+          org_id,
+          i.customer_id
+        );
+        errorCount++;
+        continue;
       }
-    });
-    if (eo.error) {
-      console.error(eo.error);
-      continue;
+      // Mark intent as executed (handed off to exchange)
+      await sb.from("order_intents").update({
+        status: "executed"
+      }).eq("intent_id", i.intent_id);
+      successCount++;
+    } catch (err) {
+      console.error(`Order execution failed for intent ${i.intent_id}:`, err);
+      await logAlert(
+        sb,
+        "ef_execute_orders",
+        "error",
+        `Order execution failed for intent ${i.intent_id}`,
+        {
+          customer_id: i.customer_id,
+          intent_id: i.intent_id,
+          trade_date: todayDate,
+          error: err instanceof Error ? err.message : String(err)
+        },
+        org_id,
+        i.customer_id
+      );
+      errorCount++;
     }
-    // Mark intent as executed (handed off to exchange)
-    await sb.from("order_intents").update({
-      status: "executed"
-    }).eq("intent_id", i.intent_id);
   }
+  
+  console.info(`ef_execute_orders: success=${successCount}, errors=${errorCount}`);
   return new Response("ok");
 });
