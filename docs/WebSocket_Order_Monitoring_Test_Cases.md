@@ -10,14 +10,16 @@
 
 | Category | Total Tests | Executed | Passed | Failed | Blocked |
 |----------|-------------|----------|--------|--------|---------|
-| **1. Database Schema** | 4 | 0 | 0 | 0 | 0 |
-| **2. Edge Function Deployment** | 3 | 1 | 1 | 0 | 0 |
-| **3. WebSocket Connection** | 5 | 0 | 0 | 0 | 0 |
-| **4. Order Monitoring** | 8 | 0 | 0 | 0 | 0 |
-| **5. Fallback Polling** | 5 | 0 | 0 | 0 | 0 |
-| **6. Error Handling** | 6 | 0 | 0 | 0 | 0 |
-| **7. Performance** | 4 | 0 | 0 | 0 | 0 |
-| **TOTAL** | **35** | **1** | **1** | **0** | **0** |
+| **1. Database Schema** | 4 | 4 | 4 | 0 | 0 |
+| **2. Edge Function Deployment** | 3 | 3 | 3 | 0 | 0 |
+| **3. WebSocket Connection** | 5 | 0 | 0 | 0 | 5* |
+| **4. Order Monitoring** | 8 | 0 | 0 | 0 | 8* |
+| **5. Fallback Polling** | 5 | 0 | 0 | 0 | 5* |
+| **6. Error Handling** | 6 | 0 | 0 | 0 | 6* |
+| **7. Performance** | 4 | 1 | 1 | 0 | 3* |
+| **TOTAL** | **35** | **8** | **8** | **0** | **27** |
+
+*Blocked tests require live order placement or manual WebSocket testing - not executable via automated SQL/MCP queries
 
 ---
 
@@ -44,9 +46,13 @@ ORDER BY column_name;
 - `requires_polling`: boolean, default true
 
 **Test Execution:**
-- **Date:** 2025-12-27
-- **Result:** ⏳ PENDING
-- **Notes:**
+- **Date:** 2025-12-27 22:00 UTC
+- **Result:** ✅ PASS
+- **Notes:** All 4 columns verified:
+  - `last_polled_at`: timestamptz, nullable ✓
+  - `poll_count`: integer, default 0 ✓
+  - `requires_polling`: boolean, default true ✓
+  - `ws_monitored_at`: timestamptz, nullable ✓
 
 ---
 
@@ -68,9 +74,12 @@ WHERE schemaname = 'lth_pvr'
 - Columns: (requires_polling, last_polled_at)
 
 **Test Execution:**
-- **Date:** 
-- **Result:** ⏳ PENDING
-- **Notes:**
+- **Date:** 2025-12-27 22:00 UTC
+- **Result:** ✅ PASS
+- **Notes:** Index confirmed:
+  - Name: idx_exchange_orders_requires_polling ✓
+  - Type: btree (requires_polling, last_polled_at) ✓
+  - WHERE clause: status = 'submitted' ✓
 
 ---
 
@@ -95,9 +104,13 @@ WHERE status = 'submitted'
 - Zero orders with `requires_polling IS NULL`
 
 **Test Execution:**
-- **Date:**
-- **Result:** ⏳ PENDING
-- **Notes:**
+- **Date:** 2025-12-27 22:00 UTC
+- **Result:** ✅ PASS (N/A - No submitted orders)
+- **Notes:** Query results:
+  - submitted_orders_with_flag: 0
+  - submitted_orders_missing_flag: 0
+  - total_submitted: 0
+  - No orders in system to test, but migration verified via schema default (requires_polling default=true)
 
 ---
 
@@ -117,9 +130,13 @@ WHERE jobname LIKE '%poll_orders%' OR command LIKE '%ef_poll_orders%';
 - Job exists and is enabled
 
 **Test Execution:**
-- **Date:**
-- **Result:** ⏳ PENDING
-- **Notes:**
+- **Date:** 2025-12-27 22:00 UTC
+- **Result:** ✅ PASS
+- **Notes:** Cron job verified:
+  - Job ID: 12
+  - Name: lthpvr_poll_orders ✓
+  - Schedule: */10 * * * * (every 10 minutes) ✓
+  - Active: true ✓
 
 ---
 
@@ -162,9 +179,16 @@ SELECT * FROM net.http_get(
 - Function compiles without errors
 
 **Test Execution:**
-- **Date:**
-- **Result:** ⏳ PENDING (blocked by CLI config error)
-- **Notes:** Code changes complete, deployment pending CLI update
+- **Date:** 2025-12-27 21:17 UTC
+- **Result:** ✅ PASS
+- **Notes:** Function deployed successfully:
+  - Version: 29 (updated from v28)
+  - Status: ACTIVE
+  - Slug: ef_execute_orders
+  - ID: a954cb9f-c502-4709-a057-7bf905636d08
+  - verify_jwt: true
+  - Code includes WebSocket monitor trigger at lines 218-288
+  - Deployed via mcp_supabase_deploy_edge_function (CLI workaround)
 
 ---
 
@@ -181,9 +205,18 @@ SELECT * FROM net.http_get(
 - Filters out recently polled orders (<2 min)
 
 **Test Execution:**
-- **Date:**
-- **Result:** ⏳ PENDING (blocked by CLI config error)
-- **Notes:** Code changes complete, deployment pending CLI update
+- **Date:** 2025-12-27 21:19 UTC
+- **Result:** ✅ PASS
+- **Notes:** Function deployed successfully:
+  - Version: 38 (updated from v37)
+  - Status: ACTIVE
+  - Slug: ef_poll_orders
+  - ID: e2245a22-3d7f-497a-917e-146afe2d3d4a
+  - verify_jwt: true
+  - Includes targeted polling (?order_ids parameter) at lines 28-47
+  - Includes 2-minute safety net filter at lines 38-43
+  - Updates tracking columns (last_polled_at, poll_count) at lines 310-318
+  - Deployed via mcp_supabase_deploy_edge_function (CLI workaround)
 
 ---
 
@@ -815,9 +848,14 @@ WHERE status = 'submitted'
 - No sequential scan
 
 **Test Execution:**
-- **Date:**
-- **Result:** ⏳ PENDING
-- **Notes:**
+- **Date:** 2025-12-27 22:00 UTC
+- **Result:** ✅ PASS
+- **Notes:** EXPLAIN ANALYZE results:
+  - Uses index: idx_exchange_orders_requires_polling ✓
+  - Index type: Index Scan (not sequential scan) ✓
+  - Execution time: 0.100 ms (< 10ms requirement) ✓
+  - Planning time: 6.089 ms
+  - Query optimizer correctly uses partial index with WHERE clause filter
 
 ---
 
@@ -853,6 +891,17 @@ WHERE status = 'submitted'
 
 ---
 
-**Last Updated:** 2025-12-27  
-**Test Execution Status:** 1/35 tests executed (2.9%)  
-**Next Test:** 1.1 - Database Schema Verification
+**Last Updated:** 2025-12-27 22:00 UTC  
+**Test Execution Status:** 8/35 tests executed (22.9%)  
+**Automated Tests Passed:** 8/8 (100%)  
+**Manual Tests Remaining:** 27 (require live order placement/WebSocket connections)  
+
+**Summary:**
+- ✅ All database schema validations passed
+- ✅ All edge function deployments verified
+- ✅ Performance index optimization confirmed (<10ms execution)
+- ⏳ WebSocket connection tests require manual execution with wscat or live orders
+- ⏳ Order monitoring tests require actual order placement
+- ⏳ Fallback polling tests require live order scenarios
+- ⏳ Error handling tests require fault injection
+- ⏳ Performance tests 7.1-7.3 require baseline measurements with real orders
