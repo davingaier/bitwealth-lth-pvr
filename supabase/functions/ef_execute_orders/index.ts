@@ -218,5 +218,78 @@ Deno.serve(async ()=>{
   }
   
   console.info(`ef_execute_orders: success=${successCount}, errors=${errorCount}`);
+  
+  // --- NEW: Initiate WebSocket monitoring for submitted orders ---
+  if (successCount > 0) {
+    try {
+      // Get all submitted orders from today
+      const { data: submittedOrders, error: ordersErr } = await sb
+        .from("exchange_orders")
+        .select("intent_id, exchange_account_id")
+        .eq("org_id", org_id)
+        .eq("status", "submitted")
+        .gte("submitted_at", todayDate + "T00:00:00Z");
+
+      if (!ordersErr && submittedOrders && submittedOrders.length > 0) {
+        // Group orders by exchange_account_id to get subaccount_id
+        const accountGroups = new Map<string, string[]>();
+        
+        for (const order of submittedOrders) {
+          const accountId = order.exchange_account_id;
+          if (!accountGroups.has(accountId)) {
+            accountGroups.set(accountId, []);
+          }
+          accountGroups.get(accountId)!.push(order.intent_id);
+        }
+
+        // Launch WebSocket monitor for each subaccount
+        for (const [accountId, orderIds] of accountGroups.entries()) {
+          const { data: exAcc } = await sb
+            .from("exchange_accounts")
+            .select("subaccount_id")
+            .eq("exchange_account_id", accountId)
+            .single();
+
+          const subaccountId = exAcc?.subaccount_id;
+
+          if (subaccountId) {
+            // Call WebSocket monitor Edge Function (non-blocking)
+            const wsUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ef_valr_ws_monitor`;
+            fetch(wsUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({
+                order_ids: orderIds,
+                subaccount_id: subaccountId,
+              }),
+            }).catch((err) => {
+              console.warn("Failed to initiate WebSocket monitor:", err);
+              // Non-critical: polling will handle as fallback
+            });
+
+            // Mark orders as WebSocket monitored
+            await sb
+              .from("exchange_orders")
+              .update({
+                ws_monitored_at: new Date().toISOString(),
+                requires_polling: true, // Still require polling as safety net
+              })
+              .in("intent_id", orderIds);
+
+            console.log(
+              `ef_execute_orders: Initiated WebSocket monitoring for ${orderIds.length} orders (subaccount ${subaccountId.substring(0, 8)}...)`,
+            );
+          }
+        }
+      }
+    } catch (wsErr) {
+      console.warn("WebSocket monitor setup failed (non-critical):", wsErr);
+      // Polling will handle as fallback
+    }
+  }
+  
   return new Response("ok");
 });
