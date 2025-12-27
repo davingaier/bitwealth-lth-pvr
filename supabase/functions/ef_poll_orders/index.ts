@@ -5,6 +5,8 @@
 //    then cancel it and place a fallback MARKET order for the remaining qty.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getOrderSummaryByCustomerOrderId, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
+import { logAlert } from "./alerting.ts";
+
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -13,6 +15,8 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
     schema: "lth_pvr"
   }
 });
+const org_id = Deno.env.get("ORG_ID");
+
 // --- Fallback config ---
 const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
@@ -58,6 +62,7 @@ Deno.serve(async (_req)=>{
       status: 200
     });
   }
+
   let processed = 0;
   for (const o of (orders ?? [])){
 
@@ -104,18 +109,34 @@ Deno.serve(async (_req)=>{
 
     } catch (err) {
       console.error(`ef_poll_orders: VALR poll failed for customerOrderId (intent_id)=${o.intent_id}`, err);
+      await logAlert(
+        supabase,
+        "ef_poll_orders",
+        "warn",
+        `Failed to fetch order status from VALR`,
+        {
+          intent_id: o.intent_id,
+          exchange_order_id: o.exchange_order_id,
+          ext_order_id: o.ext_order_id,
+          error: err instanceof Error ? err.message : String(err)
+        },
+        org_id
+      );
       continue;
     }
+
     const last = Array.isArray(summary) ? summary[0] : summary;
     if (!last) {
       console.warn(`ef_poll_orders: no VALR summary returned for intent_id=${o.intent_id}`);
       continue;
     }
+
     const valrStatus = last.orderStatusType || last.orderStatus || last.status || "";
     let newStatus = o.status ?? "submitted";
     if (valrStatus === "Cancelled") newStatus = "cancelled";
     else if (valrStatus === "Filled") newStatus = "filled";
     else newStatus = "submitted";
+
     // Prepare merged raw payload
     const mergedRaw = {
       ...o.raw ?? {},
@@ -128,6 +149,7 @@ Deno.serve(async (_req)=>{
       },
       valrLast: last
     };
+
     // ------------------------------------------------------------------
     // 2. Fallback logic: if still submitted AND not already a fallback
     // ------------------------------------------------------------------
@@ -137,10 +159,26 @@ Deno.serve(async (_req)=>{
       const ageMs = submittedAt ? Date.now() - submittedAt.getTime() : 0;
       let shouldFallback = false;
       let marketPrice = null;
+
       // (a) Age condition
       if (ageMs >= MAX_AGE_MS) {
         shouldFallback = true;
         console.log(`ef_poll_orders: order ${o.exchange_order_id} older than 5 minutes – converting to market`);
+        await logAlert(
+          supabase,
+          "ef_poll_orders",
+          "warn",
+          `Order exceeding 5min timeout, triggering market order fallback`,
+          {
+            intent_id: o.intent_id,
+            exchange_order_id: o.exchange_order_id,
+            ext_order_id: o.ext_order_id,
+            age_minutes: Math.round(ageMs / 60000),
+            side,
+            pair
+          },
+          org_id
+        );
       } else {
         // (b) Price move condition
         try {
@@ -157,17 +195,33 @@ Deno.serve(async (_req)=>{
           console.error("ef_poll_orders: failed to fetch market price for fallback check", err);
         }
       }
+
       if (shouldFallback) {
         const originalQty = Number(last.originalQuantity ?? o.qty ?? 0);
         const executedQty = Number(last.totalExecutedQuantity ?? 0);
         const remainingQty = originalQty - executedQty;
+
         if (remainingQty > 0) {
           // 2.a Cancel the stale LIMIT order on VALR
           try {
             await cancelOrderById(last.id, pair, subaccountId);
           } catch (err) {
             console.error(`ef_poll_orders: failed to cancel stale limit order ${last.id}`, err);
+            await logAlert(
+              supabase,
+              "ef_poll_orders",
+              "error",
+              `Failed to cancel stale limit order`,
+              {
+                intent_id: o.intent_id,
+                exchange_order_id: o.exchange_order_id,
+                ext_order_id: last.id,
+                error: err instanceof Error ? err.message : String(err)
+              },
+              org_id
+            );
           }
+
           // 2.b Place a MARKET order for the remaining quantity
           const usePrice = marketPrice ?? Number(last.price ?? o.price ?? 0);
           let amount;
@@ -178,6 +232,7 @@ Deno.serve(async (_req)=>{
             // SELL: amount is base (BTC)
             amount = remainingQty.toString();
           }
+
           try {
             const marketOrder = await placeMarketOrder(pair, side, amount, o.intent_id, subaccountId);
 
@@ -202,7 +257,24 @@ Deno.serve(async (_req)=>{
             }
           } catch (err) {
             console.error("ef_poll_orders: failed to place fallback market order", err);
+            await logAlert(
+              supabase,
+              "ef_poll_orders",
+              "critical",
+              `Market order fallback failed after cancelling limit order`,
+              {
+                intent_id: o.intent_id,
+                exchange_order_id: o.exchange_order_id,
+                original_ext_order_id: o.ext_order_id,
+                remaining_qty: remainingQty,
+                side,
+                pair,
+                error: err instanceof Error ? err.message : String(err)
+              },
+              org_id
+            );
           }
+
           // 2.c Mark the original limit order as cancelled locally
           const { error: updateOldError } = await supabase.from("exchange_orders").update({
             status: "cancelled",
@@ -217,6 +289,7 @@ Deno.serve(async (_req)=>{
         }
       }
     }
+
     // ------------------------------------------------------------------
     // 3. Normal status update (no fallback triggered)
     // ------------------------------------------------------------------
@@ -233,6 +306,7 @@ Deno.serve(async (_req)=>{
     }
     processed++;
   }
+
   return new Response(JSON.stringify({
     processed
   }), {
