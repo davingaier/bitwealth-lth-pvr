@@ -55,7 +55,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 Deno.serve(async (_req)=>{
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const SERVICE_ROLE_KEY = Deno.env.get('Secret Key');
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     // Write ONLY for Active customers
     const { data: customers, error: cErr } = await supabase.from('customer_details').select('customer_id').eq('customer_status', 'Active');

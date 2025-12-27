@@ -11,7 +11,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json"
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_SERVICE_ROLE_KEY = Deno.env.get("SB_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SB_SERVICE_ROLE_KEY = Deno.env.get("Secret Key");
 const SYMBOL = "BTCUSDT";
 const json = (p, s = 200)=>new Response(JSON.stringify(p), {
     status: s,
