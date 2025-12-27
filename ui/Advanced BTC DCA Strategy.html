@@ -1029,7 +1029,16 @@
         if (Date.now() - start > 8000) return; // give up silently
       }
     };
-    whenSbReady().then(() => loadPlaced24h().then(renderPlaced).catch(console.warn));
+    // Don't auto-load on init - wait for authentication
+    // Auth state handler will trigger this if needed
+    whenSbReady().then(async () => {
+      if (window.supabaseClient) {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (session?.user) {
+          loadPlaced24h().then(renderPlaced).catch(console.warn);
+        }
+      }
+    });
 
     const el = (id) => document.getElementById(id);
 
@@ -1167,6 +1176,14 @@
 
     // ====== PLACED ORDERS (submitted/executing/filled/cancelled/error) ======
     async function loadPlaced24h() {
+      // Check if authenticated
+      if (!window.supabaseClient) return [];
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.user) {
+        console.warn('[Placed Orders] Not authenticated, skipping load');
+        return [];
+      }
+      
       const start = new Date(Date.now() - 24*60*60*1000).toISOString();
       const { data, error } = await sb()
         .from('exchange_order_intents')
@@ -1209,6 +1226,10 @@
         `;
       }).join('');
     }
+
+    // Expose globally for auth handler
+    window.loadPlaced24h = loadPlaced24h;
+    window.renderPlaced = renderPlaced;
 
     // Delegate cancel clicks (both in table and placed panel)
     document.addEventListener('click', async (e) => {
@@ -2175,6 +2196,12 @@
             // Reload org context if function exists
             if (typeof window.loadOrgContext === 'function') {
               window.loadOrgContext();
+            }
+            // Reload placed orders if on that module
+            if (location.hash === '#customer-transactions-module') {
+              if (typeof window.loadPlaced24h === 'function' && typeof window.renderPlaced === 'function') {
+                window.loadPlaced24h().then(window.renderPlaced).catch(console.warn);
+              }
             }
           }
         });
@@ -3692,6 +3719,10 @@
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       }
     }
+
+    // Expose globally for auth handler
+    window.loadOrgContext = loadOrgContext;
+    window.loadCustomers = loadCustomers;
 
     function setReportTitle(first,last){const el=document.getElementById('reportTitle');el.textContent=(first&&last)?('Advanced DCA Portfolio Performance of '+first+' '+last):'';}
     function setResetZoomEnabled(en){const b=document.getElementById('resetZoomBtn');if(b)b.disabled=!en;}
