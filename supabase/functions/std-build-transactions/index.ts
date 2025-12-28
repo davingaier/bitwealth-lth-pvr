@@ -13,7 +13,7 @@ const CORS = {
 
 /* ENV */
 const URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("Secret Key");
+const KEY = Deno.env.get("SECRET_KEY");
 if (!URL || !KEY) throw new Error("Missing SB_URL/Secret Key");
 const sb = createClient(URL, KEY);
 

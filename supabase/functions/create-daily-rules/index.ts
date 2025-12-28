@@ -15,7 +15,7 @@ const json = (p, s = 200)=>new Response(JSON.stringify(p), {
     headers: CORS
   });
 /* ---------- ENV ---------- */ const URL = Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("Secret Key");
+const KEY = Deno.env.get("SECRET_KEY");
 if (!URL || !KEY) throw new Error("Missing SUPABASE_URL / Secret Key");
 /* ---------- date utils ---------- */ const toISO = (d)=>d.toISOString().slice(0, 10);
 const addDays = (iso, n)=>{
