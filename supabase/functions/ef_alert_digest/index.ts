@@ -41,20 +41,21 @@ async function sendEmail(subject: string, text: string) {
 }
 
 Deno.serve(async (req: Request) => {
-  const sb = getServiceClient();
+  try {
+    const sb = getServiceClient();
 
-  // Optional override via JSON payload, e.g. for manual tests
-  let body: any = {};
-  try { body = await req.json(); } catch (_) { body = {}; }
+    // Optional override via JSON payload, e.g. for manual tests
+    let body: any = {};
+    try { body = await req.json(); } catch (_) { body = {}; }
 
-  const org_id =
-    (typeof body.org_id === "string" && body.org_id) ||
-    Deno.env.get("ORG_ID") ||
-    null;
+    const org_id =
+      (typeof body.org_id === "string" && body.org_id) ||
+      Deno.env.get("ORG_ID") ||
+      null;
 
-  if (!org_id) {
-    return new Response("ORG_ID missing", { status: 500 });
-  }
+    if (!org_id) {
+      return new Response("ORG_ID missing", { status: 500 });
+    }
 
   // 1) Load NEW open error/critical alerts (never notified)
   const { data, error } = await sb
@@ -122,4 +123,8 @@ Deno.serve(async (req: Request) => {
   }
 
   return new Response(`notified ${alerts.length} alert(s)`, { status: 200 });
+  } catch (err) {
+    console.error("ef_alert_digest: uncaught error", err);
+    return new Response(`Error: ${(err as Error).message}`, { status: 500 });
+  }
 });
