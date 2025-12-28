@@ -1519,6 +1519,17 @@ Invoke-WebRequest `
 - `supabase/sql/migrations/20251224_add_notified_at_column_to_lth_pvr.alert_events.sql`
 - `supabase/sql/migrations/20251226_create_cron_schedule_for_ef_alert_digest.sql`
 
+**Implementation Guides:**
+- `Alert_Digest_Setup.md` – Complete alert digest configuration and troubleshooting
+- `WebSocket_Order_Monitoring_Implementation.md` – WebSocket monitoring technical guide
+
+**Test Documentation:**
+- `LTH_PVR_Test_Cases_Master.md` – Consolidated test cases for all system components (116 tests)
+- Individual test case documents:
+  - `Alert_System_Test_Cases.md` – 51 alert system tests
+  - `WebSocket_Order_Monitoring_Test_Cases.md` – 35 WebSocket monitoring tests
+  - `Pipeline_Resume_Test_Cases.md` – 30 pipeline resume tests
+
 ---
 
 ## 10. Future Enhancements
