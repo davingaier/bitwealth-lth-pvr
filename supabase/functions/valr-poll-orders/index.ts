@@ -14,7 +14,7 @@ const cors = (req)=>{
   };
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_KEY = Deno.env.get("Secret Key");
+const SB_KEY = Deno.env.get("SECRET_KEY");
 async function signVALR(ts, method, path, body, secret) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), {
