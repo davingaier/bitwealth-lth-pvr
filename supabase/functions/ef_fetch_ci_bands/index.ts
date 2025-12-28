@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
         context,
       };
       if (orgId) payload.org_id = orgId;
-      await sb.from("alert_events").insert(payload);
+      await sb.schema("lth_pvr").from("alert_events").insert(payload);
     } catch (e) {
       console.error("ef_fetch_ci_bands: alert_events insert failed", e);
     }
@@ -248,6 +248,7 @@ Deno.serve(async (req: Request) => {
   const records = data.map(toRec);
 
   const up = await sb
+    .schema("lth_pvr")
     .from("ci_bands_daily")
     .upsert(records, {
       onConflict: "org_id,date,mode",
@@ -262,7 +263,7 @@ Deno.serve(async (req: Request) => {
     d.setUTCDate(d.getUTCDate() - 1); // yesterday in UTC
     const expectedDate = d.toISOString().slice(0, 10);
 
-    const chk = await sb.from("ci_bands_daily")
+    const chk = await sb.schema("lth_pvr").from("ci_bands_daily")
       .select("date")
       .eq("org_id", org_id)
       .eq("mode", mode)
@@ -284,7 +285,7 @@ Deno.serve(async (req: Request) => {
         const data2 = Array.isArray(json2?.data) ? json2.data : [];
         if (data2.length) {
           const rec2 = data2.map(toRec);
-          await sb.from("ci_bands_daily").upsert(rec2, {
+          await sb.schema("lth_pvr").from("ci_bands_daily").upsert(rec2, {
             onConflict: "org_id,date,mode",
           });
         } else {
