@@ -55,7 +55,7 @@ async function logAlert(
 }
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("Secret Key");
+const supabaseKey = Deno.env.get("SECRET_KEY");
 const org_id = Deno.env.get("ORG_ID");
 
 const VALR_WS_URL = Deno.env.get("VALR_WS_URL") ?? "wss://api.valr.com/ws/trade";

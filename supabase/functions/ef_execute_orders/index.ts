@@ -259,7 +259,7 @@ Deno.serve(async ()=>{
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${Deno.env.get("Secret Key")}`,
+                "Authorization": `Bearer ${Deno.env.get("SECRET_KEY")}`,
               },
               body: JSON.stringify({
                 order_ids: orderIds,
