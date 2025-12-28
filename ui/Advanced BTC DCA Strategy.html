@@ -5836,8 +5836,13 @@
       const alertId = tr.getAttribute('data-alert-id');
       if (!alertId) return;
 
-      const note =
-        window.prompt('Optional note to attach when resolving this alert:', '') || null;
+      const note = window.prompt('Optional note to attach when resolving this alert:', '');
+      
+      // If user clicked Cancel, note will be null - abort the operation
+      if (note === null) return;
+      
+      // If user left it blank (empty string), pass null to the RPC
+      const resolveNote = note.trim() === '' ? null : note;
 
       btn.setAttribute('disabled', 'true');
       btn.textContent = 'Resolving…';
@@ -5845,7 +5850,7 @@
       const { error } = await supabaseClient.rpc('resolve_lth_alert_event', {
         p_alert_id: alertId,
         p_resolved_by: 'ui-admin',
-        p_resolution_note: note
+        p_resolution_note: resolveNote
       });
 
       if (error) {
@@ -5874,6 +5879,20 @@
     if (autoRefreshChk) autoRefreshChk.addEventListener('change', toggleAutoRefresh);
     if (componentFilter) componentFilter.addEventListener('change', loadAlerts);
     tableBody.addEventListener('click', handleResolveClick);
+
+    // Stop auto-refresh when leaving admin module
+    document.querySelectorAll('nav a').forEach(link => {
+      link.addEventListener('click', (e) => {
+        if (!e.target.href.includes('#admin-module')) {
+          if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+          }
+          // Also uncheck the checkbox
+          if (autoRefreshChk) autoRefreshChk.checked = false;
+        }
+      });
+    });
 
     // Expose loadAlerts globally so auth handler can call it
     window.loadAlerts = loadAlerts;
