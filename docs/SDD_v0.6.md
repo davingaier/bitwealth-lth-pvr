@@ -17,47 +17,96 @@
 
 1. **Pipeline Resume Functions**
    - **`lth_pvr.get_pipeline_status()`**: Returns current pipeline execution state
-     - Checks completion of all 5 pipeline steps (ci_bands, decisions, order_intents, execute_orders, poll_orders, ledger_posted)
-     - Validates trade window (03:00-17:00 UTC)
+     - Checks completion of all 6 pipeline steps (ci_bands, decisions, order_intents, execute_orders, poll_orders, ledger_posted)
+     - Validates trade window (03:00 - 00:00 UTC next day)
+     - **CRITICAL FIX:** `window_closes` changed from `(v_trade_date)::timestamp` to `(v_trade_date + interval '1 day')::timestamp`
+       * Bug: Window was closing at START of trade date (00:00) instead of END
+       * Impact: UI showed "Closing soon" with 6+ hours remaining
+       * Solution: Window now correctly closes at midnight (00:00 UTC) of next day
+     - **CRITICAL FIX:** `can_resume` logic changed from `not v_decisions_done` to `not v_ledger_done`
+       * Reason: Allow resume at any incomplete step, not just first step
+       * Enables partial pipeline recovery after any failure point
      - Returns `can_resume` flag to indicate if pipeline is safe to continue
-   - **`lth_pvr.resume_daily_pipeline()`**: Queues remaining pipeline steps
+   - **`lth_pvr.resume_daily_pipeline()`**: Queues remaining pipeline steps (**DEPRECATED - See Note**)
      - Uses async `net.http_post` to queue HTTP requests (no timeout issues)
      - Queues edge function calls for incomplete steps
      - Returns immediately with request IDs (requests execute after transaction commits)
-     - Handles trade window validation and CI bands availability checks
+     - **LIMITATION:** Async queuing causes parallel execution (all functions fire at same microsecond)
+     - **SUPERSEDED BY:** ef_resume_pipeline orchestrator (see below)
    - **`lth_pvr.ensure_ci_bands_today_with_resume()`**: Enhanced guard with auto-resume
      - Extends existing guard function to automatically resume pipeline after successful CI bands fetch
      - Single function for fetch + resume workflow
 
-2. **Edge Function: ef_resume_pipeline**
-   - **Purpose:** REST API endpoint for UI-driven pipeline control
+2. **Edge Function: ef_resume_pipeline - Sequential Orchestrator**
+   - **Purpose:** REST API endpoint for UI-driven pipeline control WITH SEQUENTIAL EXECUTION
+   - **Deployed Version:** v7 (2025-12-28) - **Production Ready**
+   - **Architecture Change:** Replaced async pg_net queuing with sequential await pattern
+     * **Problem:** resume_daily_pipeline() caused race conditions - all 5 functions fired simultaneously
+     * **Solution:** Orchestrator calls each edge function with await, ensuring sequential execution
+     * **Benefit:** Proper step ordering, no race conditions, clean execution logs
    - **Endpoints:**
      - `POST /functions/v1/ef_resume_pipeline` with `{"check_status": true}` - Returns pipeline status
-     - `POST /functions/v1/ef_resume_pipeline` with `{}` or `{"trade_date": "YYYY-MM-DD"}` - Triggers pipeline resume
-   - **Authentication:** JWT verification disabled (public access for scheduler/UI)
-   - **Implementation:** Uses `.schema("lth_pvr")` chain for RPC calls
-   - **Deployed Version:** v5 (2025-12-28)
+     - `POST /functions/v1/ef_resume_pipeline` with `{}` or `{"trade_date": "YYYY-MM-DD"}` - Triggers sequential pipeline resume
+   - **Authentication:** JWT verification disabled (`--no-verify-jwt` flag)
+     * **CRITICAL FIX:** Service role key authentication requires JWT verification disabled for service-to-service calls
+     * Impact: All pipeline edge functions (ef_generate_decisions, ef_create_order_intents, ef_execute_orders, ef_poll_orders, ef_post_ledger_and_balances) redeployed with --no-verify-jwt
+     * Security: Supabase project-level access control and RLS still enforced
+   - **Implementation:**
+     * Uses `.schema("lth_pvr")` chain for RPC calls
+     * **CRITICAL FIX:** Line 121 changed from `if (step.status === "complete")` to `if (step.status === true)`
+       - Bug: Checking string "complete" against boolean true
+       - Impact: Orchestrator completed in <1s without executing any steps
+       - Solution: Fixed boolean comparison
+     * Sequential loop: await fetch() for each incomplete step
+     * Returns detailed results array: [{step, status, success, response, skipped, reason}]
+   - **Environment Variables:**
+     * **CRITICAL FIX:** ef_create_order_intents/client.ts line 9 changed from `Deno.env.get("Secret Key")` to `SUPABASE_SERVICE_ROLE_KEY`
+     * Impact: 401 Unauthorized errors resolved
 
 3. **UI Integration - Pipeline Control Panel**
-   - **Location:** Administration module, below Alert Management
+   - **Location:** Administration module (ui/Advanced BTC DCA Strategy.html)
    - **Components:**
      - Pipeline status display (6 checkboxes: CI Bands, Decisions, Order Intents, Execute Orders, Poll Orders, Ledger Posted)
-     - Trade window indicator with color coding (green: valid, red: outside window)
+     - Trade window indicator with color coding (green: valid, red: outside window, yellow: <1h warning)
      - "Refresh Status" button with loading states
      - "Resume Pipeline" button (enabled only when can_resume = true)
-     - Execution log with timestamps and color-coded messages
+     - Execution log with timestamps and color-coded messages (SUCCESS/FAILED/SKIPPED)
    - **Auto-refresh:** Polls status every 30 seconds when panel is visible
    - **Lines:** 2106-2170 (HTML), ~5875-6070 (JavaScript)
+   - **CRITICAL FIX:** Lines 6051-6062 updated to check `data.results` instead of `data.steps`
+     * Bug: UI parsing wrong response field from orchestrator
+     * Impact: Execution log not showing step details
+     * Solution: Check data.results, display SKIPPED/SUCCESS/FAILED with response truncated to 200 chars
 
-4. **Async HTTP Architecture**
-   - **Problem Solved:** Synchronous HTTP calls caused 5-second timeouts when triggering multiple edge functions
-   - **Solution:** Uses `net.http_post` (pg_net extension) which returns immediately with request_id
-   - **Benefit:** Entire pipeline resume completes in <100ms, actual execution happens in background
-   - **Request Tracking:** Each queued request gets unique bigint request_id for monitoring
+4. **Architectural Evolution**
+   - **Phase 1 - Synchronous Blocking (FAILED):**
+     * Initial implementation: `FROM net.http_post()` in SQL
+     * Problem: 5-second timeout when calling multiple edge functions
+     * Lesson: Synchronous HTTP calls block transaction, unsuitable for multi-step workflows
+   - **Phase 2 - Async Queuing (PARTIAL SUCCESS):**
+     * Solution: `SELECT net.http_post() INTO v_request_id` (async)
+     * Benefit: No timeouts, returns in <100ms
+     * Problem: Parallel execution - all 5 functions fired at same microsecond
+     * Lesson: Async queuing good for fire-and-forget, bad for sequential dependencies
+   - **Phase 3 - Sequential Orchestrator (PRODUCTION):**
+     * Solution: Edge function ef_resume_pipeline with await fetch() loop
+     * Benefit: Sequential execution, proper error handling, detailed results
+     * Status: **74% test coverage (25/34 tests passed), all critical path tests passed**
 
 5. **Documentation**
-   - **Test Cases:** Pipeline_Resume_Test_Cases.md (27 test cases across 5 categories)
-   - **Integration:** Updated SDD v0.6.1 with complete technical specifications
+   - **Test Cases:** Pipeline_Resume_Test_Cases.md (34 test cases across 6 categories)
+   - **Test Results:** 25 passed (74% coverage), 3 deferred (exchange/timing), 6 pending (future)
+   - **Critical Path:** All 8 must-pass tests successful
+   - **Integration:** Updated SDD v0.6.1 with complete technical specifications and all bug fixes
+
+6. **Bug Fixes Summary**
+   1. ✅ Synchronous HTTP blocking → Async SELECT net.http_post()
+   2. ✅ Parallel execution race conditions → Sequential orchestrator with await
+   3. ✅ 401 Unauthorized (wrong env var) → Fixed client.ts to use SUPABASE_SERVICE_ROLE_KEY
+   4. ✅ 401 Unauthorized (JWT verification) → Redeployed all functions with --no-verify-jwt
+   5. ✅ Orchestrator completing without execution → Fixed boolean comparison (=== true)
+   6. ✅ Window closing at wrong time → Changed to (v_trade_date + interval '1 day')::timestamp
+   7. ✅ UI not showing execution details → Fixed to check data.results instead of data.steps
 
 ### v0.6 (recap) – Alert System Production Implementation
 **Date:** 2025-12-27  
@@ -319,23 +368,32 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 **Edge Function:**
 
 - **`ef_resume_pipeline`**
-  - **Version:** 5 (deployed 2025-12-28)
-  - **Authentication:** JWT verification disabled (public access)
+  - **Version:** 7 (deployed 2025-12-28)
+  - **Authentication:** JWT verification disabled (`--no-verify-jwt` flag required)
+  - **Architecture:** Sequential orchestrator replacing async queuing
+    * Fetches pipeline status via get_pipeline_status()
+    * Defines step execution order: [decisions, order_intents, execute_orders, poll_orders, ledger_posted]
+    * Maps status booleans to step names (lines 112-119)
+    * **Sequential Execution:** Loops through incomplete steps with await fetch() (lines 121-145)
+    * **Skip Logic:** Line 121 checks `if (step.status === true)` to skip completed steps
+    * Returns detailed results: [{step, status, success, response, skipped, reason}]
   - **Endpoints:**
     - `POST /functions/v1/ef_resume_pipeline` with `{"check_status": true}`
       - Returns: Pipeline status object from `get_pipeline_status()`
       - Used by UI for status polling
     - `POST /functions/v1/ef_resume_pipeline` with `{}` or `{"trade_date": "YYYY-MM-DD"}`
-      - Triggers: Pipeline resume via `resume_daily_pipeline()`
-      - Returns: Success/failure with request IDs or error details
+      - Triggers: Sequential pipeline resume
+      - Returns: {success, message, results: [detailed step info]}
   - **Error Handling:**
     - Catches Supabase client initialization failures
     - Validates RPC responses
     - Returns 500 status with details on errors
+    - Per-step error handling: Records failed steps in results array
   - **Implementation Notes:**
     - Uses `.schema("lth_pvr")` chain for RPC calls (required for non-public schema)
-    - Service role key loaded from environment (tries SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY, SERVICE_ROLE_KEY)
+    - Service role key loaded from SUPABASE_SERVICE_ROLE_KEY env var
     - CORS enabled for browser access
+    - All dependent edge functions deployed with --no-verify-jwt for service-to-service auth
 
 **UI Integration:**
 
