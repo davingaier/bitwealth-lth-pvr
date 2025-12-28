@@ -2103,6 +2103,73 @@
         </table>
       </div>
 
+      <!-- Pipeline Control Panel -->
+      <div class="card" id="pipelineControlCard">
+        <h3>LTH_PVR Pipeline Control</h3>
+        <p class="small-muted">Resume daily pipeline after CI bands data becomes available.</p>
+        
+        <div id="pipelineStatus" style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:1rem;margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.75rem;">
+            <div>
+              <strong style="display:block;margin-bottom:.25rem;">Pipeline Status</strong>
+              <span id="pipelineStatusText" style="color:#6c757d;">Loading...</span>
+            </div>
+            <button id="pipelineRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+            <div>
+              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Trade Date</div>
+              <div id="pipelineTradeDate" style="font-weight:500;">—</div>
+            </div>
+            <div>
+              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Signal Date (CI Bands)</div>
+              <div id="pipelineSignalDate" style="font-weight:500;">—</div>
+            </div>
+            <div>
+              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">CI Bands Available</div>
+              <div id="pipelineCIStatus" style="font-weight:500;">—</div>
+            </div>
+            <div>
+              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Trade Window</div>
+              <div id="pipelineWindowStatus" style="font-weight:500;">—</div>
+            </div>
+          </div>
+          
+          <div style="border-top:1px solid #e9ecef;padding-top:.75rem;">
+            <div style="font-size:.8rem;color:#6c757d;margin-bottom:.5rem;">Pipeline Steps</div>
+            <div style="display:grid;gap:.35rem;">
+              <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepDecisions" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">Generate Decisions</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepIntents" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">Create Order Intents</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepOrders" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">Execute Orders</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepLedger" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">Post Ledger & Balances</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:.75rem;align-items:center;">
+          <button id="pipelineResumeBtn" type="button" class="btn" disabled>Resume Pipeline</button>
+          <span id="pipelineResumeMessage" style="font-size:.85rem;color:#6c757d;"></span>
+        </div>
+        
+        <div id="pipelineExecutionLog" style="display:none;margin-top:1rem;background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:1rem;">
+          <strong style="display:block;margin-bottom:.5rem;">Execution Log</strong>
+          <div id="pipelineLogContent" style="font-family:monospace;font-size:.8rem;white-space:pre-wrap;color:#495057;"></div>
+        </div>
+      </div>
+
       <!-- Alerts card -->
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
@@ -5811,6 +5878,211 @@
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
             loadAlerts();
+          }
+        });
+      }
+    });
+  })();
+
+  /* ========== Pipeline Control Module ========== */
+  (function() {
+    const refreshBtn = document.getElementById('pipelineRefreshBtn');
+    const resumeBtn = document.getElementById('pipelineResumeBtn');
+    const statusText = document.getElementById('pipelineStatusText');
+    const tradeDateEl = document.getElementById('pipelineTradeDate');
+    const signalDateEl = document.getElementById('pipelineSignalDate');
+    const ciStatusEl = document.getElementById('pipelineCIStatus');
+    const windowStatusEl = document.getElementById('pipelineWindowStatus');
+    const resumeMessageEl = document.getElementById('pipelineResumeMessage');
+    const executionLog = document.getElementById('pipelineExecutionLog');
+    const logContent = document.getElementById('pipelineLogContent');
+    
+    const stepIcons = {
+      decisions: document.getElementById('stepDecisions'),
+      intents: document.getElementById('stepIntents'),
+      orders: document.getElementById('stepOrders'),
+      ledger: document.getElementById('stepLedger')
+    };
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      const d = new Date(dateStr + 'T00:00:00Z');
+      return d.toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function formatTimestamp(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      return d.toLocaleString('en-ZA', { 
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+
+    function updateStepIcon(step, done) {
+      if (stepIcons[step]) {
+        stepIcons[step].textContent = done ? '✅' : '⏸️';
+      }
+    }
+
+    function logMessage(msg, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString('en-ZA');
+      const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+      logContent.textContent += `[${timestamp}] ${prefix} ${msg}\n`;
+      executionLog.style.display = 'block';
+    }
+
+    function clearLog() {
+      logContent.textContent = '';
+      executionLog.style.display = 'none';
+    }
+
+    async function loadPipelineStatus() {
+      if (!supabaseClient) return;
+
+      try {
+        refreshBtn.disabled = true;
+        statusText.textContent = 'Loading...';
+
+        const { data, error } = await supabaseClient.functions.invoke('ef_resume_pipeline', {
+          body: { check_status: true }
+        });
+
+        if (error) throw error;
+
+        // Update UI with status
+        tradeDateEl.textContent = formatDate(data.trade_date);
+        signalDateEl.textContent = formatDate(data.signal_date);
+        
+        ciStatusEl.textContent = data.ci_bands_available ? '✅ Available' : '❌ Not Available';
+        ciStatusEl.style.color = data.ci_bands_available ? '#28a745' : '#dc3545';
+        
+        if (data.window_valid) {
+          const closes = new Date(data.window_closes);
+          const now = new Date();
+          const hoursLeft = Math.max(0, (closes - now) / (1000 * 60 * 60));
+          windowStatusEl.textContent = hoursLeft > 0 
+            ? `✅ Open (${hoursLeft.toFixed(1)}h left)`
+            : '⏰ Closing soon';
+          windowStatusEl.style.color = hoursLeft > 0 ? '#28a745' : '#ffc107';
+        } else {
+          windowStatusEl.textContent = '❌ Expired';
+          windowStatusEl.style.color = '#dc3545';
+        }
+
+        // Update step icons
+        updateStepIcon('decisions', data.steps?.decisions_generated);
+        updateStepIcon('intents', data.steps?.intents_created);
+        updateStepIcon('orders', data.steps?.orders_executed);
+        updateStepIcon('ledger', data.steps?.ledger_posted);
+
+        // Update resume button and message
+        resumeBtn.disabled = !data.can_resume;
+        resumeMessageEl.textContent = data.resume_reason || '';
+        
+        if (data.can_resume) {
+          statusText.textContent = '⚠️ Pipeline paused - ready to resume';
+          statusText.style.color = '#ffc107';
+          resumeBtn.classList.add('btn-primary');
+        } else if (data.steps?.decisions_generated) {
+          statusText.textContent = '✅ Pipeline already executed';
+          statusText.style.color = '#28a745';
+          resumeBtn.classList.remove('btn-primary');
+        } else if (!data.ci_bands_available) {
+          statusText.textContent = '⏳ Waiting for CI bands data';
+          statusText.style.color = '#6c757d';
+          resumeBtn.classList.remove('btn-primary');
+        } else if (!data.window_valid) {
+          statusText.textContent = '❌ Trade window expired';
+          statusText.style.color = '#dc3545';
+          resumeBtn.classList.remove('btn-primary');
+        } else {
+          statusText.textContent = '✅ System ready';
+          statusText.style.color = '#28a745';
+          resumeBtn.classList.remove('btn-primary');
+        }
+
+      } catch (err) {
+        console.error('Pipeline status error:', err);
+        statusText.textContent = '⚠️ Error loading status';
+        statusText.style.color = '#dc3545';
+        resumeMessageEl.textContent = err.message || 'Failed to load pipeline status';
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    async function resumePipeline() {
+      if (!supabaseClient) return;
+      if (!confirm('Resume the LTH_PVR pipeline? This will execute all remaining steps in sequence.')) {
+        return;
+      }
+
+      try {
+        resumeBtn.disabled = true;
+        resumeBtn.textContent = 'Resuming...';
+        statusText.textContent = '🔄 Pipeline running...';
+        statusText.style.color = '#007bff';
+        clearLog();
+        logMessage('Starting pipeline resume...');
+
+        const { data, error } = await supabaseClient.functions.invoke('ef_resume_pipeline', {
+          body: {}
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          logMessage('Pipeline completed successfully!', 'success');
+          
+          // Log each step
+          if (data.steps && Array.isArray(data.steps)) {
+            data.steps.forEach(step => {
+              const status = step.success ? 'SUCCESS' : 'FAILED';
+              const type = step.success ? 'success' : 'error';
+              logMessage(`${step.step}: ${status} (${step.status || 'N/A'})`, type);
+            });
+          }
+
+          statusText.textContent = '✅ Pipeline completed';
+          statusText.style.color = '#28a745';
+          
+          // Refresh alerts to show any new issues
+          if (typeof window.loadAlerts === 'function') {
+            window.loadAlerts();
+          }
+        } else {
+          throw new Error(data.error || data.message || 'Pipeline failed');
+        }
+
+      } catch (err) {
+        console.error('Pipeline resume error:', err);
+        logMessage(`Error: ${err.message}`, 'error');
+        statusText.textContent = '❌ Pipeline failed';
+        statusText.style.color = '#dc3545';
+        alert(`Pipeline failed: ${err.message}`);
+      } finally {
+        resumeBtn.disabled = false;
+        resumeBtn.textContent = 'Resume Pipeline';
+        
+        // Reload status after execution
+        setTimeout(loadPipelineStatus, 2000);
+      }
+    }
+
+    // Event listeners
+    if (refreshBtn) refreshBtn.addEventListener('click', loadPipelineStatus);
+    if (resumeBtn) resumeBtn.addEventListener('click', resumePipeline);
+
+    // Expose globally for auth handler
+    window.loadPipelineStatus = loadPipelineStatus;
+
+    // Load status on authentication
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPipelineStatus();
           }
         });
       }
