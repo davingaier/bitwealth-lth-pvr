@@ -3,13 +3,63 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2025-12-27
+**Last updated:** 2025-12-28
 
 ---
 
 ## 0. Change Log
 
-### v0.6 (current) – Alert System Production Implementation
+### v0.6.1 (current) – Pipeline Resume Mechanism
+**Date:** 2025-12-28  
+**Purpose:** Add automated pipeline recovery system to resume execution after CI bands fetch failures.
+
+**Key Changes:**
+
+1. **Pipeline Resume Functions**
+   - **`lth_pvr.get_pipeline_status()`**: Returns current pipeline execution state
+     - Checks completion of all 5 pipeline steps (ci_bands, decisions, order_intents, execute_orders, poll_orders, ledger_posted)
+     - Validates trade window (03:00-17:00 UTC)
+     - Returns `can_resume` flag to indicate if pipeline is safe to continue
+   - **`lth_pvr.resume_daily_pipeline()`**: Queues remaining pipeline steps
+     - Uses async `net.http_post` to queue HTTP requests (no timeout issues)
+     - Queues edge function calls for incomplete steps
+     - Returns immediately with request IDs (requests execute after transaction commits)
+     - Handles trade window validation and CI bands availability checks
+   - **`lth_pvr.ensure_ci_bands_today_with_resume()`**: Enhanced guard with auto-resume
+     - Extends existing guard function to automatically resume pipeline after successful CI bands fetch
+     - Single function for fetch + resume workflow
+
+2. **Edge Function: ef_resume_pipeline**
+   - **Purpose:** REST API endpoint for UI-driven pipeline control
+   - **Endpoints:**
+     - `POST /functions/v1/ef_resume_pipeline` with `{"check_status": true}` - Returns pipeline status
+     - `POST /functions/v1/ef_resume_pipeline` with `{}` or `{"trade_date": "YYYY-MM-DD"}` - Triggers pipeline resume
+   - **Authentication:** JWT verification disabled (public access for scheduler/UI)
+   - **Implementation:** Uses `.schema("lth_pvr")` chain for RPC calls
+   - **Deployed Version:** v5 (2025-12-28)
+
+3. **UI Integration - Pipeline Control Panel**
+   - **Location:** Administration module, below Alert Management
+   - **Components:**
+     - Pipeline status display (6 checkboxes: CI Bands, Decisions, Order Intents, Execute Orders, Poll Orders, Ledger Posted)
+     - Trade window indicator with color coding (green: valid, red: outside window)
+     - "Refresh Status" button with loading states
+     - "Resume Pipeline" button (enabled only when can_resume = true)
+     - Execution log with timestamps and color-coded messages
+   - **Auto-refresh:** Polls status every 30 seconds when panel is visible
+   - **Lines:** 2106-2170 (HTML), ~5875-6070 (JavaScript)
+
+4. **Async HTTP Architecture**
+   - **Problem Solved:** Synchronous HTTP calls caused 5-second timeouts when triggering multiple edge functions
+   - **Solution:** Uses `net.http_post` (pg_net extension) which returns immediately with request_id
+   - **Benefit:** Entire pipeline resume completes in <100ms, actual execution happens in background
+   - **Request Tracking:** Each queued request gets unique bigint request_id for monitoring
+
+5. **Documentation**
+   - **Test Cases:** Pipeline_Resume_Test_Cases.md (27 test cases across 5 categories)
+   - **Integration:** Updated SDD v0.6.1 with complete technical specifications
+
+### v0.6 (recap) – Alert System Production Implementation
 **Date:** 2025-12-27  
 **Purpose:** Document fully operational alert system with comprehensive testing and email notifications.
 
@@ -134,6 +184,8 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
     - `ef_execute_orders` – VALR order submission with alerting
     - `ef_poll_orders` – order tracking, fills, and fallback logic
     - `ef_post_ledger_and_balances` – ledger rollup and balance calculation
+  - **Pipeline Control:**
+    - `ef_resume_pipeline` – **NEW: REST API for pipeline status and resume (v5, operational)**
   - **Benchmark & Fees:**
     - `ef_std_dca_roll` – Standard DCA benchmark updates
     - `ef_fee_monthly_close` – monthly performance fee calculation
@@ -150,6 +202,7 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
   - Carry buckets: `fn_carry_add`, `fn_carry_peek`, `fn_carry_consume`
   - Capital: `fn_usdt_available_for_trading`
   - **Alerts:** `lth_pvr.ensure_ci_bands_today()` guard function
+  - **Pipeline Control:** `lth_pvr.get_pipeline_status()`, `lth_pvr.resume_daily_pipeline()`, `lth_pvr.ensure_ci_bands_today_with_resume()`
   - **UI RPCs:** `list_lth_alert_events()`, `resolve_lth_alert_event()`
 
 - **Front-end:**
@@ -201,6 +254,135 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
   - Calls `ef_fetch_ci_bands` via `pg_net.http_post` if missing
   - Logs all attempts to `ci_bands_guard_log`
   - **Status:** Operational since 2025-12-27
+
+- **`lth_pvr.ensure_ci_bands_today_with_resume()`**
+  - Enhanced version that automatically resumes pipeline after successful fetch
+  - Calls `ensure_ci_bands_today()` first to fetch missing data
+  - Then calls `resume_daily_pipeline()` to continue execution
+  - **Use Case:** Scheduled as alternative to standalone guard for automated recovery
+  - **Status:** Operational since 2025-12-28
+
+### 2.1A Pipeline Resume System
+
+**Purpose:** Automated recovery mechanism to resume daily pipeline execution after CI bands fetch failures or manual intervention.
+
+**Database Functions:**
+
+- **`lth_pvr.get_pipeline_status(p_trade_date DATE DEFAULT NULL)`**
+  - **Returns:** JSONB object with pipeline execution state
+  - **Fields:**
+    - `trade_date`: Date being processed (defaults to CURRENT_DATE)
+    - `signal_date`: Trade date - 1 (date of CI bands data used for decisions)
+    - `current_date`: Server date
+    - `window_valid`: Boolean - true if within 03:00-17:00 UTC trading window
+    - `ci_bands_available`: Boolean - true if signal_date CI bands exist
+    - `can_resume`: Boolean - true if safe to resume pipeline (window valid AND ci_bands available AND at least one incomplete step)
+    - `steps`: Object with 6 boolean flags:
+      - `ci_bands`: CI bands data exists for signal_date
+      - `decisions`: decisions_daily records exist for trade_date
+      - `order_intents`: order_intents records exist for trade_date
+      - `execute_orders`: exchange_orders records exist for trade_date
+      - `poll_orders`: order_fills records exist for trade_date
+      - `ledger_posted`: balances_daily record exists for trade_date
+  - **Logic:**
+    - Queries 6 different tables to determine completion status
+    - Validates trade window (03:00-17:00 UTC prevents post-close execution)
+    - Returns comprehensive state for UI display and resume decisions
+  - **Usage:** Called by UI and edge function to check pipeline status
+
+- **`lth_pvr.resume_daily_pipeline(p_trade_date DATE DEFAULT NULL)`**
+  - **Returns:** JSONB object with success status and request IDs
+  - **Parameters:** 
+    - `p_trade_date`: Optional trade date override (defaults to CURRENT_DATE)
+  - **Logic:**
+    1. Calls `get_pipeline_status()` to check current state
+    2. Validates `can_resume` flag (exits if false with error message)
+    3. Determines which steps are incomplete by checking status.steps
+    4. Queues HTTP POST requests for incomplete steps using `net.http_post`:
+       - `ef_generate_decisions` (if decisions incomplete)
+       - `ef_create_order_intents` (if order_intents incomplete)
+       - `ef_execute_orders` (if execute_orders incomplete)
+       - `ef_poll_orders` (if poll_orders incomplete)
+       - `ef_post_ledger_and_balances` (if ledger_posted incomplete)
+    5. Returns immediately with array of request_ids (bigint)
+  - **Key Feature:** Uses async `net.http_post` (pg_net extension) to queue requests
+    - Function returns in <100ms
+    - HTTP requests execute in background after transaction commits
+    - No timeout issues (previous synchronous approach timed out at 5 seconds)
+  - **Request Format:** Each queued request includes:
+    - URL: Base URL + edge function path
+    - Headers: Authorization (Bearer + service_role_key), Content-Type
+    - Body: Empty JSON object `{}`
+    - Timeout: 60,000ms (60 seconds per edge function)
+  - **Status:** Operational since 2025-12-28
+
+**Edge Function:**
+
+- **`ef_resume_pipeline`**
+  - **Version:** 5 (deployed 2025-12-28)
+  - **Authentication:** JWT verification disabled (public access)
+  - **Endpoints:**
+    - `POST /functions/v1/ef_resume_pipeline` with `{"check_status": true}`
+      - Returns: Pipeline status object from `get_pipeline_status()`
+      - Used by UI for status polling
+    - `POST /functions/v1/ef_resume_pipeline` with `{}` or `{"trade_date": "YYYY-MM-DD"}`
+      - Triggers: Pipeline resume via `resume_daily_pipeline()`
+      - Returns: Success/failure with request IDs or error details
+  - **Error Handling:**
+    - Catches Supabase client initialization failures
+    - Validates RPC responses
+    - Returns 500 status with details on errors
+  - **Implementation Notes:**
+    - Uses `.schema("lth_pvr")` chain for RPC calls (required for non-public schema)
+    - Service role key loaded from environment (tries SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY, SERVICE_ROLE_KEY)
+    - CORS enabled for browser access
+
+**UI Integration:**
+
+- **Location:** `Advanced BTC DCA Strategy.html` - Administration module
+- **HTML:** Lines 2106-2170 (Pipeline Control Panel)
+- **JavaScript:** Lines ~5875-6070 (loadPipelineStatus, resumePipeline functions)
+- **Components:**
+  - **Status Display:** 6 checkboxes showing step completion (✓ = complete, ☐ = incomplete)
+  - **Trade Window Indicator:** Green "Trading window open" or Red "Trading window closed"
+  - **Refresh Button:** Manually polls `check_status` endpoint
+  - **Resume Button:** Enabled only when `can_resume = true`, triggers pipeline resume
+  - **Execution Log:** Scrollable log with timestamps and color-coded messages (green = success, red = error, gray = info)
+  - **Auto-refresh:** Polls status every 30 seconds when panel visible
+- **User Workflow:**
+  1. User opens Administration module
+  2. Pipeline Control Panel loads and displays current status
+  3. If CI bands were missing and now available, "Resume Pipeline" button becomes enabled
+  4. User clicks "Resume Pipeline"
+  5. Edge function queues remaining steps asynchronously
+  6. Log shows "Pipeline resume initiated successfully"
+  7. Status checkboxes update as steps complete (via auto-refresh)
+
+**Use Cases:**
+
+1. **CI Bands Fetch Failure Recovery:**
+   - Problem: `ef_fetch_ci_bands` fails at 03:00 UTC, halting pipeline
+   - Solution: Guard function retries every 30 minutes, or admin manually fixes and clicks Resume
+   - Result: Pipeline continues from where it stopped
+
+2. **Manual Intervention:**
+   - Problem: Admin notices incomplete pipeline execution in morning
+   - Solution: Admin opens Pipeline Control Panel, verifies CI bands available, clicks Resume
+   - Result: Remaining steps execute without re-running completed steps
+
+3. **Trade Window Validation:**
+   - Problem: Admin tries to resume at 18:00 UTC (after market close)
+   - Solution: Resume button disabled, window indicator shows red
+   - Result: Prevents invalid post-close trades
+
+**Monitoring:**
+
+- **Database:** Query `net._http_response` table to check queued request status
+  - Requests retained for ~6 hours
+  - Contains status codes, response bodies, error messages
+- **Logs:** Use `mcp_supabase_get_logs(service: "edge-function")` to view execution logs
+- **UI:** Execution log provides real-time feedback to admin
+- **Alerts:** Edge functions log errors to `lth_pvr.alert_events` on failures
 
 ### 2.2 Strategy Configuration & State
 
@@ -1438,6 +1620,12 @@ Overnight: ef_std_dca_roll
 Monthly: ef_fee_monthly_close → ef_fee_invoice_email
 
 Guard: lth_pvr.ensure_ci_bands_today() (every 30 minutes)
+
+Recovery: ef_resume_pipeline (manual or scheduled)
+  - Called via UI "Resume Pipeline" button
+  - Checks pipeline status
+  - Queues incomplete steps asynchronously
+  - Continues from last completed step
 ```
 
 ---
