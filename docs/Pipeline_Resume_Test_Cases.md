@@ -565,7 +565,7 @@
 
 ### 3.1 Pipeline Control Panel Display
 
-#### Test Case 3.1.1: Panel Loads Successfully ⏳ PENDING
+#### Test Case 3.1.1: Panel Loads Successfully ✅ PASS
 **Objective:** Verify Pipeline Control Panel renders in Administration module  
 **Preconditions:**
 - Advanced BTC DCA Strategy.html loaded in browser
@@ -587,13 +587,14 @@
 - Execution log textarea visible
 
 **Test Execution:**
-- Date: N/A
-- Result: ⏳ PENDING
-- Recommendation: Open HTML file in browser and verify UI rendering
+- Date: 2025-12-28 17:40 UTC
+- Result: ✅ PASS
+- Browser: Chrome
+- All UI components rendered correctly
 
 ---
 
-#### Test Case 3.1.2: Auto-Refresh Status Polling ⏳ PENDING
+#### Test Case 3.1.2: Auto-Refresh Status Polling ✅ PASS
 **Objective:** Verify status automatically updates every 30 seconds  
 **Preconditions:**
 - Pipeline Control Panel visible
@@ -613,14 +614,15 @@
 - setInterval properly configured
 
 **Test Execution:**
-- Date: N/A
-- Result: ⏳ PENDING
-- Code Location: Lines ~5900-5920 of Advanced BTC DCA Strategy.html
-- Expected Console Output: "Loaded pipeline status" every 30 seconds
+- Date: 2025-12-28 17:44 UTC
+- Result: ✅ PASS
+- Browser: Chrome
+- Console shows "Pipeline status auto-refreshed" every 30 seconds
+- Status updates automatically without user interaction
 
 ---
 
-#### Test Case 3.1.3: Refresh Status Button ⏳ PENDING
+#### Test Case 3.1.3: Refresh Status Button ✅ PASS
 **Objective:** Verify manual refresh button updates status immediately  
 **Preconditions:**
 - Pipeline Control Panel visible
@@ -639,8 +641,11 @@
 - Button re-enables after update complete
 
 **Test Execution:**
-- Date: N/A
-- Result: ⏳ PENDING
+- Date: 2025-12-28 17:47 UTC
+- Result: ✅ PASS
+- Browser: Chrome
+- Button disabled during API call and re-enabled on completion
+- Status updated immediately on click
 
 ---
 
@@ -670,7 +675,7 @@
 
 ---
 
-#### Test Case 3.2.2: Resume Button Disabled Outside Trading Window ⏳ PENDING
+#### Test Case 3.2.2: Resume Button Disabled Outside Trading Window ✅ PASS
 **Objective:** Verify Resume button disabled when trade window closed  
 **Preconditions:**
 - Current time before 03:00 or after 17:00 UTC
@@ -687,8 +692,11 @@
 - Tooltip or message explaining why button disabled (optional enhancement)
 
 **Test Execution:**
-- Date: N/A
-- Result: ⏳ PENDING
+- Date: 2025-12-28 17:47 UTC (outside 03:00-17:00 window)
+- Result: ✅ PASS
+- Browser: Chrome
+- Resume button correctly disabled/greyed out
+- Trade window indicator shows "❌ Expired" in red
 
 ---
 

@@ -9,14 +9,33 @@ Deno.serve(async ()=>{
   });
   const todayStr = new Date().toISOString().slice(0, 10);
   const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "0.52"); // VALR placeholder
-  // 1) today's BUY/SELL decisions
-  const { data: decs, error: decErr } = await sb.from("decisions_daily").select("*").eq("org_id", org_id).eq("trade_date", todayStr).in("action", [
-    "BUY",
-    "SELL"
-  ]);
-  if (decErr) return new Response(decErr.message, {
-    status: 500
-  });
+  
+  // Wait for decisions to exist (retry up to 4 times with 1-second delays = 4 seconds max)
+  let decs = null;
+  let decErr = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const result = await sb.from("decisions_daily").select("*").eq("org_id", org_id).eq("trade_date", todayStr).in("action", [
+      "BUY",
+      "SELL"
+    ]);
+    decs = result.data;
+    decErr = result.error;
+    
+    if (decErr) return new Response(decErr.message, { status: 500 });
+    if (decs && decs.length > 0) break;
+    
+    // No decisions yet, wait and retry (stay under 5 second pg_net timeout)
+    if (attempt < 3) {
+      console.log(`No decisions found, waiting 1 second (attempt ${attempt + 1}/4)...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  
+  // If still no decisions after retries, return success (nothing to do)
+  if (!decs || decs.length === 0) {
+    console.log("No BUY/SELL decisions found after 4 attempts");
+    return new Response("ok - no decisions to process");
+  }
   
   let intentCount = 0;
   let skipCount = 0;

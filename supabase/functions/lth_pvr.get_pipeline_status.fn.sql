@@ -30,7 +30,7 @@ begin
   v_trade_date := coalesce(p_trade_date, (now() at time zone 'UTC')::date);
   v_signal_date := v_trade_date - interval '1 day';
   v_current_date := (now() at time zone 'UTC')::date;
-  v_window_closes := (v_signal_date + interval '1 day' + interval '23 hours 59 minutes')::timestamp;
+  v_window_closes := (v_trade_date)::timestamp; -- Trade window closes at midnight on trade date
   
   -- Check CI bands existence
   select exists (
@@ -79,15 +79,17 @@ begin
   into v_ledger_done;
   
   -- Determine if pipeline can be resumed
-  v_can_resume := v_ci_exists and v_window_valid and not v_decisions_done;
+  -- Pipeline is fully complete only if ledger is posted
+  -- Can resume if: CI bands exist, window valid, and ledger NOT done
+  v_can_resume := v_ci_exists and v_window_valid and not v_ledger_done;
   
   if not v_ci_exists then
     v_resume_reason := format('CI bands for %s not yet available', v_signal_date);
   elsif not v_window_valid then
     v_resume_reason := format('Trade window expired (current date: %s, window closed: %s)', 
                               v_current_date, v_window_closes);
-  elsif v_decisions_done then
-    v_resume_reason := 'Pipeline already executed for this trade date';
+  elsif v_ledger_done then
+    v_resume_reason := 'Pipeline fully complete (ledger posted)';
   else
     v_resume_reason := 'Pipeline ready to resume';
   end if;
