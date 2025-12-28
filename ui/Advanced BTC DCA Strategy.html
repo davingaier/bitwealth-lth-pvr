@@ -6047,12 +6047,17 @@
         if (data.success) {
           logMessage('Pipeline completed successfully!', 'success');
           
-          // Log each step
-          if (data.steps && Array.isArray(data.steps)) {
-            data.steps.forEach(step => {
-              const status = step.success ? 'SUCCESS' : 'FAILED';
-              const type = step.success ? 'success' : 'error';
-              logMessage(`${step.step}: ${status} (${step.status || 'N/A'})`, type);
+          // Log each step result
+          if (data.results && Array.isArray(data.results)) {
+            data.results.forEach(step => {
+              if (step.skipped) {
+                logMessage(`${step.step}: SKIPPED (${step.reason})`, 'info');
+              } else {
+                const status = step.success ? 'SUCCESS' : 'FAILED';
+                const type = step.success ? 'success' : 'error';
+                const response = step.response ? ` - ${step.response}` : '';
+                logMessage(`${step.step}: ${status}${response}`, type);
+              }
             });
           }
 
