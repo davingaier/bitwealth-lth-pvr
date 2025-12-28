@@ -30,7 +30,7 @@ begin
   v_trade_date := coalesce(p_trade_date, (now() at time zone 'UTC')::date);
   v_signal_date := v_trade_date - interval '1 day';
   v_current_date := (now() at time zone 'UTC')::date;
-  v_window_closes := (v_trade_date)::timestamp; -- Trade window closes at midnight on trade date
+  v_window_closes := (v_trade_date + interval '1 day')::timestamp; -- Trade window closes at midnight END of trade date (start of next day)
   
   -- Check CI bands existence
   select exists (
