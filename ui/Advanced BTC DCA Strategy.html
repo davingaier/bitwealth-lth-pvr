@@ -2140,20 +2140,28 @@
             <div style="font-size:.8rem;color:#6c757d;margin-bottom:.5rem;">Pipeline Steps</div>
             <div style="display:grid;gap:.35rem;">
               <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepCIBands" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">CI Bands</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:.5rem;">
                 <span id="stepDecisions" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Generate Decisions</span>
+                <span style="font-size:.85rem;">Decisions</span>
               </div>
               <div style="display:flex;align-items:center;gap:.5rem;">
                 <span id="stepIntents" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Create Order Intents</span>
+                <span style="font-size:.85rem;">Order Intents</span>
               </div>
               <div style="display:flex;align-items:center;gap:.5rem;">
                 <span id="stepOrders" style="font-size:1.2rem;">⏸️</span>
                 <span style="font-size:.85rem;">Execute Orders</span>
               </div>
               <div style="display:flex;align-items:center;gap:.5rem;">
+                <span id="stepPollOrders" style="font-size:1.2rem;">⏸️</span>
+                <span style="font-size:.85rem;">Poll Orders</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:.5rem;">
                 <span id="stepLedger" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Post Ledger & Balances</span>
+                <span style="font-size:.85rem;">Ledger Posted</span>
               </div>
             </div>
           </div>
@@ -5898,9 +5906,11 @@
     const logContent = document.getElementById('pipelineLogContent');
     
     const stepIcons = {
+      ci_bands: document.getElementById('stepCIBands'),
       decisions: document.getElementById('stepDecisions'),
       intents: document.getElementById('stepIntents'),
       orders: document.getElementById('stepOrders'),
+      poll_orders: document.getElementById('stepPollOrders'),
       ledger: document.getElementById('stepLedger')
     };
 
@@ -5971,9 +5981,11 @@
         }
 
         // Update step icons
-        updateStepIcon('decisions', data.steps?.decisions_generated);
-        updateStepIcon('intents', data.steps?.intents_created);
-        updateStepIcon('orders', data.steps?.orders_executed);
+        updateStepIcon('ci_bands', data.steps?.ci_bands);
+        updateStepIcon('decisions', data.steps?.decisions);
+        updateStepIcon('intents', data.steps?.order_intents);
+        updateStepIcon('orders', data.steps?.execute_orders);
+        updateStepIcon('poll_orders', data.steps?.poll_orders);
         updateStepIcon('ledger', data.steps?.ledger_posted);
 
         // Update resume button and message
@@ -6077,15 +6089,43 @@
     // Expose globally for auth handler
     window.loadPipelineStatus = loadPipelineStatus;
 
+    // Auto-refresh every 30 seconds
+    let autoRefreshInterval = null;
+    
+    function startAutoRefresh() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      autoRefreshInterval = setInterval(() => {
+        loadPipelineStatus();
+        console.log('Pipeline status auto-refreshed');
+      }, 30000); // 30 seconds
+    }
+
+    function stopAutoRefresh() {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+    }
+
     // Load status on authentication
     document.addEventListener('DOMContentLoaded', () => {
       if (supabaseClient) {
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
             loadPipelineStatus();
+            startAutoRefresh();
           }
         });
       }
+    });
+    
+    // Stop auto-refresh when leaving admin module
+    document.querySelectorAll('nav a').forEach(link => {
+      link.addEventListener('click', (e) => {
+        if (!e.target.href.includes('#admin-module')) {
+          stopAutoRefresh();
+        }
+      });
     });
   })();
 
