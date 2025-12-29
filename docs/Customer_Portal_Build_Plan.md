@@ -169,8 +169,8 @@ ALTER TABLE public.customer_details
 ADD COLUMN phone_number TEXT,
 ADD COLUMN phone_country_code TEXT, -- e.g., '+27'
 ADD COLUMN country TEXT,
-ADD COLUMN investment_amount_range TEXT, -- e.g., 'R1000-R5000', 'R5000-R10000'
--- [Dav: can we have an upfront_investment_amount_range AND monthly_investment_amount_range fields?]
+ADD COLUMN upfront_investment_amount_range TEXT, -- e.g., 'R10000-R50000', 'R50000-R100000'
+ADD COLUMN monthly_investment_amount_range TEXT, -- e.g., 'R1000-R5000', 'R5000-R10000'
 ADD COLUMN prospect_message TEXT, -- Initial message from interest form
 ADD COLUMN kyc_id_document_url TEXT, -- Supabase Storage URL
 ADD COLUMN kyc_id_verified_at TIMESTAMPTZ,
@@ -305,6 +305,17 @@ FOR INSERT WITH CHECK (
 3. Generate branded PDF with logo, charts, transaction table
 4. Return PDF as blob or upload to Storage and return URL
 
+#### `ef_valr_list_subaccounts`
+**Purpose:** Fetch all VALR subaccounts and attempt to match with customers in 'setup' status  
+**Authentication:** Admin only  
+**Flow:**
+1. Call VALR API: `GET /v1/account/subaccounts`
+2. Parse response to get list of subaccounts with IDs and labels
+3. Query customers with `status = 'setup'`
+4. Attempt auto-match by label pattern: "{first_names} {surname} - {strategy}"
+5. Return matched and unmatched subaccounts for admin review
+6. Admin can manually assign unmatched subaccounts via UI
+
 ### 3.2 Modified Edge Functions
 
 #### `ef_valr_deposit_scan` (tweaks)
@@ -346,6 +357,48 @@ FOR INSERT WITH CHECK (
 #### `public.get_benchmark_comparison(p_portfolio_id UUID, p_from_date DATE, p_to_date DATE)`
 **Returns:** Table with:
 - date, lth_pvr_nav, std_dca_nav, lth_pvr_roi, std_dca_roi
+
+#### `public.generate_std_dca_benchmark(p_portfolio_id UUID, p_from_date DATE, p_to_date DATE)`
+**Purpose:** Calculate Standard DCA benchmark performance for comparison  
+**Start Date:** Customer's first deposit date (from `ledger_lines` earliest deposit event)  
+**Logic:**
+- Fetch customer's first deposit date
+- Fetch total contributions for each month from first deposit to current
+- For each month:
+  - Calculate daily contribution amount: monthly_total / days_in_month
+  - Simulate daily BTC purchases at historical closing prices (from `lth_pvr.ci_bands_daily.btc_price`)
+  - Apply exchange fees: 0.1% taker fee (worst case for benchmark)
+  - Accumulate BTC balance
+- Calculate daily NAV: (btc_balance * btc_price) + usdt_balance
+- Calculate ROI: ((current_nav - total_contributions) / total_contributions) * 100
+- Calculate CAGR: ((current_nav / total_contributions) ^ (365/days_elapsed) - 1) * 100
+**Returns:** Table with columns: date, btc_balance, usdt_balance, nav, total_contributions, roi, cagr
+
+#### `public.calculate_monthly_performance_fee(p_portfolio_id UUID, p_year INT, p_month INT)`
+**Purpose:** Calculate BitWealth 10% performance fee for a given month  
+**Timing:** Applied on 1st day of new month (monthly close)  
+**Logic:**
+- Fetch opening NAV (last day of previous month from `balances_daily`)
+- Fetch closing NAV (last day of current month from `balances_daily`)
+- Fetch total contributions made during month (sum from `ledger_lines` where event_type='deposit')
+- Calculate gain: closing_nav - opening_nav - contributions
+- If gain > 0: fee = gain * 0.10
+- If gain <= 0: fee = 0
+- Record fee in `lth_pvr.fees_monthly` table
+**Returns:** JSONB with fee_amount, opening_nav, closing_nav, contributions, gain
+
+#### `public.get_fee_analysis(p_portfolio_id UUID, p_from_date DATE, p_to_date DATE)`
+**Purpose:** Break down all fees paid (exchange + BitWealth)  
+**Logic:**
+- Query `lth_pvr.order_fills` for exchange fees (fee_asset IN ('BTC', 'USDT'))
+- Sum BTC fees and USDT fees separately
+- Query `lth_pvr.fees_monthly` for BitWealth performance fees (ZAR)
+- Calculate total fees as % of current NAV
+**Returns:** JSONB with:
+- exchange_fees_btc (numeric)
+- exchange_fees_usdt (numeric)
+- bitwealth_fees_zar (numeric)
+- fees_as_pct_of_nav (numeric, e.g., 0.98 for 0.98%)
 
 ### 4.2 Admin RPCs (extend existing)
 
@@ -393,13 +446,21 @@ FOR INSERT WITH CHECK (
   - Email Address (required, validation)
   - Phone Number (required, with country code dropdown)
   - Country (required, dropdown)
-  -- [Dav: can we have upfront investment amount range too (use the same options as monthly)?]
-  - Investment Amount Range per Month (required, radio buttons):
+  - Upfront Investment Amount Range (required, radio buttons):
+    - R0 (no upfront investment)
+    - R10,000 - R25,000
+    - R25,000 - R50,000
+    - R50,000 - R100,000
+    - R100,000 - R250,000
+    - R250,000+
+  - Monthly Investment Amount Range (required, radio buttons):
+    - R0 (no monthly contributions)
     - R1,000 - R2,500
     - R2,500 - R5,000
     - R5,000 - R10,000
     - R10,000 - R20,000
     - R20,000+
+  - **Validation:** At least one of the two fields must be non-zero
   - Message (optional, textarea)
   - Legal checkboxes:
     - [ ] I accept the Terms of Service
@@ -410,7 +471,12 @@ FOR INSERT WITH CHECK (
 - Links to legal documents (open in modal or new tab)
 
 **JavaScript:**
-- Form validation
+- Form validation:
+  - All required fields filled
+  - Valid email format
+  - Valid phone number format
+  - **Critical:** At least one investment range must be non-zero (upfront OR monthly)
+  - All three legal checkboxes checked
 - Country code autocomplete (use library like intl-tel-input)
 - Call `ef_prospect_submit` edge function
 - Show success/error messages
@@ -461,7 +527,7 @@ FOR INSERT WITH CHECK (
   - Last Updated: "2025-12-29 03:35 UTC"
 - **Performance Chart**
   - Dropdown selector: "NAV" | "ROI %" | "CAGR %" | "Max Drawdown"
-  - Line chart comparing LTH PVR (blue) vs Standard DCA (gold) -- [Dav: please make the Standard DCA line black?]
+  - Line chart comparing LTH PVR (blue) vs Standard DCA (black)
   - Date range selector: "Last 30 days" | "Last 90 days" | "Last 12 months" | "All Time" | "Custom Range"
   - Use Chart.js or similar library
 - **Advanced Metrics Card** (collapsible)
@@ -472,11 +538,10 @@ FOR INSERT WITH CHECK (
   - Asset Allocation Pie Chart: BTC 65% | USDT 35%
   - Monthly Return Heatmap (calendar view, last 12 months)
 - **Fee Analysis Card**
-  - Total Fees Paid: "R 1,234.50"
-  - Exchange Fees: "R 890.00 (72%)"
-  - BitWealth Fees: "R 344.50 (28%)"
-  - Fees as % of NAV: "0.98%"
-  -- [Dav: we will need to figure out the best way to show fees because BTCUSDT transactions incur fees in BTC but USDTZAR conversions incur fees in USDT. Maybe we can show both separately?]
+  - Exchange Fees (BTC): "0.0045 BTC"
+  - Exchange Fees (USDT): "234.50 USDT"
+  - BitWealth Performance Fee: "R 344.50"
+  - Total Fees as % of NAV: "0.98%"
 
 ##### C. Transactions Tab (`#transactions`)
 - **Filter Controls**
@@ -501,13 +566,19 @@ FOR INSERT WITH CHECK (
 
 ##### E. Withdraw Funds Tab (`#withdraw`)
 - **Current Balance Display**
-  - Available to withdraw: "5,234.50 USDT" (from portfolio balance)
+  - Available USDT: "5,234.50 USDT (~R 108,450)"
+  - Available BTC: "0.85432100 BTC (~12,345.67 USDT / ~R 255,600)"
+  - Total Available for Withdrawal: "~R 364,050"
   - Note: "Minimum withdrawal: R 1,000"
-  -- [Dav: can we also show the amount of BTC available to sell for withdrawal with an approximate USDT value and make the user aware that if they don't have enough USDT, we will sell BTC to cover the shortfall?]
 - **Withdrawal Form**
   - Amount (USDT): Input field
-  - Note: "If insufficient USDT, we will sell BTC to cover the shortfall."
-  -- [Dav: Perhaps the user should select a checkbox to confirm they understand this before submitting the withdrawal request?]
+  - Info box: "If you don't have enough USDT, we will sell BTC to cover the shortfall. Exchange fees will apply."
+  - Confirmation checkbox: [ ] I understand that BTC may be sold to fulfill this withdrawal if USDT balance is insufficient
+  - Banking details (pre-filled from customer profile, editable)
+    - Bank Name
+    - Account Number
+    - Account Holder Name
+  - Submit button: "Request Withdrawal" (disabled until checkbox checked)
   - Banking details (pre-filled from customer profile, editable)
     - Bank Name
     - Account Number
@@ -538,8 +609,10 @@ FOR INSERT WITH CHECK (
 ##### G. Settings Tab (FUTURE - placeholder for MVP)
 - Password change
 - Email preferences
+  - [ ] Monthly performance summary emails
+  - [ ] Marketing and promotional emails
+  - [ ] Trading notifications (when available)
 - Referral link
--- [Dav: please add marketing consent checkbox here too for future email campaigns]
 
 ### 5.3 Admin Portal Changes
 
@@ -560,9 +633,13 @@ FOR INSERT WITH CHECK (
   - Actions: "Approve" | "Reject"
 - **Pending Setups Card**
   - Customers with `status = 'setup'`
-  - Button: "Create VALR Subaccount" (manual for MVP)
-  - Input field: Enter deposit_reference from VALR
-  -- [Dav: can we have a button here to trigger the ef_valr_subaccounts EF to list all subaccounts from VALR and match them to customers who are in 'setup' status? This would help automate the process a bit more.]
+  - Button: "Sync VALR Subaccounts" (calls `ef_valr_list_subaccounts` to fetch from VALR)
+  - Two sections after sync:
+    - **Matched:** Customers auto-matched by label pattern
+    - **Unmatched:** VALR subaccounts with no matching customer OR customers with no subaccount
+  - Actions: "Confirm Match" (admin approves auto-match) | "Assign Manually" (dropdown to link customer to subaccount)
+  - Input field: Enter deposit_reference from VALR (after confirmation)
+  - Note: This process will be automated once `ef_valr_create_subaccount` is implemented
 - **Active Customers Table**
   - All customers with `status = 'active'`
   - Quick view: Name | Portfolio | NAV | Last Trade | Actions
@@ -648,9 +725,11 @@ Great news! We're ready to proceed with setting up your BitWealth account.
 To comply with regulations, we need you to:
 
 1. Reply to this email with a clear copy of your ID (passport or ID card)
-2. Download, sign, and return the Investment Disclaimer (attached) -- [Dav: didn't we agree to have this hosted on the website as a checkbox instead?]
+2. Complete your account registration and accept the Investment Disclaimer online
 
-Once we receive these documents, we'll verify your identity and set up your trading account within 1 business day.
+Optional: You may download and keep a signed copy of the Investment Disclaimer for your records (attached).
+
+Once we receive your ID and verify your identity, we'll send you a registration link to complete your account setup within 1 business day.
 
 Best regards,
 The BitWealth Team
@@ -988,6 +1067,12 @@ Approved by: _______________________  Date: _______________
 - [ ] Create database migrations for all new tables
 - [ ] Add columns to existing tables
 - [ ] Set up RLS policies
+- [ ] **CRITICAL:** Review and complete fee calculation tables/functions
+  - Verify `lth_pvr.fee_configs` schema
+  - Verify `lth_pvr.fee_invoices` schema
+  - Verify `lth_pvr.fees_monthly` schema
+  - Create/update RPC: `calculate_monthly_performance_fee()`
+  - Test fee calculation: 10% of (NAV Gain - Contributions)
 - [ ] Create `email_templates` table and insert initial templates
 - [ ] Create `ef_send_email` edge function (test with Resend)
 - [ ] Create `ef_prospect_submit` edge function
@@ -1009,6 +1094,10 @@ Approved by: _______________________  Date: _______________
 ### Phase 2: Dashboard & Transactions (Jan 6-7, 2 days)
 
 #### Day 5: Dashboard Tab
+- [ ] **CRITICAL:** Implement Standard DCA benchmark calculation
+  - Create RPC: `generate_std_dca_benchmark(p_portfolio_id, p_from_date, p_to_date)`
+  - Logic: Equal daily contributions, same total as customer's actual contributions
+  - Store in table or calculate on-demand (decide based on performance)
 - [ ] Create RPC: `get_customer_dashboard()`
 - [ ] Build Performance Summary Card
 - [ ] Build Portfolio Selector (if multiple portfolios)
@@ -1430,7 +1519,7 @@ Based on attached logo/screenshot:
   
   /* Chart Colors */
   --bw-chart-lth: #3498DB;  /* LTH PVR line (blue) */
-  --bw-chart-dca: #F39C12;  /* Standard DCA line (gold) */ [Dav: please make this black instead of gold for better contrast]
+  --bw-chart-dca: #2C3E50;  /* Standard DCA line (black/navy for contrast) */
 }
 ```
 
@@ -1484,7 +1573,7 @@ h4 { font-size: 1.25rem; font-weight: 500; }
    The LTH PVR strategy trades daily at 03:05 UTC (05:05 SAST) based on market conditions.
 
 2. **What are the fees?**  
-   Exchange fees (VALR): ~0.25% per trade. BitWealth management fee: 1.5% annually (charged monthly). -- [Dav: exchange fees for BTCUSDT trades are 0.08% maker, 0.1% taker and USDTZAR conversion are 0.18%. BitWealth performance fee is 10% of monthly NAV gains less contributions made that month; please update]
+   Exchange fees (VALR): 0.08% maker / 0.1% taker for BTCUSDT trades, 0.18% for USDT/ZAR conversions. BitWealth performance fee: 10% of monthly NAV gains (after deducting contributions made that month).
 
 3. **How do I withdraw funds?**  
    Navigate to "Withdraw Funds" tab, enter amount, and submit request. Funds will be in your bank account within 2-5 business days.
@@ -1524,22 +1613,21 @@ h4 { font-size: 1.25rem; font-weight: 500; }
 
 ### 15.2 Future Enhancements (Q1 2026)
 
-1. **Referral Program:** Generate unique referral links, track referrals, apply fee discounts
-2. **Mobile App:** React Native app with push notifications
-3. **Auto-Invest:** Link bank account, auto-debit monthly contributions
-4. **Tax Center:** Generate capital gains reports for SARS
-5. **Multi-Currency:** Support USD, EUR portfolios (not just ZAR)
-6. **Portfolio Comparison:** Side-by-side comparison of multiple portfolios
-7. **Social Proof:** Anonymous leaderboard showing top-performing portfolios
-8. **Educational Content:** Blog posts, videos explaining strategy
+1. **Interactive Back-Tester on Prospect Form:** Embed the existing back-tester on get-started.html so prospects can input their contribution amounts and see projected returns before signing up
+2. **Referral Program:** Generate unique referral links, track referrals, apply fee discounts
+3. **Mobile App:** React Native app with push notifications
+4. **Auto-Invest:** Link bank account, auto-debit monthly contributions
+5. **Tax Center:** Generate capital gains reports for SARS
+6. **Multi-Currency:** Support USD, EUR portfolios (not just ZAR)
+7. **Portfolio Comparison:** Side-by-side comparison of multiple portfolios
+8. **Social Proof:** Anonymous leaderboard showing top-performing portfolios
+9. **Educational Content:** Blog posts, videos explaining strategy
 
 ### 15.3 Technical Debt to Address
 
-1. **Fee Calculation Engine:** Complete refinement of `lth_pvr.fee_configs` and related functions and tables -- [Dav: please move this to MVP as it is critical for accurate fee reporting]
-2. **Benchmark Data Generation:** Ensure Standard DCA data is calculated and stored correctly -- [Dav: please move this to MVP as it is critical for accurate benchmark comparison]
-3. **Supabase Storage Cleanup:** Implement lifecycle policies (delete abandoned uploads)
-4. **Database Indexing:** Add indexes based on actual query patterns (post-launch analysis)
-5. **API Rate Limiting:** Implement rate limiting on edge functions (prevent abuse)
+1. **Supabase Storage Cleanup:** Implement lifecycle policies (delete abandoned uploads)
+2. **Database Indexing:** Add indexes based on actual query patterns (post-launch analysis)
+3. **API Rate Limiting:** Implement rate limiting on edge functions (prevent abuse)
 
 ---
 
