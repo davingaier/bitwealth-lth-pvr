@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Your Account - BitWealth</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .register-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            background: var(--bg-dark);
+        }
+        
+        .register-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            max-width: 600px;
+            width: 100%;
+            padding: 48px;
+        }
+        
+        .register-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .register-header h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: var(--gradient-gold);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .register-header p {
+            color: var(--text-secondary);
+        }
+        
+        .password-requirements {
+            background: rgba(255, 180, 0, 0.1);
+            border: 1px solid rgba(255, 180, 0, 0.2);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .password-requirements ul {
+            margin: 8px 0 0 20px;
+            padding: 0;
+        }
+        
+        .password-requirements li {
+            margin: 4px 0;
+        }
+        
+        .checkbox-group {
+            margin: 20px 0;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            margin-top: 2px;
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+        
+        .checkbox-label a {
+            color: var(--gold);
+            text-decoration: none;
+        }
+        
+        .checkbox-label a:hover {
+            text-decoration: underline;
+        }
+        
+        .btn-register {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 24px;
+        }
+        
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .back-link:hover {
+            color: var(--gold);
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-card">
+            <div class="register-header">
+                <h1>Create Your Account</h1>
+                <p>Complete your registration to access the BitWealth customer portal</p>
+            </div>
+            
+            <form id="registerForm">
+                <input type="hidden" id="customerId" name="customerId">
+                <input type="hidden" id="email" name="email">
+                
+                <div class="form-group">
+                    <label for="displayEmail">Email Address</label>
+                    <input type="email" id="displayEmail" disabled>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password *</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password *</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required>
+                </div>
+                
+                <div class="password-requirements">
+                    <strong>Password Requirements:</strong>
+                    <ul>
+                        <li>Minimum 8 characters</li>
+                        <li>At least 1 uppercase letter</li>
+                        <li>At least 1 number</li>
+                        <li>At least 1 special character (@, $, !, %, *, ?, &, #)</li>
+                    </ul>
+                </div>
+                
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="acceptTerms" name="acceptTerms" required>
+                        <span>I accept the <a href="#" target="_blank">Terms of Service</a></span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="acceptPrivacy" name="acceptPrivacy" required>
+                        <span>I accept the <a href="#" target="_blank">Privacy Policy</a></span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="signDisclaimer" name="signDisclaimer" required>
+                        <span>I have read and understood the <a href="#" target="_blank">Investment Disclaimer</a></span>
+                    </label>
+                </div>
+                
+                <div id="formMessage" class="form-message"></div>
+                
+                <button type="submit" class="btn-primary btn-register" id="submitBtn">
+                    Create Account
+                </button>
+            </form>
+            
+            <a href="index.html" class="back-link">← Back to Home</a>
+        </div>
+    </div>
+    
+    <script>
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI1MzI3OTksImV4cCI6MjAzODEwODc5OX0.xXqvdCVBslEbh5rQcfAi9Y2vxeVmGEVr0zT0BdjS5yA';
+        
+        // Get customer_id and email from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const customerId = urlParams.get('customer_id');
+        const email = urlParams.get('email');
+        
+        // Populate form
+        if (customerId && email) {
+            document.getElementById('customerId').value = customerId;
+            document.getElementById('email').value = email;
+            document.getElementById('displayEmail').value = email;
+        } else {
+            document.getElementById('formMessage').className = 'form-message error';
+            document.getElementById('formMessage').textContent = 'Invalid registration link. Please contact support.';
+            document.getElementById('submitBtn').disabled = true;
+        }
+        
+        // Form submission
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const formMessage = document.getElementById('formMessage');
+            
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            // Validate passwords match
+            if (password !== confirmPassword) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Passwords do not match.';
+                return;
+            }
+            
+            // Validate password requirements
+            const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
+            if (!passwordRegex.test(password)) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Password does not meet requirements.';
+                return;
+            }
+            
+            // Check all agreements accepted
+            const acceptTerms = document.getElementById('acceptTerms').checked;
+            const acceptPrivacy = document.getElementById('acceptPrivacy').checked;
+            const signDisclaimer = document.getElementById('signDisclaimer').checked;
+            
+            if (!acceptTerms || !acceptPrivacy || !signDisclaimer) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Please accept all agreements to continue.';
+                return;
+            }
+            
+            // Disable submit
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating Account...';
+            formMessage.className = 'form-message';
+            formMessage.textContent = '';
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_customer_register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        customer_id: parseInt(customerId),
+                        email: email,
+                        password: password,
+                        accept_terms: acceptTerms,
+                        accept_privacy: acceptPrivacy,
+                        sign_disclaimer: signDisclaimer
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    formMessage.className = 'form-message success';
+                    formMessage.textContent = result.message || 'Account created successfully! Redirecting to portal...';
+                    
+                    // Redirect to portal after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = result.portal_url || 'portal.html';
+                    }, 2000);
+                } else {
+                    formMessage.className = 'form-message error';
+                    formMessage.textContent = result.error || 'Failed to create account. Please try again.';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Account';
+                }
+            } catch (error) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Network error. Please check your connection and try again.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Account';
+                console.error('Registration error:', error);
+            }
+        });
+    </script>
+</body>
+</html>
