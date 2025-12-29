@@ -4,9 +4,9 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SECRET_KEY = Deno.env.get("Secret Key");
 const ORG_ID = Deno.env.get("ORG_ID");
-const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "davin@bitwealth.co.za";
+const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 const ADMIN_PORTAL_URL = Deno.env.get("ADMIN_PORTAL_URL") || "https://bitwealth.co.za/admin";
 const WEBSITE_URL = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
 
@@ -61,17 +61,19 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client (service role for database insert)
-    const supabase = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
+    // Use service role client (bypasses RLS)
+    const supabase = createClient(SUPABASE_URL!, SECRET_KEY!, {
       auth: { persistSession: false },
     });
 
-    // Check if email already exists in customer_details
-    const { data: existing, error: checkError } = await supabase
+    // Check if email already exists (handle potential duplicates)
+    const { data: existingList, error: checkError } = await supabase
       .from("customer_details")
       .select("customer_id, email, status")
       .eq("email", email.toLowerCase())
-      .maybeSingle();
+      .limit(1);
+    
+    const existing = existingList?.[0];
 
     if (checkError) {
       console.error("Error checking existing customer:", checkError);
@@ -112,6 +114,9 @@ serve(async (req) => {
         first_name,
         surname,
         email: email.toLowerCase(),
+        first_names: first_name,
+        last_name: surname,
+        email_address: email.toLowerCase(),
         phone_number,
         phone_country_code,
         country,
@@ -119,7 +124,7 @@ serve(async (req) => {
         monthly_investment_amount_range,
         prospect_message,
         status: "prospect",
-        customer_status: "Inactive", // Legacy field
+        customer_status: "Inactive",
       })
       .select("customer_id, first_name, surname, email")
       .single();
@@ -127,7 +132,7 @@ serve(async (req) => {
     if (insertError) {
       console.error("Error inserting prospect:", insertError);
       return new Response(
-        JSON.stringify({ error: "Failed to save prospect information" }),
+        JSON.stringify({ error: "Failed to save prospect information", details: insertError }),
         { status: 500, headers: CORS }
       );
     }
@@ -163,9 +168,10 @@ serve(async (req) => {
       phone_country_code: phone_country_code || "",
       phone_number: phone_number || "",
       country: country || "",
-      upfront_amount_range: upfront_investment_amount_range || "Not specified",
-      monthly_amount_range: monthly_investment_amount_range || "Not specified",
+      upfront_investment_amount_range: upfront_investment_amount_range || "Not specified",
+      monthly_investment_amount_range: monthly_investment_amount_range || "Not specified",
       message: prospect_message || "No message provided",
+      created_at: new Date().toISOString(),
       admin_portal_url: ADMIN_PORTAL_URL,
     };
 
