@@ -170,6 +170,7 @@ ADD COLUMN phone_number TEXT,
 ADD COLUMN phone_country_code TEXT, -- e.g., '+27'
 ADD COLUMN country TEXT,
 ADD COLUMN investment_amount_range TEXT, -- e.g., 'R1000-R5000', 'R5000-R10000'
+-- [Dav: can we have an upfront_investment_amount_range AND monthly_investment_amount_range fields?]
 ADD COLUMN prospect_message TEXT, -- Initial message from interest form
 ADD COLUMN kyc_id_document_url TEXT, -- Supabase Storage URL
 ADD COLUMN kyc_id_verified_at TIMESTAMPTZ,
@@ -392,6 +393,7 @@ FOR INSERT WITH CHECK (
   - Email Address (required, validation)
   - Phone Number (required, with country code dropdown)
   - Country (required, dropdown)
+  -- [Dav: can we have upfront investment amount range too (use the same options as monthly)?]
   - Investment Amount Range per Month (required, radio buttons):
     - R1,000 - R2,500
     - R2,500 - R5,000
@@ -459,7 +461,7 @@ FOR INSERT WITH CHECK (
   - Last Updated: "2025-12-29 03:35 UTC"
 - **Performance Chart**
   - Dropdown selector: "NAV" | "ROI %" | "CAGR %" | "Max Drawdown"
-  - Line chart comparing LTH PVR (blue) vs Standard DCA (gold)
+  - Line chart comparing LTH PVR (blue) vs Standard DCA (gold) -- [Dav: please make the Standard DCA line black?]
   - Date range selector: "Last 30 days" | "Last 90 days" | "Last 12 months" | "All Time" | "Custom Range"
   - Use Chart.js or similar library
 - **Advanced Metrics Card** (collapsible)
@@ -474,6 +476,7 @@ FOR INSERT WITH CHECK (
   - Exchange Fees: "R 890.00 (72%)"
   - BitWealth Fees: "R 344.50 (28%)"
   - Fees as % of NAV: "0.98%"
+  -- [Dav: we will need to figure out the best way to show fees because BTCUSDT transactions incur fees in BTC but USDTZAR conversions incur fees in USDT. Maybe we can show both separately?]
 
 ##### C. Transactions Tab (`#transactions`)
 - **Filter Controls**
@@ -500,9 +503,11 @@ FOR INSERT WITH CHECK (
 - **Current Balance Display**
   - Available to withdraw: "5,234.50 USDT" (from portfolio balance)
   - Note: "Minimum withdrawal: R 1,000"
+  -- [Dav: can we also show the amount of BTC available to sell for withdrawal with an approximate USDT value and make the user aware that if they don't have enough USDT, we will sell BTC to cover the shortfall?]
 - **Withdrawal Form**
   - Amount (USDT): Input field
-  - Note: "If insufficient USDT, we will sell BTC to cover the gap."
+  - Note: "If insufficient USDT, we will sell BTC to cover the shortfall."
+  -- [Dav: Perhaps the user should select a checkbox to confirm they understand this before submitting the withdrawal request?]
   - Banking details (pre-filled from customer profile, editable)
     - Bank Name
     - Account Number
@@ -516,7 +521,7 @@ FOR INSERT WITH CHECK (
 ##### F. Support Tab (`#support`)
 - **Contact Information**
   - Email: support@bitwealth.co.za
-  - Hours: Mon-Fri 9:00-17:00 SAST
+  - Hours: Mon-Fri 09:00-17:00 SAST
 - **Submit Support Request Form**
   - Subject (dropdown): Account | Trading | Withdrawal | Technical | Other
   - Message (textarea)
@@ -534,6 +539,7 @@ FOR INSERT WITH CHECK (
 - Password change
 - Email preferences
 - Referral link
+-- [Dav: please add marketing consent checkbox here too for future email campaigns]
 
 ### 5.3 Admin Portal Changes
 
@@ -556,6 +562,7 @@ FOR INSERT WITH CHECK (
   - Customers with `status = 'setup'`
   - Button: "Create VALR Subaccount" (manual for MVP)
   - Input field: Enter deposit_reference from VALR
+  -- [Dav: can we have a button here to trigger the ef_valr_subaccounts EF to list all subaccounts from VALR and match them to customers who are in 'setup' status? This would help automate the process a bit more.]
 - **Active Customers Table**
   - All customers with `status = 'active'`
   - Quick view: Name | Portfolio | NAV | Last Trade | Actions
@@ -641,7 +648,7 @@ Great news! We're ready to proceed with setting up your BitWealth account.
 To comply with regulations, we need you to:
 
 1. Reply to this email with a clear copy of your ID (passport or ID card)
-2. Download, sign, and return the Investment Disclaimer (attached)
+2. Download, sign, and return the Investment Disclaimer (attached) -- [Dav: didn't we agree to have this hosted on the website as a checkbox instead?]
 
 Once we receive these documents, we'll verify your identity and set up your trading account within 1 business day.
 
@@ -1423,7 +1430,7 @@ Based on attached logo/screenshot:
   
   /* Chart Colors */
   --bw-chart-lth: #3498DB;  /* LTH PVR line (blue) */
-  --bw-chart-dca: #F39C12;  /* Standard DCA line (gold) */
+  --bw-chart-dca: #F39C12;  /* Standard DCA line (gold) */ [Dav: please make this black instead of gold for better contrast]
 }
 ```
 
@@ -1477,7 +1484,7 @@ h4 { font-size: 1.25rem; font-weight: 500; }
    The LTH PVR strategy trades daily at 03:05 UTC (05:05 SAST) based on market conditions.
 
 2. **What are the fees?**  
-   Exchange fees (VALR): ~0.25% per trade. BitWealth management fee: 1.5% annually (charged monthly).
+   Exchange fees (VALR): ~0.25% per trade. BitWealth management fee: 1.5% annually (charged monthly). -- [Dav: exchange fees for BTCUSDT trades are 0.08% maker, 0.1% taker and USDTZAR conversion are 0.18%. BitWealth performance fee is 10% of monthly NAV gains less contributions made that month; please update]
 
 3. **How do I withdraw funds?**  
    Navigate to "Withdraw Funds" tab, enter amount, and submit request. Funds will be in your bank account within 2-5 business days.
@@ -1528,8 +1535,8 @@ h4 { font-size: 1.25rem; font-weight: 500; }
 
 ### 15.3 Technical Debt to Address
 
-1. **Fee Calculation Engine:** Complete refinement of `lth_pvr.fee_configs` and related tables
-2. **Benchmark Data Generation:** Ensure Standard DCA data is calculated and stored correctly
+1. **Fee Calculation Engine:** Complete refinement of `lth_pvr.fee_configs` and related functions and tables -- [Dav: please move this to MVP as it is critical for accurate fee reporting]
+2. **Benchmark Data Generation:** Ensure Standard DCA data is calculated and stored correctly -- [Dav: please move this to MVP as it is critical for accurate benchmark comparison]
 3. **Supabase Storage Cleanup:** Implement lifecycle policies (delete abandoned uploads)
 4. **Database Indexing:** Add indexes based on actual query patterns (post-launch analysis)
 5. **API Rate Limiting:** Implement rate limiting on edge functions (prevent abuse)
