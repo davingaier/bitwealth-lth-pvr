@@ -2251,6 +2251,33 @@
           </table>
         </div>
       </div>
+
+      <!-- Customer Fee Management card -->
+      <div class="card" id="feeManagementCard">
+        <h3>Customer Fee Management</h3>
+        <p class="small-muted">Adjust BitWealth fees for individual customers. Changes are effective from the beginning of the current month.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="feeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="feeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="feeTableContainer">
+          <table id="feeTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:100px;">Fee Rate</th>
+                <th style="min-width:100px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="muted">Loading customers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="feeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
     </div>
   </main>
 
@@ -2295,6 +2322,10 @@
             // Reload alerts if the loadAlerts function exists
             if (typeof window.loadAlerts === 'function') {
               window.loadAlerts();
+            }
+            // Reload customer fees if the loadCustomerFees function exists
+            if (typeof window.loadCustomerFees === 'function') {
+              window.loadCustomerFees();
             }
             // Reload customers if the loadCustomers function exists
             if (typeof window.loadCustomers === 'function') {
@@ -5941,6 +5972,233 @@
         });
       }
     });
+  })();
+
+  /* ========== Fee Management Module ========== */
+  (() => {
+    const tableBody = document.querySelector('#feeTable tbody');
+    const refreshBtn = document.getElementById('feeRefreshBtn');
+    const searchInput = document.getElementById('feeSearchInput');
+    const feeMessage = document.getElementById('feeMessage');
+
+    if (!tableBody || !refreshBtn) return;
+
+    let allCustomers = [];
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch] || ch));
+    }
+
+    function showMessage(msg, type) {
+      feeMessage.textContent = msg;
+      feeMessage.style.display = 'block';
+      feeMessage.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
+      feeMessage.style.color = type === 'success' ? '#155724' : '#721c24';
+      feeMessage.style.borderLeft = type === 'success' ? '4px solid #28a745' : '4px solid #dc3545';
+      
+      setTimeout(() => {
+        feeMessage.style.display = 'none';
+      }, 5000);
+    }
+
+    async function loadCustomerFees() {
+      if (!supabaseClient) {
+        tableBody.innerHTML = '<tr><td colspan="5">Loading Supabase client…</td></tr>';
+        return;
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="muted">Please sign in via Administration tab to manage fees.</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = '<tr><td colspan="5">Loading customers...</td></tr>';
+
+      try {
+        // Get all active customers with their fee configurations
+        const { data, error } = await supabaseClient
+          .from('customer_details')
+          .select(`
+            customer_id,
+            first_name,
+            surname,
+            email,
+            status,
+            fee_configs!left(fee_rate)
+          `)
+          .in('status', ['active', 'setup', 'kyc'])
+          .order('customer_id', { ascending: true });
+
+        if (error) throw error;
+
+        allCustomers = data.map(c => ({
+          customer_id: c.customer_id,
+          name: `${c.first_name || ''} ${c.surname || ''}`.trim() || '—',
+          email: c.email || '—',
+          status: c.status,
+          fee_rate: c.fee_configs?.[0]?.fee_rate ?? 0.10 // Default 10%
+        }));
+
+        renderCustomers(allCustomers);
+      } catch (err) {
+        console.error('loadCustomerFees error:', err);
+        tableBody.innerHTML = `<tr><td colspan="5" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderCustomers(customers) {
+      if (!customers || customers.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="muted">No customers found.</td></tr>';
+        return;
+      }
+
+      const rowsHtml = customers.map(c => {
+        const feePercent = (c.fee_rate * 100).toFixed(2);
+        return `
+          <tr data-customer-id="${c.customer_id}">
+            <td>${escapeHtml(c.customer_id)}</td>
+            <td>${escapeHtml(c.name)}</td>
+            <td>${escapeHtml(c.email)}</td>
+            <td class="fee-rate-cell">
+              <span class="fee-display">${feePercent}%</span>
+              <input type="number" class="fee-input" value="${feePercent}" min="0" max="100" step="0.01" style="display:none;width:80px;padding:4px;">
+            </td>
+            <td>
+              <button type="button" class="btn btn-secondary-sm js-edit-fee">Edit</button>
+              <button type="button" class="btn btn-secondary-sm js-save-fee" style="display:none;">Save</button>
+              <button type="button" class="btn btn-secondary-sm js-cancel-fee" style="display:none;">Cancel</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tableBody.innerHTML = rowsHtml;
+    }
+
+    function filterCustomers() {
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      if (!searchTerm) {
+        renderCustomers(allCustomers);
+        return;
+      }
+
+      const filtered = allCustomers.filter(c => 
+        c.name.toLowerCase().includes(searchTerm) ||
+        c.email.toLowerCase().includes(searchTerm)
+      );
+      renderCustomers(filtered);
+    }
+
+    async function handleFeeActions(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const tr = target.closest('tr');
+      if (!tr) return;
+
+      const customerId = tr.getAttribute('data-customer-id');
+      if (!customerId) return;
+
+      const feeCell = tr.querySelector('.fee-rate-cell');
+      const feeDisplay = feeCell.querySelector('.fee-display');
+      const feeInput = feeCell.querySelector('.fee-input');
+      const editBtn = tr.querySelector('.js-edit-fee');
+      const saveBtn = tr.querySelector('.js-save-fee');
+      const cancelBtn = tr.querySelector('.js-cancel-fee');
+
+      // Edit button clicked
+      if (target.classList.contains('js-edit-fee')) {
+        feeDisplay.style.display = 'none';
+        feeInput.style.display = 'inline-block';
+        feeInput.focus();
+        editBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'inline-block';
+        return;
+      }
+
+      // Cancel button clicked
+      if (target.classList.contains('js-cancel-fee')) {
+        const originalValue = feeDisplay.textContent.replace('%', '');
+        feeInput.value = originalValue;
+        feeDisplay.style.display = 'inline-block';
+        feeInput.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+        saveBtn.style.display = 'none';
+        cancelBtn.style.display = 'none';
+        return;
+      }
+
+      // Save button clicked
+      if (target.classList.contains('js-save-fee')) {
+        const newFeePercent = parseFloat(feeInput.value);
+        
+        if (isNaN(newFeePercent) || newFeePercent < 0 || newFeePercent > 100) {
+          showMessage('Fee rate must be between 0% and 100%', 'error');
+          return;
+        }
+
+        const newFeeRate = newFeePercent / 100;
+
+        saveBtn.setAttribute('disabled', 'true');
+        saveBtn.textContent = 'Saving…';
+
+        try {
+          const { data, error } = await supabaseClient.rpc('update_customer_fee_rate', {
+            p_customer_id: parseInt(customerId),
+            p_new_rate: newFeeRate
+          });
+
+          if (error) throw error;
+
+          // Update UI
+          feeDisplay.textContent = `${newFeePercent.toFixed(2)}%`;
+          feeDisplay.style.display = 'inline-block';
+          feeInput.style.display = 'none';
+          editBtn.style.display = 'inline-block';
+          saveBtn.style.display = 'none';
+          cancelBtn.style.display = 'none';
+
+          // Update in-memory data
+          const customer = allCustomers.find(c => c.customer_id == customerId);
+          if (customer) customer.fee_rate = newFeeRate;
+
+          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${data.previous_rate_percentage}%, New: ${data.new_rate_percentage}%`, 'success');
+        } catch (err) {
+          console.error('update fee error:', err);
+          showMessage(`Failed to update fee: ${err.message}`, 'error');
+        } finally {
+          saveBtn.removeAttribute('disabled');
+          saveBtn.textContent = 'Save';
+        }
+      }
+    }
+
+    refreshBtn.addEventListener('click', loadCustomerFees);
+    searchInput.addEventListener('input', filterCustomers);
+    tableBody.addEventListener('click', handleFeeActions);
+
+    // Load fees when authenticated
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadCustomerFees();
+          }
+        });
+      }
+    });
+
+    // Expose globally for auth handler
+    window.loadCustomerFees = loadCustomerFees;
   })();
 
   /* ========== Pipeline Control Module ========== */

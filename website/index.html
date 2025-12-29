@@ -279,13 +279,87 @@
     <section id="signup" class="cta-section">
         <div class="container">
             <div class="cta-content">
-                <h2>Start Building Wealth Today</h2>
-                <p>Join hundreds of investors using BitWealth to accumulate Bitcoin systematically.</p>
-                <form class="signup-form">
-                    <input type="email" placeholder="Enter your email" required>
-                    <button type="submit" class="btn-primary">Get Started</button>
+                <h2>Express Your Interest</h2>
+                <p>Tell us about your investment goals and we'll be in touch within 24 hours.</p>
+                
+                <form id="prospectForm" class="prospect-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName">First Name *</label>
+                            <input type="text" id="firstName" name="firstName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="surname">Surname *</label>
+                            <input type="text" id="surname" name="surname" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email">Email Address *</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="country">Country *</label>
+                            <select id="country" name="country" required>
+                                <option value="">Select Country</option>
+                                <option value="South Africa">South Africa</option>
+                                <option value="United States">United States</option>
+                                <option value="United Kingdom">United Kingdom</option>
+                                <option value="Australia">Australia</option>
+                                <option value="Canada">Canada</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="phoneCountryCode">Phone Country Code</label>
+                            <input type="text" id="phoneCountryCode" name="phoneCountryCode" placeholder="+27">
+                        </div>
+                        <div class="form-group">
+                            <label for="phoneNumber">Phone Number</label>
+                            <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="82 123 4567">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="upfrontAmount">Upfront Investment Amount *</label>
+                            <select id="upfrontAmount" name="upfrontAmount">
+                                <option value="">Select Range (optional if monthly selected)</option>
+                                <option value="R0 - R10,000">R0 - R10,000</option>
+                                <option value="R10,000 - R50,000">R10,000 - R50,000</option>
+                                <option value="R50,000 - R100,000">R50,000 - R100,000</option>
+                                <option value="R100,000+">R100,000+</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="monthlyAmount">Monthly Contribution Amount *</label>
+                            <select id="monthlyAmount" name="monthlyAmount">
+                                <option value="">Select Range (optional if upfront selected)</option>
+                                <option value="R0 - R1,000">R0 - R1,000</option>
+                                <option value="R1,000 - R5,000">R1,000 - R5,000</option>
+                                <option value="R5,000 - R10,000">R5,000 - R10,000</option>
+                                <option value="R10,000+">R10,000+</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message">Message (Optional)</label>
+                        <textarea id="message" name="message" rows="4" placeholder="Tell us about your investment goals or any questions you have..."></textarea>
+                    </div>
+                    
+                    <div id="formMessage" class="form-message"></div>
+                    
+                    <button type="submit" class="btn-primary btn-large" id="submitBtn">
+                        Submit Interest
+                    </button>
+                    
+                    <p class="form-note">* Required fields. At least one investment amount must be selected.</p>
                 </form>
-                <p class="form-note">No credit card required. 14-day free trial.</p>
             </div>
         </div>
     </section>
@@ -364,5 +438,73 @@
     </footer>
 
     <script src="js/main.js"></script>
+    <script>
+        // Prospect Form Handler
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI1MzI3OTksImV4cCI6MjAzODEwODc5OX0.xXqvdCVBslEbh5rQcfAi9Y2vxeVmGEVr0zT0BdjS5yA';
+        
+        document.getElementById('prospectForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const formMessage = document.getElementById('formMessage');
+            
+            // Get form values
+            const formData = {
+                first_name: document.getElementById('firstName').value.trim(),
+                surname: document.getElementById('surname').value.trim(),
+                email: document.getElementById('email').value.trim().toLowerCase(),
+                country: document.getElementById('country').value,
+                phone_country_code: document.getElementById('phoneCountryCode').value.trim(),
+                phone_number: document.getElementById('phoneNumber').value.trim(),
+                upfront_investment_amount_range: document.getElementById('upfrontAmount').value,
+                monthly_investment_amount_range: document.getElementById('monthlyAmount').value,
+                prospect_message: document.getElementById('message').value.trim()
+            };
+            
+            // Validate at least one investment amount
+            if (!formData.upfront_investment_amount_range && !formData.monthly_investment_amount_range) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Please select at least one investment amount range.';
+                return;
+            }
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+            formMessage.className = 'form-message';
+            formMessage.textContent = '';
+            
+            try {
+                // Call edge function
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_prospect_submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    formMessage.className = 'form-message success';
+                    formMessage.textContent = result.message || 'Thank you! We will contact you within 24 hours.';
+                    document.getElementById('prospectForm').reset();
+                } else {
+                    formMessage.className = 'form-message error';
+                    formMessage.textContent = result.error || 'Something went wrong. Please try again.';
+                }
+            } catch (error) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Network error. Please check your connection and try again.';
+                console.error('Prospect form error:', error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Interest';
+            }
+        });
+    </script>
 </body>
 </html>
