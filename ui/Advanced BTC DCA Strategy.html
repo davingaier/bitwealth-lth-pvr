@@ -1337,6 +1337,7 @@
             ? `Nothing to execute — intents are ${statuses}.`
             : 'Nothing to execute — no intents for this date.';
           previewBtn.disabled = false;
+          executeBtn.disabled = false;
           return;
         }
 
@@ -1345,10 +1346,29 @@
         const { data, error } = await sb().functions.invoke('valr-execute-orders', {
           body: { for_date: forDate }
         });
+        
+        // Check for errors BEFORE proceeding
+        if (error || data?.error) {
+          console.error('[Execute Orders] Error:', error, data);
+          throw new Error(data?.error || error?.message || error?.toString() || 'Execute failed');
+        }
+        
         const rowsAfterExec = await loadPreviewRows(forDate);
         renderIntentsTable(rowsAfterExec);
-
-        if (error || data?.error) throw new Error(data?.error || error?.message || 'Execute failed');
+        
+        // Check if any orders failed with signature errors
+        const signatureErrors = rowsAfterExec.filter(r => 
+          r.status === 'error' && 
+          (r.notes || '').toLowerCase().includes('invalid signature')
+        );
+        
+        if (signatureErrors.length > 0) {
+          const errorMsg = `Warning: ${signatureErrors.length} order(s) failed due to invalid VALR API credentials.\n\n` +
+            'The VALR API key/secret appear to be incorrect or have been regenerated.\n\n' +
+            'Please update the VALR credentials in Customer Maintenance.';
+          alert(errorMsg);
+          statusEl.textContent = `${data?.submitted || 0} submitted, ${signatureErrors.length} failed (invalid credentials)`;
+        }
 
         // Show placed orders panel
         const placed = await loadPlaced24h();
@@ -1497,8 +1517,20 @@
         pollLoop();
 
       } catch (e) {
-        console.error(e);
-        statusEl.textContent = 'Error: ' + (e?.message || e);
+        console.error('[Execute Orders] Caught error:', e);
+        const errorMsg = e?.message || e?.toString() || 'Unknown error';
+        statusEl.textContent = 'Error: ' + errorMsg;
+        
+        // Check if it's a VALR signature error and provide helpful message
+        if (errorMsg.includes('invalid signature') || errorMsg.includes('401')) {
+          alert('Execute Orders failed: VALR API Authentication Error\n\n' +
+            'The VALR API credentials (key/secret) are invalid or have been regenerated.\n\n' +
+            'Please verify and update the VALR API credentials in Customer Maintenance.\n\n' +
+            'Technical details: ' + errorMsg);
+        } else {
+          alert('Execute Orders failed:\n\n' + errorMsg + '\n\nCheck the browser console for more details.');
+        }
+        
         executeBtn.disabled = false;
         previewBtn.disabled  = false;
       }
