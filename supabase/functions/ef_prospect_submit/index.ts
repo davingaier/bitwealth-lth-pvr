@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SECRET_KEY = Deno.env.get("Secret Key");
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const ORG_ID = Deno.env.get("ORG_ID");
 const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "davin@bitwealth.co.za";
 const ADMIN_PORTAL_URL = Deno.env.get("ADMIN_PORTAL_URL") || "https://bitwealth.co.za/admin";
@@ -62,7 +62,7 @@ serve(async (req) => {
     }
 
     // Initialize Supabase client (service role for database insert)
-    const supabase = createClient(SUPABASE_URL!, SECRET_KEY!, {
+    const supabase = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
       auth: { persistSession: false },
     });
 
