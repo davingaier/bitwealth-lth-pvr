@@ -1095,12 +1095,20 @@ Approved by: _______________________  Date: _______________
 
 ### Phase 7: Post-Launch (Jan 20-24, 5 days)
 
-#### Day 16-17: VALR Subaccount Automation (Research)
-- [ ] Research VALR API endpoints for subaccount creation
-- [ ] Test subaccount creation in sandbox/test environment
+#### Day 16-17: VALR Subaccount Automation Implementation
 - [ ] Create `ef_valr_create_subaccount` edge function
-- [ ] Integrate with Milestone 4 workflow
-- [ ] Document VALR API integration
+  - Endpoint: `POST https://api.valr.com/v1/account/subaccount`
+  - Request body: `{"label": "Customer Name - LTH PVR"}`
+  - Authentication: HMAC SHA512 signature (timestamp + verb + path + body)
+  - Headers: X-VALR-API-KEY, X-VALR-SIGNATURE, X-VALR-TIMESTAMP
+  - Rate limit: Max 1 request per second (add delay if batching)
+- [ ] Test in VALR environment (production - no sandbox available)
+- [ ] Parse response to extract subaccount_id
+- [ ] Update `public.exchange_accounts` with subaccount_id
+- [ ] Integrate with Milestone 4 workflow (status change trigger)
+- [ ] Add error handling for duplicate labels, API failures
+- [ ] Log to alert system if subaccount creation fails
+- [ ] Document: Deposit reference still requires manual entry from VALR web UI
 
 #### Day 18: Onboarding Pipeline Enhancements
 - [ ] Build advanced pipeline visualization (Kanban board)
@@ -1549,6 +1557,213 @@ This build plan transforms the LTH_PVR solution from an admin-only system into a
 3. Begin Phase 1 development (Jan 2)
 4. Daily standups to track progress
 5. MVP demo/review on Jan 9 (pre-launch)
+
+---
+
+## 17. VALR Subaccount API Research Findings
+
+### 17.1 API Endpoint Details
+
+**Create Subaccount:**
+- **Endpoint:** `POST /v1/account/subaccount`
+- **Base URL:** `https://api.valr.com`
+- **Rate Limit:** 1 request per second
+- **Authentication:** Primary account API key with HMAC SHA512 signing
+
+**Request Format:**
+```typescript
+// Headers
+{
+  "X-VALR-API-KEY": "your-primary-api-key",
+  "X-VALR-SIGNATURE": "hmac-sha512-signature",
+  "X-VALR-TIMESTAMP": "1734567890123",  // Unix timestamp in milliseconds
+  "Content-Type": "application/json"
+}
+
+// Body
+{
+  "label": "John Doe - LTH PVR"  // Customer name + strategy
+}
+```
+
+**Response Format (Expected):**
+```json
+{
+  "id": "abc123def456",  // Subaccount ID
+  "label": "John Doe - LTH PVR",
+  "createdAt": "2025-12-29T10:30:00Z"
+}
+```
+
+**HMAC Signature Generation:**
+```typescript
+// Concatenate: timestamp + verb + path + body
+const payload = `${timestamp}POST/v1/account/subaccount${JSON.stringify(body)}`;
+const signature = crypto.createHmac('sha512', apiSecret)
+  .update(payload)
+  .digest('hex');
+```
+
+### 17.2 Implementation Plan
+
+**Edge Function: `ef_valr_create_subaccount`**
+
+**Purpose:** Automate subaccount creation for new customers
+
+**Trigger:** Admin clicks "Create VALR Subaccount" in Milestone 4
+
+**Parameters:**
+- `customer_id` (UUID)
+- `strategy_code` (string, e.g., 'LTH_PVR')
+
+**Logic:**
+1. Fetch customer details (name, surname)
+2. Generate label: `{first_names} {surname} - {strategy_code}`
+3. Check if subaccount already exists for this customer/strategy
+4. Call VALR API with signed request
+5. Parse response to extract subaccount_id
+6. Insert row into `public.exchange_accounts`:
+   - org_id (from customer)
+   - exchange: 'VALR'
+   - label: (same as VALR label)
+   - subaccount_id: (from API response)
+   - notes: "Auto-created on {date}"
+7. Link to `public.customer_portfolios`:
+   - Update or insert row with exchange_account_id
+8. Log success to `lth_pvr.alert_events` (info level)
+9. Return subaccount details to admin UI
+
+**Error Handling:**
+- Duplicate label → Append timestamp to label, retry
+- Rate limit exceeded → Queue request for retry after 1 second
+- API failure → Log to alert system, notify admin via email
+- Invalid API key → Critical alert, halt onboarding
+
+**Environment Variables Required:**
+- `VALR_PRIMARY_API_KEY` - Primary account API key
+- `VALR_PRIMARY_API_SECRET` - Primary account API secret
+
+### 17.3 Retrieve Subaccounts API
+
+**Endpoint:** `GET /v1/account/subaccounts` (mentioned in docs)
+
+**Purpose:** 
+- Verify subaccount creation
+- List all subaccounts for audit
+- Check for existing subaccounts before creation
+
+**Admin RPC Function:**
+```sql
+CREATE OR REPLACE FUNCTION public.list_valr_subaccounts()
+RETURNS TABLE (
+  exchange_account_id UUID,
+  label TEXT,
+  subaccount_id TEXT,
+  created_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT ea.exchange_account_id, ea.label, ea.subaccount_id, ea.created_at
+  FROM public.exchange_accounts ea
+  WHERE ea.exchange = 'VALR' AND ea.subaccount_id IS NOT NULL
+  ORDER BY ea.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 17.4 Deposit Reference Limitation
+
+**Important:** VALR does not provide an API endpoint to retrieve the deposit reference code programmatically.
+
+**Workaround:**
+1. Subaccount created via API
+2. Admin manually logs into VALR web interface
+3. Admin navigates to subaccount details
+4. Admin copies deposit reference from UI
+5. Admin pastes into BitWealth Admin Portal (`deposit_reference` field)
+6. System sends email to customer with banking details and reference
+
+**Future Enhancement Request:** Contact VALR support to add deposit reference to API response.
+
+### 17.5 Subaccount Impersonation
+
+**X-VALR-SUB-ACCOUNT-ID Header:**
+- Used to "impersonate" subaccount for trading operations
+- Primary account API key can transact on behalf of subaccount
+- Must be included in HMAC signature: `timestamp + verb + path + body + subaccount_id`
+
+**Example:**
+```typescript
+// Trading on subaccount
+const subaccountId = 'abc123def456';
+const payload = `${timestamp}POST/v1/orders/market${JSON.stringify(orderBody)}${subaccountId}`;
+const signature = crypto.createHmac('sha512', apiSecret).update(payload).digest('hex');
+
+// Headers
+{
+  "X-VALR-API-KEY": "primary-api-key",
+  "X-VALR-SIGNATURE": signature,
+  "X-VALR-TIMESTAMP": timestamp,
+  "X-VALR-SUB-ACCOUNT-ID": subaccountId  // Impersonate subaccount
+}
+```
+
+**Already Implemented:** Existing `valrClient` helper in TypeScript handles this correctly.
+
+### 17.6 Testing Strategy
+
+**Pre-Production Testing:**
+- VALR does not provide a sandbox/test environment
+- Testing must be done in production with caution
+- Recommendation: Create 2-3 test subaccounts manually to verify integration
+
+**Test Cases:**
+1. Create subaccount with unique label → Verify response, database update
+2. Create subaccount with duplicate label → Verify error handling, retry logic
+3. Rate limit test → Create 2 subaccounts within 1 second → Verify delay/retry
+4. Invalid API key → Verify error logging and admin notification
+5. Network timeout → Verify retry mechanism
+6. Verify impersonation → Place test order on created subaccount
+
+### 17.7 Security Considerations
+
+**API Key Permissions:**
+- Primary API key must have "View" and "Trade" permissions
+- Do NOT grant "Withdraw" permission (security risk)
+- Store API key/secret in Supabase project secrets (not in code)
+
+**RLS Policies:**
+- Only admins can call `ef_valr_create_subaccount`
+- Customers cannot see other customers' subaccount_id values
+- Audit log all subaccount creation events
+
+**Monitoring:**
+- Alert if subaccount creation fails >2 times in 24 hours
+- Weekly audit: Compare VALR subaccounts (API list) vs database records
+- Monthly review: Verify all active customers have subaccounts
+
+---
+
+## 18. Revised Timeline with VALR Integration
+
+### Phase 7: Post-Launch (Updated)
+
+#### Day 16-17: VALR Subaccount Automation Implementation
+- [ ] Create `ef_valr_create_subaccount` edge function
+- [ ] Add HMAC SHA512 signing logic (reuse existing valrClient if possible)
+- [ ] Test in production with 2 test subaccounts
+- [ ] Handle rate limiting (1/s max)
+- [ ] Integrate with Admin UI Milestone 4 workflow
+- [ ] Add "Create VALR Subaccount" button (calls edge function)
+- [ ] Display subaccount_id in Admin UI after creation
+- [ ] Add manual `deposit_reference` input field
+- [ ] Document manual deposit reference retrieval process
+
+#### Day 18: Testing & Validation
+- [ ] End-to-end test: Prospect → KYC → Setup (auto subaccount) → Deposit
+- [ ] Verify subaccount shows in VALR web interface
+- [ ] Test deposit detection with real ZAR deposit (small amount)
+- [ ] Verify deposit reference matching logic in `ef_valr_deposit_scan`
 
 ---
 
