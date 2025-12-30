@@ -2252,6 +2252,39 @@
         </div>
       </div>
 
+      <!-- KYC Management card -->
+      <div class="card" id="kycManagementCard">
+        <h3>KYC Management</h3>
+        <p class="small-muted">Review and approve customer KYC verifications. Approved customers will receive a registration email with account setup link.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="kycRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="kycSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+          <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+            <input type="checkbox" id="kycShowPendingOnly" checked>
+            Pending Only
+          </label>
+        </div>
+        <div class="table-scroll" id="kycTableContainer">
+          <table id="kycTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:120px;">Phone</th>
+                <th style="min-width:100px;">Status</th>
+                <th style="min-width:140px;">Submitted</th>
+                <th style="min-width:150px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="muted">Loading prospects...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="kycMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
       <!-- Customer Fee Management card -->
       <div class="card" id="feeManagementCard">
         <h3>Customer Fee Management</h3>
@@ -5972,6 +6005,197 @@
         });
       }
     });
+  })();
+
+  /* ========== KYC Management Module ========== */
+  (() => {
+    const tableBody = document.querySelector('#kycTable tbody');
+    const refreshBtn = document.getElementById('kycRefreshBtn');
+    const searchInput = document.getElementById('kycSearchInput');
+    const pendingOnlyCheckbox = document.getElementById('kycShowPendingOnly');
+    const kycMessage = document.getElementById('kycMessage');
+
+    if (!tableBody || !refreshBtn) return;
+
+    let allProspects = [];
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch] || ch));
+    }
+
+    function showMessage(msg, type) {
+      kycMessage.textContent = msg;
+      kycMessage.style.display = 'block';
+      kycMessage.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
+      kycMessage.style.color = type === 'success' ? '#155724' : '#721c24';
+      kycMessage.style.borderLeft = type === 'success' ? '4px solid #28a745' : '4px solid #dc3545';
+      
+      setTimeout(() => {
+        kycMessage.style.display = 'none';
+      }, 5000);
+    }
+
+    async function loadProspects() {
+      if (!supabaseClient) {
+        tableBody.innerHTML = '<tr><td colspan="7">Loading Supabase client…</td></tr>';
+        return;
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) {
+        tableBody.innerHTML = '<tr><td colspan="7">⚠️ Not authenticated</td></tr>';
+        return;
+      }
+
+      refreshBtn.textContent = 'Loading...';
+      refreshBtn.disabled = true;
+
+      try {
+        let query = supabaseClient
+          .from('customer_details')
+          .select('customer_id, first_names, last_name, email, phone_number, phone_country_code, registration_status, created_at')
+          .order('created_at', { ascending: false });
+
+        if (pendingOnlyCheckbox.checked) {
+          query = query.eq('registration_status', 'prospect');
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('KYC load error:', error);
+          tableBody.innerHTML = `<tr><td colspan="7" style="color:red;">Error: ${escapeHtml(error.message)}</td></tr>`;
+          return;
+        }
+
+        allProspects = data || [];
+        renderProspects(allProspects);
+      } catch (err) {
+        console.error('KYC fetch error:', err);
+        tableBody.innerHTML = `<tr><td colspan="7" style="color:red;">Fetch failed: ${escapeHtml(err.message)}</td></tr>`;
+      } finally {
+        refreshBtn.textContent = 'Refresh';
+        refreshBtn.disabled = false;
+      }
+    }
+
+    function renderProspects(prospects) {
+      if (!prospects || prospects.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="7" class="muted">No prospects found</td></tr>';
+        return;
+      }
+
+      const searchTerm = (searchInput?.value || '').toLowerCase();
+      const filtered = searchTerm
+        ? prospects.filter(p => {
+            const name = `${p.first_names || ''} ${p.last_name || ''}`.toLowerCase();
+            const email = (p.email || '').toLowerCase();
+            return name.includes(searchTerm) || email.includes(searchTerm);
+          })
+        : prospects;
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="7" class="muted">No matches found</td></tr>';
+        return;
+      }
+
+      const statusBadges = {
+        prospect: '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#ffc107;color:#000;">Pending</span>',
+        kyc: '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#17a2b8;color:#fff;">Approved</span>',
+        setup: '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#28a745;color:#fff;">Registered</span>',
+        active: '<span style="padding:2px 8px;border-radius:4px;font-size:11px;background:#007bff;color:#fff;">Active</span>',
+      };
+
+      tableBody.innerHTML = filtered.map(customer => {
+        const phone = customer.phone_country_code && customer.phone_number
+          ? `${customer.phone_country_code} ${customer.phone_number}`
+          : '-';
+        const submittedDate = customer.created_at
+          ? new Date(customer.created_at).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' })
+          : '-';
+        const statusBadge = statusBadges[customer.registration_status] || customer.registration_status;
+
+        const actionButton = customer.registration_status === 'prospect'
+          ? `<button class="btn btn-sm btn-success" onclick="window.approveKYC(${customer.customer_id})" style="font-size:12px;">Approve KYC</button>`
+          : '<span class="muted" style="font-size:12px;">-</span>';
+
+        return `
+          <tr>
+            <td>${customer.customer_id}</td>
+            <td>${escapeHtml(customer.first_names)} ${escapeHtml(customer.last_name)}</td>
+            <td>${escapeHtml(customer.email)}</td>
+            <td style="font-size:13px;">${escapeHtml(phone)}</td>
+            <td>${statusBadge}</td>
+            <td style="font-size:13px;">${submittedDate}</td>
+            <td>${actionButton}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Approve KYC function (global for onclick handler)
+    window.approveKYC = async function(customerId) {
+      if (!confirm(`Approve KYC for customer ${customerId}?\n\nThis will:\n- Update status to 'kyc'\n- Send registration email with account setup link`)) {
+        return;
+      }
+
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const adminEmail = session?.user?.email || 'admin';
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/ef_approve_kyc`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            customer_id: customerId,
+            admin_email: adminEmail,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'KYC approval failed');
+        }
+
+        showMessage(`KYC approved for customer ${customerId}. Registration email sent to ${result.email}`, 'success');
+        
+        // Show registration URL for manual testing
+        console.log('Registration URL:', result.registration_url);
+        
+        // Reload prospects list
+        await loadProspects();
+      } catch (err) {
+        console.error('KYC approval error:', err);
+        showMessage(`Failed to approve KYC: ${err.message}`, 'error');
+      }
+    };
+
+    // Event listeners
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', loadProspects);
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => renderProspects(allProspects));
+    }
+
+    if (pendingOnlyCheckbox) {
+      pendingOnlyCheckbox.addEventListener('change', loadProspects);
+    }
+
+    // Initial load
+    loadProspects();
   })();
 
   /* ========== Fee Management Module ========== */
