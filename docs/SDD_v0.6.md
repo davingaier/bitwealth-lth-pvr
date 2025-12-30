@@ -3,13 +3,101 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2025-12-28
+**Last updated:** 2025-12-31
 
 ---
 
 ## 0. Change Log
 
-### v0.6.1 (current) – Pipeline Resume Mechanism
+### v0.6.2 (current) – Customer Portal MVP Testing Complete
+**Date:** 2025-12-31  
+**Purpose:** Document completion of Phase 1 MVP testing for customer portal (prospect submission, registration, email templates, admin fee management).
+
+**Key Changes:**
+
+1. **Customer Portal Testing - Phase 1 Complete**
+   - **Test Progress:** 20 of 30+ test cases completed (67%)
+   - **Tests Passed:** 
+     - TC1.1-TC1.5: Prospect Form Submission (5/5 tests) ✅
+     - TC2.1-TC2.6: Customer Registration Flow (6/6 tests) ✅
+     - TC3.1, TC3.2, TC3.4: Email Template Rendering (3/4 tests) ✅
+     - TC4.1-TC4.6: Admin Fee Management (6/6 tests) ✅
+   - **Tests Deferred:**
+     - TC3.3: KYC Verified Email (waiting for admin KYC workflow UI)
+     - TC5.1-TC5.4: RLS Policy Testing (ALL deferred - requires customer portal UI)
+   - **Remaining Tests:** TC6 (E2E workflows), TC7 (error handling), TC8 (performance)
+
+2. **Schema Cleanup - Column Standardization**
+   - **Issue:** Duplicate name columns in `customer_details` table
+     - OLD: `first_name` (text, nullable), `surname` (text, nullable)
+     - NEW: `first_names` (text, NOT NULL), `last_name` (text, NOT NULL)
+   - **Migration:** `20251230203041_drop_old_name_columns.sql`
+     - Dropped `first_name` and `surname` columns
+     - Added table comment documenting standard fields
+   - **Code Updates:**
+     - **ef_prospect_submit:** Changed to use `first_names`/`last_name` only
+       * Still accepts `first_name`/`surname` from web form (backwards compatible)
+       * Maps directly to new columns on insert
+       * Email templates receive `first_names` for personalization
+     - **ef_customer_register:** Updated SELECT and user metadata to use new columns
+     - **UI (Advanced BTC DCA Strategy.html):** Already using correct columns
+     - **chart-narrative function:** Already using correct columns (no change needed)
+   - **Impact:** Consistent naming across all code, single source of truth for customer names
+
+3. **Fee Management RPC Fix**
+   - **Issue:** UI calling `update_customer_fee_rate` with wrong parameter name
+     - Function expects: `p_new_fee_rate` (NUMERIC)
+     - UI was passing: `p_new_rate` (wrong name)
+   - **Fix:** Updated UI line 6174 to use correct parameter name
+   - **Success Message Fix:** UI was looking for `previous_rate_percentage`/`new_rate_percentage`
+     - Function returns: `previous_fee_rate` (0.05), `new_fee_rate` (0.075)
+     - Updated UI line 6191 to multiply by 100 and format correctly
+   - **Result:** Fee updates now show proper success message: "Fee updated successfully for customer 12. Previous: 5.00%, New: 7.50%"
+
+4. **RLS Testing Deferred Until Portal UI Complete**
+   - **Rationale:** 
+     - Customer RLS policies require authentication as customer (with customer_id in JWT)
+     - Admin users have different RLS policies (can view all customers)
+     - Demo portal.html has no Supabase integration
+     - Proper testing requires functional customer portal with authentication
+   - **Deferred Tests:**
+     - TC5.1: Customer can only view own data
+     - TC5.2: Customer can insert own agreements
+     - TC5.3: Anonymous users can submit support requests
+     - TC5.4: Customer can view own withdrawal requests
+   - **Alternative Verification:** SQL queries added to TC5.1 for checking RLS enabled and policies exist
+   - **Next Steps:** Build customer portal UI (Phase 2) before completing RLS testing
+
+5. **Production Readiness Status**
+   - **✅ Operational:**
+     - Prospect form submission with email confirmations
+     - Customer registration workflow
+     - Email template system (12 templates, fully branded)
+     - Admin fee management with validation
+     - Alert system with daily digest emails
+     - Pipeline resume mechanism with UI controls
+   - **⏸️ Deferred (Non-blocking for Phase 1):**
+     - Customer portal UI (portal.html is demo only)
+     - RLS policy end-to-end testing
+     - Admin KYC approval workflow
+     - Support request system
+     - Withdrawal request system
+   - **📋 Pending (Phase 2+):**
+     - Customer portfolio dashboard
+     - Transaction history UI
+     - Automated deposit reconciliation
+     - Performance optimization (caching, pagination)
+
+6. **Launch Timeline**
+   - **Target Date:** January 10, 2026 (10 days remaining)
+   - **Phase 1 Status:** Testing 67% complete (20/30 tests passed)
+   - **Critical Path:** Prospect → Registration → Fee Management ✅ COMPLETE
+   - **Next Phase:** Determine priority between:
+     - Option A: Complete remaining tests (E2E, error handling, performance)
+     - Option B: Build customer portal UI for Phase 2
+     - Option C: Focus on admin KYC workflow and manual processes
+
+### v0.6.1 – Pipeline Resume Mechanism
 **Date:** 2025-12-28  
 **Purpose:** Add automated pipeline recovery system to resume execution after CI bands fetch failures.
 

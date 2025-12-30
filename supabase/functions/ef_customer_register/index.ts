@@ -65,7 +65,7 @@ serve(async (req) => {
     // Verify customer exists and status is 'kyc' (KYC approved, ready to register)
     const { data: customer, error: customerError } = await supabase
       .from("customer_details")
-      .select("customer_id, email, status, first_name, surname")
+      .select("customer_id, email, registration_status, first_names, last_name")
       .eq("customer_id", customer_id)
       .eq("email", email.toLowerCase())
       .single();
@@ -77,10 +77,21 @@ serve(async (req) => {
       );
     }
 
+    // Check if customer is already registered (duplicate registration prevention)
+    if (customer.registration_status === "setup" || customer.registration_status === "active") {
+      return new Response(
+        JSON.stringify({
+          error: "Failed to create account as this user is already registered. If you forgot your password, please use the password reset option.",
+        }),
+        { status: 400, headers: CORS }
+      );
+    }
+
+    // Check if customer has completed KYC verification
     if (customer.registration_status !== "kyc") {
       return new Response(
         JSON.stringify({
-          error: `Registration not available. Current registration status: ${customer.registration_status}. Please contact support.`,
+          error: "Failed to create account as KYC is not verified. Please contact support at support@bitwealth.co.za.",
         }),
         { status: 400, headers: CORS }
       );
@@ -93,8 +104,8 @@ serve(async (req) => {
       email_confirm: true, // Auto-confirm email since KYC is already done
       user_metadata: {
         customer_id: customer.customer_id,
-        first_name: customer.first_name,
-        surname: customer.surname,
+        first_name: customer.first_names,
+        surname: customer.last_name,
       },
     });
 
