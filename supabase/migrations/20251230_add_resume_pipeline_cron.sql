@@ -53,3 +53,4 @@ COMMENT ON EXTENSION pg_cron IS
 - ef_resume_pipeline checks pipeline status and only runs needed steps (idempotent)
 - Old individual step jobs disabled, now orchestrated via ef_resume_pipeline
 - Polling continues every 10 min for order status updates';
+
