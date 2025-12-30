@@ -11,7 +11,7 @@ SELECT cron.schedule(
       url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_resume_pipeline',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzI0NzU3OCwiZXhwIjoyMDQ4ODIzNTc4fQ.l7TrBD7BsX8h5bS5pDOw4sJmI5fWSKHwdqEgTXh2jTQ'
+        'Authorization', 'Bearer ' || public.get_secret('service_jwt')
       ),
       body := jsonb_build_object()
     );
@@ -28,7 +28,7 @@ SELECT cron.schedule(
       url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_resume_pipeline',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzI0NzU3OCwiZXhwIjoyMDQ4ODIzNTc4fQ.l7TrBD7BsX8h5bS5pDOw4sJmI5fWSKHwdqEgTXh2jTQ'
+        'Authorization', 'Bearer ' || public.get_secret('service_jwt')
       ),
       body := jsonb_build_object()
     );
