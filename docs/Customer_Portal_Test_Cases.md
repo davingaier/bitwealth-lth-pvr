@@ -240,7 +240,7 @@ ORDER BY agreed_at;
 
 ---
 
-### TC2.2: Registration - Weak Password
+### TC2.2: Registration - Weak Password ✅ PASS
 
 **Objective:** Verify password strength requirements
 
@@ -260,7 +260,7 @@ ORDER BY agreed_at;
 
 ---
 
-### TC2.3: Registration - Password Mismatch
+### TC2.3: Registration - Password Mismatch ✅ PASS
 
 **Objective:** Verify password confirmation validation
 
@@ -275,7 +275,7 @@ ORDER BY agreed_at;
 
 ---
 
-### TC2.4: Registration - Missing Agreements
+### TC2.4: Registration - Missing Agreements ✅ PASS
 
 **Objective:** Verify all agreements are required
 
@@ -290,7 +290,7 @@ ORDER BY agreed_at;
 
 ---
 
-### TC2.5: Registration - Invalid Customer Status
+### TC2.5: Registration - Invalid Customer Status ✅ PASS
 
 **Objective:** Verify only 'kyc' status customers can register
 
@@ -308,7 +308,7 @@ ORDER BY agreed_at;
 
 ---
 
-### TC2.6: Registration - Already Registered Customer
+### TC2.6: Registration - Already Registered Customer ✅ PASS
 
 **Objective:** Verify duplicate registration prevention
 
@@ -327,7 +327,7 @@ ORDER BY agreed_at;
 
 ## Test Case 3: Email Template Rendering
 
-### TC3.1: Prospect Confirmation Email - Template Rendering
+### TC3.1: Prospect Confirmation Email - Template Rendering ✅ PASS
 
 **Objective:** Verify email template placeholders are correctly replaced
 
@@ -356,7 +356,7 @@ ORDER BY created_at DESC LIMIT 1;
 
 ---
 
-### TC3.2: Prospect Notification Email - Admin Template
+### TC3.2: Prospect Notification Email - Admin Template ✅ PASS
 
 **Objective:** Verify admin receives all prospect details
 
@@ -378,6 +378,8 @@ ORDER BY created_at DESC LIMIT 1;
 ### TC3.3: KYC Verified Email - Registration Link
 
 **Objective:** Verify registration link is correctly generated
+
+**Note:** This test should be completed when the admin UI has functionality to approve customer KYC and trigger the email automatically.
 
 **Preconditions:**
 - Customer ID: 999
@@ -412,7 +414,7 @@ WHERE template_key = 'kyc_verified_notification';
 
 ---
 
-### TC3.4: All Email Templates - No Missing Placeholders
+### TC3.4: All Email Templates - No Missing Placeholders ✅ PASS
 
 **Objective:** Verify all templates have no syntax errors
 
@@ -460,7 +462,7 @@ FROM email_templates;
 
 ---
 
-### TC4.2: Update Customer Fee Rate (Happy Path)
+### TC4.2: Update Customer Fee Rate (Happy Path) ✅ PASS
 
 **Objective:** Verify admin can change customer fee rate
 
@@ -485,21 +487,21 @@ FROM email_templates;
 -- Check fee_configs updated
 SELECT customer_id, fee_rate, 
        (fee_rate * 100) as fee_percentage,
-       effective_from
+       created_at
 FROM lth_pvr.fee_configs
 WHERE customer_id = 12
-ORDER BY effective_from DESC LIMIT 1;
+ORDER BY created_at DESC LIMIT 1;
 -- fee_rate should be 0.075
 ```
 
 **Pass Criteria:**
-- Database record updated with new rate
-- effective_from set to beginning of current month
+- Database record updated with new rate (0.075)
+- created_at timestamp reflects when update was made
 - Fee will be used in next monthly close
 
 ---
 
-### TC4.3: Fee Rate Validation - Invalid Range
+### TC4.3: Fee Rate Validation - Invalid Range ✅ PASS
 
 **Objective:** Verify fee rate must be between 0% and 100%
 
@@ -520,7 +522,7 @@ ORDER BY effective_from DESC LIMIT 1;
 
 ---
 
-### TC4.4: Fee Rate Update - Edge Case 0%
+### TC4.4: Fee Rate Update - Edge Case 0% ✅ PASS
 
 **Objective:** Verify 0% fee rate is accepted (free management)
 
@@ -536,7 +538,7 @@ ORDER BY effective_from DESC LIMIT 1;
 
 ---
 
-### TC4.5: Fee Rate Update - Cancel Action
+### TC4.5: Fee Rate Update - Cancel Action ✅ PASS
 
 **Objective:** Verify cancel button discards changes
 
@@ -553,7 +555,7 @@ ORDER BY effective_from DESC LIMIT 1;
 
 ---
 
-### TC4.6: Fee Search Filter
+### TC4.6: Fee Search Filter ✅ PASS
 
 **Objective:** Verify search functionality
 
@@ -573,16 +575,18 @@ ORDER BY effective_from DESC LIMIT 1;
 
 ## Test Case 5: Row-Level Security (RLS) Policies
 
-### TC5.1: Customer Can Only View Own Data
+### TC5.1: Customer Can Only View Own Data ⏸️ DEFERRED
 
 **Objective:** Verify RLS prevents cross-customer data access
 
+**Note:** Cannot test until customer portal UI is built (see Known Issues #3). Admin RLS policies differ from customer RLS policies. This test requires signing in as a registered customer with customer_id in JWT metadata. Admin users (like davin.gaier@gmail.com) have different permissions that allow viewing all customers.
+
 **Preconditions:**
-- Customer A (ID: 100) authenticated
+- Customer A (ID: 100) authenticated in customer portal
 - Customer B (ID: 101) exists in database
 
 **Test Steps:**
-1. Sign in as Customer A
+1. Sign in as Customer A in customer portal
 2. Attempt to query Customer B's data via SQL or API:
 ```javascript
 const { data, error } = await supabase
@@ -596,11 +600,30 @@ const { data, error } = await supabase
 - ❌ OR Postgres RLS policy blocks access
 - ✅ Customer A can ONLY see their own data (customer_id = 100)
 
+**Alternative Verification (SQL Editor):**
+```sql
+-- Verify RLS is enabled
+SELECT tablename, rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+AND tablename = 'customer_details';
+-- rowsecurity should be TRUE
+
+-- Check customer RLS policies exist
+SELECT policyname, cmd, qual::text 
+FROM pg_policies 
+WHERE schemaname = 'public' 
+AND tablename = 'customer_details'
+AND policyname LIKE '%customer%';
+```
+
 ---
 
-### TC5.2: Customer Agreement - RLS Insert Policy
+### TC5.2: Customer Agreement - RLS Insert Policy ⏸️ DEFERRED
 
 **Objective:** Verify customer can insert own agreements during registration
+
+**Note:** Testing deferred until customer portal UI is built. While ef_customer_register successfully inserts agreements (verified in TC2.1), full RLS policy testing requires customer authentication context.
 
 **Preconditions:**
 - Customer authenticated with customer_id in JWT metadata
@@ -624,9 +647,11 @@ WHERE customer_id = 999;
 
 ---
 
-### TC5.3: Support Request - Anonymous Insert
+### TC5.3: Support Request - Anonymous Insert ⏸️ DEFERRED
 
 **Objective:** Verify anonymous (unauthenticated) users can submit support requests
+
+**Note:** Testing deferred until support request functionality is implemented in portal UI.
 
 **Preconditions:**
 - User NOT signed in (no auth session)
@@ -642,9 +667,11 @@ WHERE customer_id = 999;
 
 ---
 
-### TC5.4: Withdrawal Request - Customer Can View Own
+### TC5.4: Withdrawal Request - Customer Can View Own ⏸️ DEFERRED
 
 **Objective:** Verify RLS on withdrawal_requests table
+
+**Note:** Testing deferred until withdrawal functionality is implemented in portal UI.
 
 **Test Steps:**
 1. Sign in as Customer A (ID: 100)

@@ -6026,8 +6026,8 @@
         // Get all active customers
         const { data: customers, error: custError } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_name, surname, email, status')
-          .in('status', ['active', 'setup', 'kyc'])
+          .select('customer_id, first_names, last_name, email, registration_status')
+          .in('registration_status', ['active', 'setup', 'kyc'])
           .order('customer_id', { ascending: true });
 
         if (custError) throw custError;
@@ -6058,9 +6058,9 @@
 
         allCustomers = customers.map(c => ({
           customer_id: c.customer_id,
-          name: `${c.first_name || ''} ${c.surname || ''}`.trim() || '—',
+          name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
           email: c.email || '—',
-          status: c.status,
+          registration_status: c.registration_status,
           fee_rate: feeMap.get(c.customer_id) ?? 0.10 // Default 10%
         }));
 
@@ -6171,7 +6171,7 @@
         try {
           const { data, error } = await supabaseClient.rpc('update_customer_fee_rate', {
             p_customer_id: parseInt(customerId),
-            p_new_rate: newFeeRate
+            p_new_fee_rate: newFeeRate
           });
 
           if (error) throw error;
@@ -6188,7 +6188,7 @@
           const customer = allCustomers.find(c => c.customer_id == customerId);
           if (customer) customer.fee_rate = newFeeRate;
 
-          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${data.previous_rate_percentage}%, New: ${data.new_rate_percentage}%`, 'success');
+          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${(data.previous_fee_rate * 100).toFixed(2)}%, New: ${(data.new_fee_rate * 100).toFixed(2)}%`, 'success');
         } catch (err) {
           console.error('update fee error:', err);
           showMessage(`Failed to update fee: ${err.message}`, 'error');

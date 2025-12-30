@@ -6,7 +6,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SECRET_KEY = Deno.env.get("Secret Key");
 const ORG_ID = Deno.env.get("ORG_ID");
-const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
+const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "davin.gaier@gmail.com";
 const ADMIN_PORTAL_URL = Deno.env.get("ADMIN_PORTAL_URL") || "https://bitwealth.co.za/admin";
 const WEBSITE_URL = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
 
@@ -25,8 +25,8 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const {
-      first_name,
-      surname,
+      first_names,
+      last_name,
       email,
       phone_number,
       phone_country_code,
@@ -37,9 +37,9 @@ serve(async (req) => {
     } = body;
 
     // Validate required fields
-    if (!first_name || !surname || !email) {
+    if (!first_names || !last_name || !email) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: first_name, surname, email" }),
+        JSON.stringify({ error: "Missing required fields: first_names, last_name, email" }),
         { status: 400, headers: CORS }
       );
     }
@@ -111,11 +111,9 @@ serve(async (req) => {
       .from("customer_details")
       .insert({
         org_id: ORG_ID,
-        first_name,
-        surname,
+        first_names,
+        last_name,
         email: email.toLowerCase(),
-        first_names: first_name,
-        last_name: surname,
         email_address: email.toLowerCase(),
         phone_number,
         phone_country_code,
@@ -126,7 +124,7 @@ serve(async (req) => {
         registration_status: "prospect",
         customer_status: "Inactive",
       })
-      .select("customer_id, first_name, surname, email")
+      .select("customer_id, first_names, last_name, email")
       .single();
 
     if (insertError) {
@@ -139,7 +137,7 @@ serve(async (req) => {
 
     // Send confirmation email to prospect
     const prospectEmailData = {
-      first_name: customer.first_name,
+      first_name: customer.first_names,
       website_url: WEBSITE_URL,
     };
 
@@ -162,8 +160,8 @@ serve(async (req) => {
 
     // Send notification email to admin
     const adminEmailData = {
-      first_name: customer.first_name,
-      surname: customer.surname,
+      first_name: customer.first_names,
+      surname: customer.last_name,
       email: customer.email,
       phone_country_code: phone_country_code || "",
       phone_number: phone_number || "",
