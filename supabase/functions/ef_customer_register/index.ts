@@ -77,10 +77,10 @@ serve(async (req) => {
       );
     }
 
-    if (customer.status !== "kyc") {
+    if (customer.registration_status !== "kyc") {
       return new Response(
         JSON.stringify({
-          error: `Registration not available. Current status: ${customer.status}. Please contact support.`,
+          error: `Registration not available. Current registration status: ${customer.registration_status}. Please contact support.`,
         }),
         { status: 400, headers: CORS }
       );
@@ -157,7 +157,7 @@ serve(async (req) => {
       // Don't fail the request if agreement recording fails, just log it
     }
 
-    // Update customer_details with acceptance timestamps and status
+    // Update customer_details with acceptance timestamps and registration_status
     const { error: updateError } = await supabase
       .from("customer_details")
       .update({
@@ -165,7 +165,7 @@ serve(async (req) => {
         privacy_accepted_at: accept_privacy ? now : null,
         disclaimer_signed_at: sign_disclaimer ? now : null,
         portal_access_granted_at: now,
-        status: "setup", // Move to setup milestone (waiting for account setup)
+        registration_status: "setup", // Move to setup milestone (waiting for account setup)
       })
       .eq("customer_id", customer.customer_id);
 

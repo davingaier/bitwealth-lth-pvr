@@ -69,7 +69,7 @@ serve(async (req) => {
     // Check if email already exists (handle potential duplicates)
     const { data: existingList, error: checkError } = await supabase
       .from("customer_details")
-      .select("customer_id, email, status")
+      .select("customer_id, email, registration_status")
       .eq("email", email.toLowerCase())
       .limit(1);
     
@@ -85,7 +85,7 @@ serve(async (req) => {
 
     if (existing) {
       // Customer already exists
-      if (existing.status === "prospect") {
+      if (existing.registration_status === "prospect") {
         return new Response(
           JSON.stringify({
             success: true,
@@ -123,7 +123,7 @@ serve(async (req) => {
         upfront_investment_amount_range,
         monthly_investment_amount_range,
         prospect_message,
-        status: "prospect",
+        registration_status: "prospect",
         customer_status: "Inactive",
       })
       .select("customer_id, first_name, surname, email")

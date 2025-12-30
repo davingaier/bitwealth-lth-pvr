@@ -170,7 +170,7 @@ WHERE email = 'existing.customer@example.com';
 
 ## Test Case 2: Customer Registration Flow
 
-### TC2.1: Valid Customer Registration (Happy Path)
+### TC2.1: Valid Customer Registration (Happy Path) ✅ PASS
 
 **Objective:** Verify KYC-approved customer can create account successfully
 
