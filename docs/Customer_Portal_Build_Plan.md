@@ -1,70 +1,66 @@
 # BitWealth Customer Portal - Build Plan
-## Version 1.1
+## Version 1.2 - UPDATED WITH CONFIRMED WORKFLOW
 
 **Project:** Customer Lifecycle Platform & Portal  
 **Author:** Dav / GPT  
 **Created:** 2025-12-29  
-**Last Updated:** 2025-12-31  
+**Last Updated:** 2025-12-31 (Workflow Redesigned)  
 **MVP Target:** 2026-01-10 (10 days remaining)  
 **Full Launch Target:** 2026-01-24 (24 days remaining)
 
+⚠️ **IMPORTANT:** This plan has been updated to reflect the CONFIRMED 6-milestone onboarding workflow.  
+See: `Customer_Onboarding_Workflow_CONFIRMED.md` for authoritative source.
+
 ---
 
-## 📊 Implementation Progress
+## 📊 Implementation Progress (UPDATED)
 
-### ✅ Completed (As of Dec 31, 2025)
+### ✅ Milestone 1 - Prospect (COMPLETE)
+- ✅ Prospect form in website/index.html
+- ✅ Edge function: ef_prospect_submit (deployed & tested TC1.1-TC1.5)
+- ✅ Email: prospect_notification (to admin)
+- ✅ Email: prospect_confirmation (to customer)
 
-**Phase 1: Foundation**
-- ✅ Database schema designed (all tables, columns, RLS policies)
-- ✅ Email templates created (12 templates, fully branded)
-- ✅ Edge function: `ef_prospect_submit` (deployed & tested TC1.1-TC1.5)
-- ✅ Edge function: `ef_send_email` (centralized email sending)
-- ✅ Edge function: `ef_customer_register` (deployed & tested TC2.1-TC2.6)
-- ✅ Edge function: `ef_approve_kyc` (deployed with email integration)
-- ✅ Prospect form in website/index.html (tested & working)
-- ✅ Customer registration page (register.html, tested & working)
-- ✅ Admin KYC Management UI (KYC approval workflow complete)
-- ✅ Admin Fee Management UI (full CRUD operations)
-- ✅ Alert system with daily digest emails
+### ⏳ Milestone 2 - Confirm Interest (TO BUILD)
+- ⏳ Admin UI: Strategy selection dropdown in Customer Management module
+- ⏳ Edge function: ef_confirm_strategy (replaces ef_approve_kyc)
+- ⏳ Create customer_portfolios entry when strategy selected
+- ⏳ Email: kyc_portal_registration (to customer with registration link)
+- **Estimated Time:** 1 day
 
-**Test Coverage:**
-- ✅ TC1.1-TC1.5: Prospect Form (5/5 tests PASSED)
-- ✅ TC2.1-TC2.6: Registration (6/6 tests PASSED)
-- ✅ TC3.1, TC3.2, TC3.4: Email Templates (3/4 tests PASSED)
-- ⏸️ TC3.3: KYC Email (ready to test - workflow just completed)
-- ✅ TC4.1-TC4.6: Fee Management (6/6 tests PASSED)
-- ⏸️ TC5.1-TC5.4: RLS Policies (deferred until customer portal built)
+### ⏳ Milestone 3 - Portal Registration & KYC (TO BUILD)
+- ✅ Customer registration page (register.html - EXISTS)
+- ⏳ Customer portal ID upload page
+- ⏳ Supabase Storage bucket: kyc-documents
+- ⏳ Edge function: ef_upload_kyc_id
+- ⏳ Admin UI: View uploaded IDs + Verify button
+- ⏳ Email: kyc_id_uploaded_notification (to admin)
+- **Estimated Time:** 2-3 days
+- **File Naming:** `{ccyy-mm-dd}_{last_name}_{first_names}_id.pdf`
 
-### 🚧 In Progress (Dec 31, 2025)
-- 🔄 KYC workflow end-to-end testing (TODAY)
-- 🔄 Documentation updates
+### ⏳ Milestone 4 - VALR Account Setup (TO BUILD)
+- ⏳ Edge function: ef_valr_create_subaccount (auto-triggered when status='setup')
+- ⏳ Database column: exchange_accounts.deposit_ref
+- ⏳ Admin UI: deposit_ref input field + Save button
+- ⏳ Trigger: Auto-change status when deposit_ref saved
+- ⏳ Email: deposit_instructions (to customer with banking details)
+- **Estimated Time:** 2 days
 
-### ⏳ Remaining Work (Critical Path)
+### ⏳ Milestone 5 - Funds Deposit (TO BUILD)
+- ⏳ Edge function: ef_deposit_scan (hourly pg_cron job)
+- ⏳ Query VALR subaccount balances (ZAR/BTC/USDT)
+- ⏳ Auto-change status='deposit' → 'active' when balance > 0
+- ⏳ Email: funds_deposited_admin_notification (to admin)
+- ⏳ Email: registration_complete_welcome (to customer)
+- **Estimated Time:** 1-2 days
 
-**High Priority (Jan 1-5):**
-- [ ] Customer Portal UI (customer-portal.html) - 3-4 days
-  - Dashboard tab (portfolio summary, performance)
-  - Transactions tab (ledger view)
-  - Settings tab (basic auth management)
-- [ ] Customer authentication integration - 1 day
-  - Login/logout flow
-  - Session management
-  - Password reset
+### ⏳ Milestone 6 - Customer Active (PARTIAL)
+- ✅ Trading pipeline (EXISTS - LTH_PVR strategy operational)
+- ⏳ Full customer portal UI (dashboard, transactions, statements)
+- ⏳ Admin UI: "Set Inactive" button
+- **Estimated Time:** 3-4 days
 
-**Medium Priority (Jan 6-8):**
-- [ ] Withdrawal request functionality - 1 day
-  - Database table (already designed)
-  - Edge function: `ef_withdrawal_request_submit`
-  - Admin approval UI
-- [ ] Support request functionality - 0.5 day
-  - Database table (already designed)
-  - Edge function: `ef_support_request_submit`
-  - Admin management UI
-
-**Lower Priority (Jan 9-10):**
-- [ ] Statement generation (basic PDF) - 1-2 days
-- [ ] VALR subaccount automation - 1-2 days (can be manual at launch)
-- [ ] End-to-end testing & bug fixes
+### **TOTAL ESTIMATED TIME: 9-12 days** ⚠️ Tight against Jan 10 launch
 
 ---
 
