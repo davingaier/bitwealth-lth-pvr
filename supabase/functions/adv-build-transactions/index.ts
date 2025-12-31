@@ -49,13 +49,15 @@ serve(async (req) => {
       .eq("customer_status","Active");
     if (cErr) throw new Error("customers: "+cErr.message);
 
-    const custs = (customers||[]).map(c=>({
-      id: Number(c.customer_id),
-      tradeStart: String(c.trade_start_date).slice(0,10),
-      upfrontZ: N(c.upfront_contribution_zar,0),
-      recurZ:   N(c.recurring_contribution_zar,0),
-      upfrontB: N(c.upfront_contribution_btc,0),
-    }));
+    const custs = (customers||[])
+      .filter(c => c.trade_start_date && String(c.trade_start_date) !== 'null')
+      .map(c=>({
+        id: Number(c.customer_id),
+        tradeStart: String(c.trade_start_date).slice(0,10),
+        upfrontZ: N(c.upfront_contribution_zar,0),
+        recurZ:   N(c.recurring_contribution_zar,0),
+        upfrontB: N(c.upfront_contribution_btc,0),
+      }));
 
     async function lastTxDate(cid:number){
       const { data, error } = await sb
