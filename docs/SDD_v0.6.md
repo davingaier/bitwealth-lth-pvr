@@ -9,7 +9,96 @@
 
 ## 0. Change Log
 
-### v0.6.2 (current) – Customer Portal MVP Testing Complete
+### v0.6.3 (current) – Customer Onboarding Workflow REDESIGNED
+**Date:** 2025-12-31  
+**Purpose:** Complete redesign of customer onboarding pipeline based on confirmed requirements. Replaces previous KYC workflow with proper 6-milestone pipeline.
+
+**Key Changes:**
+
+1. **NEW: 6-Milestone Onboarding Pipeline**
+   - **Source Document:** `Customer_Onboarding_Workflow_CONFIRMED.md`
+   - **Module Rename:** "Customer Maintenance" → "Customer Management"
+   - **Architecture:** Option A (Registration → ID Upload → Verification)
+   
+   **Milestone 1 - Prospect:** ✅ COMPLETE
+   - Form on website/index.html
+   - Creates customer_details with status='prospect'
+   - Sends admin notification email
+   
+   **Milestone 2 - Confirm Interest:** ✅ COMPLETE (deployed 2025-12-31)
+   - Admin selects strategy from dropdown (source: public.strategies table)
+   - Creates entry in customer_portfolios
+   - Changes status='prospect' → 'kyc'
+   - Sends email to customer with registration link (template: `kyc_portal_registration`)
+   - Edge function: `ef_confirm_strategy` (deployed with --no-verify-jwt)
+   - Email template: `kyc_portal_registration` (created)
+   - UI: Strategy dropdown in Customer Management module (implemented)
+   
+   **Milestone 3 - Portal Registration & KYC:** ⏳ TO BUILD
+   - Customer registers account on register.html (Supabase Auth)
+   - Customer logs into portal (portal access starts here)
+   - Customer uploads ID (naming: `{ccyy-mm-dd}_{last_name}_{first_names}_id.pdf`)
+   - Stores in Supabase Storage bucket: `kyc-documents`
+   - Sends admin notification email (template: `kyc_id_uploaded_notification`)
+   - Admin verifies ID → changes status='kyc' → 'setup'
+   
+   **Milestone 4 - VALR Account Setup:** ⏳ TO BUILD
+   - Auto-creates VALR subaccount when status='setup'
+   - Stores subaccount_id in exchange_accounts
+   - Admin manually enters deposit_ref (from VALR web UI)
+   - Changes status='setup' → 'deposit' when deposit_ref saved
+   - Sends email to customer with banking details (template: `deposit_instructions`)
+   
+   **Milestone 5 - Funds Deposit:** ⏳ TO BUILD
+   - Hourly scan (ef_deposit_scan via pg_cron)
+   - Checks ZAR/BTC/USDT balances on subaccount
+   - If ANY balance > 0 → changes status='deposit' → 'active'
+   - Sends admin notification email (template: `funds_deposited_admin_notification`)
+   - Sends customer welcome email (template: `registration_complete_welcome`)
+   
+   **Milestone 6 - Customer Active:** ⏳ TO BUILD
+   - Full portal access granted
+   - Trading begins (existing LTH_PVR pipeline)
+   - Admin can set status='inactive' to pause trading
+
+2. **Database Schema Additions**
+   - **New column:** `exchange_accounts.deposit_ref` (TEXT)
+   - **New storage bucket:** `kyc-documents` (private, 10MB limit, image/* + application/pdf)
+   - **Existing columns:** kyc_id_document_url, kyc_id_verified_at, kyc_verified_by (already exist)
+
+3. **Edge Functions Required**
+   - ✅ `ef_prospect_submit` (EXISTS - deployed and tested)
+   - ✅ `ef_customer_register` (EXISTS - deployed and tested)
+   - ✅ `ef_confirm_strategy` (DEPLOYED 2025-12-31 - replaces ef_approve_kyc)
+   - ⏳ `ef_upload_kyc_id` (TO CREATE)
+   - ⏳ `ef_valr_create_subaccount` (TO CREATE)
+   - ⏳ `ef_deposit_scan` (TO CREATE - hourly pg_cron job)
+
+4. **Email Templates Status**
+   - ✅ `prospect_notification` (EXISTS)
+   - ✅ `prospect_confirmation` (EXISTS)
+   - ✅ `kyc_portal_registration` (CREATED 2025-12-31)
+   - ⏳ `kyc_id_uploaded_notification` (TO CREATE)
+   - ⏳ `deposit_instructions` (TO CREATE)
+   - ⏳ `funds_deposited_admin_notification` (TO CREATE)
+   - ⏳ `registration_complete_welcome` (TO CREATE)
+
+5. **UI Components Required**
+   - ✅ Customer Management module basic structure (EXISTS)
+   - ✅ Strategy selection dropdown (IMPLEMENTED 2025-12-31 - Milestone 2)
+   - ⏳ View uploaded IDs + Verify button (TO BUILD - Milestone 3)
+   - ⏳ deposit_ref input field (TO BUILD - Milestone 4)
+   - ⏳ Customer portal ID upload page (TO BUILD - Milestone 3)
+   - ⏳ Customer portal onboarding progress indicator (TO BUILD)
+
+6. **Implementation Impact**
+   - **Estimated Time:** 5-7 days (Milestones 3-6 remaining)
+   - **Complexity:** High (VALR integration, file uploads, hourly scanning)
+   - **Launch Target:** January 17, 2026 (17 days available)
+   - **Testing Priority:** Milestone 2 ✅ COMPLETE | Milestone 3 (ID upload) next critical path
+   - **Milestone 2 Completion:** 2025-12-31 (tested with customer_id 31)
+
+### v0.6.2 – Customer Portal MVP Testing Complete
 **Date:** 2025-12-31  
 **Purpose:** Document completion of Phase 1 MVP testing for customer portal (prospect submission, registration, email templates, admin fee management).
 
