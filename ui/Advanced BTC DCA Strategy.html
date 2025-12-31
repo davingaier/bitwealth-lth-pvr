@@ -6023,11 +6023,11 @@
       tableBody.innerHTML = '<tr><td colspan="5">Loading customers...</td></tr>';
 
       try {
-        // Get all active customers
+        // Get all customers with registration_status = setup or active
         const { data: customers, error: custError } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_names, last_name, email, customer_status')
-          .in('customer_status', ['active', 'setup', 'kyc'])
+          .select('customer_id, first_names, last_name, email, registration_status')
+          .in('registration_status', ['setup', 'active'])
           .order('customer_id', { ascending: true });
 
         if (custError) throw custError;
@@ -6060,7 +6060,7 @@
           customer_id: c.customer_id,
           name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
           email: c.email || '—',
-          status: c.customer_status,
+          status: c.registration_status,
           fee_rate: feeMap.get(c.customer_id) ?? 0.10 // Default 10%
         }));
 
