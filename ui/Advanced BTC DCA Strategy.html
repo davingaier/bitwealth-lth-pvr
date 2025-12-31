@@ -2285,6 +2285,90 @@
         <div id="prospectsMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
       </div>
 
+      <!-- KYC ID Verification card -->
+      <div class="card" id="kycVerificationCard">
+        <h3>KYC ID Verification</h3>
+        <p class="small-muted">Review and verify uploaded ID documents. Customers at Milestone 3 (KYC) awaiting verification.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="kycRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="kycSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="kycTableContainer">
+          <table id="kycTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:120px;">Uploaded</th>
+                <th style="min-width:180px;">Document</th>
+                <th style="min-width:120px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading pending verifications...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="kycMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- VALR Account Setup card -->
+      <div class="card" id="valrSetupCard">
+        <h3>VALR Account Setup</h3>
+        <p class="small-muted">Manage VALR subaccounts and deposit references. Customers at Milestone 4 (Setup) awaiting deposit reference.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="valrRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="valrSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="valrTableContainer">
+          <table id="valrTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:200px;">Subaccount ID</th>
+                <th style="min-width:150px;">Deposit Ref</th>
+                <th style="min-width:180px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading VALR setup queue...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="valrMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- Active Customers card -->
+      <div class="card" id="activeCustomersCard">
+        <h3>Active Customers</h3>
+        <p class="small-muted">Manage active customers. Set customers to inactive status to pause trading temporarily.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="activeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="activeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="activeTableContainer">
+          <table id="activeTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:100px;">Strategy</th>
+                <th style="min-width:140px;">Activated</th>
+                <th style="min-width:140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading active customers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="activeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
       <!-- Customer Fee Management card -->
       <div class="card" id="feeManagementCard">
         <h3>Customer Fee Management</h3>
@@ -6224,6 +6308,634 @@
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
             loadProspects();
+          }
+        });
+      }
+    });
+  })();
+
+  // =================== KYC ID Verification Module (Milestone 3) ===================
+  (function() {
+    const refreshBtn = document.getElementById('kycRefreshBtn');
+    const searchInput = document.getElementById('kycSearchInput');
+    const tableBody = document.querySelector('#kycTable tbody');
+    const messageDiv = document.getElementById('kycMessage');
+
+    let allPendingKyc = [];
+
+    // Show message
+    function showMessage(text, type) {
+      messageDiv.textContent = text;
+      messageDiv.style.display = 'block';
+      messageDiv.style.backgroundColor = type === 'success' ? '#d1fae5' : '#fee2e2';
+      messageDiv.style.color = type === 'success' ? '#065f46' : '#991b1b';
+      setTimeout(() => {
+        messageDiv.style.display = 'none';
+      }, 5000);
+    }
+
+    // Load pending KYC verifications
+    async function loadPendingKyc() {
+      try {
+        const { data, error } = await supabase
+          .from('customer_details')
+          .select('customer_id, first_names, last_name, email, kyc_id_document_url, kyc_id_uploaded_at, registration_status')
+          .eq('registration_status', 'kyc')
+          .not('kyc_id_document_url', 'is', null)
+          .order('kyc_id_uploaded_at', { ascending: false });
+
+        if (error) throw error;
+
+        allPendingKyc = data || [];
+        renderPendingKyc();
+      } catch (err) {
+        console.error('Error loading pending KYC:', err);
+        showMessage(`Failed to load pending verifications: ${err.message}`, 'error');
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Error loading data</td></tr>';
+      }
+    }
+
+    // Render pending KYC table
+    function renderPendingKyc() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const filtered = allPendingKyc.filter(c => 
+        c.first_names.toLowerCase().includes(searchTerm) ||
+        c.last_name.toLowerCase().includes(searchTerm) ||
+        c.email.toLowerCase().includes(searchTerm)
+      );
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No pending verifications</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = filtered.map(customer => {
+        const uploadDate = customer.kyc_id_uploaded_at 
+          ? new Date(customer.kyc_id_uploaded_at).toLocaleString('en-ZA', { 
+              dateStyle: 'short', 
+              timeStyle: 'short' 
+            })
+          : 'N/A';
+
+        // Extract filename from URL for display
+        const fileName = customer.kyc_id_document_url 
+          ? customer.kyc_id_document_url.split('/').pop().split('?')[0]
+          : 'N/A';
+
+        return `
+          <tr>
+            <td>${customer.customer_id}</td>
+            <td>${customer.first_names} ${customer.last_name}</td>
+            <td>${customer.email}</td>
+            <td>${uploadDate}</td>
+            <td>
+              <a href="${customer.kyc_id_document_url}" target="_blank" 
+                 style="color: #3b82f6; text-decoration: none; font-size: 0.85em;"
+                 title="${fileName}">
+                📄 View Document
+              </a>
+            </td>
+            <td>
+              <button class="btn btn-primary-sm" 
+                      onclick="window.verifyKycId(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                      style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+                ✓ Verify
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Global function for onclick (exposed to window)
+    window.verifyKycId = async function(customerId, firstName, lastName) {
+      const confirmed = confirm(
+        `Verify ID document for ${firstName} ${lastName} (Customer ${customerId})?\n\n` +
+        `This will:\n` +
+        `• Change status from 'kyc' to 'setup'\n` +
+        `• Record verification timestamp and your admin email\n` +
+        `• Move customer to Milestone 4 (VALR Setup)`
+      );
+
+      if (!confirmed) return;
+
+      try {
+        // Get current admin email
+        const { data: { session } } = await supabase.auth.getSession();
+        const adminEmail = session?.user?.email || 'admin@bitwealth.co.za';
+
+        // Update customer record
+        const { error } = await supabase
+          .from('customer_details')
+          .update({
+            registration_status: 'setup',
+            kyc_verified_at: new Date().toISOString(),
+            kyc_verified_by: adminEmail
+          })
+          .eq('customer_id', customerId);
+
+        if (error) throw error;
+
+        showMessage(`✓ ID verified for ${firstName} ${lastName}. Customer moved to Milestone 4 (VALR Setup).`, 'success');
+        await loadPendingKyc();
+      } catch (err) {
+        console.error('Error verifying KYC:', err);
+        showMessage(`Failed to verify ID: ${err.message}`, 'error');
+      }
+    };
+
+    // Event listeners
+    refreshBtn.addEventListener('click', loadPendingKyc);
+    searchInput.addEventListener('input', renderPendingKyc);
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPendingKyc();
+          }
+        });
+      }
+    });
+  })();
+
+  // =================== VALR Account Setup Module (Milestone 4) ===================
+  (function() {
+    const refreshBtn = document.getElementById('valrRefreshBtn');
+    const searchInput = document.getElementById('valrSearchInput');
+    const tableBody = document.querySelector('#valrTable tbody');
+    const messageDiv = document.getElementById('valrMessage');
+
+    let allSetupCustomers = [];
+
+    // Show message
+    function showMessage(text, type) {
+      messageDiv.textContent = text;
+      messageDiv.style.display = 'block';
+      messageDiv.style.backgroundColor = type === 'success' ? '#d1fae5' : '#fee2e2';
+      messageDiv.style.color = type === 'success' ? '#065f46' : '#991b1b';
+      setTimeout(() => {
+        messageDiv.style.display = 'none';
+      }, 5000);
+    }
+
+    // Load customers in setup status
+    async function loadSetupCustomers() {
+      try {
+        // Get customers with status='setup'
+        const { data: customers, error: customerError } = await supabase
+          .from('customer_details')
+          .select('customer_id, first_names, last_name, email, registration_status')
+          .eq('registration_status', 'setup')
+          .order('created_at', { ascending: false });
+
+        if (customerError) throw customerError;
+
+        // Get exchange accounts for these customers
+        const customerIds = (customers || []).map(c => c.customer_id);
+        
+        let exchangeAccounts = [];
+        if (customerIds.length > 0) {
+          const { data: accounts, error: accountError } = await supabase
+            .from('exchange_accounts')
+            .select('customer_id, subaccount_id, deposit_ref, exchange_account_id')
+            .eq('exchange_name', 'VALR')
+            .in('customer_id', customerIds);
+
+          if (accountError) console.error('Error loading exchange accounts:', accountError);
+          exchangeAccounts = accounts || [];
+        }
+
+        // Merge data
+        allSetupCustomers = (customers || []).map(customer => {
+          const account = exchangeAccounts.find(a => a.customer_id === customer.customer_id);
+          return {
+            ...customer,
+            subaccount_id: account?.subaccount_id || null,
+            deposit_ref: account?.deposit_ref || null,
+            exchange_account_id: account?.exchange_account_id || null
+          };
+        });
+
+        renderSetupCustomers();
+      } catch (err) {
+        console.error('Error loading setup customers:', err);
+        showMessage(`Failed to load VALR setup queue: ${err.message}`, 'error');
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Error loading data</td></tr>';
+      }
+    }
+
+    // Render setup customers table
+    function renderSetupCustomers() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const filtered = allSetupCustomers.filter(c => 
+        c.first_names.toLowerCase().includes(searchTerm) ||
+        c.last_name.toLowerCase().includes(searchTerm) ||
+        c.email.toLowerCase().includes(searchTerm)
+      );
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No customers in setup status</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = filtered.map(customer => {
+        const hasSubaccount = !!customer.subaccount_id;
+        const hasDepositRef = !!customer.deposit_ref;
+
+        let actionButtons = '';
+        
+        if (!hasSubaccount) {
+          // Show "Create Subaccount" button
+          actionButtons = `
+            <button class="btn btn-primary-sm" 
+                    onclick="window.createValrSubaccount(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+              🏦 Create Subaccount
+            </button>
+          `;
+        } else if (!hasDepositRef) {
+          // Show deposit ref input + save button
+          actionButtons = `
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <input type="text" 
+                     id="depositRef_${customer.customer_id}" 
+                     placeholder="Enter ref from VALR"
+                     style="padding: 0.4rem; font-size: 0.85em; border: 1px solid #cbd5e0; border-radius: 4px; width: 120px;">
+              <button class="btn btn-primary-sm" 
+                      onclick="window.saveDepositRef(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                      style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+                💾 Save
+              </button>
+            </div>
+          `;
+        } else {
+          // Show "Resend Email" button
+          actionButtons = `
+            <button class="btn btn-secondary-sm" 
+                    onclick="window.resendDepositEmail(${customer.customer_id}, '${customer.email}')"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+              📧 Resend Email
+            </button>
+          `;
+        }
+
+        return `
+          <tr>
+            <td>${customer.customer_id}</td>
+            <td>${customer.first_names} ${customer.last_name}</td>
+            <td>${customer.email}</td>
+            <td style="font-family: monospace; font-size: 0.8em;">
+              ${hasSubaccount ? customer.subaccount_id : '<span style="color: #999;">Not created</span>'}
+            </td>
+            <td style="font-family: monospace; font-size: 0.85em;">
+              ${hasDepositRef ? customer.deposit_ref : '<span style="color: #999;">Pending</span>'}
+            </td>
+            <td>${actionButtons}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Global function: Create VALR subaccount
+    window.createValrSubaccount = async function(customerId, firstName, lastName) {
+      const confirmed = confirm(
+        `Create VALR subaccount for ${firstName} ${lastName}?\n\n` +
+        `This will call the VALR API to create a new subaccount.`
+      );
+
+      if (!confirmed) return;
+
+      try {
+        showMessage('Creating VALR subaccount...', 'success');
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_valr_create_subaccount`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+          },
+          body: JSON.stringify({ customer_id: customerId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          showMessage(`✓ Subaccount created: ${result.subaccount_id}`, 'success');
+          await loadSetupCustomers();
+        } else {
+          showMessage(`Failed to create subaccount: ${result.error || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error creating subaccount:', err);
+        showMessage(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    // Global function: Save deposit reference
+    window.saveDepositRef = async function(customerId, firstName, lastName) {
+      const input = document.getElementById(`depositRef_${customerId}`);
+      const depositRef = input?.value?.trim();
+
+      if (!depositRef) {
+        alert('Please enter a deposit reference');
+        return;
+      }
+
+      const confirmed = confirm(
+        `Save deposit reference "${depositRef}" for ${firstName} ${lastName}?\n\n` +
+        `This will:\n` +
+        `• Update exchange_accounts.deposit_ref\n` +
+        `• Change status to 'deposit'\n` +
+        `• Send deposit instructions email to customer`
+      );
+
+      if (!confirmed) return;
+
+      try {
+        // Find customer in current list
+        const customer = allSetupCustomers.find(c => c.customer_id === customerId);
+        if (!customer || !customer.exchange_account_id) {
+          showMessage('Exchange account not found. Create subaccount first.', 'error');
+          return;
+        }
+
+        // Update exchange_accounts
+        const { error: updateError } = await supabase
+          .from('exchange_accounts')
+          .update({ deposit_ref: depositRef })
+          .eq('exchange_account_id', customer.exchange_account_id);
+
+        if (updateError) throw updateError;
+
+        // Update customer status to 'deposit'
+        const { error: statusError } = await supabase
+          .from('customer_details')
+          .update({ registration_status: 'deposit' })
+          .eq('customer_id', customerId);
+
+        if (statusError) throw statusError;
+
+        // Send deposit instructions email
+        const websiteUrl = SUPABASE_URL.replace('supabase.co', 'supabase.co');
+        const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+          },
+          body: JSON.stringify({
+            template_key: 'deposit_instructions',
+            to_email: customer.email,
+            data: {
+              first_name: firstName,
+              deposit_ref: depositRef,
+              website_url: websiteUrl
+            }
+          })
+        });
+
+        const emailSent = emailResponse.ok;
+
+        showMessage(
+          `✓ Deposit ref saved. Customer moved to Milestone 5. Email ${emailSent ? 'sent' : 'queued'}.`,
+          'success'
+        );
+        
+        await loadSetupCustomers();
+      } catch (err) {
+        console.error('Error saving deposit ref:', err);
+        showMessage(`Failed to save: ${err.message}`, 'error');
+      }
+    };
+
+    // Global function: Resend deposit email
+    window.resendDepositEmail = async function(customerId, email) {
+      const customer = allSetupCustomers.find(c => c.customer_id === customerId);
+      if (!customer || !customer.deposit_ref) {
+        showMessage('Customer or deposit ref not found', 'error');
+        return;
+      }
+
+      try {
+        const websiteUrl = SUPABASE_URL.replace('supabase.co', 'supabase.co');
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+          },
+          body: JSON.stringify({
+            template_key: 'deposit_instructions',
+            to_email: email,
+            data: {
+              first_name: customer.first_names,
+              deposit_ref: customer.deposit_ref,
+              website_url: websiteUrl
+            }
+          })
+        });
+
+        if (response.ok) {
+          showMessage('✓ Email resent successfully', 'success');
+        } else {
+          showMessage('Failed to resend email', 'error');
+        }
+      } catch (err) {
+        console.error('Error resending email:', err);
+        showMessage(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    // Event listeners
+    refreshBtn.addEventListener('click', loadSetupCustomers);
+    searchInput.addEventListener('input', renderSetupCustomers);
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadSetupCustomers();
+          }
+        });
+      }
+    });
+  })();
+
+  /* ========== Active Customers Module (Milestone 6) ========== */
+  (() => {
+    const tableBody = document.querySelector('#activeTable tbody');
+    const refreshBtn = document.getElementById('activeRefreshBtn');
+    const searchInput = document.getElementById('activeSearchInput');
+    const activeMessage = document.getElementById('activeMessage');
+
+    if (!tableBody || !refreshBtn) return;
+
+    let allActiveCustomers = [];
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch] || ch));
+    }
+
+    function showMessage(msg, type) {
+      activeMessage.textContent = msg;
+      activeMessage.className = type === 'error' ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success';
+      activeMessage.style.display = 'block';
+      setTimeout(() => { activeMessage.style.display = 'none'; }, 5000);
+    }
+
+    async function loadActiveCustomers() {
+      if (!supabaseClient) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Supabase not loaded</td></tr>';
+        return;
+      }
+
+      try {
+        // Get all active customers with portfolio info
+        const { data: customers, error } = await supabaseClient
+          .from('customer_details')
+          .select(`
+            customer_id,
+            first_names,
+            last_name,
+            email,
+            registration_status,
+            customer_portfolios (
+              portfolio_id,
+              strategy_code,
+              status,
+              registration_complete_at
+            )
+          `)
+          .eq('registration_status', 'active')
+          .order('customer_id', { ascending: true });
+
+        if (error) throw error;
+
+        allActiveCustomers = customers || [];
+        renderActiveCustomers();
+      } catch (err) {
+        console.error('Error loading active customers:', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="text-danger">Error: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderActiveCustomers() {
+      const query = searchInput.value.toLowerCase().trim();
+      
+      let filtered = allActiveCustomers;
+      if (query) {
+        filtered = allActiveCustomers.filter(c => {
+          const fullName = `${c.first_names || ''} ${c.last_name || ''}`.toLowerCase();
+          const email = (c.email || '').toLowerCase();
+          return fullName.includes(query) || email.includes(query);
+        });
+      }
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No active customers found</td></tr>';
+        return;
+      }
+
+      const rows = filtered.map(customer => {
+        const portfolio = customer.customer_portfolios?.[0];
+        const strategy = portfolio?.strategy_code || 'N/A';
+        const activated = portfolio?.registration_complete_at 
+          ? new Date(portfolio.registration_complete_at).toLocaleDateString()
+          : 'N/A';
+
+        return `
+          <tr>
+            <td>${escapeHtml(customer.customer_id)}</td>
+            <td>${escapeHtml(customer.first_names)} ${escapeHtml(customer.last_name)}</td>
+            <td>${escapeHtml(customer.email)}</td>
+            <td><span class="badge badge-info">${escapeHtml(strategy)}</span></td>
+            <td>${escapeHtml(activated)}</td>
+            <td>
+              <button 
+                class="btn btn-sm btn-warning"
+                onclick="window.setCustomerInactive(${customer.customer_id}, '${escapeHtml(customer.first_names)}', '${escapeHtml(customer.last_name)}')"
+                title="Pause trading for this customer"
+              >
+                ⏸ Set Inactive
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tableBody.innerHTML = rows;
+    }
+
+    // Global function: Set customer inactive
+    window.setCustomerInactive = async function(customerId, firstName, lastName) {
+      const fullName = `${firstName} ${lastName}`;
+      
+      if (!confirm(`⚠️ Set ${fullName} to INACTIVE?\n\nThis will:\n• Pause all trading for this customer\n• Exclude customer from daily pipeline\n• Customer can be reactivated later\n\nContinue?`)) {
+        return;
+      }
+
+      try {
+        // Get customer's portfolio ID
+        const customer = allActiveCustomers.find(c => c.customer_id === customerId);
+        if (!customer || !customer.customer_portfolios?.[0]) {
+          showMessage('Customer or portfolio not found', 'error');
+          return;
+        }
+
+        const portfolioId = customer.customer_portfolios[0].portfolio_id;
+
+        // Update customer status
+        const { error: customerError } = await supabaseClient
+          .from('customer_details')
+          .update({ 
+            registration_status: 'inactive'
+          })
+          .eq('customer_id', customerId);
+
+        if (customerError) throw customerError;
+
+        // Update portfolio status
+        const { error: portfolioError } = await supabaseClient
+          .from('customer_portfolios')
+          .update({ 
+            status: 'inactive'
+          })
+          .eq('portfolio_id', portfolioId);
+
+        if (portfolioError) throw portfolioError;
+
+        showMessage(`✓ ${fullName} set to inactive. Trading paused.`, 'success');
+        
+        // Remove from list
+        allActiveCustomers = allActiveCustomers.filter(c => c.customer_id !== customerId);
+        renderActiveCustomers();
+
+      } catch (err) {
+        console.error('Error setting customer inactive:', err);
+        showMessage(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    // Event listeners
+    refreshBtn.addEventListener('click', loadActiveCustomers);
+    searchInput.addEventListener('input', renderActiveCustomers);
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadActiveCustomers();
           }
         });
       }
