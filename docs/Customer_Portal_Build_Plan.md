@@ -1,11 +1,70 @@
 # BitWealth Customer Portal - Build Plan
-## Version 1.0
+## Version 1.1
 
 **Project:** Customer Lifecycle Platform & Portal  
 **Author:** Dav / GPT  
 **Created:** 2025-12-29  
-**MVP Target:** 2026-01-10 (12 days)  
-**Full Launch Target:** 2026-01-24 (26 days)
+**Last Updated:** 2025-12-31  
+**MVP Target:** 2026-01-10 (10 days remaining)  
+**Full Launch Target:** 2026-01-24 (24 days remaining)
+
+---
+
+## 📊 Implementation Progress
+
+### ✅ Completed (As of Dec 31, 2025)
+
+**Phase 1: Foundation**
+- ✅ Database schema designed (all tables, columns, RLS policies)
+- ✅ Email templates created (12 templates, fully branded)
+- ✅ Edge function: `ef_prospect_submit` (deployed & tested TC1.1-TC1.5)
+- ✅ Edge function: `ef_send_email` (centralized email sending)
+- ✅ Edge function: `ef_customer_register` (deployed & tested TC2.1-TC2.6)
+- ✅ Edge function: `ef_approve_kyc` (deployed with email integration)
+- ✅ Prospect form in website/index.html (tested & working)
+- ✅ Customer registration page (register.html, tested & working)
+- ✅ Admin KYC Management UI (KYC approval workflow complete)
+- ✅ Admin Fee Management UI (full CRUD operations)
+- ✅ Alert system with daily digest emails
+
+**Test Coverage:**
+- ✅ TC1.1-TC1.5: Prospect Form (5/5 tests PASSED)
+- ✅ TC2.1-TC2.6: Registration (6/6 tests PASSED)
+- ✅ TC3.1, TC3.2, TC3.4: Email Templates (3/4 tests PASSED)
+- ⏸️ TC3.3: KYC Email (ready to test - workflow just completed)
+- ✅ TC4.1-TC4.6: Fee Management (6/6 tests PASSED)
+- ⏸️ TC5.1-TC5.4: RLS Policies (deferred until customer portal built)
+
+### 🚧 In Progress (Dec 31, 2025)
+- 🔄 KYC workflow end-to-end testing (TODAY)
+- 🔄 Documentation updates
+
+### ⏳ Remaining Work (Critical Path)
+
+**High Priority (Jan 1-5):**
+- [ ] Customer Portal UI (customer-portal.html) - 3-4 days
+  - Dashboard tab (portfolio summary, performance)
+  - Transactions tab (ledger view)
+  - Settings tab (basic auth management)
+- [ ] Customer authentication integration - 1 day
+  - Login/logout flow
+  - Session management
+  - Password reset
+
+**Medium Priority (Jan 6-8):**
+- [ ] Withdrawal request functionality - 1 day
+  - Database table (already designed)
+  - Edge function: `ef_withdrawal_request_submit`
+  - Admin approval UI
+- [ ] Support request functionality - 0.5 day
+  - Database table (already designed)
+  - Edge function: `ef_support_request_submit`
+  - Admin management UI
+
+**Lower Priority (Jan 9-10):**
+- [ ] Statement generation (basic PDF) - 1-2 days
+- [ ] VALR subaccount automation - 1-2 days (can be manual at launch)
+- [ ] End-to-end testing & bug fixes
 
 ---
 
@@ -42,12 +101,18 @@ This build plan transforms the LTH_PVR solution from an admin-only system into a
 
 ```
 website/
-├── index.html              # Public homepage (existing)
-├── get-started.html        # NEW: Prospect interest form (public)
-├── portal.html             # Existing (repurpose for customer login)
-├── customer-portal.html    # NEW: Customer dashboard & features
-└── admin-portal.html       # Rename from "Advanced BTC DCA Strategy.html"
+├── index.html              # ✅ Public homepage with prospect form (COMPLETE)
+├── register.html           # ✅ Customer registration page (COMPLETE)
+├── portal.html             # Existing demo (needs customer auth integration)
+├── customer-portal.html    # ⏳ NEW: Customer dashboard (TO BUILD)
+└── (admin in ui/)          # ✅ "Advanced BTC DCA Strategy.html" (COMPLETE)
 ```
+
+**Implementation Notes:**
+- `index.html` contains fully functional prospect interest form (tested TC1.1-TC1.5)
+- `register.html` handles customer registration with Supabase Auth (tested TC2.1-TC2.6)
+- `portal.html` exists but needs refactoring for customer authentication
+- `customer-portal.html` is the main remaining UI work (dashboard, transactions, statements)
 
 ### 1.3 Technology Stack
 
