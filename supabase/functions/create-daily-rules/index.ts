@@ -14,9 +14,9 @@ const json = (p, s = 200)=>new Response(JSON.stringify(p), {
     status: s,
     headers: CORS
   });
-/* ---------- ENV ---------- */ const URL = Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("SECRET_KEY");
-if (!URL || !KEY) throw new Error("Missing SUPABASE_URL / Secret Key");
+/* ---------- ENV ---------- */ const URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
+const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+if (!URL || !KEY) throw new Error("Missing SB_URL/SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
 /* ---------- date utils ---------- */ const toISO = (d)=>d.toISOString().slice(0, 10);
 const addDays = (iso, n)=>{
   const d = new Date(iso);
@@ -95,7 +95,9 @@ async function lastRuleDate(sb, cid) {
   try {
     // Active customers
     const { data: custs } = await sb.from("customer_details").select("customer_id, trade_start_date, customer_status").eq("customer_status", "Active");
-    const active = (custs ?? []).map((c)=>({
+    const active = (custs ?? [])
+      .filter((c) => c.trade_start_date && String(c.trade_start_date) !== 'null')
+      .map((c)=>({
         id: Number(c.customer_id),
         start: String(c.trade_start_date).slice(0, 10)
       }));
