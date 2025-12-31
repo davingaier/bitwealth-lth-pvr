@@ -92,7 +92,7 @@
 
     /* Active tab strictly matches visible :target (uniform style for all modules) */
     body:not(:has(.module:target)) nav a[href="#import-module"],
-    body:has(#maintenance-module:target) nav a[href="#maintenance-module"],
+    body:has(#management-module:target) nav a[href="#management-module"],
     body:has(#strategy-maintenance-module:target) nav a[href="#strategy-maintenance-module"],
     body:has(#import-module:target) nav a[href="#import-module"],
     body:has(#balance-maintenance-module:target) nav a[href="#balance-maintenance-module"],
@@ -396,7 +396,7 @@
   </header>
 
   <nav id="topnav">
-    <a href="#maintenance-module">Customer Maintenance</a>
+    <a href="#management-module">Customer Management</a>
     <a href="#strategy-maintenance-module">Strategy Maintenance</a>
     <a href="#import-module">Import Daily Data</a>
     <a id="nav-cbm" class="top-tab" href="#balance-maintenance-module">Customer Balance Maintenance</a>
@@ -597,6 +597,150 @@
             <button type="button" id="cmDeleteBtn" style="margin-left:auto;">Delete Client</button>
           </div>
         </form>
+      </div>
+
+      <!-- Customer Onboarding Pipeline (Milestone 2: Strategy Selection) -->
+      <div class="card" id="onboardingPipelineCard">
+        <h3>Customer Onboarding Pipeline</h3>
+        <p class="small-muted">Select strategy for prospects to move them to the next onboarding stage</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="prospectsRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="prospectsSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
+            <input type="checkbox" id="prospectsPendingOnlyCheckbox" checked>
+            <span>Prospects Only</span>
+          </label>
+        </div>
+        <div class="table-scroll" id="prospectsTableContainer">
+          <table id="prospectsTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:120px;">Phone</th>
+                <th style="min-width:100px;">Status</th>
+                <th style="min-width:140px;">Submitted</th>
+                <th style="min-width:200px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="muted">Loading prospects...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="prospectsMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- KYC ID Verification card -->
+      <div class="card" id="kycVerificationCard">
+        <h3>KYC ID Verification</h3>
+        <p class="small-muted">Review and verify customer ID documents uploaded during registration.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="kycRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="kycSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="kycTableContainer">
+          <table id="kycTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:140px;">Uploaded</th>
+                <th style="min-width:150px;">Document</th>
+                <th style="min-width:120px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading KYC verifications...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="kycMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- VALR Account Setup card -->
+      <div class="card" id="valrSetupCard">
+        <h3>VALR Account Setup</h3>
+        <p class="small-muted">Manage VALR subaccounts and deposit references. Customers at Milestone 4 (Setup) awaiting deposit reference.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="valrRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="valrSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="valrTableContainer">
+          <table id="valrTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:200px;">Subaccount ID</th>
+                <th style="min-width:150px;">Deposit Ref</th>
+                <th style="min-width:180px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading VALR setup queue...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="valrMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- Active Customers card -->
+      <div class="card" id="activeCustomersCard">
+        <h3>Active Customers</h3>
+        <p class="small-muted">Manage active customers. Set customers to inactive status to pause trading temporarily.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="activeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="activeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="activeTableContainer">
+          <table id="activeTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:100px;">Strategy</th>
+                <th style="min-width:140px;">Activated</th>
+                <th style="min-width:140px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" class="muted">Loading active customers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="activeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
+      </div>
+
+      <!-- Customer Fee Management card -->
+      <div class="card" id="feeManagementCard">
+        <h3>Customer Fee Management</h3>
+        <p class="small-muted">Adjust BitWealth fees for individual customers. Changes are effective from the beginning of the current month.</p>
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
+          <button id="feeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
+          <input id="feeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
+        </div>
+        <div class="table-scroll" id="feeTableContainer">
+          <table id="feeTable">
+            <thead>
+              <tr>
+                <th style="min-width:80px;">ID</th>
+                <th style="min-width:150px;">Name</th>
+                <th style="min-width:200px;">Email</th>
+                <th style="min-width:100px;">Fee Rate</th>
+                <th style="min-width:100px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="muted">Loading customers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="feeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
       </div>
     </div>
 
@@ -2250,150 +2394,6 @@
             </tbody>
           </table>
         </div>
-      </div>
-
-      <!-- Customer Onboarding Pipeline (Milestone 2: Strategy Selection) -->
-      <div class="card" id="onboardingPipelineCard">
-        <h3>Customer Onboarding Pipeline</h3>
-        <p class="small-muted">Select strategy for prospects to move them to the next onboarding stage</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
-          <button id="prospectsRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          <input id="prospectsSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
-          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
-            <input type="checkbox" id="prospectsPendingOnlyCheckbox" checked>
-            <span>Prospects Only</span>
-          </label>
-        </div>
-        <div class="table-scroll" id="prospectsTableContainer">
-          <table id="prospectsTable">
-            <thead>
-              <tr>
-                <th style="min-width:80px;">ID</th>
-                <th style="min-width:150px;">Name</th>
-                <th style="min-width:200px;">Email</th>
-                <th style="min-width:120px;">Phone</th>
-                <th style="min-width:100px;">Status</th>
-                <th style="min-width:140px;">Submitted</th>
-                <th style="min-width:200px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="7" class="muted">Loading prospects...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="prospectsMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
-      </div>
-
-      <!-- KYC ID Verification card -->
-      <div class="card" id="kycVerificationCard">
-        <h3>KYC ID Verification</h3>
-        <p class="small-muted">Review and verify uploaded ID documents. Customers at Milestone 3 (KYC) awaiting verification.</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
-          <button id="kycRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          <input id="kycSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
-        </div>
-        <div class="table-scroll" id="kycTableContainer">
-          <table id="kycTable">
-            <thead>
-              <tr>
-                <th style="min-width:80px;">ID</th>
-                <th style="min-width:150px;">Name</th>
-                <th style="min-width:200px;">Email</th>
-                <th style="min-width:120px;">Uploaded</th>
-                <th style="min-width:180px;">Document</th>
-                <th style="min-width:120px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="6" class="muted">Loading pending verifications...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="kycMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
-      </div>
-
-      <!-- VALR Account Setup card -->
-      <div class="card" id="valrSetupCard">
-        <h3>VALR Account Setup</h3>
-        <p class="small-muted">Manage VALR subaccounts and deposit references. Customers at Milestone 4 (Setup) awaiting deposit reference.</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
-          <button id="valrRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          <input id="valrSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
-        </div>
-        <div class="table-scroll" id="valrTableContainer">
-          <table id="valrTable">
-            <thead>
-              <tr>
-                <th style="min-width:80px;">ID</th>
-                <th style="min-width:150px;">Name</th>
-                <th style="min-width:200px;">Email</th>
-                <th style="min-width:200px;">Subaccount ID</th>
-                <th style="min-width:150px;">Deposit Ref</th>
-                <th style="min-width:180px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="6" class="muted">Loading VALR setup queue...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="valrMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
-      </div>
-
-      <!-- Active Customers card -->
-      <div class="card" id="activeCustomersCard">
-        <h3>Active Customers</h3>
-        <p class="small-muted">Manage active customers. Set customers to inactive status to pause trading temporarily.</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
-          <button id="activeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          <input id="activeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
-        </div>
-        <div class="table-scroll" id="activeTableContainer">
-          <table id="activeTable">
-            <thead>
-              <tr>
-                <th style="min-width:80px;">ID</th>
-                <th style="min-width:150px;">Name</th>
-                <th style="min-width:200px;">Email</th>
-                <th style="min-width:100px;">Strategy</th>
-                <th style="min-width:140px;">Activated</th>
-                <th style="min-width:140px;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="6" class="muted">Loading active customers...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="activeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
-      </div>
-
-      <!-- Customer Fee Management card -->
-      <div class="card" id="feeManagementCard">
-        <h3>Customer Fee Management</h3>
-        <p class="small-muted">Adjust BitWealth fees for individual customers. Changes are effective from the beginning of the current month.</p>
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
-          <button id="feeRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          <input id="feeSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
-        </div>
-        <div class="table-scroll" id="feeTableContainer">
-          <table id="feeTable">
-            <thead>
-              <tr>
-                <th style="min-width:80px;">ID</th>
-                <th style="min-width:150px;">Name</th>
-                <th style="min-width:200px;">Email</th>
-                <th style="min-width:100px;">Fee Rate</th>
-                <th style="min-width:100px;"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="5" class="muted">Loading customers...</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="feeMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
       </div>
     </div>
   </main>
@@ -6337,12 +6337,12 @@
     // Load pending KYC verifications
     async function loadPendingKyc() {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_names, last_name, email, kyc_id_document_url, kyc_id_uploaded_at, registration_status')
+          .select('customer_id, first_names, last_name, email, kyc_id_document_url, created_at, registration_status')
           .eq('registration_status', 'kyc')
           .not('kyc_id_document_url', 'is', null)
-          .order('kyc_id_uploaded_at', { ascending: false });
+          .order('created_at', { ascending: false });
 
         if (error) throw error;
 
@@ -6370,8 +6370,8 @@
       }
 
       tableBody.innerHTML = filtered.map(customer => {
-        const uploadDate = customer.kyc_id_uploaded_at 
-          ? new Date(customer.kyc_id_uploaded_at).toLocaleString('en-ZA', { 
+        const uploadDate = customer.created_at 
+          ? new Date(customer.created_at).toLocaleString('en-ZA', { 
               dateStyle: 'short', 
               timeStyle: 'short' 
             })
@@ -6421,11 +6421,11 @@
 
       try {
         // Get current admin email
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
         const adminEmail = session?.user?.email || 'admin@bitwealth.co.za';
 
         // Update customer record
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('customer_details')
           .update({
             registration_status: 'setup',
@@ -6483,35 +6483,55 @@
     // Load customers in setup status
     async function loadSetupCustomers() {
       try {
-        // Get customers with status='setup'
-        const { data: customers, error: customerError } = await supabase
+        // Get customers with status='setup' or 'deposit'
+        const { data: customers, error: customerError } = await supabaseClient
           .from('customer_details')
           .select('customer_id, first_names, last_name, email, registration_status')
-          .eq('registration_status', 'setup')
+          .in('registration_status', ['setup', 'deposit'])
           .order('created_at', { ascending: false });
 
         if (customerError) throw customerError;
 
-        // Get exchange accounts for these customers
+        // Get their portfolios
         const customerIds = (customers || []).map(c => c.customer_id);
+        let portfolios = [];
+        if (customerIds.length > 0) {
+          const { data: portfolioData, error: portfolioError } = await supabaseClient
+            .from('customer_portfolios')
+            .select('customer_id, portfolio_id, exchange_account_id')
+            .in('customer_id', customerIds);
+          
+          if (portfolioError) console.error('Error loading portfolios:', portfolioError);
+          portfolios = portfolioData || [];
+        }
+
+        // Get exchange accounts for those portfolios
+        const exchangeAccountIds = portfolios
+          .map(p => p.exchange_account_id)
+          .filter(id => id != null);
         
         let exchangeAccounts = [];
-        if (customerIds.length > 0) {
-          const { data: accounts, error: accountError } = await supabase
+        if (exchangeAccountIds.length > 0) {
+          const { data: accountData, error: accountError } = await supabaseClient
             .from('exchange_accounts')
-            .select('customer_id, subaccount_id, deposit_ref, exchange_account_id')
-            .eq('exchange_name', 'VALR')
-            .in('customer_id', customerIds);
-
+            .select('exchange_account_id, subaccount_id, deposit_ref')
+            .in('exchange_account_id', exchangeAccountIds);
+          
           if (accountError) console.error('Error loading exchange accounts:', accountError);
-          exchangeAccounts = accounts || [];
+          exchangeAccounts = accountData || [];
         }
 
         // Merge data
         allSetupCustomers = (customers || []).map(customer => {
-          const account = exchangeAccounts.find(a => a.customer_id === customer.customer_id);
+          const portfolio = portfolios.find(p => p.customer_id === customer.customer_id);
+          const account = portfolio ? exchangeAccounts.find(a => a.exchange_account_id === portfolio.exchange_account_id) : null;
+          
           return {
-            ...customer,
+            customer_id: customer.customer_id,
+            first_names: customer.first_names,
+            last_name: customer.last_name,
+            email: customer.email,
+            registration_status: customer.registration_status,
             subaccount_id: account?.subaccount_id || null,
             deposit_ref: account?.deposit_ref || null,
             exchange_account_id: account?.exchange_account_id || null
@@ -6662,7 +6682,7 @@
         }
 
         // Update exchange_accounts
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseClient
           .from('exchange_accounts')
           .update({ deposit_ref: depositRef })
           .eq('exchange_account_id', customer.exchange_account_id);
@@ -6670,7 +6690,7 @@
         if (updateError) throw updateError;
 
         // Update customer status to 'deposit'
-        const { error: statusError } = await supabase
+        const { error: statusError } = await supabaseClient
           .from('customer_details')
           .update({ registration_status: 'deposit' })
           .eq('customer_id', customerId);
@@ -6813,7 +6833,7 @@
               portfolio_id,
               strategy_code,
               status,
-              registration_complete_at
+              created_at
             )
           `)
           .eq('registration_status', 'active')
@@ -6849,8 +6869,8 @@
       const rows = filtered.map(customer => {
         const portfolio = customer.customer_portfolios?.[0];
         const strategy = portfolio?.strategy_code || 'N/A';
-        const activated = portfolio?.registration_complete_at 
-          ? new Date(portfolio.registration_complete_at).toLocaleDateString()
+        const activated = portfolio?.created_at 
+          ? new Date(portfolio.created_at).toLocaleDateString()
           : 'N/A';
 
         return `
