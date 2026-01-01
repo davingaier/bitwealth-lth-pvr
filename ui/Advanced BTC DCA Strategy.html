@@ -6420,17 +6420,21 @@
       if (!confirmed) return;
 
       try {
-        // Get current admin email
+        // Get current admin user UUID
         const { data: { session } } = await supabaseClient.auth.getSession();
-        const adminEmail = session?.user?.email || 'admin@bitwealth.co.za';
+        const adminUserId = session?.user?.id;
+        
+        if (!adminUserId) {
+          throw new Error('Admin session not found. Please log in again.');
+        }
 
         // Update customer record
         const { error } = await supabaseClient
           .from('customer_details')
           .update({
             registration_status: 'setup',
-            kyc_verified_at: new Date().toISOString(),
-            kyc_verified_by: adminEmail
+            kyc_id_verified_at: new Date().toISOString(),
+            kyc_verified_by: adminUserId
           })
           .eq('customer_id', customerId);
 
