@@ -6316,6 +6316,9 @@
 
   // =================== KYC ID Verification Module (Milestone 3) ===================
   (function() {
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0OTc2NzMsImV4cCI6MjA0OTA3MzY3M30.t7YhiLG9j1F1rkipICLbGRFAC3Tl44TqsN3jtv8zOvA';
+    
     const refreshBtn = document.getElementById('kycRefreshBtn');
     const searchInput = document.getElementById('kycSearchInput');
     const tableBody = document.querySelector('#kycTable tbody');
@@ -6414,6 +6417,7 @@
         `This will:\n` +
         `• Change status from 'kyc' to 'setup'\n` +
         `• Record verification timestamp and your admin email\n` +
+        `• Automatically create VALR subaccount\n` +
         `• Move customer to Milestone 4 (VALR Setup)`
       );
 
@@ -6440,7 +6444,37 @@
 
         if (error) throw error;
 
-        showMessage(`✓ ID verified for ${firstName} ${lastName}. Customer moved to Milestone 4 (VALR Setup).`, 'success');
+        // Automatically trigger VALR subaccount creation
+        showMessage(`✓ ID verified for ${firstName} ${lastName}. Creating VALR subaccount...`, 'info');
+        
+        try {
+          const { data: { session: authSession } } = await supabaseClient.auth.getSession();
+          const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_valr_create_subaccount`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authSession?.access_token || SUPABASE_PUBLISHABLE_KEY}`
+            },
+            body: JSON.stringify({
+              customer_id: customerId,
+              force_recreate: false
+            })
+          });
+
+          const result = await response.json();
+          
+          if (response.ok && result.success) {
+            showMessage(`✓ VALR subaccount created successfully for ${firstName} ${lastName}. Customer moved to Milestone 4.`, 'success');
+          } else {
+            // Log error but don't block - admin can manually create later
+            console.error('VALR subaccount creation failed:', result);
+            showMessage(`⚠️ ID verified but subaccount creation failed: ${result.message || 'Unknown error'}. You can create it manually.`, 'warning');
+          }
+        } catch (valrError) {
+          console.error('VALR subaccount creation error:', valrError);
+          showMessage(`⚠️ ID verified but subaccount creation failed: ${valrError.message}. You can create it manually.`, 'warning');
+        }
+
         await loadPendingKyc();
       } catch (err) {
         console.error('Error verifying KYC:', err);
@@ -6466,6 +6500,9 @@
 
   // =================== VALR Account Setup Module (Milestone 4) ===================
   (function() {
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0OTc2NzMsImV4cCI6MjA0OTA3MzY3M30.t7YhiLG9j1F1rkipICLbGRFAC3Tl44TqsN3jtv8zOvA';
+    
     const refreshBtn = document.getElementById('valrRefreshBtn');
     const searchInput = document.getElementById('valrSearchInput');
     const tableBody = document.querySelector('#valrTable tbody');
@@ -6571,12 +6608,15 @@
         let actionButtons = '';
         
         if (!hasSubaccount) {
-          // Show "Create Subaccount" button
+          // Show status: Automatic creation in progress or failed
           actionButtons = `
-            <button class="btn btn-primary-sm" 
-                    onclick="window.createValrSubaccount(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
-                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
-              🏦 Create Subaccount
+            <div style="color: #f59e0b; font-size: 0.85em;">
+              ⏳ Auto-creating...
+            </div>
+            <button class="btn btn-secondary-sm" 
+                    onclick="window.manualCreateValrSubaccount(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85em; margin-top: 0.3rem;">
+              🔄 Retry Manually
             </button>
           `;
         } else if (!hasDepositRef) {
@@ -6622,34 +6662,39 @@
       }).join('');
     }
 
-    // Global function: Create VALR subaccount
-    window.createValrSubaccount = async function(customerId, firstName, lastName) {
+    // Global function: Manual retry for VALR subaccount creation (when automatic fails)
+    window.manualCreateValrSubaccount = async function(customerId, firstName, lastName) {
       const confirmed = confirm(
-        `Create VALR subaccount for ${firstName} ${lastName}?\n\n` +
+        `Manually create VALR subaccount for ${firstName} ${lastName}?\n\n` +
+        `Use this if automatic creation failed during KYC verification.\n` +
         `This will call the VALR API to create a new subaccount.`
       );
 
       if (!confirmed) return;
 
       try {
-        showMessage('Creating VALR subaccount...', 'success');
+        showMessage('Creating VALR subaccount...', 'info');
 
+        const { data: { session } } = await supabaseClient.auth.getSession();
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_valr_create_subaccount`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+            'Authorization': `Bearer ${session?.access_token || SUPABASE_PUBLISHABLE_KEY}`
           },
-          body: JSON.stringify({ customer_id: customerId })
+          body: JSON.stringify({ 
+            customer_id: customerId,
+            force_recreate: true  // Allow retry even if previous attempt logged
+          })
         });
 
         const result = await response.json();
 
         if (response.ok && result.success) {
-          showMessage(`✓ Subaccount created: ${result.subaccount_id}`, 'success');
+          showMessage(`✓ Subaccount created successfully: ${result.subaccount_id}`, 'success');
           await loadSetupCustomers();
         } else {
-          showMessage(`Failed to create subaccount: ${result.error || 'Unknown error'}`, 'error');
+          showMessage(`Failed to create subaccount: ${result.message || result.error || 'Unknown error'}`, 'error');
         }
       } catch (err) {
         console.error('Error creating subaccount:', err);
