@@ -140,7 +140,9 @@ Deno.serve(async (req) => {
     }
 
     // Generate registration URL
-    const websiteUrl = Deno.env.get("WEBSITE_URL") || "https://wqnmxpooabmedvtackji.supabase.co/website";
+    // IMPORTANT: Set WEBSITE_URL environment variable in production to your actual domain
+    // For local testing, use file:// protocol or local server (e.g., http://localhost:8000/website)
+    const websiteUrl = Deno.env.get("WEBSITE_URL") || `file://${Deno.cwd()}/../../website`;
     const registrationUrl = `${websiteUrl}/register.html?customer_id=${customer_id}&email=${encodeURIComponent(customer.email)}`;
 
     // Send kyc_portal_registration email

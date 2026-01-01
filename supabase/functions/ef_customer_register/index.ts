@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SECRET_KEY = Deno.env.get("Secret Key");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PORTAL_URL = Deno.env.get("PORTAL_URL") || "https://bitwealth.co.za/portal";
 
 const CORS = {
@@ -58,7 +58,7 @@ serve(async (req) => {
     }
 
     // Initialize Supabase admin client
-    const supabase = createClient(SUPABASE_URL!, SECRET_KEY!, {
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!, {
       auth: { persistSession: false },
     });
 
@@ -168,7 +168,8 @@ serve(async (req) => {
       // Don't fail the request if agreement recording fails, just log it
     }
 
-    // Update customer_details with acceptance timestamps and registration_status
+    // Update customer_details with acceptance timestamps
+    // NOTE: Status stays as 'kyc' - only changes to 'setup' after admin verifies ID document
     const { error: updateError } = await supabase
       .from("customer_details")
       .update({
@@ -176,7 +177,7 @@ serve(async (req) => {
         privacy_accepted_at: accept_privacy ? now : null,
         disclaimer_signed_at: sign_disclaimer ? now : null,
         portal_access_granted_at: now,
-        registration_status: "setup", // Move to setup milestone (waiting for account setup)
+        // registration_status stays as 'kyc' - admin must verify ID before moving to 'setup'
       })
       .eq("customer_id", customer.customer_id);
 
