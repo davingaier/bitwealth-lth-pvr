@@ -4,6 +4,7 @@
 // Deployed with: --no-verify-jwt (internal function, called from admin portal or trigger)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { logAlert } from "../_shared/alerting.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -11,12 +12,25 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const orgId = Deno.env.get("ORG_ID");
 const valrApiKey = Deno.env.get("VALR_API_KEY");
 const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+const testMode = Deno.env.get("VALR_TEST_MODE") === "true"; // For testing without real VALR API
 
-if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
-  throw new Error("Missing required environment variables");
+if (!supabaseUrl || !supabaseKey || !orgId) {
+  throw new Error("Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID");
+}
+
+if (!testMode && (!valrApiKey || !valrApiSecret)) {
+  throw new Error("Missing VALR credentials. Set VALR_TEST_MODE=true to test without real API calls.");
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// CORS headers constant
+const corsHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface CreateSubaccountRequest {
   customer_id: number;
@@ -42,13 +56,7 @@ async function signVALR(timestamp: string, method: string, path: string, body: s
 Deno.serve(async (req) => {
   // CORS headers
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -59,7 +67,7 @@ Deno.serve(async (req) => {
     if (!customer_id) {
       return new Response(
         JSON.stringify({ error: "Missing required field: customer_id" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -73,7 +81,7 @@ Deno.serve(async (req) => {
     if (customerError || !customer) {
       return new Response(
         JSON.stringify({ error: "Customer not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -83,34 +91,40 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           error: `Invalid customer status: ${customer.registration_status}. VALR subaccount creation only allowed for status='setup'` 
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     // Get customer's portfolio to determine strategy
     const { data: portfolio, error: portfolioError } = await supabase
       .from("customer_portfolios")
-      .select("portfolio_id, strategy_code")
+      .select("portfolio_id, strategy_code, exchange_account_id")
       .eq("customer_id", customer_id)
       .single();
 
     if (portfolioError || !portfolio) {
+      console.error("Portfolio query error:", portfolioError);
       return new Response(
-        JSON.stringify({ error: "Customer portfolio not found. Cannot determine strategy." }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({ 
+          error: "Customer portfolio not found. Cannot determine strategy.",
+          details: portfolioError?.message 
+        }),
+        { status: 404, headers: corsHeaders }
       );
     }
 
-    // Check if subaccount already exists
-    const { data: existingAccount, error: checkError } = await supabase
-      .from("exchange_accounts")
-      .select("exchange_account_id, subaccount_id")
-      .eq("customer_id", customer_id)
-      .eq("exchange_name", "VALR")
-      .maybeSingle();
-
-    if (checkError) {
-      console.error("Error checking existing account:", checkError);
+    // Check if customer already has an exchange account linked
+    let existingAccount = null;
+    if (portfolio.exchange_account_id) {
+      const { data: acct, error: acctError } = await supabase
+        .from("exchange_accounts")
+        .select("exchange_account_id, subaccount_id, exchange")
+        .eq("exchange_account_id", portfolio.exchange_account_id)
+        .maybeSingle();
+      
+      if (!acctError && acct) {
+        existingAccount = acct;
+      }
     }
 
     if (existingAccount && existingAccount.subaccount_id && !force_recreate) {
@@ -120,52 +134,80 @@ Deno.serve(async (req) => {
           subaccount_id: existingAccount.subaccount_id,
           exchange_account_id: existingAccount.exchange_account_id
         }),
-        { status: 409, headers: { "Content-Type": "application/json" } }
+        { status: 409, headers: corsHeaders }
       );
     }
 
     // Create VALR subaccount label
-    const label = `${customer.first_names} ${customer.last_name} - ${portfolio.strategy_code}`;
+    // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars)
+    const strategyName = portfolio.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
+    const label = `${customer.first_names} ${customer.last_name} ${strategyName}`;
 
-    // Call VALR API to create subaccount
-    const timestamp = Date.now().toString();
-    const method = "POST";
-    const path = "/v1/account/subaccounts";
-    const requestBody = JSON.stringify({ label });
-    const signature = await signVALR(timestamp, method, path, requestBody);
+    let subaccountId: string;
 
-    const valrResponse = await fetch(`https://api.valr.com${path}`, {
-      method: "POST",
-      headers: {
-        "X-VALR-API-KEY": valrApiKey,
-        "X-VALR-SIGNATURE": signature,
-        "X-VALR-TIMESTAMP": timestamp,
-        "Content-Type": "application/json",
-      },
-      body: requestBody,
-    });
+    if (testMode) {
+      // TEST MODE: Generate mock subaccount ID (VALR has no sandbox)
+      console.log("⚠️ TEST MODE: Generating mock VALR subaccount ID");
+      subaccountId = `test-valr-${crypto.randomUUID()}`;
+      console.log(`Mock subaccount created: ${subaccountId} (${label})`);
+    } else {
+      // PRODUCTION MODE: Call real VALR API
+      const timestamp = Date.now().toString();
+      const method = "POST";
+      const path = "/v1/account/subaccount"; // Note: singular for POST, plural for GET
+      const requestBody = JSON.stringify({ label });
+      const signature = await signVALR(timestamp, method, path, requestBody);
 
-    if (!valrResponse.ok) {
-      const errorText = await valrResponse.text();
-      console.error("VALR API error:", valrResponse.status, errorText);
-      return new Response(
-        JSON.stringify({ 
-          error: `VALR API error: ${valrResponse.status}`,
-          details: errorText
-        }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
+      // Log request for debugging
+      console.log("VALR API Request:", {
+        url: `https://api.valr.com${path}`,
+        method,
+        label,
+        timestamp,
+        bodyLength: requestBody.length
+      });
 
-    const valrData = await valrResponse.json();
-    const subaccountId = valrData.id || valrData.subaccountId;
+      const valrResponse = await fetch(`https://api.valr.com${path}`, {
+        method: "POST",
+        headers: {
+          "X-VALR-API-KEY": valrApiKey!,
+          "X-VALR-SIGNATURE": signature,
+          "X-VALR-TIMESTAMP": timestamp,
+          "Content-Type": "application/json",
+        },
+        body: requestBody,
+      });
 
-    if (!subaccountId) {
-      console.error("No subaccount ID in VALR response:", valrData);
-      return new Response(
-        JSON.stringify({ error: "VALR did not return subaccount ID", valr_response: valrData }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      if (!valrResponse.ok) {
+        const errorText = await valrResponse.text();
+        console.error("VALR API Error Response:", {
+          status: valrResponse.status,
+          statusText: valrResponse.statusText,
+          body: errorText,
+          requestLabel: label,
+          requestPath: path
+        });
+        
+        return new Response(
+          JSON.stringify({ 
+            error: `VALR API error: ${valrResponse.status} ${valrResponse.statusText}`,
+            details: errorText,
+            requestLabel: label
+          }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const valrData = await valrResponse.json();
+      subaccountId = valrData.id || valrData.subaccountId;
+
+      if (!subaccountId) {
+        console.error("No subaccount ID in VALR response:", valrData);
+        return new Response(
+          JSON.stringify({ error: "VALR did not return subaccount ID", valr_response: valrData }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
     }
 
     // Store or update in exchange_accounts
@@ -187,23 +229,22 @@ Deno.serve(async (req) => {
         console.error("Error updating exchange account:", updateError);
         return new Response(
           JSON.stringify({ error: "Failed to update exchange account: " + updateError.message }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: corsHeaders }
         );
       }
 
       exchangeAccountId = updateData.exchange_account_id;
     } else {
-      // Create new record
+      // Create new exchange account record
       const { data: insertData, error: insertError } = await supabase
         .from("exchange_accounts")
         .insert({
           org_id: customer.org_id,
-          customer_id: customer_id,
-          exchange_name: "VALR",
+          exchange: "VALR",
+          label: label,
           subaccount_id: subaccountId,
-          api_key: null, // Not needed - uses primary account credentials
-          api_secret: null,
-          active: true
+          status: "active",
+          is_omnibus: false  // Customer-specific subaccount, not omnibus
         })
         .select()
         .single();
@@ -212,11 +253,31 @@ Deno.serve(async (req) => {
         console.error("Error inserting exchange account:", insertError);
         return new Response(
           JSON.stringify({ error: "Failed to create exchange account record: " + insertError.message }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: corsHeaders }
         );
       }
 
       exchangeAccountId = insertData.exchange_account_id;
+      
+      // Link the new exchange account to the customer's portfolio
+      const { error: linkError } = await supabase
+        .from("customer_portfolios")
+        .update({ exchange_account_id: exchangeAccountId })
+        .eq("portfolio_id", portfolio.portfolio_id);
+      
+      if (linkError) {
+        console.error("Error linking exchange account to portfolio:", linkError);
+        // Don't fail the whole operation, but log the error
+        await logAlert(
+          supabase,
+          "ef_valr_create_subaccount",
+          "warn",
+          `Failed to link exchange account to portfolio: ${linkError.message}`,
+          { customer_id, portfolio_id: portfolio.portfolio_id, exchange_account_id: exchangeAccountId },
+          customer.org_id,
+          customer_id
+        );
+      }
     }
 
     // Return success response
@@ -229,25 +290,13 @@ Deno.serve(async (req) => {
         exchange_account_id: exchangeAccountId,
         label: label,
       }),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
+      { status: 200, headers: corsHeaders }
     );
   } catch (error) {
     console.error("Error in ef_valr_create_subaccount:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
+      { status: 500, headers: corsHeaders }
     );
   }
 });
