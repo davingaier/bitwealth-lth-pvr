@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Login - BitWealth</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            background: var(--bg-dark);
+        }
+        
+        .login-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            max-width: 450px;
+            width: 100%;
+            padding: 48px;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .login-header h1 {
+            font-size: 32px;
+            margin-bottom: 8px;
+            background: var(--gradient-gold);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .login-header p {
+            color: var(--text-secondary);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--gold);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            background: var(--gradient-gold);
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 24px;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(255, 180, 0, 0.3);
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .form-message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            display: none;
+        }
+        
+        .form-message.success {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+            display: block;
+        }
+        
+        .form-message.error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            display: block;
+        }
+        
+        .back-link {
+            text-align: center;
+            margin-top: 24px;
+        }
+        
+        .back-link a {
+            color: var(--gold);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>BitWealth</h1>
+                <p>Customer Portal Login</p>
+            </div>
+            
+            <div id="formMessage" class="form-message"></div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                
+                <button type="submit" id="submitBtn" class="btn-login">Log In</button>
+            </form>
+            
+            <div class="back-link">
+                <a href="index.html">← Back to Home</a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Check if already logged in
+        async function checkSession() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) {
+                // Get customer_id from URL or redirect to upload page
+                const urlParams = new URLSearchParams(window.location.search);
+                const customerId = urlParams.get('customer_id');
+                
+                if (customerId) {
+                    window.location.href = `/upload-kyc.html?customer_id=${customerId}`;
+                } else {
+                    // Find customer by email
+                    const { data: customer } = await supabaseClient
+                        .from('customer_details')
+                        .select('customer_id')
+                        .eq('email', session.user.email)
+                        .single();
+                    
+                    if (customer) {
+                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                    }
+                }
+            }
+        }
+        
+        checkSession();
+        
+        // Form submission
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const formMessage = document.getElementById('formMessage');
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Logging in...';
+            formMessage.style.display = 'none';
+            
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+                
+                if (error) {
+                    throw error;
+                }
+                
+                // Get customer_id
+                const { data: customer, error: customerError } = await supabaseClient
+                    .from('customer_details')
+                    .select('customer_id, registration_status')
+                    .eq('email', email)
+                    .single();
+                
+                if (customerError || !customer) {
+                    throw new Error('Customer profile not found');
+                }
+                
+                formMessage.className = 'form-message success';
+                formMessage.textContent = 'Login successful! Redirecting...';
+                
+                // Redirect based on registration status
+                setTimeout(() => {
+                    if (customer.registration_status === 'kyc') {
+                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                    } else {
+                        // For other statuses, could redirect to dashboard/portal
+                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                    }
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                formMessage.className = 'form-message error';
+                
+                if (error.message.includes('Invalid login credentials')) {
+                    formMessage.textContent = 'Invalid email or password. Please try again.';
+                } else {
+                    formMessage.textContent = error.message || 'Login failed. Please try again.';
+                }
+                
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Log In';
+            }
+        });
+    </script>
+</body>
+</html>

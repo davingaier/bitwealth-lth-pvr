@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Session Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Session Test</h1>
+    <div id="output"></div>
+    
+    <script>
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxNDcyNTEsImV4cCI6MjA0ODcyMzI1MX0.TA91qzqXU_c1yY_X5_7bLdHFvMcE56K_IFGCKzRSo2o';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        async function checkSession() {
+            const output = document.getElementById('output');
+            
+            try {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                
+                output.innerHTML = '<h2>Session Check Results:</h2>';
+                
+                if (error) {
+                    output.innerHTML += '<p style="color:red">Error: ' + error.message + '</p>';
+                } else if (!session) {
+                    output.innerHTML += '<p style="color:orange">No active session found</p>';
+                    output.innerHTML += '<p>User is not logged in</p>';
+                } else {
+                    output.innerHTML += '<p style="color:green">✓ Session found!</p>';
+                    output.innerHTML += '<pre>' + JSON.stringify(session.user, null, 2) + '</pre>';
+                }
+            } catch (e) {
+                output.innerHTML = '<p style="color:red">Exception: ' + e.message + '</p>';
+            }
+        }
+        
+        checkSession();
+    </script>
+</body>
+</html>

@@ -1929,6 +1929,89 @@ const signature = crypto.createHmac('sha512', apiSecret).update(payload).digest(
 
 ---
 
+## 19. Post-Launch Enhancement Backlog
+
+### 19.1 KYC Document URL Regeneration (Medium Priority)
+
+**Problem:**
+- Signed URLs for KYC documents expire after 1 year (31,536,000 seconds)
+- After expiry, admin cannot view documents without regenerating URLs
+- Compliance requires long-term document retention (5-7 years)
+
+**Solution:**
+- Implement automated URL regeneration before expiry
+- Create pg_cron job to run monthly: `kyc_url_refresh_monthly`
+- Edge function: `ef_regenerate_kyc_urls` (--no-verify-jwt)
+- Query all customers with `kyc_id_document_url` expiring within 60 days
+- Generate new signed URLs (1 year expiration)
+- Update `customer_details.kyc_id_document_url` with fresh URLs
+- Log regenerations to audit table
+
+**Implementation Estimate:** 4-6 hours
+- Edge function: 2 hours
+- pg_cron setup: 30 minutes
+- Testing: 2 hours
+- Documentation: 1 hour
+
+**Dependencies:**
+- None (can be implemented anytime post-launch)
+
+**SQL Pattern:**
+```sql
+-- Pseudo-code for detection
+SELECT customer_id, kyc_id_document_url
+FROM customer_details
+WHERE kyc_id_document_url IS NOT NULL
+  AND kyc_id_document_url LIKE '%token=%'
+  AND EXTRACT(EPOCH FROM (
+    -- Parse expiry from JWT token in URL
+    -- Compare to current timestamp
+  )) < (EXTRACT(EPOCH FROM NOW()) + 5184000); -- 60 days
+```
+
+**Alternative Approach:**
+- Store `kyc_id_document_url_expires_at` TIMESTAMPTZ column
+- Set during upload: `NOW() + INTERVAL '1 year'`
+- Simplifies detection query (no JWT parsing needed)
+
+**Priority:** Post-launch enhancement (not blocking MVP)
+
+**Status:** Deferred to post-launch backlog (2026-01-01)
+
+### 19.2 Customer Reactivation UI Button
+
+**Problem:** Admin must use SQL to reactivate inactive customers
+
+**Solution:** Add "Reactivate" button to Active Customers card
+
+**Estimate:** 2 hours
+
+### 19.3 Automated Email Retry Mechanism
+
+**Problem:** No retry if email sending fails
+
+**Solution:** Dead-letter queue + retry logic in ef_send_email
+
+**Estimate:** 4 hours
+
+### 19.4 Audit Trail for Status Changes
+
+**Problem:** No log of who changed customer status when
+
+**Solution:** Create `customer_status_history` table with triggers
+
+**Estimate:** 3 hours
+
+### 19.5 Multi-Currency Support in Deposit Scan
+
+**Problem:** Currently only checks ZAR, BTC, USDT
+
+**Solution:** Make currency list configurable, support all VALR currencies
+
+**Estimate:** 2 hours
+
+---
+
 **Document Version:** 1.0  
 **Status:** Draft for Review  
 **Approval Required:** Davin Gaier  
@@ -1937,3 +2020,4 @@ const signature = crypto.createHmac('sha512', apiSecret).update(payload).digest(
 ---
 
 **End of Customer Portal Build Plan**
+

@@ -262,11 +262,11 @@
                 
                 if (response.ok && result.success) {
                     formMessage.className = 'form-message success';
-                    formMessage.textContent = result.message || 'Account created successfully! Redirecting to portal...';
+                    formMessage.textContent = result.message || 'Account created successfully! Redirecting to login...';
                     
-                    // Redirect to portal after 2 seconds
+                    // Redirect to login page after 2 seconds
                     setTimeout(() => {
-                        window.location.href = result.portal_url || 'portal.html';
+                        window.location.href = `/login.html?customer_id=${customerId}`;
                     }, 2000);
                 } else {
                     formMessage.className = 'form-message error';
