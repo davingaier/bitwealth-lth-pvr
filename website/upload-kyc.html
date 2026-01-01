@@ -360,7 +360,9 @@
             if (!session) {
                 showMessage('Please log in to upload your ID document.', 'error');
                 setTimeout(() => {
-                    window.location.href = '/website/portal.html';
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const customerId = urlParams.get('customer_id');
+                    window.location.href = `/login.html?customer_id=${customerId || ''}`;
                 }, 2000);
                 return;
             }
@@ -491,10 +493,12 @@
 
                 progressFill.style.width = '50%';
 
-                // Get public URL (even though bucket is private, this generates the path)
-                const { data: { publicUrl } } = supabaseClient.storage
+                // Generate signed URL (valid for 1 year - admin needs long-term access)
+                const { data: signedUrlData, error: signedUrlError } = await supabaseClient.storage
                     .from('kyc-documents')
-                    .getPublicUrl(filePath);
+                    .createSignedUrl(filePath, 31536000); // 1 year = 365 days * 24 hours * 3600 seconds
+
+                if (signedUrlError) throw signedUrlError;
 
                 progressFill.style.width = '75%';
 
@@ -503,7 +507,7 @@
                     body: {
                         customer_id: customerData.customer_id,
                         file_path: filePath,
-                        file_url: publicUrl
+                        file_url: signedUrlData.signedUrl
                     }
                 });
 

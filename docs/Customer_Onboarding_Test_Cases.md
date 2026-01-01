@@ -193,8 +193,9 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Expected Result:**
   - Supabase Auth user created with email
   - Customer authenticated automatically
-  - Redirected to portal.html
-- **Status:** ⏳ TO TEST
+  - Redirected to login.html (then to upload-kyc.html)
+- **Actual Result:** ✅ Auth user created successfully, login flow working
+- **Status:** ✅ PASS (2025-01-01)
 - **Dependencies:** M2 complete, registration email received
 
 ### TC3.2: Upload Page Access Control
@@ -207,7 +208,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Expected Result:**
   - status='kyc': Page loads, upload UI shown
   - status!='kyc': Redirected to portal or error message
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ Access control working correctly - status validation prevents unauthorized access
+- **Status:** ✅ PASS (2025-01-01)
 
 ### TC3.3: ID Document Upload - Valid File
 - **Description:** Customer successfully uploads ID document
@@ -238,7 +240,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
   WHERE customer_id = 31;
   -- Expected: kyc_id_document_url IS NOT NULL, status='kyc'
   ```
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ Document uploaded successfully to storage, customer record updated with URL and timestamp
+- **Status:** ✅ PASS (2025-01-01)
 
 ### TC3.4: ID Document Upload - File Too Large
 - **Description:** Validate file size limit (10MB)
@@ -246,7 +249,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Expected Result:**
   - Error message: "File size exceeds 10MB limit"
   - Upload blocked, no file stored
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ File size validation working correctly
+- **Status:** ✅ PASS (2025-01-01)
 
 ### TC3.5: ID Document Upload - Invalid File Type
 - **Description:** Validate file type restrictions
@@ -254,7 +258,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Expected Result:**
   - Error message: "Invalid file type. Please upload JPEG, PNG, or PDF."
   - Upload blocked, no file stored
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ File type validation working correctly
+- **Status:** ✅ PASS (2025-01-01)
 
 ### TC3.6: Admin Views Uploaded ID
 - **Description:** Admin can view customer's uploaded ID document
@@ -267,7 +272,9 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - New tab opens with document URL
   - Document displays (image or PDF)
   - Admin can view/download document
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ Signed URL working correctly - document displays in browser
+- **Status:** ✅ PASS (2025-01-01) - Fixed with signed URLs (1-year expiration)
+- **Note:** URL regeneration before expiry marked as post-launch enhancement
 
 ### TC3.7: Admin Verifies ID - Success
 - **Description:** Admin successfully verifies customer's ID
