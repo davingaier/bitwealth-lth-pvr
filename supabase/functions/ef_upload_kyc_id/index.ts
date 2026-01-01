@@ -90,46 +90,49 @@ Deno.serve(async (req) => {
     const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
     const adminPortalUrl = `${websiteUrl}/ui/Advanced BTC DCA Strategy.html#management-module`;
 
-    // Send notification email to admin
+    // Send notification emails to admins (both admin addresses)
     let emailSent = false;
     let emailError = null;
+    const adminEmails = ["admin@bitwealth.co.za", "davin.gaier@gmail.com"];
 
-    try {
-      const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": req.headers.get("authorization") || "",
-        },
-        body: JSON.stringify({
-          template_key: "kyc_id_uploaded_notification",
-          to_email: "admin@bitwealth.co.za",
-          data: {
-            first_name: customer.first_names,
-            last_name: customer.last_name,
-            customer_id: customer.customer_id,
-            email: customer.email,
-            upload_date: new Date().toLocaleString("en-ZA", { 
-              dateStyle: "medium", 
-              timeStyle: "short",
-              timeZone: "Africa/Johannesburg"
-            }),
-            admin_portal_url: adminPortalUrl,
-            file_path: file_path,
+    for (const adminEmail of adminEmails) {
+      try {
+        const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": req.headers.get("authorization") || "",
           },
-        }),
-      });
+          body: JSON.stringify({
+            template_key: "kyc_id_uploaded_notification",
+            to_email: adminEmail,
+            data: {
+              first_name: customer.first_names,
+              last_name: customer.last_name,
+              customer_id: customer.customer_id,
+              email: customer.email,
+              upload_date: new Date().toLocaleString("en-ZA", { 
+                dateStyle: "medium", 
+                timeStyle: "short",
+                timeZone: "Africa/Johannesburg"
+              }),
+              admin_portal_url: adminPortalUrl,
+              file_path: file_path,
+            },
+          }),
+        });
 
-      if (emailResponse.ok) {
-        emailSent = true;
-      } else {
-        const errorData = await emailResponse.json();
-        emailError = errorData.error || "Unknown email error";
-        console.error("Email send failed:", emailError);
+        if (emailResponse.ok) {
+          emailSent = true;
+        } else {
+          const errorData = await emailResponse.json();
+          emailError = errorData.error || "Unknown email error";
+          console.error(`Email send failed to ${adminEmail}:`, emailError);
+        }
+      } catch (e) {
+        emailError = e.message;
+        console.error(`Email send exception to ${adminEmail}:`, e);
       }
-    } catch (e) {
-      emailError = e.message;
-      console.error("Email send exception:", e);
     }
 
     // Return success response

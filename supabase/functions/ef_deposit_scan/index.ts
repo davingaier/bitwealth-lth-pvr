@@ -19,8 +19,8 @@ if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // VALR API: Sign request with HMAC SHA-512
-async function signVALR(timestamp: string, method: string, path: string, body: string = "") {
-  const message = timestamp + method.toUpperCase() + path + body;
+async function signVALR(timestamp: string, method: string, path: string, body: string = "", subaccountId: string = "") {
+  const message = timestamp + method.toUpperCase() + path + body + subaccountId;
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(valrApiSecret),
@@ -39,7 +39,7 @@ async function getSubaccountBalances(subaccountId: string) {
   const timestamp = Date.now().toString();
   const method = "GET";
   const path = "/v1/account/balances";
-  const signature = await signVALR(timestamp, method, path);
+  const signature = await signVALR(timestamp, method, path, "", subaccountId);
 
   const response = await fetch(`https://api.valr.com${path}`, {
     method: "GET",
@@ -106,13 +106,26 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${customers.length} customers in deposit status`);
 
-    // Get exchange accounts for these customers
+    // Get exchange accounts for these customers via customer_portfolios
     const customerIds = customers.map(c => c.customer_id);
+    const { data: portfolios, error: portfolioError } = await supabase
+      .from("customer_portfolios")
+      .select("customer_id, portfolio_id, exchange_account_id")
+      .in("customer_id", customerIds)
+      .not("exchange_account_id", "is", null);
+
+    if (portfolioError) {
+      console.error("Error loading customer portfolios:", portfolioError);
+      throw portfolioError;
+    }
+
+    // Get the actual exchange accounts with subaccount IDs
+    const exchangeAccountIds = (portfolios || []).map(p => p.exchange_account_id);
     const { data: accounts, error: accountError } = await supabase
       .from("exchange_accounts")
-      .select("customer_id, subaccount_id, exchange_account_id")
-      .eq("exchange_name", "VALR")
-      .in("customer_id", customerIds)
+      .select("exchange_account_id, subaccount_id, label")
+      .eq("exchange", "VALR")
+      .in("exchange_account_id", exchangeAccountIds)
       .not("subaccount_id", "is", null);
 
     if (accountError) {
@@ -126,7 +139,11 @@ Deno.serve(async (req) => {
     for (const account of accounts || []) {
       results.scanned++;
 
-      const customer = customers.find(c => c.customer_id === account.customer_id);
+      // Find the portfolio and customer for this exchange account
+      const portfolio = portfolios?.find(p => p.exchange_account_id === account.exchange_account_id);
+      if (!portfolio) continue;
+
+      const customer = customers.find(c => c.customer_id === portfolio.customer_id);
       if (!customer) continue;
 
       try {
@@ -165,31 +182,34 @@ Deno.serve(async (req) => {
             console.error(`Error updating portfolio for ${customer.customer_id}:`, updatePortfolioError);
           }
 
-          // Send admin notification email
-          try {
-            await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": req.headers.get("authorization") || "",
-              },
-              body: JSON.stringify({
-                template_key: "funds_deposited_admin_notification",
-                to_email: "admin@bitwealth.co.za",
-                data: {
-                  first_name: customer.first_names,
-                  last_name: customer.last_name,
-                  customer_id: customer.customer_id,
-                  email: customer.email,
-                  balances: balances
-                    .filter((b: any) => parseFloat(b.available || "0") > 0)
-                    .map((b: any) => `${b.currency}: ${b.available}`)
-                    .join(", "),
+          // Send admin notification emails (to both admin addresses)
+          const adminEmails = ["admin@bitwealth.co.za", "davin.gaier@gmail.com"];
+          for (const adminEmail of adminEmails) {
+            try {
+              await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": req.headers.get("authorization") || "",
                 },
-              }),
-            });
-          } catch (emailError) {
-            console.error("Error sending admin email:", emailError);
+                body: JSON.stringify({
+                  template_key: "funds_deposited_admin_notification",
+                  to_email: adminEmail,
+                  data: {
+                    first_name: customer.first_names,
+                    last_name: customer.last_name,
+                    customer_id: customer.customer_id,
+                    email: customer.email,
+                    balances: balances
+                      .filter((b: any) => parseFloat(b.available || "0") > 0)
+                      .map((b: any) => `${b.currency}: ${b.available}`)
+                      .join(", "),
+                  },
+                }),
+              });
+            } catch (emailError) {
+              console.error(`Error sending admin email to ${adminEmail}:`, emailError);
+            }
           }
 
           // Send customer welcome email
@@ -226,6 +246,10 @@ Deno.serve(async (req) => {
         }
       } catch (balanceError) {
         console.error(`Error checking balance for customer ${customer.customer_id}:`, balanceError);
+        console.error(`VALR error details:`, {
+          subaccount_id: account.subaccount_id,
+          error_message: balanceError instanceof Error ? balanceError.message : String(balanceError)
+        });
         results.errors++;
       }
     }
