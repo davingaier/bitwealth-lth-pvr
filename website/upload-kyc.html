@@ -335,7 +335,7 @@
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let selectedFile = null;
         let customerData = null;
@@ -355,7 +355,7 @@
         // Initialize
         async function init() {
             // Check if user is authenticated
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await supabaseClient.auth.getSession();
             
             if (!session) {
                 showMessage('Please log in to upload your ID document.', 'error');
@@ -366,7 +366,7 @@
             }
 
             // Get customer details
-            const { data: customer, error } = await supabase
+            const { data: customer, error } = await supabaseClient
                 .from('customer_details')
                 .select('customer_id, first_names, last_name, email, registration_status')
                 .eq('email', session.user.email)
@@ -474,13 +474,13 @@
                 const newFileName = `${today}_${safeLast}_${safeFirst}_id.${ext}`;
 
                 // Get session
-                const { data: { session } } = await supabase.auth.getSession();
+                const { data: { session } } = await supabaseClient.auth.getSession();
                 const userId = session.user.id;
 
                 // Upload to Storage: {user_id}/{filename}
                 const filePath = `${userId}/${newFileName}`;
 
-                const { data: uploadData, error: uploadError } = await supabase.storage
+                const { data: uploadData, error: uploadError } = await supabaseClient.storage
                     .from('kyc-documents')
                     .upload(filePath, selectedFile, {
                         cacheControl: '3600',
@@ -492,14 +492,14 @@
                 progressFill.style.width = '50%';
 
                 // Get public URL (even though bucket is private, this generates the path)
-                const { data: { publicUrl } } = supabase.storage
+                const { data: { publicUrl } } = supabaseClient.storage
                     .from('kyc-documents')
                     .getPublicUrl(filePath);
 
                 progressFill.style.width = '75%';
 
                 // Call edge function to update customer record
-                const { data: updateData, error: updateError } = await supabase.functions.invoke('ef_upload_kyc_id', {
+                const { data: updateData, error: updateError } = await supabaseClient.functions.invoke('ef_upload_kyc_id', {
                     body: {
                         customer_id: customerData.customer_id,
                         file_path: filePath,
