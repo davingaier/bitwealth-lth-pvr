@@ -1,11 +1,65 @@
 # Customer Portal Test Cases
 
-**Project:** BitWealth Customer Portal MVP  
-**Date Created:** December 29, 2025  
+**⚠️ DOCUMENT STATUS: SUPERSEDED & ARCHIVED**  
+**Superseded By:** Customer_Onboarding_Test_Cases.md (M1-M6) + LTH_PVR_Test_Cases_Master.md (Section 5)  
+**Archived Date:** January 4, 2026  
+**Original Date Created:** December 29, 2025  
 **Target Launch:** January 10, 2026  
 **Test Environment:** Production (wqnmxpooabmedvtackji.supabase.co)
 
 ---
+
+## Archive Notice
+
+This document has been **superseded** and **archived** as of January 4, 2026. Test cases have been consolidated into the following documents for a single source of truth:
+
+### Test Case Migration Map:
+
+| Original Test Cases | New Location | Status |
+|---------------------|--------------|--------|
+| **TC1: Prospect Submission** (TC1.1-TC1.5) | Customer_Onboarding_Test_Cases.md → Milestone 1 | ✅ Migrated |
+| **TC2: Customer Registration** (TC2.1-TC2.6) | Customer_Onboarding_Test_Cases.md → Milestone 3 | ✅ Migrated |
+| **TC3: Email Templates** (TC3.1-TC3.4) | Customer_Onboarding_Test_Cases.md → Tested throughout M1-M5 | ✅ Migrated |
+| **TC4: Admin Fee Management** (TC4.1-TC4.6) | LTH_PVR_Test_Cases_Master.md → Section 5.1 | ✅ Migrated |
+| **TC5: RLS Policies** (TC5.1-TC5.4) | LTH_PVR_Test_Cases_Master.md → Section 5.2 | ✅ Migrated |
+| **TC6.1: E2E Onboarding** | Customer_Onboarding_Test_Cases.md → Integration Test IT1 | ✅ Migrated |
+| **TC6.2: Withdrawal Flow** | LTH_PVR_Test_Cases_Master.md → Section 5.3.1 | ✅ Migrated |
+| **TC6.3: Fee Monthly Close** | LTH_PVR_Test_Cases_Master.md → Section 5.3.2 | ✅ Migrated |
+| **TC7: Error Handling** (TC7.1-TC7.4) | LTH_PVR_Test_Cases_Master.md → Section 5.4 | ✅ Migrated |
+| **TC8: Performance** (TC8.1-TC8.2) | LTH_PVR_Test_Cases_Master.md → Section 5.5 | ✅ Migrated |
+
+### Active Documents:
+
+1. **LTH_PVR_Test_Cases_Master.md** - Consolidated test suite for all system components
+   - Section 4: Customer Onboarding (60 tests)
+   - Section 5: Portal Features (16 tests)
+   
+2. **Customer_Onboarding_Test_Cases.md** - Detailed 6-milestone onboarding pipeline tests
+   - M1: Prospect (2 tests)
+   - M2: Strategy (7 tests)
+   - M3: KYC (10 tests)
+   - M4: VALR (9 tests)
+   - M5: Deposit (14 tests)
+   - M6: Active (10 tests)
+   - Integration Tests (3 tests)
+   - Security Tests (3 tests)
+   - Performance Tests (2 tests)
+
+### Why This Document Was Archived:
+
+1. **Overlap Elimination:** TC1-TC3 and TC6.1 were duplicated in Customer_Onboarding_Test_Cases.md with more comprehensive coverage
+2. **Consolidation:** All unique tests (TC4-TC8) migrated to LTH_PVR_Test_Cases_Master.md Section 5
+3. **Single Source of Truth:** LTH_PVR_Test_Cases_Master.md now consolidates all test cases across the entire system
+
+### When to Reference This Document:
+
+- ⚠️ **DO NOT USE for new testing** - Use consolidated documents instead
+- ✅ **Historical reference only** - Original test design from December 2025
+- ✅ **Audit trail** - Preserved for documentation history
+
+---
+
+## Original Document Content (Archived Below)
 
 ## Test Suite Overview
 
