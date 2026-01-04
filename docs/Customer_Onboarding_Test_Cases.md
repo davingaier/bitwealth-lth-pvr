@@ -1185,7 +1185,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
 
 1. **No UI for Reactivation:** Admin must use SQL to reactivate inactive customers (future enhancement)
 2. **Manual Deposit Ref Entry:** Admin must manually copy deposit ref from VALR web UI (no API endpoint for this)
-3. **Email Delivery:** No retry mechanism if email fails (use Resend dashboard to monitor)
+3. **Email Delivery:** Check email_logs table for delivery status and SMTP message IDs
 4. **Single Currency Check:** ef_deposit_scan only checks ZAR, BTC, USDT (extendable to other currencies)
 5. **No Audit Trail:** Status changes not logged for compliance (future enhancement)
 

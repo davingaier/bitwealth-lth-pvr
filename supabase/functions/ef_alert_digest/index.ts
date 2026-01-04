@@ -2,6 +2,7 @@
 // Sends an email for NEW open error/critical alerts (notified_at IS NULL)
 
 import { getServiceClient } from "./client.ts";
+import { sendTextEmail } from "../_shared/smtp.ts";
 
 type AlertRow = {
   alert_id: string;
@@ -12,31 +13,13 @@ type AlertRow = {
 };
 
 async function sendEmail(subject: string, text: string) {
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  const from   = Deno.env.get("ALERT_EMAIL_FROM");
-  const to     = Deno.env.get("ALERT_EMAIL_TO");
+  const from = Deno.env.get("ALERT_EMAIL_FROM") || "admin@bitwealth.co.za";
+  const to = Deno.env.get("ALERT_EMAIL_TO") || "admin@bitwealth.co.za";
 
-  if (!apiKey || !from || !to) {
-    throw new Error("RESEND_API_KEY / ALERT_EMAIL_FROM / ALERT_EMAIL_TO not configured");
-  }
+  const result = await sendTextEmail(to, from, subject, text);
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to,
-      subject,
-      text,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Resend error ${res.status}: ${res.statusText} – ${body}`);
+  if (!result.success) {
+    throw new Error(`SMTP error: ${result.error}`);
   }
 }
 

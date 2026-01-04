@@ -21,7 +21,7 @@ This document contains comprehensive test cases for the BitWealth Customer Porta
 
 **Prerequisites:**
 - Supabase project: `wqnmxpooabmedvtackji.supabase.co`
-- RESEND_API_KEY configured in Supabase secrets
+- SMTP credentials configured in Supabase secrets (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE)
 - All 5 database migrations applied
 - All 3 edge functions deployed
 - All 12 email templates inserted
@@ -76,7 +76,7 @@ WHERE email = 'test.prospect@example.com'
 ORDER BY created_at DESC LIMIT 1;
 
 -- Check email logs
-SELECT template_key, recipient_email, status, resend_message_id
+SELECT template_key, recipient_email, status, smtp_message_id
 FROM email_logs
 WHERE recipient_email = 'test.prospect@example.com'
 ORDER BY created_at DESC LIMIT 2;
@@ -839,12 +839,12 @@ ORDER BY invoice_month DESC LIMIT 1;
 
 ---
 
-### TC7.2: Resend API Key Invalid
+### TC7.2: SMTP Configuration Invalid
 
 **Objective:** Verify email failure handling
 
 **Preconditions:**
-- Temporarily remove or invalidate RESEND_API_KEY
+- Temporarily remove or invalidate SMTP_HOST environment variable
 
 **Test Steps:**
 1. Submit prospect form
@@ -1008,7 +1008,7 @@ WHERE customer_id = 12;
 
 ## Known Issues & Limitations
 
-1. **Email Sending:** Resend has rate limits (100 emails/day on free tier). Consider upgrading for production.
+1. **Email Sending:** SMTP has no rate limits. Monitor email_logs table for delivery success rate.
 2. **Bank Deposits:** Manual deposit reconciliation required (no automated bank integration yet).
 3. **Customer Portal UI:** Not yet built (pending Phase 2 development).
 4. **Withdrawal Processing:** Requires manual admin intervention (no automated BTC sale/transfer).

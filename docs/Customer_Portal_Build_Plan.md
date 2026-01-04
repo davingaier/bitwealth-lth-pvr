@@ -121,7 +121,7 @@ website/
 - **Frontend:** HTML, CSS (Aptos font, blue/gold/white theme), Vanilla JavaScript
 - **Backend:** Supabase (PostgreSQL + Edge Functions)
 - **Auth:** Supabase Auth (email verification, password reset)
-- **Email:** Resend API (8 templates)
+- **Email:** Direct SMTP via mail.bitwealth.co.za:587 (8 templates)
 - **Storage:** Supabase Storage (KYC documents)
 - **PDF Generation:** jsPDF or similar (statements)
 
@@ -220,7 +220,8 @@ CREATE TABLE public.email_logs (
     subject TEXT,
     sent_at TIMESTAMPTZ DEFAULT NOW(),
     status TEXT CHECK (status IN ('sent', 'failed', 'bounced')),
-    resend_message_id TEXT, -- Resend API message ID
+    smtp_message_id TEXT, -- SMTP message ID from mail server
+    legacy_resend_message_id TEXT, -- Legacy: Resend API message ID (pre-2026-01-04)
     error_message TEXT
 );
 
@@ -321,8 +322,8 @@ FOR INSERT WITH CHECK (
 **Flow:**
 1. Fetch template from `email_templates`
 2. Replace `{{placeholders}}` with actual values
-3. Call Resend API
-4. Log to `email_logs`
+3. Send via SMTP (nodemailer)
+4. Log to `email_logs` with smtp_message_id
 5. Return status
 
 #### `ef_kyc_request`
@@ -1141,7 +1142,7 @@ Approved by: _______________________  Date: _______________
   - Create/update RPC: `calculate_monthly_performance_fee()`
   - Test fee calculation: 10% of (NAV Gain - Contributions)
 - [ ] Create `email_templates` table and insert initial templates
-- [ ] Create `ef_send_email` edge function (test with Resend)
+- [x] Create `ef_send_email` edge function (using SMTP)
 - [ ] Create `ef_prospect_submit` edge function
 - [ ] Create `ef_customer_register` edge function
 
@@ -1304,7 +1305,7 @@ Approved by: _______________________  Date: _______________
 - Test edge cases (empty results, NULL values)
 
 **Edge Functions:**
-- Mock Resend API calls (use test API key)
+- Test SMTP connection (use mail.bitwealth.co.za:587)
 - Test email template variable replacement
 - Test authentication (JWT validation)
 - Test error handling (invalid inputs, missing data)
@@ -1396,7 +1397,7 @@ Approved by: _______________________  Date: _______________
 - [ ] Verify all functions have correct JWT settings
 
 #### Environment Variables
-- [ ] Set `RESEND_API_KEY` in Supabase project secrets
+- [x] Set SMTP credentials in Supabase project secrets (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE)
 - [ ] Set `ADMIN_EMAIL` (davin.gaier@gmail.com)
 - [ ] Set `PORTAL_URL` (customer portal URL)
 - [ ] Set `ADMIN_PORTAL_URL` (admin portal URL)
@@ -1530,7 +1531,7 @@ Approved by: _______________________  Date: _______________
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | Supabase Storage failure | High | Implement backup to AWS S3; store documents locally |
-| Resend API downtime | Medium | Queue failed emails for retry; implement SMTP fallback |
+| SMTP server downtime | Medium | Queue failed emails for retry; monitor email_logs for failures |
 | Database migration failure | High | Test migrations in staging; keep rollback scripts ready |
 | Chart rendering performance issues | Low | Implement data pagination; use chart caching |
 
@@ -1708,7 +1709,7 @@ This build plan transforms the LTH_PVR solution from an admin-only system into a
 
 **Critical Success Factors:**
 1. Rigorous testing of authentication and data security (RLS policies)
-2. Email deliverability monitoring (Resend API integration)
+2. Email deliverability monitoring (SMTP delivery status tracking)
 3. Mobile-responsive UI (desktop-first but mobile-compatible)
 4. Legal document review before full launch
 5. Admin training on new customer management workflows

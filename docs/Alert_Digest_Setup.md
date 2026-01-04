@@ -6,7 +6,7 @@ The `ef_alert_digest` Edge Function sends daily email summaries of unresolved er
 ## Configuration
 
 ### Email Settings
-- **Resend API Key**: `re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc`
+- **Email Provider**: Direct SMTP via mail.bitwealth.co.za:587
 - **From Address**: `alerts@bitwealth.co.za`
 - **To Address**: `davin.gaier@gmail.com`
 
@@ -30,7 +30,7 @@ The `ef_alert_digest` Edge Function sends daily email summaries of unresolved er
    - `severity IN ('error', 'critical')`
    - `resolved_at IS NULL`
    - `notified_at IS NULL`
-3. **Send Email**: Uses Resend API to send digest email
+3. **Send Email**: Uses SMTP (nodemailer) to send digest email
 4. **Mark Notified**: Updates `notified_at` timestamp to prevent re-sending
 
 ## Current Alert Status
@@ -121,14 +121,14 @@ To resolve these, open the BitWealth UI and use the Alerts card.
 
 ## Files Modified
 
-1. **supabase/config.toml**: Added Resend API key and email configuration to `[edge_runtime.secrets]`
+1. **supabase/config.toml**: Added SMTP credentials to `[edge_runtime.secrets]`
 2. **supabase/sql/migrations/20251226_create_cron_schedule_for_ef_alert_digest.sql**: Updated schedule to 05:00 UTC
 3. **supabase/functions/ef_alert_digest/index.ts**: Already correctly implemented
 4. **supabase/functions/ef_alert_digest/client.ts**: Already correctly implemented
 
 ## Security Notes
 
-- The Resend API key is stored as a Supabase secret
+- SMTP credentials are stored as Supabase secrets (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE)
 - The function has JWT verification disabled to allow cron access
 - Only error/critical severity alerts trigger emails
 - Alerts are marked with `notified_at` to prevent duplicate emails

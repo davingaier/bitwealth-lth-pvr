@@ -1,9 +1,9 @@
 // ef_send_email/index.ts
-// Purpose: Centralized email sending using Resend API
+// Purpose: Centralized email sending using SMTP
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { sendHTMLEmail } from "../_shared/smtp.ts";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SECRET_KEY = Deno.env.get("Secret Key");
 
@@ -27,52 +27,16 @@ function replacePlaceholders(template: string, data: Record<string, any>): strin
 }
 
 /**
- * Send email via Resend API
+ * Extract plain text from HTML for email fallback
  */
-async function sendEmail(
-  to: string,
-  subject: string,
-  html: string,
-  from: string = "BitWealth <noreply@bitwealth.co.za>"
-): Promise<{ success: boolean; message_id?: string; error?: string }> {
-  if (!RESEND_API_KEY) {
-    return { success: false, error: "RESEND_API_KEY not configured" };
-  }
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: `Resend API error: ${errorData.message || response.statusText}`,
-      };
-    }
-
-    const result = await response.json();
-    return {
-      success: true,
-      message_id: result.id,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: `Failed to send email: ${error.message}`,
-    };
-  }
+function htmlToPlainText(html: string): string {
+  // Simple HTML to text conversion
+  return html
+    .replace(/<style[^>]*>.*?<\/style>/gi, '')
+    .replace(/<script[^>]*>.*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 serve(async (req) => {
@@ -120,9 +84,13 @@ serve(async (req) => {
     // Replace placeholders in subject and body
     const subject = replacePlaceholders(template.subject, data);
     const html = replacePlaceholders(template.body_html, data);
+    const text = htmlToPlainText(html);
 
-    // Send email via Resend
-    const result = await sendEmail(to_email, subject, html, from_email);
+    // Set default from address if not provided
+    const fromAddress = from_email || "BitWealth <noreply@bitwealth.co.za>";
+
+    // Send email via SMTP
+    const result = await sendHTMLEmail(to_email, fromAddress, subject, html, text);
 
     // Log email attempt
     await supabase.from("email_logs").insert({
@@ -130,7 +98,7 @@ serve(async (req) => {
       recipient_email: to_email,
       subject,
       status: result.success ? "sent" : "failed",
-      resend_message_id: result.message_id,
+      smtp_message_id: result.messageId,
       error_message: result.error,
       template_data: data,
     });
@@ -145,7 +113,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message_id: result.message_id,
+        message_id: result.messageId,
       }),
       { status: 200, headers: CORS }
     );
