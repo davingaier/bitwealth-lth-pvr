@@ -175,22 +175,21 @@
         async function checkSession() {
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
-                // Get customer_id from URL or redirect to upload page
-                const urlParams = new URLSearchParams(window.location.search);
-                const customerId = urlParams.get('customer_id');
+                // Find customer and redirect based on status
+                const { data: customer } = await supabaseClient
+                    .from('customer_details')
+                    .select('customer_id, registration_status')
+                    .eq('email', session.user.email)
+                    .single();
                 
-                if (customerId) {
-                    window.location.href = `/upload-kyc.html?customer_id=${customerId}`;
-                } else {
-                    // Find customer by email
-                    const { data: customer } = await supabaseClient
-                        .from('customer_details')
-                        .select('customer_id')
-                        .eq('email', session.user.email)
-                        .single();
+                if (customer) {
+                    const status = customer.registration_status;
                     
-                    if (customer) {
+                    if (status === 'kyc') {
                         window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                    } else {
+                        // Active customers go to portal
+                        window.location.href = '/customer-portal.html';
                     }
                 }
             }
@@ -238,11 +237,20 @@
                 
                 // Redirect based on registration status
                 setTimeout(() => {
-                    if (customer.registration_status === 'kyc') {
+                    const status = customer.registration_status;
+                    
+                    if (status === 'kyc') {
+                        // Need to upload ID document
                         window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                    } else if (status === 'active' || status === 'inactive') {
+                        // Full portal access
+                        window.location.href = '/customer-portal.html';
+                    } else if (status === 'deposit' || status === 'setup') {
+                        // Show onboarding status in portal
+                        window.location.href = '/customer-portal.html';
                     } else {
-                        // For other statuses, could redirect to dashboard/portal
-                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                        // Default: redirect to portal
+                        window.location.href = '/customer-portal.html';
                     }
                 }, 1000);
                 

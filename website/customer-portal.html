@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Portal - BitWealth</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            color: #1e3a8a;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card h2 {
+            color: #1e3a8a;
+            font-size: 20px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+        .milestone-track {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 30px 0;
+            position: relative;
+        }
+        .milestone {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            flex: 1;
+        }
+        .milestone-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .milestone.complete .milestone-circle {
+            background: #10b981;
+            color: white;
+        }
+        .milestone-label {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 500;
+        }
+        .progress-line {
+            position: absolute;
+            top: 25px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #e2e8f0;
+            z-index: 1;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #10b981;
+            transition: width 0.5s ease;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            color: #1e3a8a;
+            font-weight: 700;
+        }
+        .alert {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            color: #78350f;
+            font-weight: 500;
+        }
+        .alert-success {
+            background: #d1fae5;
+            border-left-color: #10b981;
+            color: #064e3b;
+        }
+        .btn {
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: #64748b;
+        }
+        .btn-secondary:hover {
+            background: #475569;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+        .logout-btn {
+            float: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="btn btn-secondary logout-btn" onclick="logout()">Logout</button>
+            <h1>Welcome, <span id="customerName">...</span>! 👋</h1>
+            <p>Your BitWealth Investment Dashboard</p>
+        </div>
+
+        <div id="loading" class="card loading">
+            <p>Loading your portfolio data...</p>
+        </div>
+
+        <div id="content" style="display: none;">
+            <!-- Onboarding Status Card -->
+            <div class="card">
+                <h2>🎯 Onboarding Status</h2>
+                <div class="milestone-track">
+                    <div class="progress-line">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="milestone" id="m1">
+                        <div class="milestone-circle">1</div>
+                        <div class="milestone-label">Prospect</div>
+                    </div>
+                    <div class="milestone" id="m2">
+                        <div class="milestone-circle">2</div>
+                        <div class="milestone-label">Strategy</div>
+                    </div>
+                    <div class="milestone" id="m3">
+                        <div class="milestone-circle">3</div>
+                        <div class="milestone-label">KYC</div>
+                    </div>
+                    <div class="milestone" id="m4">
+                        <div class="milestone-circle">4</div>
+                        <div class="milestone-label">VALR Setup</div>
+                    </div>
+                    <div class="milestone" id="m5">
+                        <div class="milestone-circle">5</div>
+                        <div class="milestone-label">Deposit</div>
+                    </div>
+                    <div class="milestone" id="m6">
+                        <div class="milestone-circle">6</div>
+                        <div class="milestone-label">Active</div>
+                    </div>
+                </div>
+                <div class="alert alert-success" id="statusMessage">
+                    <strong>Status:</strong> <span id="nextAction">Loading...</span>
+                </div>
+            </div>
+
+            <!-- Portfolio Dashboard Card -->
+            <div class="card">
+                <h2>📊 Portfolio Dashboard</h2>
+                <div id="noDataMessage" class="alert">
+                    <strong>Trading starts tomorrow!</strong><br>
+                    Your account is active. The first trading decision will be generated at 03:00 UTC tomorrow morning. Check back then to see your portfolio performance!
+                </div>
+                <div id="dashboardData" style="display: none;">
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Net Asset Value</div>
+                            <div class="stat-value" id="navValue">R 0.00</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">BTC Balance</div>
+                            <div class="stat-value" id="btcBalance">0.00000000</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">USDT Balance</div>
+                            <div class="stat-value" id="usdtBalance">0.00</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">ROI</div>
+                            <div class="stat-value" id="roiValue">0.00%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portfolio Selector Card -->
+            <div class="card">
+                <h2>💼 Your Portfolios</h2>
+                <div id="portfolioList">Loading portfolios...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
+
+        const { createClient } = supabase;
+        const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let customerData = null;
+
+        async function initPortal() {
+            // Check if user is authenticated
+            const { data: { session }, error } = await sb.auth.getSession();
+            
+            if (error || !session) {
+                // Not logged in - redirect to login
+                window.location.href = 'login.html';
+                return;
+            }
+
+            currentUser = session.user;
+            await loadCustomerData();
+        }
+
+        async function loadCustomerData() {
+            try {
+                // Get customer details by email
+                const { data: customers, error: customerError } = await sb
+                    .from('customer_details')
+                    .select('*')
+                    .eq('email', currentUser.email)
+                    .single();
+
+                if (customerError) throw customerError;
+                
+                customerData = customers;
+                document.getElementById('customerName').textContent = `${customers.first_names} ${customers.last_name}`;
+
+                // Load onboarding status
+                await loadOnboardingStatus(customers.customer_id);
+
+                // Load portfolios
+                await loadPortfolios(customers.customer_id);
+
+                // Show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error loading customer data:', error);
+                alert('Error loading your data. Please try again or contact support.');
+            }
+        }
+
+        async function loadOnboardingStatus(customerId) {
+            try {
+                const { data, error } = await sb.rpc('get_customer_onboarding_status', { 
+                    p_customer_id: customerId 
+                });
+
+                if (error) throw error;
+
+                // Update milestone indicators
+                const milestones = data.milestone_statuses || [false, false, false, false, false, false];
+                milestones.forEach((complete, index) => {
+                    const milestoneEl = document.getElementById(`m${index + 1}`);
+                    if (complete) {
+                        milestoneEl.classList.add('complete');
+                    }
+                });
+
+                // Update progress bar
+                const progress = (data.current_milestone / 6) * 100;
+                document.getElementById('progressFill').style.width = `${progress}%`;
+
+                // Update status message
+                document.getElementById('nextAction').textContent = data.next_action;
+
+            } catch (error) {
+                console.error('Error loading onboarding status:', error);
+            }
+        }
+
+        async function loadPortfolios(customerId) {
+            try {
+                const { data: portfolios, error } = await sb.rpc('list_customer_portfolios', {
+                    p_customer_id: customerId
+                });
+
+                if (error) throw error;
+
+                const container = document.getElementById('portfolioList');
+                
+                if (!portfolios || portfolios.length === 0) {
+                    container.innerHTML = '<p>No portfolios found.</p>';
+                    return;
+                }
+
+                container.innerHTML = portfolios.map(p => `
+                    <div class="stat-box" style="margin-bottom: 10px;">
+                        <div class="stat-label">${p.strategy_code} - ${p.status.toUpperCase()}</div>
+                        <div style="font-size: 14px; color: #64748b; margin-top: 5px;">
+                            Created: ${new Date(p.created_at).toLocaleDateString()}
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading portfolios:', error);
+                document.getElementById('portfolioList').innerHTML = '<p>Error loading portfolios.</p>';
+            }
+        }
+
+        async function logout() {
+            await sb.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        // Initialize on page load
+        initPortal();
+    </script>
+</body>
+</html>
