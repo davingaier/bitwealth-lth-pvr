@@ -250,7 +250,7 @@ ORDER BY agreed_at;
 - Email payload prepared but not sent
 
 **TODO:**
-- Integrate with existing email sending system (Resend API)
+- Integrate with existing email sending system (SMTP via ef_send_email)
 - Call email template function with `kyc_verified_notification` template
 - Pass placeholders: `first_name`, `registration_url`, `website_url`
 - Update `email_sent` field in response to `true`

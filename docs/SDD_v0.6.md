@@ -9,7 +9,30 @@
 
 ## 0. Change Log
 
-### v0.6.4 (current) – Customer Onboarding Pipeline COMPLETE
+### v0.6.5 (current) – SMTP Migration Complete
+**Date:** 2026-01-04  
+**Purpose:** Migrated from Resend API to direct SMTP for all email communications. Improved deliverability and reduced external dependencies.
+
+**Key Changes:**
+1. **Email Infrastructure Migration**
+   - Replaced Resend API with direct SMTP integration using nodemailer
+   - SMTP Server: `mail.bitwealth.co.za:587` (STARTTLS)
+   - Email addresses: `noreply@bitwealth.co.za` (automated), `admin@bitwealth.co.za` (alerts)
+   - Database: Added `smtp_message_id` column, renamed `resend_message_id` to `legacy_resend_message_id`
+   - New module: `supabase/functions/_shared/smtp.ts`
+   - Updated edge functions: `ef_send_email`, `ef_alert_digest`
+   
+2. **Environment Variables**
+   - Removed: `RESEND_API_KEY`
+   - Added: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`
+   - Updated: `ALERT_EMAIL_FROM=admin@bitwealth.co.za`
+   
+3. **DNS Configuration**
+   - SPF: `v=spf1 a mx ip4:169.239.218.70 ~all`
+   - DKIM: Configured with RSA public key
+   - DMARC: `v=DMARC1; p=none; rua=mailto:admin@bitwealth.co.za; adkim=r; aspf=r`
+
+### v0.6.4 – Customer Onboarding Pipeline COMPLETE
 **Date:** 2025-12-31  
 **Purpose:** All 6 milestones of customer onboarding pipeline built, deployed, and documented. System 100% functional from prospect to active customer.
 
@@ -318,11 +341,12 @@
    - RPC functions: `list_lth_alert_events()`, `resolve_lth_alert_event()`
 
 2. **Alert Digest Email System**
-   - **Edge Function:** `ef_alert_digest` (version 3, JWT verification disabled)
-   - **Email Provider:** Resend API (`re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc`)
+   - **Edge Function:** `ef_alert_digest` (JWT verification disabled)
+   - **Email Provider:** Direct SMTP via `mail.bitwealth.co.za:587` (STARTTLS)
+   - **Email Module:** `_shared/smtp.ts` using nodemailer
    - **Schedule:** Daily at 05:00 UTC (07:00 SAST) via pg_cron (job ID 22)
-   - **Recipients:** davin.gaier@gmail.com
-   - **From Address:** alerts@bitwealth.co.za
+   - **Recipients:** admin@bitwealth.co.za
+   - **From Address:** admin@bitwealth.co.za
    - **Logic:** 
      - Queries error/critical alerts where `notified_at IS NULL`
      - Sends formatted email digest
@@ -906,7 +930,11 @@ await logAlert(
 ```toml
 # supabase/config.toml
 [edge_runtime.secrets]
-RESEND_API_KEY = "[your-resend-api-key]"
+SMTP_HOST = "mail.bitwealth.co.za"
+SMTP_PORT = "587"
+SMTP_USER = "admin@bitwealth.co.za"
+SMTP_PASS = "[smtp-password]"
+SMTP_SECURE = "false"
 ALERT_EMAIL_FROM = "alerts@bitwealth.co.za"
 ALERT_EMAIL_TO = "your-email@example.com"
 ```
@@ -940,7 +968,7 @@ SELECT cron.schedule(
    - Alert count
    - Component, severity, timestamp, message for each alert
    - Instructions to resolve via UI
-3. Send via Resend API
+3. Send via SMTP (nodemailer)
 4. Update `notified_at` timestamp on all sent alerts
 
 **Email Template:**
@@ -1280,10 +1308,10 @@ ORDER BY created_at DESC;
   - Produces `ledger_lines` events
   - Rolls into `balances_daily` per portfolio and asset
 
-**05:00** – **Alert Digest Email** (NEW)
+**05:00** – **Alert Digest Email** (2025-12-27+)
 - `ef_alert_digest`:
   - Queries unresolved error/critical alerts where `notified_at IS NULL`
-  - Sends email digest via Resend API
+  - Sends email digest via SMTP (nodemailer)
   - Updates `notified_at` to prevent duplicate emails
 
 **Overnight** – Benchmark & fees
@@ -1548,8 +1576,12 @@ ORG_ID="b0a77009-03b9-44a1-ae1d-34f157d44a8b"
 VALR_API_KEY="[primary_api_key]"
 VALR_API_SECRET="[primary_api_secret]"
 
-# Alert Digest (NEW)
-RESEND_API_KEY="[your-resend-api-key]"
+# SMTP Email Configuration (2026-01-04+)
+SMTP_HOST="mail.bitwealth.co.za"
+SMTP_PORT="587"
+SMTP_USER="admin@bitwealth.co.za"
+SMTP_PASS="[smtp-password]"
+SMTP_SECURE="false"
 ALERT_EMAIL_FROM="alerts@bitwealth.co.za"
 ALERT_EMAIL_TO="your-email@example.com"
 
@@ -1560,7 +1592,11 @@ CRYPTOQUANT_API_KEY="[api_key]"
 **Setting Secrets:**
 ```bash
 cd /path/to/bitwealth-lth-pvr
-supabase secrets set RESEND_API_KEY=[your-resend-api-key] \
+supabase secrets set SMTP_HOST="mail.bitwealth.co.za" \
+  SMTP_PORT="587" \
+  SMTP_USER="admin@bitwealth.co.za" \
+  SMTP_PASS="[smtp-password]" \
+  SMTP_SECURE="false" \
   ALERT_EMAIL_FROM="alerts@bitwealth.co.za" \
   ALERT_EMAIL_TO="your-email@example.com"
 ```
