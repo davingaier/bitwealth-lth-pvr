@@ -58,16 +58,36 @@ Deno.serve(async (_req: any)=>{
     // If we start mid-pause and there's no prior state, we need today's pause flag.
     const pauseNow = await computeBearPauseAt(sb, org_id, signalStr);
     // Active customers for this org (lth_pvr schema)
+    // CRITICAL: Only process customers with registration_status='active'
     let custs = null;
     {
-      // primary: lth_pvr.customer_strategies
-      let q = await sb.from("customer_strategies").select("customer_id, strategy_version_id").eq("org_id", org_id).eq("live_enabled", true);
-      // optional fallback: if you later expose a public view
-      if (q.error && /does not exist/i.test(q.error.message)) {
-        q = await sb.from("active_customer_strategies_v").select("customer_id, strategy_version_id").eq("org_id", org_id);
+      // Query customer_strategies with live_enabled=true
+      const { data: cs, error: csErr } = await sb
+        .from("customer_strategies")
+        .select("customer_id, strategy_version_id")
+        .eq("org_id", org_id)
+        .eq("live_enabled", true);
+      
+      if (csErr) throw new Error(`customer_strategies query failed: ${csErr.message}`);
+      
+      // Filter by registration_status='active' from customer_details (public schema)
+      if (cs && cs.length > 0) {
+        const customerIds = cs.map(c => c.customer_id);
+        const { data: activeCustomers, error: cdErr } = await sb
+          .schema("public")
+          .from("customer_details")
+          .select("customer_id")
+          .in("customer_id", customerIds)
+          .eq("registration_status", "active");
+        
+        if (cdErr) throw new Error(`customer_details query failed: ${cdErr.message}`);
+        
+        // Only include customers that are in 'active' status
+        const activeIds = new Set(activeCustomers?.map(c => c.customer_id) ?? []);
+        custs = cs.filter(c => activeIds.has(c.customer_id));
+      } else {
+        custs = [];
       }
-      if (q.error) throw new Error(`customer_strategies query failed: ${q.error.message}`);
-      custs = q.data ?? [];
     }
     console.info(`ef_generate_decisions: ${signalStr} px=${px} roc5=${roc5.toFixed(4)} pauseNow=${pauseNow} custs=${custs?.length ?? 0}`);
     
