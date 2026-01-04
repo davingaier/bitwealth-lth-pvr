@@ -6262,7 +6262,12 @@
 
       const strategyName = selectElement.options[selectElement.selectedIndex].text;
 
-      if (!confirm(`Confirm strategy "${strategyName}" for customer ${customerId}?\\n\\nThis will:\\n- Create portfolio entry\\n- Change status to 'kyc'\\n- Send registration email to customer`)) {
+      if (!confirm(`Confirm strategy "${strategyName}" for customer ${customerId}?
+
+This will:
+• Create portfolio entry
+• Change status to 'kyc'
+• Send registration email to customer`)) {
         return;
       }
 

@@ -1,17 +1,22 @@
 # BitWealth Customer Portal - Build Plan
-## Version 2.1 - PORTAL MVP COMPLETE
+## Version 2.2 - INTEGRATION TESTING COMPLETE
 
 **Project:** Customer Lifecycle Platform & Portal  
 **Author:** Dav / GPT  
 **Created:** 2025-12-29  
-**Last Updated:** 2026-01-04 (Portal MVP Deployed & Tested)  
-**MVP Target:** 2026-01-10 (6 days remaining)  
-**Full Launch Target:** 2026-01-17 (13 days remaining) ✅ AHEAD OF SCHEDULE
+**Last Updated:** 2026-01-05 (Integration Testing Complete)  
+**MVP Target:** 2026-01-10 (5 days remaining)  
+**Full Launch Target:** 2026-01-17 (12 days remaining) ✅ AHEAD OF SCHEDULE
 
-🎉 **MAJOR MILESTONE:** Customer-facing portal dashboard is now LIVE and functional!  
-✅ **STATUS UPDATE:** All 6 milestones + Portal MVP are now COMPLETE and deployed.  
-✅ **FIRST CUSTOMER:** Customer 31 (Jemaica Gaier) activated and portal access confirmed.  
-See: `MILESTONES_3_TO_6_COMPLETE.md` for detailed onboarding implementation.
+🎉 **MAJOR MILESTONE:** Integration testing complete - all 3 integration tests passed!  
+✅ **STATUS UPDATE:** All 6 milestones + Portal MVP + Integration Tests are COMPLETE.  
+✅ **TEST CUSTOMER:** Customer 39 (Integration TestUser) successfully progressed through full pipeline.  
+✅ **TESTING PROGRESS:** 75% complete (45/60 tests passed)
+
+**Integration Testing Results (2026-01-05):**
+- ✅ **IT1: Full Pipeline End-to-End** - PASS (45 minutes, 5 bugs fixed)
+- ✅ **IT2: Email Flow Verification** - PASS (all 7 emails verified)
+- ✅ **IT3: Database State Consistency** - PASS (all checks validated)
 
 ---
 
@@ -1489,6 +1494,64 @@ Approved by: _______________________  Date: _______________
 ## 10. Deployment Checklist
 
 ### 10.1 Pre-MVP Deployment (Jan 10)
+
+#### Website Hosting (CRITICAL - NEW)
+**Current Issue:** Website files (register.html, upload-kyc.html, portal.html, index.html) are local-only.  
+**Impact:** Registration/KYC URLs in emails point to localhost (broken for customers).  
+**Solution:** Deploy website folder to production hosting service.
+
+**Hosting Options (Priority Order):**
+1. **Cloudflare Pages** (RECOMMENDED)
+   - Free tier sufficient for MVP
+   - Automatic HTTPS
+   - CDN included
+   - Deploy: `npx wrangler pages deploy website`
+   - Custom domain: bitwealth.co.za
+   - Est. setup time: 30 minutes
+
+2. **Netlify**
+   - Free tier with 100GB bandwidth/month
+   - Automatic HTTPS
+   - Deploy: Drag-drop website folder or Git integration
+   - Custom domain support
+   - Est. setup time: 20 minutes
+
+3. **Vercel**
+   - Free tier for static sites
+   - Automatic HTTPS
+   - Deploy: `vercel --prod`
+   - Est. setup time: 25 minutes
+
+**Deployment Steps:**
+```bash
+# Option 1: Cloudflare Pages
+cd website
+npx wrangler pages deploy . --project-name bitwealth-portal
+
+# Option 2: Netlify (via CLI)
+cd website
+npm install -g netlify-cli
+netlify deploy --prod --dir .
+
+# Option 3: Vercel (via CLI)
+cd website
+npm install -g vercel
+vercel --prod
+```
+
+**Post-Deployment:**
+- [ ] Update WEBSITE_URL environment variable in Supabase (all edge functions)
+- [ ] Test registration URL: https://bitwealth.co.za/register.html?customer_id=X&email=test@example.com
+- [ ] Test upload page: https://bitwealth.co.za/upload-kyc.html
+- [ ] Test customer portal: https://bitwealth.co.za/portal.html
+- [ ] Update email templates with production URL (if hardcoded anywhere)
+- [ ] Remove localhost fallback from ef_confirm_strategy, ef_upload_kyc_id
+
+**Affected Edge Functions:**
+- ef_confirm_strategy (registration_url)
+- ef_upload_kyc_id (redirect after upload)
+- ef_prospect_submit (website_url in emails)
+- Any email templates with {{website_url}} or {{portal_url}}
 
 #### Database
 - [ ] Run all migrations in production

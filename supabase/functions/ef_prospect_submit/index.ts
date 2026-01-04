@@ -6,7 +6,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SECRET_KEY = Deno.env.get("Secret Key");
 const ORG_ID = Deno.env.get("ORG_ID");
-const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "davin.gaier@gmail.com";
+const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 const ADMIN_PORTAL_URL = Deno.env.get("ADMIN_PORTAL_URL") || "https://bitwealth.co.za/admin";
 const WEBSITE_URL = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
 

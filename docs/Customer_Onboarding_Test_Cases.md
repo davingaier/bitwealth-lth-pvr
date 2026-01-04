@@ -957,7 +957,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Table displays all customers with status='active'
   - Search by name or email
   - Refresh button updates list
-- **Status:** ⏳ TO TEST
+- **Status:** ✅ PASS (2026-01-04)
 
 ### TC6.4: Admin Sets Customer Inactive
 - **Description:** Admin pauses customer trading by setting status='inactive'
@@ -1035,7 +1035,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Customer appears in Active Customers card
   - Customer included in next pipeline run
   - Full trading resumes
-- **Status:** ⏳ TO TEST
+- **Status:** ✅ PASS (2026-01-04)
 - **Future Enhancement:** Add "Reactivate" button to admin UI
 
 ### TC6.8: Active Customers Card - Search
@@ -1048,7 +1048,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Search filters in real-time
   - Case-insensitive match
   - Clearing search shows all active customers
-- **Status:** ⏳ TO TEST
+- **Status:** ✅ PASS (2026-01-04)
 
 ### TC6.9: Active Customers Card - Refresh
 - **Description:** Verify refresh button updates customer list
@@ -1059,7 +1059,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Re-queries database
   - Table updates with latest data
   - Loading state shown briefly
-- **Status:** ⏳ TO TEST
+- **Status:** ✅ PASS (2026-01-04)
 
 ### TC6.10: Customer Status Badge Colors
 - **Description:** Verify status badges display with correct colors
@@ -1070,43 +1070,76 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - deposit: Orange (badge-warning)
   - active: Green (badge-success)
   - inactive: Gray (badge-secondary)
-- **Status:** ⏳ TO TEST (UI verification)
+- **Status:** ✅ PASS (2026-01-04)
 
 ## Integration Tests
 
 ### IT1: Full Pipeline End-to-End
 - **Description:** Test complete flow from prospect to active
+- **Test Data:** Customer 39 (Integration TestUser, integration.test@example.com)
 - **Steps:**
-  1. Submit prospect form (M1)
-  2. Admin confirms strategy (M2)
-  3. Customer registers + uploads ID (M3)
-  4. Admin verifies ID (M3)
-  5. Auto-create VALR subaccount + admin enters deposit_ref (M4)
-  6. Customer deposits funds (M5)
-  7. Hourly scan detects balance (M5)
-  8. Customer accesses full portal (M6)
+  1. Submit prospect form (M1) ✅
+  2. Admin confirms strategy (M2) ✅
+  3. Customer registers + uploads ID (M3) ✅
+  4. Admin verifies ID (M3) ✅
+  5. Auto-create VALR subaccount + admin enters deposit_ref (M4) ✅
+  6. Customer deposits funds (M5) ✅
+  7. Hourly scan detects balance (M5) ✅
+  8. Customer accesses full portal (M6) ✅
 - **Expected Duration:** ~30 minutes (excluding hourly scan wait)
-- **Status:** ⏳ TO TEST (after all milestones built)
+- **Actual Duration:** 45 minutes (including bug fixes)
+- **Bugs Fixed During Testing:**
+  1. ef_prospect_submit: ADMIN_EMAIL default changed from davin.gaier@gmail.com to admin@bitwealth.co.za
+  2. Admin UI: Strategy confirmation dialog had escaped \n characters instead of line breaks
+  3. ef_confirm_strategy: WEBSITE_URL default changed from file:// to http://localhost:8081
+  4. website/upload-kyc.html: Redirect URL fixed from /website/portal.html to /portal.html
+  5. ef_upload_kyc_id: Removed davin.gaier@gmail.com from admin notification recipients (single recipient only)
+- **Status:** ✅ PASS (2026-01-05)
 
 ### IT2: Email Flow Verification
 - **Description:** Verify all 7 emails sent correctly throughout pipeline
+- **Test Data:** Customer 39 (Integration TestUser, integration.test@example.com)
 - **Emails:**
-  1. prospect_notification (M1 - to admin)
-  2. prospect_confirmation (M1 - to customer)
-  3. kyc_portal_registration (M2 - to customer) ✅ VERIFIED
-  4. kyc_id_uploaded_notification (M3 - to admin)
-  5. deposit_instructions (M4 - to customer)
-  6. funds_deposited_admin_notification (M5 - to admin)
-  7. registration_complete_welcome (M5 - to customer)
-- **Status:** ⏳ TO TEST
+  1. prospect_notification (M1 - to admin) ✅ VERIFIED (2026-01-05) - Bug fixed: ADMIN_EMAIL default was davin.gaier@gmail.com, changed to admin@bitwealth.co.za
+  2. prospect_confirmation (M1 - to customer) ✅ VERIFIED (2026-01-05)
+  3. kyc_portal_registration (M2 - to customer) ✅ VERIFIED (2026-01-05)
+  4. kyc_id_uploaded_notification (M3 - to admin) ✅ VERIFIED (2026-01-05) - Bug fixed: Removed davin.gaier@gmail.com from recipients
+  5. deposit_instructions (M4 - to customer) ✅ VERIFIED (2026-01-05)
+  6. funds_deposited_admin_notification (M5 - to admin) ✅ VERIFIED (2026-01-05)
+  7. registration_complete_welcome (M5 - to customer) ✅ VERIFIED (2026-01-05)
+- **Verification Method:** Checked email_logs table for all 7 templates, confirmed status='sent' and correct recipients
+- **Status:** ✅ PASS (2026-01-05)
 
 ### IT3: Database State Consistency
 - **Description:** Verify data integrity across tables at each milestone
+- **Test Data:** Customer 39 (Integration TestUser)
 - **Checks:**
-  - customer_details.registration_status matches customer_portfolios.status logic
-  - exchange_accounts entries exist for all active customers
-  - email_templates active=true for all pipeline emails
-- **Status:** ⏳ TO TEST
+  - customer_details.registration_status matches customer_portfolios.status logic ✅
+  - exchange_accounts entries exist for all active customers ✅
+  - email_templates active=true for all pipeline emails ✅
+  - Foreign key relationships intact across all tables ✅
+  - No orphaned records in customer_portfolios or exchange_accounts ✅
+- **Verification Queries:**
+  ```sql
+  -- Check status consistency
+  SELECT cd.customer_id, cd.registration_status, cp.status
+  FROM customer_details cd
+  JOIN customer_portfolios cp ON cd.customer_id = cp.customer_id
+  WHERE cd.customer_id = 39;
+  -- Result: Both 'active' (consistent)
+  
+  -- Check exchange_accounts linkage
+  SELECT ea.exchange_account_id, ea.subaccount_id, ea.deposit_ref
+  FROM exchange_accounts ea
+  JOIN customer_portfolios cp ON ea.exchange_account_id = cp.exchange_account_id
+  WHERE cp.customer_id = 39;
+  -- Result: Found valid subaccount with deposit_ref
+  
+  -- Check all email templates active
+  SELECT COUNT(*) FROM email_templates WHERE active = true;
+  -- Result: 7 templates active (all pipeline emails)
+  ```
+- **Status:** ✅ PASS (2026-01-05)
 
 ## Performance Tests
 
@@ -1152,11 +1185,11 @@ This is the **master test document** for the complete 6-milestone customer onboa
 | M3 - KYC | 10 | 10 | 0 | 0 | ✅ Complete |
 | M4 - VALR | 9 | 9 | 0 | 0 | ✅ COMPLETE |
 | M5 - Deposit | 14 | 9 | 0 | 4 | ✅ Deployed & Automated |
-| M6 - Active | 10 | 0 | 0 | 10 | ✅ Deployed |
-| Integration | 3 | 0 | 0 | 3 | ⏳ Pending M3-M6 tests |
+| M6 - Active | 10 | 5 | 0 | 5 | ✅ Deployed |
+| Integration | 3 | 3 | 0 | 0 | ✅ Complete |
 | Performance | 2 | 0 | 0 | 2 | ⏳ Pending M3-M6 tests |
 | Security | 3 | 0 | 0 | 3 | ⏳ Pending M3-M6 tests |
-| **TOTAL** | **60** | **37** | **0** | **22** | **100% built, 62% tested** |
+| **TOTAL** | **60** | **45** | **0** | **14** | **100% built, 75% tested** |
 
 ### Edge Functions Deployed
 

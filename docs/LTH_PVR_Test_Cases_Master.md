@@ -1,6 +1,6 @@
 # LTH PVR - Master Test Cases Document
-**Date:** January 4, 2026  
-**Version:** 3.0  
+**Date:** January 5, 2026  
+**Version:** 3.1  
 **Scope:** Comprehensive test coverage for all LTH PVR system components
 
 ---
@@ -22,31 +22,34 @@
 | **Alert System** | 51 | 17 | 34 | 0 | 33% |
 | **WebSocket Monitoring** | 35 | 8 | 27 | 0 | 23% |
 | **Pipeline Resume** | 30 | 22 | 8 | 1 | 73% |
-| **Customer Onboarding** | 60 | 44 | 14 | 2 | 73% |
+| **Customer Onboarding** | 60 | 45 | 14 | 1 | 75% |
 | **Portal Features** | 16 | 7 | 7 | 2 | 44% |
-| **TOTAL** | **192** | **98** | **90** | **5** | **51%** |
+| **TOTAL** | **192** | **99** | **90** | **4** | **52%** |
 
-**Status Update (2026-01-04 15:00 UTC):**
-- ✅ **Pipeline Resume: FULLY OPERATIONAL** - JWT authentication issue resolved
-- ✅ **Customer Onboarding: M1-M5 COMPLETE** - 37 of 60 tests passed (62%)
+**Status Update (2026-01-05 00:00 UTC):**
+- ✅ **Customer Onboarding: INTEGRATION TESTS COMPLETE** - 45 of 60 tests passed (75%)
   - ✅ M1 (Prospect): 100% tested
   - ✅ M2 (Strategy): 100% tested
   - ✅ M3 (KYC): 100% tested
   - ✅ M4 (VALR): 100% tested
-  - ✅ M5 (Deposit): 64% tested (TC5.7-TC5.14 completed)
-  - ⏳ M6 (Active): Pending customer activation workflow tests
+  - ✅ M5 (Deposit): 64% tested (9/14 tests)
+  - ✅ M6 (Active): 50% tested (5/10 tests)
+  - ✅ **Integration Tests (IT1, IT2, IT3): ALL PASSED** - End-to-end pipeline verified with Customer 39
+  - ⏳ Remaining M6 tests require trading pipeline run (scheduled 03:00 UTC)
+- ✅ **Bug Fixes During Integration Testing:**
+  - ef_prospect_submit: ADMIN_EMAIL default corrected
+  - Admin UI: Strategy confirmation dialog formatting fixed
+  - ef_confirm_strategy: WEBSITE_URL localhost support added
+  - website/upload-kyc.html: Portal redirect URL corrected
+  - ef_upload_kyc_id: Single admin recipient enforced
+- ✅ **Pipeline Resume: FULLY OPERATIONAL** - JWT authentication issue resolved
 - ✅ **Portal Features: ADMIN FEE MANAGEMENT FUNCTIONAL** - 7 of 16 tests passed (44%)
-  - Fee management UI tested and working
-  - RLS policies deferred (requires customer portal UI)
-  - Withdrawal/monthly close features not yet implemented
-- All core backend functions tested and working
-- Remaining tests are M6 workflow tests, RLS policies, and future features
 
 **Notes:**
 - Alert System: UI and integration tests remain pending
 - WebSocket: Blocked on live order placement for real-world testing  
 - Pipeline Resume: **End-to-end functionality verified** ✅
-- Customer Onboarding: **6-milestone pipeline functional** ✅
+- Customer Onboarding: **6-milestone pipeline + integration tests verified** ✅
 - Portal Features: Admin fee management working, customer portal UI pending
 
 ---
@@ -782,15 +785,25 @@ ORDER BY created_at DESC LIMIT 1;
 
 ### Critical Path (Must Execute Before Production)
 
-1. **Customer Onboarding M6 Tests** (Priority 1)
-   - Test 4.6.1: Full portal access for active customers
-   - Test 4.6.2: Trading pipeline inclusion
-   - Test 4.6.4: Admin sets customer inactive
+1. **Customer Onboarding M6 Tests** (Priority 1) - **5/10 COMPLETE**
+   - ✅ Test 4.6.3: Admin views active customers
+   - ✅ Test 4.6.7: Reactivate customer (manual SQL)
+   - ✅ Test 4.6.8: Active customers card - search
+   - ✅ Test 4.6.9: Active customers card - refresh
+   - ✅ Test 4.6.10: Customer status badge colors
+   - ⏳ Test 4.6.1: Full portal access for active customers (requires trading data)
+   - ⏳ Test 4.6.2: Trading pipeline inclusion (requires Jan 5 03:00 UTC run)
+   - ⏳ Test 4.6.4: Admin sets customer inactive
+   - ⏳ Test 4.6.5: Inactive customer - trading exclusion
+   - ⏳ Test 4.6.6: Inactive customer - portal access (view only)
 
-2. **Customer Onboarding Integration Tests** (Priority 2)
-   - IT1: Full pipeline end-to-end (Prospect → Active)
-   - IT2: Email flow verification (7 emails)
-   - IT3: Database state consistency
+2. **Customer Onboarding Integration Tests** (Priority 2) - **✅ 3/3 COMPLETE**
+   - ✅ IT1: Full pipeline end-to-end (Prospect → Active) - PASS (2026-01-05)
+   - ✅ IT2: Email flow verification (7 emails) - PASS (2026-01-05)
+   - ✅ IT3: Database state consistency - PASS (2026-01-05)
+   - **Test Customer:** Customer 39 (Integration TestUser, integration.test@example.com)
+   - **Duration:** 45 minutes (including 5 bug fixes)
+   - **Bugs Fixed:** ADMIN_EMAIL default, UI dialog formatting, WEBSITE_URL localhost, portal redirect, admin email recipients
 
 3. **Pipeline Resume UI Tests** (Priority 3)
    - Test 3.3.1: Panel loads successfully

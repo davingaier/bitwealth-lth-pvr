@@ -90,22 +90,21 @@ Deno.serve(async (req) => {
     const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
     const adminPortalUrl = `${websiteUrl}/ui/Advanced BTC DCA Strategy.html#management-module`;
 
-    // Send notification emails to admins (both admin addresses)
+    // Send notification email to admin
     let emailSent = false;
     let emailError = null;
-    const adminEmails = ["admin@bitwealth.co.za", "davin.gaier@gmail.com"];
+    const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 
-    for (const adminEmail of adminEmails) {
-      try {
-        const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": req.headers.get("authorization") || "",
-          },
-          body: JSON.stringify({
-            template_key: "kyc_id_uploaded_notification",
-            to_email: adminEmail,
+    try {
+      const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": req.headers.get("authorization") || "",
+        },
+        body: JSON.stringify({
+          template_key: "kyc_id_uploaded_notification",
+          to_email: adminEmail,
             data: {
               first_name: customer.first_names,
               last_name: customer.last_name,
@@ -122,17 +121,16 @@ Deno.serve(async (req) => {
           }),
         });
 
-        if (emailResponse.ok) {
-          emailSent = true;
-        } else {
-          const errorData = await emailResponse.json();
-          emailError = errorData.error || "Unknown email error";
-          console.error(`Email send failed to ${adminEmail}:`, emailError);
-        }
-      } catch (e) {
-        emailError = e.message;
-        console.error(`Email send exception to ${adminEmail}:`, e);
+      if (emailResponse.ok) {
+        emailSent = true;
+      } else {
+        const errorData = await emailResponse.json();
+        emailError = errorData.error || "Unknown email error";
+        console.error(`Email send failed to ${adminEmail}:`, emailError);
       }
+    } catch (e) {
+      emailError = e.message;
+      console.error(`Email send exception to ${adminEmail}:`, e);
     }
 
     // Return success response
