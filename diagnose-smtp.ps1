@@ -2,8 +2,8 @@
 # Tests multiple SMTP configurations to find the working one
 
 $smtpHost = "mail.bitwealth.co.za"
-$user = "admin@bitwealth.co.za"
-$pass = "D@v!nG@!er01020"
+$user = $env:SMTP_USER
+$pass = $env:SMTP_PASS
 $recipient = "admin@bitwealth.co.za"
 
 Write-Host "========================================" -ForegroundColor Cyan

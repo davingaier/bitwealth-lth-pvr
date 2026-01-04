@@ -17,7 +17,7 @@ supabase db push --project-ref wqnmxpooabmedvtackji
 # - SMTP_HOST=mail.bitwealth.co.za
 # - SMTP_PORT=587
 # - SMTP_USER=admin@bitwealth.co.za
-# - SMTP_PASS=D@v!nG@!er01020
+# - SMTP_PASS=your_smtp_password_here
 # - SMTP_SECURE=false
 # - ALERT_EMAIL_FROM=admin@bitwealth.co.za
 # - ALERT_EMAIL_TO=admin@bitwealth.co.za

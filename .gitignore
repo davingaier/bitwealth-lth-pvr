@@ -9,6 +9,10 @@
 *.pem
 secrets.txt
 replacements.txt
+passwords.txt
+*_credentials.txt
+credentials.json
+auth.json
 
 # Supabase
 .branches

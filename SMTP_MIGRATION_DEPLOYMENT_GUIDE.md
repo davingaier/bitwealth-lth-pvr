@@ -30,7 +30,7 @@ Before deploying, obtain the following from your email hosting provider:
 SMTP_HOST=mail.bitwealth.co.za   # e.g., mail.hover.com, smtp.gmail.com
 SMTP_PORT=587                             # Usually 587 for STARTTLS or 465 for SSL
 SMTP_USER=admin@bitwealth.co.za           # Your SMTP username
-SMTP_PASS=D@v!nG@!er01020              # Your SMTP password
+SMTP_PASS=your_smtp_password_here         # Your SMTP password
 SMTP_SECURE=false                         # false for port 587, true for port 465
 ```
 
@@ -41,7 +41,7 @@ Before deploying, test your SMTP credentials:
 # Using PowerShell (Windows)
 $smtp = New-Object Net.Mail.SmtpClient("mail.bitwealth.co.za", 587)
 $smtp.EnableSsl = $true
-$smtp.Credentials = New-Object System.Net.NetworkCredential("admin@bitwealth.co.za", "D@v!nG@!er01020")
+$smtp.Credentials = New-Object System.Net.NetworkCredential("admin@bitwealth.co.za", $env:SMTP_PASS)
 
 $msg = New-Object Net.Mail.MailMessage
 $msg.From = "admin@bitwealth.co.za"
@@ -106,7 +106,7 @@ Via Supabase Dashboard:
    - `SMTP_HOST` = `mail.bitwealth.co.za`
    - `SMTP_PORT` = `587`
    - `SMTP_USER` = `admin@bitwealth.co.za`
-   - `SMTP_PASS` = `D@v!nG@!er01020`
+   - `SMTP_PASS` = `your_smtp_password_here`
    - `SMTP_SECURE` = `false`
 
 3. Update existing secrets:

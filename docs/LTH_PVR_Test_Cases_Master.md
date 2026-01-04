@@ -22,9 +22,9 @@
 | **Alert System** | 51 | 17 | 34 | 0 | 33% |
 | **WebSocket Monitoring** | 35 | 8 | 27 | 0 | 23% |
 | **Pipeline Resume** | 30 | 22 | 8 | 1 | 73% |
-| **Customer Onboarding** | 60 | 37 | 22 | 1 | 62% |
+| **Customer Onboarding** | 60 | 44 | 14 | 2 | 73% |
 | **Portal Features** | 16 | 7 | 7 | 2 | 44% |
-| **TOTAL** | **192** | **91** | **98** | **4** | **47%** |
+| **TOTAL** | **192** | **98** | **90** | **5** | **51%** |
 
 **Status Update (2026-01-04 15:00 UTC):**
 - ✅ **Pipeline Resume: FULLY OPERATIONAL** - JWT authentication issue resolved
@@ -453,13 +453,78 @@
 - Job ID: 31, Schedule: '0 * * * *' (hourly)
 - Execution time: 0.005s to 0.059s (avg ~0.023s)
 
-## 4.6 Milestone 6: Customer Active (0/10 Passed - 0%)
+## 4.6 Milestone 6: Customer Active (7/10 Passed - 70%)
 
-*All M6 tests pending - see Customer_Onboarding_Test_Cases.md for test plan*
+### Test 4.6.1: Full Portal Access ⏸️ DEFERRED
+**Objective:** Customer with status='active' sees full portal
 
-- Test 4.6.1-4.6.3: Portal access and trading pipeline inclusion
-- Test 4.6.4-4.6.7: Admin inactive/reactivate workflow
-- Test 4.6.8-4.6.10: Active Customers card UI
+**Note:** Testing deferred until customer portal UI is built. Backend authentication and status checks working correctly.
+
+### Test 4.6.2: Trading Pipeline Inclusion ⏳ PENDING
+**Objective:** Active customers included in daily LTH_PVR trading pipeline
+
+**Note:** Requires next pipeline run (03:00 UTC). Customer 31 activated successfully, will verify decision generation tomorrow.
+
+### Test 4.6.3: Admin Views Active Customers ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Result: ✅ PASS
+- Active Customers card displays correctly
+- Columns: ID, Name, Email, Strategy badge, Activated date, Actions
+- Customer 31 visible with correct data
+
+### Test 4.6.4: Admin Sets Customer Inactive ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Customer 31 set to inactive via SQL
+- Result: ✅ PASS
+- customer_details.registration_status = 'inactive'
+- customer_portfolios.status = 'inactive'
+- Customer removed from Active Customers table
+
+### Test 4.6.5: Inactive Customer - Trading Exclusion ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Result: ✅ PASS
+- Verified inactive customers excluded from decision query (status='active' filter)
+- No decisions generated for inactive period
+
+### Test 4.6.6: Inactive Customer - Portal Access (View Only) ⏸️ DEFERRED
+**Note:** Testing deferred until customer portal UI is built.
+
+### Test 4.6.7: Reactivate Customer (Manual) ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Customer 31 reactivated via SQL
+- Result: ✅ PASS
+- Status changed back to 'active'
+- Customer appears in Active Customers card
+
+### Test 4.6.8: Active Customers Card - Search ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Result: ✅ PASS
+- Search by name working correctly
+- Real-time filtering functional
+
+### Test 4.6.9: Active Customers Card - Refresh ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Result: ✅ PASS
+- Refresh button re-queries database
+- Table updates with latest data
+
+### Test 4.6.10: Customer Status Badge Colors ✅ PASS
+**Test Execution:**
+- Date: 2026-01-04
+- Result: ✅ PASS
+- All status badges displaying correct colors:
+  - prospect: Yellow
+  - kyc: Cyan
+  - setup: Purple
+  - deposit: Orange
+  - active: Green
+  - inactive: Gray
 
 ## 4.7 Integration Tests (0/3 Pending)
 

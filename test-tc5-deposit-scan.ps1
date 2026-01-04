@@ -34,7 +34,7 @@ Write-Host ""
 $url = "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_deposit_scan"
 $headers = @{
     "Content-Type" = "application/json"
-    "Authorization" = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNDM0MDY4MywiZXhwIjoyMDQ5OTE2NjgzfQ.yC5oLtfQBSjyR-6oXXsFy5O8mLg2DXN-Bm9eZGjvqF4"
+    "Authorization" = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
 }
 $body = "{}"
 
