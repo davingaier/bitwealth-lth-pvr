@@ -377,33 +377,46 @@
 
                 if (error) throw error;
 
-                // Check if we have portfolio data with balances
-                if (!portfolios || portfolios.length === 0 || !portfolios[0].nav_usd) {
-                    // No balance data yet - show "trading starts tomorrow" message
+                // Check if we have portfolio data
+                if (!portfolios || portfolios.length === 0) {
+                    // No portfolio found - show "trading starts tomorrow" message
                     document.getElementById('noDataMessage').style.display = 'block';
                     document.getElementById('dashboardData').style.display = 'none';
                     return;
                 }
 
-                // We have balance data - show dashboard
-                const portfolio = portfolios[0]; // Use first portfolio
-                
-                // Update dashboard values
-                document.getElementById('navValue').textContent = `$${parseFloat(portfolio.nav_usd).toFixed(2)}`;
-                document.getElementById('btcBalance').textContent = parseFloat(portfolio.btc_balance).toFixed(8);
-                document.getElementById('usdtBalance').textContent = parseFloat(portfolio.usdt_balance).toFixed(2);
-                
-                // Calculate ROI (if we have it, otherwise show 0%)
-                // For now, just show 0% - ROI calculation would need contribution data
-                document.getElementById('roiValue').textContent = '0.00%';
+                const portfolio = portfolios[0];
 
-                // Hide "no data" message and show dashboard
-                document.getElementById('noDataMessage').style.display = 'none';
-                document.getElementById('dashboardData').style.display = 'block';
+                // Check if portfolio is active and has balance data (nav_usd should be defined, even if '0.00')
+                // Show dashboard if:
+                // 1. Portfolio status is 'active' AND
+                // 2. nav_usd is not null/undefined (even if zero)
+                if (portfolio.status === 'active' && portfolio.nav_usd !== null && portfolio.nav_usd !== undefined) {
+                    // We have balance data - show dashboard (even if zero balances)
+                    
+                    // Update dashboard values
+                    document.getElementById('navValue').textContent = `$${parseFloat(portfolio.nav_usd).toFixed(2)}`;
+                    document.getElementById('btcBalance').textContent = parseFloat(portfolio.btc_balance || 0).toFixed(8);
+                    document.getElementById('usdtBalance').textContent = parseFloat(portfolio.usdt_balance || 0).toFixed(2);
+                    
+                    // Calculate ROI (if we have it, otherwise show 0%)
+                    // For now, just show 0% - ROI calculation would need contribution data
+                    document.getElementById('roiValue').textContent = '0.00%';
+
+                    // Hide "no data" message and show dashboard
+                    document.getElementById('noDataMessage').style.display = 'none';
+                    document.getElementById('dashboardData').style.display = 'block';
+                } else {
+                    // Portfolio not active yet OR no balance data - show "trading starts tomorrow"
+                    document.getElementById('noDataMessage').style.display = 'block';
+                    document.getElementById('dashboardData').style.display = 'none';
+                }
 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
                 // On error, keep showing "trading starts tomorrow" message
+                document.getElementById('noDataMessage').style.display = 'block';
+                document.getElementById('dashboardData').style.display = 'none';
             }
         }
 
