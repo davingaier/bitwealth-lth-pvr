@@ -986,17 +986,51 @@ This is the **master test document** for the complete 6-milestone customer onboa
 
 **Status:** ✅ BUILT & DEPLOYED (2025-12-30)
 
-### TC6.1: Full Portal Access
-- **Description:** Customer with status='active' sees full portal
+### TC6.1: Customer Portal MVP Access
+- **Description:** Customer with status='active' can access customer portal with MVP features
+- **Test Customer:** Customer 31 (Jemaica Gaier)
+- **Portal URL:** http://localhost:8100/customer-portal.html
 - **Steps:**
-  1. Customer logs in with status='active'
-  2. Check available tabs/modules in portal
+  1. Customer logs in with email/password
+  2. Check available features in portal
+- **MVP Features Implemented:**
+  - ✅ Portfolio Summary Dashboard (NAV, BTC balance, USDT balance, ROI placeholder)
+  - ✅ Portfolio List (strategy, status, created date)
+  - ✅ Zero Balance Support (displays dashboard even with $0.00 - see TC6.1.1)
+  - ✅ Login/Logout functionality
+- **Features NOT Implemented (Future):**
+  - ❌ Performance chart (time-series NAV visualization)
+  - ❌ Transactions table (ledger history)
+  - ❌ Statements download (PDF generation)
+  - ❌ Settings panel
 - **Expected Result:**
-  - Dashboard: Portfolio summary, NAV, performance chart
-  - Transactions: Ledger view
-  - Statements: Monthly PDF generation
-  - All features accessible (no restrictions)
-- **Status:** ⏳ TO TEST
+  - Dashboard displays current balances
+  - No JavaScript errors
+  - Portfolio summary shows accurate data
+- **Actual Result:** ✅ PASS (2026-01-05)
+  - Portal displays correctly with Customer 31
+  - NAV: $0.00 (correct after 2.00 USDT withdrawal)
+  - BTC: 0.00000000, USDT: 0.00
+  - Portfolio shows LTH_PVR - ACTIVE
+- **Status:** ✅ PASS - MVP features working as designed
+
+### TC6.1.1: Portal Zero Balance Display
+- **Description:** Portal displays dashboard even when balances are zero (for active customers)
+- **Background:** Customer 31 had 2.00 USDT, then manually transferred out (balance reconciliation set to 0.00)
+- **Bug Found:** Portal showed "Trading starts tomorrow" for active customers with zero balances
+- **Root Cause:** JavaScript `!portfolios[0].nav_usd` treated 0 as falsy
+- **Fix Applied:** Changed to check `portfolio.status === 'active' && nav_usd !== null && nav_usd !== undefined`
+- **Test Steps:**
+  1. Customer 31 has status='active', created_at='2025-12-31', all balances = 0.00
+  2. Login to portal
+  3. Verify dashboard displays (not "Trading starts tomorrow" message)
+- **Expected Result:**
+  - Dashboard visible with $0.00 values
+  - All balance fields show zeros correctly
+- **Actual Result:** ✅ Dashboard displays correctly
+  - File modified: customer-portal.html lines 372-420
+  - Zero values now allowed through
+- **Status:** ✅ PASS (2026-01-05)
 
 ### TC6.2: Trading Pipeline Inclusion
 - **Description:** Active customers included in daily LTH_PVR trading pipeline
