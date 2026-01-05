@@ -48,7 +48,7 @@ BEGIN
       v_next_action := 'Account active - trading commenced';
     WHEN 'inactive' THEN 
       v_milestone := 6;
-      v_next_action := 'Your account is currently inactive. Trading is paused.';
+      v_next_action := 'Account inactive';
     ELSE 
       v_milestone := 1;
       v_next_action := 'Status: ' || v_customer.registration_status;

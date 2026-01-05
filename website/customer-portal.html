@@ -332,7 +332,14 @@
                 document.getElementById('progressFill').style.width = `${progress}%`;
 
                 // Update status message
-                document.getElementById('nextAction').textContent = data.next_action;
+                let statusMessage = data.next_action;
+                
+                // Override message for inactive customers
+                if (customerData.registration_status === 'inactive') {
+                    statusMessage = 'Your account is currently inactive. Trading is paused. Contact support to reactivate.';
+                }
+                
+                document.getElementById('nextAction').textContent = statusMessage;
 
             } catch (error) {
                 console.error('Error loading onboarding status:', error);
@@ -387,12 +394,16 @@
 
                 const portfolio = portfolios[0];
 
-                // Check if portfolio has balance data (nav_usd should be defined, even if '0.00')
                 // Show dashboard if:
-                // 1. Portfolio status is 'active' OR 'inactive' (view-only for inactive) AND
+                // 1. Portfolio is active or inactive (both can view balances)
                 // 2. nav_usd is not null/undefined (even if zero)
-                if ((portfolio.status === 'active' || portfolio.status === 'inactive') && portfolio.nav_usd !== null && portfolio.nav_usd !== undefined) {
-                    // We have balance data - show dashboard (even if zero balances)
+                // Only hide dashboard if status is not 'active' or 'inactive' (e.g., still onboarding)
+                const canViewDashboard = (portfolio.status === 'active' || portfolio.status === 'inactive') && 
+                                        portfolio.nav_usd !== null && 
+                                        portfolio.nav_usd !== undefined;
+                
+                if (canViewDashboard) {
+                    // We have balance data - show dashboard (view-only for inactive)
                     
                     // Update dashboard values
                     document.getElementById('navValue').textContent = `$${parseFloat(portfolio.nav_usd).toFixed(2)}`;
@@ -403,11 +414,27 @@
                     // For now, just show 0% - ROI calculation would need contribution data
                     document.getElementById('roiValue').textContent = '0.00%';
 
-                    // Hide "no data" message and show dashboard
-                    document.getElementById('noDataMessage').style.display = 'none';
+                    // Update noDataMessage for inactive customers
+                    if (portfolio.status === 'inactive') {
+                        document.getElementById('noDataMessage').innerHTML = 
+                            '<strong>⏸ Account Inactive</strong><br>' +
+                            'Your account is currently inactive. Trading is paused. Contact support to reactivate your account.';
+                        document.getElementById('noDataMessage').style.display = 'block';
+                    } else {
+                        // Active customer with no trading data yet
+                        document.getElementById('noDataMessage').innerHTML = 
+                            '<strong>Trading starts tomorrow!</strong><br>' +
+                            'Your account is active. The first trading decision will be generated at 03:00 UTC tomorrow morning. Check back then to see your portfolio performance!';
+                        document.getElementById('noDataMessage').style.display = 'none';
+                    }
+
+                    // Show dashboard
                     document.getElementById('dashboardData').style.display = 'block';
                 } else {
-                    // Portfolio not active yet OR no balance data - show "trading starts tomorrow"
+                    // Portfolio not active/inactive yet OR no balance data - show "trading starts tomorrow"
+                    document.getElementById('noDataMessage').innerHTML = 
+                        '<strong>Trading starts tomorrow!</strong><br>' +
+                        'Your account is active. The first trading decision will be generated at 03:00 UTC tomorrow morning. Check back then to see your portfolio performance!';
                     document.getElementById('noDataMessage').style.display = 'block';
                     document.getElementById('dashboardData').style.display = 'none';
                 }
