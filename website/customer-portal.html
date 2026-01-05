@@ -387,11 +387,11 @@
 
                 const portfolio = portfolios[0];
 
-                // Check if portfolio is active and has balance data (nav_usd should be defined, even if '0.00')
+                // Check if portfolio has balance data (nav_usd should be defined, even if '0.00')
                 // Show dashboard if:
-                // 1. Portfolio status is 'active' AND
+                // 1. Portfolio status is 'active' OR 'inactive' (view-only for inactive) AND
                 // 2. nav_usd is not null/undefined (even if zero)
-                if (portfolio.status === 'active' && portfolio.nav_usd !== null && portfolio.nav_usd !== undefined) {
+                if ((portfolio.status === 'active' || portfolio.status === 'inactive') && portfolio.nav_usd !== null && portfolio.nav_usd !== undefined) {
                     // We have balance data - show dashboard (even if zero balances)
                     
                     // Update dashboard values

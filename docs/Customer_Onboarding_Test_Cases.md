@@ -1101,7 +1101,12 @@ This is the **master test document** for the complete 6-milestone customer onboa
   WHERE cd.customer_id = 31;
   -- Expected: cd.registration_status='inactive', cp.status='inactive'
   ```
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ Customer successfully set to inactive
+  - Admin clicked "Set Inactive" button for Customer 31
+  - customer_details.registration_status changed to 'inactive'
+  - customer_portfolios.status changed to 'inactive'
+  - Customer removed from Active Customers table
+- **Status:** ✅ PASS (2026-01-05)
 
 ### TC6.5: Inactive Customer - Trading Exclusion
 - **Description:** Verify inactive customers excluded from trading pipeline
@@ -1122,15 +1127,24 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Status:** ⏳ TO TEST
 
 ### TC6.6: Inactive Customer - Portal Access (View Only)
-- **Description:** Inactive customers retain portal access but cannot trade
+- **Description:** Inactive customers retain portal access with view-only mode
+- **Test Customer:** Customer 31 (Jemaica Gaier) marked inactive via admin UI
 - **Steps:**
-  1. Customer logs in with status='inactive'
-  2. Check available features
+  1. Admin sets Customer 31 to inactive (TC6.4)
+  2. Customer logs in to portal
+  3. Check dashboard display and banner message
 - **Expected Result:**
-  - Can view: Dashboard, transactions, statements, historical data
-  - Cannot: Place manual orders (if feature exists)
+  - Dashboard displays with current balances (view-only)
   - Banner message: "Your account is currently inactive. Trading is paused."
-- **Status:** ⏳ TO TEST (future enhancement - not critical for launch)
+  - All historical data visible
+  - No trading actions available (manual orders disabled if feature exists)
+- **Bug Found:** Portal shows "Trading starts tomorrow" instead of dashboard for inactive customers
+  - Root Cause: loadDashboard() checks `portfolio.status === 'active'` - rejects inactive customers
+  - Banner displays: "Status: Account inactive" (correct status, wrong message format)
+- **Fix Required:** Update customer-portal.html to:
+  1. Show dashboard for both 'active' AND 'inactive' statuses (view-only for inactive)
+  2. Display proper banner message: "Your account is currently inactive. Trading is paused."
+- **Status:** 🔄 DEFERRED (2026-01-05) - Not critical for MVP launch, requires view-only mode implementation
 
 ### TC6.7: Reactivate Customer (Manual)
 - **Description:** Admin can reactivate inactive customer
