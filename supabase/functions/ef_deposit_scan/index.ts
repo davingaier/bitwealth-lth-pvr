@@ -182,6 +182,64 @@ Deno.serve(async (req) => {
             console.error(`Error updating portfolio for ${customer.customer_id}:`, updatePortfolioError);
           }
 
+          // CRITICAL: Create lth_pvr.customer_strategies row for trading pipeline inclusion
+          // Get portfolio details (strategy_version_id, exchange_account_id)
+          const { data: portfolioData, error: portfolioDataError } = await supabase
+            .from("customer_portfolios")
+            .select("portfolio_id, strategy_code")
+            .eq("customer_id", customer.customer_id)
+            .single();
+
+          if (portfolioDataError) {
+            console.error(`Error fetching portfolio data for ${customer.customer_id}:`, portfolioDataError);
+          } else {
+            // Get strategy_version_id from lth_pvr.strategy_versions
+            const { data: strategyVersion, error: strategyVersionError } = await supabase
+              .schema("lth_pvr")
+              .from("strategy_versions")
+              .select("strategy_version_id")
+              .eq("strategy_code", portfolioData.strategy_code)
+              .eq("is_latest", true)
+              .single();
+
+            if (strategyVersionError) {
+              console.error(`Error fetching strategy version for ${customer.customer_id}:`, strategyVersionError);
+            } else {
+              // Create customer_strategies row
+              const { error: customerStrategyError } = await supabase
+                .schema("lth_pvr")
+                .from("customer_strategies")
+                .insert({
+                  org_id: customer.org_id,
+                  customer_id: customer.customer_id,
+                  strategy_version_id: strategyVersion.strategy_version_id,
+                  exchange_account_id: portfolio.exchange_account_id,
+                  live_enabled: true,
+                  effective_from: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
+                  portfolio_id: portfolioData.portfolio_id,
+                });
+
+              if (customerStrategyError) {
+                console.error(`Error creating customer_strategies for ${customer.customer_id}:`, customerStrategyError);
+              } else {
+                console.log(`✓ Created customer_strategies row for customer ${customer.customer_id}`);
+              }
+            }
+          }
+
+          // Set trade_start_date (date first strategy becomes active)
+          const { error: tradeStartDateError } = await supabase
+            .from("customer_details")
+            .update({ trade_start_date: new Date().toISOString().split('T')[0] })
+            .eq("customer_id", customer.customer_id)
+            .is("trade_start_date", null); // Only set if not already set
+
+          if (tradeStartDateError) {
+            console.error(`Error setting trade_start_date for ${customer.customer_id}:`, tradeStartDateError);
+          } else {
+            console.log(`✓ Set trade_start_date for customer ${customer.customer_id}`);
+          }
+
           // Send admin notification emails (to both admin addresses)
           const adminEmails = ["admin@bitwealth.co.za", "davin.gaier@gmail.com"];
           for (const adminEmail of adminEmails) {

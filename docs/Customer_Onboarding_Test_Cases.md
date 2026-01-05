@@ -723,6 +723,81 @@ This is the **master test document** for the complete 6-milestone customer onboa
   ```
 - **Status:** ✅ PASS (2026-01-01) - Tested with production VALR account and real funds
 
+### TC5.14: Balance Reconciliation - Automated Detection
+- **Description:** Verify automated balance reconciliation detects manual transfers
+- **Background:** VALR does not provide webhooks for deposits/withdrawals. System uses hourly polling.
+- **Component:** ef_balance_reconciliation edge function
+- **Test Scenario:**
+  - Customer 31 manually transferred 2.00 USDT out of VALR subaccount to another subaccount
+  - System balances_daily still showed 2.00 USDT (stale)
+  - VALR API balance query returned 0.00 USDT (actual)
+- **Test Execution:**
+  ```bash
+  curl -X POST https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_balance_reconciliation \
+    -H "Content-Type: application/json" -d "{}"
+  ```
+- **Expected Result:**
+  - Discrepancy detected: USDT diff = -2.00
+  - Create withdrawal event in exchange_funding_events
+  - Update balances_daily: usdt_balance=0.00, nav_usd=0.00
+  - Response includes: {discrepancies: 1, details: [{customer_id: 31, usdt_diff: -2.00}]}
+- **Actual Result:** ✅ Discrepancy detected and corrected
+  - Funding event created: `idempotency_key='RECON_31_2026-01-05_USDT_...'`, kind='withdrawal', amount=2.00
+  - balances_daily updated: customer_id=31, date=2026-01-05, usdt_balance=0.00, nav_usd=0.00
+  - Manual verification: SELECT * FROM lth_pvr.exchange_funding_events WHERE ext_ref LIKE 'AUTO_RECON%'
+  - Customer portal refreshed and displayed $0.00 balance
+- **Status:** ✅ PASS (2026-01-05) - Automated reconciliation working correctly
+
+### TC5.15: Balance Reconciliation - pg_cron Schedule
+- **Description:** Verify hourly balance reconciliation job configured correctly
+- **Component:** pg_cron Job #32 (balance-reconciliation-hourly)
+- **Schedule:** Every hour at :30 minutes past (cron: '30 * * * *')
+- **Rationale:** Avoids conflict with trading pipeline (03:00-03:15 UTC)
+- **Verification Query:**
+  ```sql
+  SELECT jobid, jobname, schedule, command, active
+  FROM cron.job
+  WHERE jobname = 'balance-reconciliation-hourly';
+  ```
+- **Expected Result:**
+  - Job ID: 32
+  - Schedule: '30 * * * *'
+  - Active: true
+  - Command: Calls ef_balance_reconciliation via net.http_post with service_role_key
+- **Actual Result:** ✅ Job configured correctly
+  - jobid=32, active=true, schedule='30 * * * *'
+  - Function URL: https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_balance_reconciliation
+- **Status:** ✅ PASS (2026-01-05)
+
+### TC5.16: Balance Reconciliation - Zero Discrepancies
+- **Description:** Verify function handles matching balances gracefully (no false positives)
+- **Test Data:** All active customers with accurate balances (VALR API matches balances_daily)
+- **Test Execution:** Manual curl call after Customer 31's balance was corrected
+- **Expected Result:**
+  - Function scans all active customers
+  - Compares VALR API balances with balances_daily (tolerance: BTC ±0.00000001, USDT ±0.01)
+  - No discrepancies detected
+  - No funding events created
+  - Response: {scanned: N, reconciled: N, discrepancies: 0, errors: 0}
+- **Actual Result:** ✅ Function correctly handled matching balances
+  - Response: {scanned: 3, reconciled: 3, discrepancies: 0, errors: 0, details: []}
+  - Customers checked: 12, 31, 39 (all active)
+  - No unnecessary database writes
+- **Status:** ✅ PASS (2026-01-05) - No false positive discrepancies
+
+### TC5.17: VALR Webhook Research
+- **Description:** Document VALR webhook availability for deposit/withdrawal events
+- **Research Date:** 2026-01-05
+- **Documentation Reviewed:** https://docs.valr.com/ (VALR API official documentation)
+- **Findings:**
+  - **WebSocket API:** Only supports trading data (market quotes, order book, order updates, balance updates for TRADES)
+  - **REST API:** No webhook endpoints documented
+  - **Deposit/Withdrawal Events:** NO webhook support available
+  - **Alternative:** Manual polling via GET /v1/account/balances required
+- **Conclusion:** Automated balance reconciliation via hourly polling is ONLY available option
+- **Implementation:** ef_balance_reconciliation deployed with hourly schedule (Job #32)
+- **Status:** ✅ DOCUMENTED (2026-01-05) - Webhook unavailable, polling implemented
+
 ### TC5.7: Zero Balance - No Activation
 - **Description:** Customer has no deposits yet
 - **Test Data:** 

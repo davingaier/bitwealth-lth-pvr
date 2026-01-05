@@ -2100,11 +2100,36 @@ const signature = crypto.createHmac('sha512', apiSecret).update(payload).digest(
 - [ ] Test deposit detection with real ZAR deposit (small amount)
 - [ ] Verify deposit reference matching logic in `ef_valr_deposit_scan`
 
+#### Day 19: Balance Reconciliation System ✅ COMPLETE (2026-01-05)
+- [x] Researched VALR webhook support (NONE AVAILABLE - must use polling)
+- [x] Created `ef_balance_reconciliation` edge function
+  - Queries VALR API for all active customer balances
+  - Compares with `lth_pvr.balances_daily` (tolerance: BTC ±1 satoshi, USDT ±1 cent)
+  - Auto-creates funding events for discrepancies
+  - Updates balances_daily to match VALR reality
+- [x] Added pg_cron job (hourly at :30, Job #32)
+- [x] Deployed and tested (3 customers scanned, zero discrepancies)
+- [x] Created `docs/Balance_Reconciliation_System.md` documentation
+- [x] Updated SDD v0.6.9, test case documents
+
+**Rationale:** VALR API docs have no webhook endpoints for deposits/withdrawals. WebSocket API only covers trading data (market quotes, order updates), not bank transfers. Hourly polling acceptable for production (max 60-minute lag for manual transfers).
+
 ---
 
 ## 19. Post-Launch Enhancement Backlog
 
-### 19.1 KYC Document URL Regeneration (Medium Priority)
+### 19.1 Balance Reconciliation Enhancements (Low Priority) ✅ CORE COMPLETE
+
+**Core Feature:** Automated balance reconciliation via hourly VALR API polling ✅ COMPLETE (v0.6.9)
+
+**Future Enhancements:**
+- Historical reconciliation (check past balances for drift)
+- Large discrepancy alerts (>$100 USD) integrate with `lth_pvr.raise_alert()`
+- Daily reconciliation report email (summary of all discrepancies found)
+- Balance drift dashboard (track cumulative discrepancies per customer over time)
+- VALR webhook migration (if/when VALR adds webhook support for deposits/withdrawals)
+
+### 19.2 KYC Document URL Regeneration (Medium Priority)
 
 **Problem:**
 - Signed URLs for KYC documents expire after 1 year (31,536,000 seconds)

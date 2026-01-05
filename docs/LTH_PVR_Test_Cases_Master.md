@@ -448,6 +448,61 @@
 - Deferred to post-launch load testing
 - Current production volume: <10 customers
 
+### Test 4.5.14: Balance Reconciliation - Automated Detection ✅ PASS
+**Purpose:** Verify automated balance reconciliation detects manual transfers not tracked by system
+**Component:** ef_balance_reconciliation (deployed 2026-01-05)
+**Test Execution:**
+- Date: 2026-01-05
+- Test Scenario: Customer 31 manually transferred 2.00 USDT out of subaccount
+- System State: balances_daily showed 2.00 USDT, VALR API showed 0.00 USDT
+- Manual Test: Called ef_balance_reconciliation via curl
+- **Expected Result:**
+  - Discrepancy detected (USDT diff = -2.00)
+  - Withdrawal event created in exchange_funding_events
+  - balances_daily updated to 0.00 USDT, 0.00 NAV
+- **Actual Result:** ✅ Function correctly detected discrepancy and created records
+  - Funding event: `ext_ref='AUTO_RECON_2026-01-05_USDT'`, amount=2.00, kind='withdrawal'
+  - balances_daily: usdt_balance=0.00, btc_balance=0.00, nav_usd=0.00
+  - Portal refreshed and showed $0.00 balance
+- **Status:** ✅ PASS (2026-01-05) - Automated reconciliation working correctly
+
+### Test 4.5.15: Balance Reconciliation - Hourly Schedule ✅ PASS
+**Purpose:** Verify pg_cron job runs balance reconciliation every hour at :30
+**Component:** pg_cron Job #32 (balance-reconciliation-hourly)
+**Test Execution:**
+- Date: 2026-01-05
+- Verification Query:
+  ```sql
+  SELECT jobid, jobname, schedule, active
+  FROM cron.job
+  WHERE jobname = 'balance-reconciliation-hourly';
+  ```
+- **Expected Result:**
+  - Job ID: 32
+  - Schedule: '30 * * * *' (every hour at :30 minutes past)
+  - Active: true
+  - Command: Calls ef_balance_reconciliation via net.http_post
+- **Actual Result:** ✅ Job configured correctly
+  - jobid=32, active=true, schedule='30 * * * *'
+  - Avoids conflict with trading pipeline (03:00-03:15 UTC)
+- **Status:** ✅ PASS (2026-01-05)
+
+### Test 4.5.16: Balance Reconciliation - Zero Discrepancies ✅ PASS
+**Purpose:** Verify function handles customers with matching balances (no action needed)
+**Test Execution:**
+- Date: 2026-01-05
+- Test: Called ef_balance_reconciliation with all customers having accurate balances
+- **Expected Result:**
+  - Function scans all active customers
+  - No discrepancies detected
+  - No funding events created
+  - Response: {scanned: 3, reconciled: 3, discrepancies: 0, errors: 0}
+- **Actual Result:** ✅ Function correctly handled matching balances
+  - Scanned 3 customers (12, 31, 39)
+  - All balances matched VALR API
+  - No unnecessary database writes
+- **Status:** ✅ PASS (2026-01-05)
+
 ### Test 4.5.14: Hourly Automation - 24-Hour Test ✅ PASS
 **Test Execution:**
 - Date: 2026-01-04

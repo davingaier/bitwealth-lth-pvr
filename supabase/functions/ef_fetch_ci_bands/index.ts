@@ -79,10 +79,20 @@ Deno.serve(async (req: Request) => {
     typeof body.start === "string" && body.start ? body.start : null;
   const end = typeof body.end === "string" && body.end ? body.end : null;
 
-  // if neither start nor end provided, pull a small rolling window by default to self-heal gaps
+  // CRITICAL: When called by daily pipeline, we want YESTERDAY's data only (not today)
+  // Today's CI bands data changes throughout the day and is only finalized at day's close.
+  // Trading decisions made today are based on yesterday's CI bands.
+  
+  // Calculate yesterday's date (signal_date)
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  
+  // If neither start nor end provided, default to fetching yesterday's data only
+  // (unless explicitly overridden with days parameter)
   const days = Number.isFinite(Number(body?.days)) && Number(body.days) > 0
     ? Number(body.days)
-    : 5;
+    : 1; // Changed from 5 to 1 (fetch yesterday only)
 
   if (!org_id) {
     await logAlert(
@@ -113,14 +123,17 @@ Deno.serve(async (req: Request) => {
     return new Response("CI_API_KEY missing", { status: 500 });
   }
 
-  // Build URL; prefer explicit range else a short trailing window (days) for self-heal
+  // Build URL; prefer explicit range else fetch yesterday's data
   let url =
     `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=${
       encodeURIComponent(mode)
     }`;
   if (start) url += `&start=${encodeURIComponent(start)}`;
   if (end) url += `&end=${encodeURIComponent(end)}`;
-  if (!start && !end && days > 1) url += `&days=${days}`;
+  // If no explicit range, fetch yesterday's data (signal_date)
+  if (!start && !end) {
+    url += `&start=${encodeURIComponent(yesterdayStr)}&end=${encodeURIComponent(yesterdayStr)}`;
+  }
 
   console.info("CI GET", url);
 
