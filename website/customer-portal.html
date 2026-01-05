@@ -250,6 +250,43 @@
                 <h2>💼 Your Portfolios</h2>
                 <div id="portfolioList">Loading portfolios...</div>
             </div>
+
+            <!-- Transaction History Card -->
+            <div class="card">
+                <h2>📜 Transaction History</h2>
+                <div id="transactionHistory">
+                    <div id="transactionLoading" style="text-align: center; padding: 20px; color: #64748b;">
+                        Loading transactions...
+                    </div>
+                    <div id="transactionError" style="display: none; padding: 15px; background: #fee2e2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 8px;">
+                        Error loading transactions. Please refresh the page.
+                    </div>
+                    <div id="transactionTable" style="display: none;">
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Date</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Type</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">BTC</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">USDT</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Fee (BTC)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Fee (USDT)</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transactionTableBody">
+                                    <!-- Rows will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="noTransactions" style="display: none; text-align: center; padding: 40px; color: #94a3b8;">
+                            <p style="font-size: 16px; margin-bottom: 10px;">📭 No transactions yet</p>
+                            <p style="font-size: 14px;">Transactions will appear here after your first trade.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -299,6 +336,9 @@
 
                 // Load portfolio dashboard (balances)
                 await loadDashboard(customers.customer_id);
+
+                // Load transaction history
+                await loadTransactionHistory(customers.customer_id);
 
                 // Show content
                 document.getElementById('loading').style.display = 'none';
@@ -444,6 +484,86 @@
                 // On error, keep showing "trading starts tomorrow" message
                 document.getElementById('noDataMessage').style.display = 'block';
                 document.getElementById('dashboardData').style.display = 'none';
+            }
+        }
+
+        async function loadTransactionHistory(customerId) {
+            try {
+                const { data: transactions, error } = await sb.rpc('list_customer_transactions', {
+                    p_customer_id: customerId,
+                    p_limit: 100
+                });
+
+                if (error) throw error;
+
+                // Hide loading, show table
+                document.getElementById('transactionLoading').style.display = 'none';
+                document.getElementById('transactionTable').style.display = 'block';
+
+                if (!transactions || transactions.length === 0) {
+                    // No transactions yet
+                    document.getElementById('noTransactions').style.display = 'block';
+                    return;
+                }
+
+                // Populate table
+                const tbody = document.getElementById('transactionTableBody');
+                tbody.innerHTML = transactions.map(tx => {
+                    // Format date
+                    const date = new Date(tx.trade_date).toLocaleDateString();
+                    
+                    // Determine type display and color
+                    let typeDisplay = tx.kind.charAt(0).toUpperCase() + tx.kind.slice(1);
+                    let typeColor = '#64748b'; // default gray
+                    
+                    // Map "topup" to "Deposit" for display
+                    if (tx.kind === 'topup') {
+                        typeDisplay = 'Deposit';
+                    }
+                    
+                    if (tx.kind === 'buy' || tx.kind === 'deposit' || tx.kind === 'topup') {
+                        typeColor = '#10b981'; // green
+                    } else if (tx.kind === 'sell' || tx.kind === 'withdrawal') {
+                        typeColor = '#ef4444'; // red
+                    } else if (tx.kind === 'fee') {
+                        typeColor = '#f59e0b'; // orange
+                    }
+                    
+                    // Format amounts
+                    const btcAmount = parseFloat(tx.amount_btc || 0).toFixed(8);
+                    const usdtAmount = parseFloat(tx.amount_usdt || 0).toFixed(2);
+                    const feeBtc = parseFloat(tx.fee_btc || 0).toFixed(8);
+                    const feeUsdt = parseFloat(tx.fee_usdt || 0).toFixed(2);
+                    
+                    // Color code amounts
+                    const btcColor = parseFloat(tx.amount_btc) >= 0 ? '#10b981' : '#ef4444';
+                    const usdtColor = parseFloat(tx.amount_usdt) >= 0 ? '#10b981' : '#ef4444';
+                    
+                    // Note display (truncate long notes)
+                    const note = tx.note || '-';
+                    const noteDisplay = note.length > 40 ? note.substring(0, 40) + '...' : note;
+                    
+                    return `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 12px; font-size: 14px; color: #1e3a8a;">${date}</td>
+                            <td style="padding: 12px;">
+                                <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; color: white; background: ${typeColor};">
+                                    ${typeDisplay}
+                                </span>
+                            </td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${btcColor}; font-weight: 500;">${btcAmount}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${usdtColor}; font-weight: 500;">${usdtAmount}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: #64748b;">${feeBtc}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: #64748b;">${feeUsdt}</td>
+                            <td style="padding: 12px; font-size: 13px; color: #64748b;" title="${note}">${noteDisplay}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('Error loading transaction history:', error);
+                document.getElementById('transactionLoading').style.display = 'none';
+                document.getElementById('transactionError').style.display = 'block';
             }
         }
 

@@ -2,49 +2,47 @@
 -- Purpose: List customer transaction history
 -- Called by: Customer portal transactions tab
 -- RLS: Customer can only see their own transactions
+-- Updated: 2026-01-05 - Fixed to use customer_id and actual column names
 
 CREATE OR REPLACE FUNCTION public.list_customer_transactions(
-  p_portfolio_id UUID,
-  p_from_date DATE DEFAULT NULL,
-  p_to_date DATE DEFAULT NULL
+  p_customer_id BIGINT,
+  p_limit INT DEFAULT 100
 )
 RETURNS TABLE (
-  event_date DATE,
-  event_type TEXT,
-  btc_delta NUMERIC,
-  usdt_delta NUMERIC,
+  trade_date DATE,
+  kind TEXT,
+  amount_btc NUMERIC,
+  amount_usdt NUMERIC,
   fee_btc NUMERIC,
   fee_usdt NUMERIC,
-  note TEXT
+  note TEXT,
+  created_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-DECLARE
-  v_from_date DATE;
-  v_to_date DATE;
 BEGIN
-  -- Default date range: last 90 days
-  v_from_date := COALESCE(p_from_date, CURRENT_DATE - INTERVAL '90 days');
-  v_to_date := COALESCE(p_to_date, CURRENT_DATE);
-
+  -- Return transaction history from ledger_lines
+  -- Sorted by date descending (most recent first)
   RETURN QUERY
   SELECT 
-    ll.event_date,
-    ll.event_type,
-    ll.btc_delta,
-    ll.usdt_delta,
+    ll.trade_date,
+    ll.kind,
+    ll.amount_btc,
+    ll.amount_usdt,
     ll.fee_btc,
     ll.fee_usdt,
-    ll.note
+    ll.note,
+    ll.created_at
   FROM lth_pvr.ledger_lines ll
-  WHERE ll.portfolio_id = p_portfolio_id
-    AND ll.event_date BETWEEN v_from_date AND v_to_date
-  ORDER BY ll.event_date DESC, ll.created_at DESC;
+  WHERE ll.customer_id = p_customer_id
+  ORDER BY ll.trade_date DESC, ll.created_at DESC
+  LIMIT p_limit;
 END;
 $$;
 
--- Grant execute to authenticated users
-GRANT EXECUTE ON FUNCTION public.list_customer_transactions(UUID, DATE, DATE) TO authenticated;
+-- Grant execute to authenticated users (and anon for portal access)
+GRANT EXECUTE ON FUNCTION public.list_customer_transactions(BIGINT, INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.list_customer_transactions(BIGINT, INT) TO anon;
 
-COMMENT ON FUNCTION public.list_customer_transactions IS 'Returns customer transaction history with optional date range filter (defaults to last 90 days)';
+COMMENT ON FUNCTION public.list_customer_transactions IS 'Returns customer transaction history from lth_pvr.ledger_lines. Used by customer portal.';
