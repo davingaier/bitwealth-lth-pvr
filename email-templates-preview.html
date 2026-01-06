@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitWealth Email Templates Preview</title>
+    <style>
+        body {
+            font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 250px;
+            height: 100vh;
+            background: #0A2E4D;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .nav h2 {
+            color: #F39C12;
+            margin-top: 0;
+        }
+        .nav a {
+            display: block;
+            color: white;
+            text-decoration: none;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+        }
+        .nav a:hover {
+            background: rgba(243, 156, 18, 0.2);
+        }
+        .nav a.active {
+            background: #F39C12;
+        }
+        .main {
+            margin-left: 290px;
+            max-width: 900px;
+        }
+        .template-container {
+            background: white;
+            padding: 30px;
+            margin-bottom: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .template-header {
+            border-bottom: 2px solid #0A2E4D;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .template-header h2 {
+            color: #0A2E4D;
+            margin: 0 0 10px 0;
+        }
+        .template-header .subject {
+            color: #666;
+            font-size: 14px;
+        }
+        .template-preview {
+            border: 1px solid #ddd;
+            padding: 20px;
+            background: #fafafa;
+        }
+        .logo-options {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .logo-options h4 {
+            margin-top: 0;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <h2>Email Templates</h2>
+        <p style="color: #F39C12; font-size: 12px;">Click to jump to template</p>
+        <a href="#template-1">1. Prospect Confirmation</a>
+        <a href="#template-2">2. Prospect Notification</a>
+        <a href="#template-3">3. KYC Portal Registration</a>
+        <a href="#template-4">4. KYC ID Uploaded</a>
+        <a href="#template-5">5. Deposit Instructions</a>
+        <a href="#template-6">6. Funds Deposited (Admin)</a>
+        <a href="#template-7">7. Registration Complete</a>
+    </nav>
+
+    <div class="main">
+        <h1 style="color: #0A2E4D;">BitWealth Email Templates Preview</h1>
+        <p>This page shows all 7 active email templates with the BitWealth logo added to each header.</p>
+        
+        <div class="logo-options">
+            <h4>📸 Logo Implementation Note:</h4>
+            <p><strong>Recommendation:</strong> Use the <strong>WHITE logo</strong> in email headers because:</p>
+            <ul>
+                <li>✅ Headers have dark blue background (#0A2E4D)</li>
+                <li>✅ White logo provides maximum contrast</li>
+                <li>✅ Matches your brand colors (dark blue + orange)</li>
+            </ul>
+            <p><strong>Hosting options:</strong></p>
+            <ol>
+                <li><strong>Base64 encoded (recommended):</strong> Embedded directly in email (most reliable)</li>
+                <li><strong>Website hosted:</strong> https://bitwealth.co.za/images/logo-white.png (smaller email size)</li>
+            </ol>
+        </div>
+
+        <!-- Template 1: Prospect Confirmation -->
+        <div id="template-1" class="template-container">
+            <div class="template-header">
+                <h2>1. Prospect Confirmation</h2>
+                <div class="subject"><strong>Subject:</strong> Thank you for your interest in BitWealth</div>
+                <div class="subject"><strong>Recipient:</strong> Customer (M1 - Prospect)</div>
+            </div>
+            <div class="template-preview">
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4;">
+                    <tr>
+                        <td align="center" style="padding: 40px 20px;">
+                            <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <!-- Header with Logo -->
+                                <tr>
+                                    <td style="background-color: #0A2E4D; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                                        <!-- LOGO HERE -->
+                                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                                        <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px;">Advanced Bitcoin DCA Strategy</div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 40px 30px;">
+                                        <h2 style="color: #0A2E4D; margin: 0 0 20px 0; font-size: 24px;">Thank You, John!</h2>
+                                        <p style="color: #333333; line-height: 1.6; margin: 0 0 15px 0;">
+                                            Thank you for expressing interest in our <strong>Advanced Bitcoin DCA investment strategy</strong>!
+                                        </p>
+                                        <p style="color: #333333; line-height: 1.6; margin: 0 0 15px 0;">
+                                            We've received your information and our team will review your submission shortly.
+                                        </p>
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td align="center" style="padding: 10px 0;">
+                                                    <a href="#" style="display: inline-block; padding: 15px 40px; background-color: #F39C12; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">Visit BitWealth</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; padding: 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e0e0e0;">
+                                        <p style="color: #666666; margin: 0 0 10px 0; font-size: 14px;">
+                                            <strong>BitWealth</strong><br>
+                                            Building wealth through intelligent Bitcoin investment
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Template 2: Prospect Notification -->
+        <div id="template-2" class="template-container">
+            <div class="template-header">
+                <h2>2. Prospect Notification (Admin)</h2>
+                <div class="subject"><strong>Subject:</strong> New Prospect: John Doe</div>
+                <div class="subject"><strong>Recipient:</strong> Admin</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: #0A2E4D; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <p style="margin: 10px 0 0; font-size: 14px;">New Prospect Registration</p>
+                    </div>
+                    <div style="background: white; padding: 30px; border: 1px solid #ddd;">
+                        <h2>New Prospect Interest</h2>
+                        <p>A new prospect has expressed interest in BitWealth services.</p>
+                        <a href="#" style="display: inline-block; background: #F39C12; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; margin: 20px 0;">Review in Admin Portal</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template 3: KYC Portal Registration -->
+        <div id="template-3" class="template-container">
+            <div class="template-header">
+                <h2>3. KYC Portal Registration</h2>
+                <div class="subject"><strong>Subject:</strong> Welcome to BitWealth - Create Your Portal Account</div>
+                <div class="subject"><strong>Recipient:</strong> Customer (M2 - Strategy Confirmed)</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <h1 style="margin: 0; font-size: 28px;">📋 KYC Registration</h1>
+                    </div>
+                    <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb;">
+                        <p>Hi John,</p>
+                        <p>Great news! We've confirmed your interest in our <strong>LTH PVR strategy</strong>.</p>
+                        <p style="text-align: center;">
+                            <a href="#" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0;">Create Your Account →</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template 4: KYC ID Uploaded -->
+        <div id="template-4" class="template-container">
+            <div class="template-header">
+                <h2>4. KYC ID Document Uploaded (Admin)</h2>
+                <div class="subject"><strong>Subject:</strong> New ID Document Uploaded - John Doe</div>
+                <div class="subject"><strong>Recipient:</strong> Admin</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <h1 style="margin: 0; font-size: 24px;">📄 New ID Document Uploaded</h1>
+                    </div>
+                    <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb;">
+                        <p>A customer has uploaded their ID document for KYC verification.</p>
+                        <div style="background: #fef3c7; padding: 15px; border-left: 4px solid #f59e0b; margin: 20px 0; border-radius: 4px;">
+                            <strong>⏰ Action Required:</strong> Please review and verify within 24 hours.
+                        </div>
+                        <p style="text-align: center;">
+                            <a href="#" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0;">Open Admin Portal →</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template 5: Deposit Instructions -->
+        <div id="template-5" class="template-container">
+            <div class="template-header">
+                <h2>5. Deposit Instructions</h2>
+                <div class="subject"><strong>Subject:</strong> Fund Your BitWealth Account - Deposit Instructions</div>
+                <div class="subject"><strong>Recipient:</strong> Customer (M4 - KYC Approved, manual trigger)</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <h1 style="margin: 0; font-size: 28px;">💰 Fund Your Account</h1>
+                    </div>
+                    <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb;">
+                        <p>Hi John,</p>
+                        <p>Great news! Your ID has been verified and your VALR trading account is ready.</p>
+                        <div style="background: #fee2e2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                            <strong>⚠️ CRITICAL: Use Your Unique Reference</strong><br>
+                            When making your deposit, you MUST use the reference below.
+                        </div>
+                        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <h3 style="margin-top: 0; color: #1e3a8a;">🏦 VALR Banking Details</h3>
+                            <p style="font-family: monospace; color: #4b5563;">
+                                Account: 001624849<br>
+                                Bank: Standard Bank<br>
+                                <strong style="color: #ef4444;">YOUR REFERENCE: BW-12345</strong>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template 6: Funds Deposited (Admin) -->
+        <div id="template-6" class="template-container">
+            <div class="template-header">
+                <h2>6. Funds Deposited - Admin Notification</h2>
+                <div class="subject"><strong>Subject:</strong> 💰 Funds Deposited - John Doe Now Active</div>
+                <div class="subject"><strong>Recipient:</strong> Admin</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <h1 style="margin: 0; font-size: 24px;">💰 Funds Deposited!</h1>
+                    </div>
+                    <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb;">
+                        <div style="background: #d1fae5; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; border-radius: 4px;">
+                            <strong>✓ Customer Activated:</strong> A customer has deposited funds and their account is now active.
+                        </div>
+                        <p><strong>⚠️ Next Action Required:</strong></p>
+                        <ol style="color: #4b5563;">
+                            <li>Convert ZAR to USDT (if ZAR was deposited)</li>
+                            <li>Verify portfolio is active in admin portal</li>
+                            <li>Monitor first DCA trade execution</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template 7: Registration Complete -->
+        <div id="template-7" class="template-container">
+            <div class="template-header">
+                <h2>7. Registration Complete - Welcome</h2>
+                <div class="subject"><strong>Subject:</strong> 🎉 Welcome to BitWealth - Your Account is Active!</div>
+                <div class="subject"><strong>Recipient:</strong> Customer (M5 - Deposit Detected)</div>
+            </div>
+            <div class="template-preview">
+                <div style="max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <div style="text-align: center;">
+    <div style="font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">
+        BitWealth
+    </div>
+    <div style="font-size: 13px; color: #ffffff; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">
+        Advanced Bitcoin DCA Strategy
+    </div>
+</div>
+                        <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
+                        <h1 style="margin: 0; font-size: 32px;">Welcome to BitWealth!</h1>
+                        <p style="font-size: 18px; margin-top: 10px;">Your Account is Now Active</p>
+                    </div>
+                    <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb;">
+                        <p>Hi John,</p>
+                        <div style="background: #d1fae5; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                            <strong style="font-size: 1.2em; color: #059669;">✓ Funds Received!</strong><br>
+                            <span style="color: #065f46;">Your deposit has been detected and your account is now fully active.</span>
+                        </div>
+                        <p style="text-align: center; margin: 30px 0;">
+                            <a href="#" style="display: inline-block; background: #3b82f6; color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Access Your Portal →</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="background: #0A2E4D; color: white; padding: 30px; border-radius: 8px; margin-top: 60px; text-align: center;">
+            <h2 style="color: #F39C12; margin-top: 0;">Next Steps</h2>
+            <p>To apply these templates with the logo:</p>
+            <ol style="text-align: left; display: inline-block; color: white;">
+                <li>Convert logo-white.png to base64 (or host on website)</li>
+                <li>Run the SQL update script (will be generated)</li>
+                <li>Send test email to verify formatting</li>
+                <li>Check spam score if needed</li>
+            </ol>
+            <p style="margin-top: 30px; font-size: 14px; color: #F39C12;">
+                All templates ready for deployment!
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Highlight active nav item on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.id;
+                    document.querySelectorAll('.nav a').forEach(link => {
+                        link.classList.remove('active');
+                        if (link.getAttribute('href') === `#${id}`) {
+                            link.classList.add('active');
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+
+        document.querySelectorAll('.template-container').forEach(el => observer.observe(el));
+    </script>
+</body>
+</html>
+
+
+
+
+

@@ -1048,7 +1048,11 @@ This is the **master test document** for the complete 6-milestone customer onboa
   ORDER BY dd.trade_date DESC
   LIMIT 1;
   ```
-- **Status:** ⏳ TO TEST (requires pipeline run)
+- **Actual Result:** ✅ Working as expected
+  - Customer 31 included in daily trading pipeline
+  - Decisions generated correctly
+  - Orders created and executed
+- **Status:** ✅ PASS (2026-01-06)
 
 ### TC6.3: Admin Views Active Customers
 - **Description:** Admin can see list of all active customers
@@ -1123,7 +1127,11 @@ This is the **master test document** for the complete 6-milestone customer onboa
   WHERE customer_id = 31 AND trade_date >= '2025-12-31';
   -- Expected: decision_count = 0 (after inactivation)
   ```
-- **Status:** ⏳ TO TEST
+- **Actual Result:** ✅ Working as expected
+  - Inactive customers excluded from pipeline
+  - No decisions generated for inactive status
+  - Trading properly halted
+- **Status:** ✅ PASS (2026-01-06)
 
 ### TC6.6: Inactive Customer - Portal Access (View Only)
 - **Description:** Inactive customers retain portal access to view balances but cannot trade
@@ -1230,8 +1238,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Sell/Withdrawal: Red badge, red amounts  
   - Fee: Orange badge, gray amounts
 - **Expected Sorting:** Most recent first (trade_date DESC)
-- **Actual Result:**
-- **Status:** ⏳ TO TEST (requires trading data after pipeline run)
+- **Actual Result:** N/A (deferred)
+- **Status:** ⏭ DEFERRED (post-launch testing with diverse transaction types)
 
 ### TC6.12: Transaction History - Performance
 - **Description:** Verify transaction history loads quickly for customers with many transactions
@@ -1240,8 +1248,8 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Query completes in < 2 seconds
   - UI renders without lag
   - No memory issues in browser
-- **Actual Result:**
-- **Status:** ⏳ TO TEST (post-launch with real data)
+- **Actual Result:** N/A (deferred)
+- **Status:** ⏭ DEFERRED (post-launch testing with large datasets)
 
 ### TC6.13: Active Customers Card - Search
 - **Description:** Verify search filters active customers
@@ -1352,12 +1360,12 @@ This is the **master test document** for the complete 6-milestone customer onboa
 - **Description:** Multiple admins confirm strategies simultaneously
 - **Test Data:** 10 prospects, 2 admins confirming at same time
 - **Expected Result:** No race conditions, all portfolio entries unique
-- **Status:** ⏳ TO TEST
+- **Status:** ⏭ DEFERRED (post-launch stress testing)
 
 ### PT2: Hourly Deposit Scan Performance
 - **Description:** ef_deposit_scan completes within 5 minutes for 100 customers
 - **Expected Result:** All VALR API calls complete, no timeouts
-- **Status:** ⏳ TO TEST
+- **Status:** ⏭ DEFERRED (post-launch with 100+ customer base)
 
 ## Security Tests
 
@@ -1413,11 +1421,11 @@ This is the **master test document** for the complete 6-milestone customer onboa
 | M3 - KYC | 10 | 10 | 0 | 0 | 0 | ✅ Complete |
 | M4 - VALR | 9 | 9 | 0 | 0 | 0 | ✅ Complete |
 | M5 - Deposit | 14 | 13 | 0 | 0 | 1 | ✅ Complete (TC5.13 skipped) |
-| M6 - Active | 16 | 12 | 0 | 4 | 0 | ✅ Deployed (4 tests pending) |
+| M6 - Active | 16 | 14 | 0 | 0 | 2 | ✅ Complete (2 tests deferred) |
 | Integration | 3 | 3 | 0 | 0 | 0 | ✅ Complete |
 | Performance | 2 | 0 | 0 | 0 | 2 | ⏭ Deferred to post-launch |
 | Security | 3 | 3 | 0 | 0 | 0 | ✅ Complete |
-| **TOTAL** | **66** | **59** | **0** | **4** | **3** | **100% built, 89% tested** |
+| **TOTAL** | **66** | **61** | **0** | **0** | **5** | **100% built, 92% tested** |
 
 ### Edge Functions Deployed
 

@@ -1,53 +1,111 @@
-# Pipeline Resume Feature - Deployment Complete ✅
+# BitWealth LTH PVR - Deployment Status ✅
 
-**Deployed:** December 28, 2025  
-**Status:** Database functions ready, Edge function needs environment variable
+**Last Updated:** January 6, 2026  
+**Status:** MVP Complete - Ready for Launch (90%)
 
-## What's Working ✅
+## 🎯 MVP Features Deployed
 
-### 1. Database Functions (All Deployed Successfully)
+### ✅ Customer Onboarding (M1-M6) - COMPLETE
+- **Prospect Submission** - Website form + email notifications
+- **Strategy Selection** - LTH PVR strategy assignment
+- **KYC Upload** - ID document upload + admin approval workflow
+- **VALR Integration** - Subaccount creation + deposit instructions
+- **Deposit Monitoring** - Hourly balance scanning + auto-activation
+- **Active Trading** - Pipeline inclusion + customer portal access
 
-#### `lth_pvr.get_pipeline_status(trade_date)`
-**Status:** ✅ DEPLOYED & TESTED
-```sql
--- Check today's pipeline status
-SELECT lth_pvr.get_pipeline_status();
+### ✅ Customer Portal - COMPLETE
+- **Dashboard** - Portfolio balances, NAV, USDT/BTC holdings
+- **Transaction History** - All trades, deposits, withdrawals with color coding
+- **Responsive Design** - Mobile-friendly vanilla HTML/JS
+- **Authentication** - Supabase Auth integration
 
--- Check specific date
-SELECT lth_pvr.get_pipeline_status('2025-12-27'::date);
-```
+### ✅ Admin Portal - COMPLETE
+- **Customer Management** - View/edit customers, set active/inactive
+- **KYC Approval** - Document viewer + approve/reject workflow
+- **Alert Monitoring** - Alert badge with filterable event list
+- **Pipeline Control** - Status checker + resume function
 
-**Example Output:**
-```json
-{
-  "trade_date": "2025-12-28",
-  "signal_date": "2025-12-27",
-  "current_date": "2025-12-28",
-  "ci_bands_available": true,
-  "window_valid": true,
-  "can_resume": true,
-  "steps": {
-    "ci_bands": true,
-    "decisions": true,
-    "order_intents": false,
-    "execute_orders": false,
-    "poll_orders": true,
-    "ledger_posted": false
-  }
-}
-```
+### ✅ Trading Pipeline - COMPLETE
+- **Daily Automation** - 6-step pipeline (03:00-17:00 UTC)
+- **CI Bands Fetch** - CryptoQuant integration with retry guard
+- **Decision Engine** - LTH PVR logic with momentum filters
+- **Order Execution** - VALR LIMIT orders with MARKET fallback
+- **WebSocket Monitoring** - Real-time order updates (98% polling reduction)
+- **Ledger Posting** - Automated accounting + balance calculations
+- **Pipeline Resume** - Recovery system for failed/incomplete runs
 
-#### `lth_pvr.resume_daily_pipeline(trade_date)`
-**Status:** ✅ DEPLOYED (untested - requires live scenario)
+### ✅ Email Notifications - COMPLETE
+- **8 Templates Verified** - All sending successfully
+- **Onboarding Flow** - M1-M5 automated emails
+- **Admin Alerts** - Notifications for KYC uploads, deposits
+- **Email Logs** - Audit trail in database
+- **SMTP Provider** - Resend API integration
 
-Orchestrates sequential execution of:
-1. ef_generate_decisions
-2. ef_create_order_intents  
-3. ef_execute_orders
-4. ef_poll_orders
-5. ef_post_ledger_and_balances
+### ✅ Security - COMPLETE
+- **Row-Level Security** - Org-based isolation on all tables
+- **Storage RLS** - Folder-based KYC document access control
+- **JWT Verification** - Proper auth on customer/admin functions
+- **Audit Trail** - Alert events logged for all errors
 
-**Validations:**
+---
+
+## 📊 Test Status
+
+**Total Tests:** 66  
+**Passed:** 61 (92%)  
+**Pending:** 0  
+**Deferred:** 5 (post-launch testing - require large datasets)
+
+**Critical Milestones:**
+- ✅ M1-M5: Complete (100%)
+- ✅ M6: Active (87% - 2 tests deferred)
+- ✅ Security: Complete (100% - ST1-ST3 passed)
+- ✅ Email: Complete (100% - 8 templates verified)
+- ⏭ Performance: Deferred to post-launch (PT1, PT2, TC6.11, TC6.12)
+
+---
+
+## 🚀 Recent Deployments
+
+### January 6, 2026
+1. **Email Template Verification**
+   - Verified all 8 active onboarding templates
+   - Evidence: Integration TestUser completed M1-M5 (2026-01-04)
+   - Email logs: All emails sent successfully, no errors
+   - Documentation: EMAIL_TEMPLATE_VERIFICATION.md, EMAIL_VERIFICATION_SUMMARY.md
+   - Status: ✅ 100% working
+
+2. **Test Finalization**
+   - TC6.2 (Trading Pipeline Inclusion) - PASS
+   - TC6.5 (Inactive Customer Trading Exclusion) - PASS
+   - Deferred 4 tests to post-launch (require large datasets or diverse data)
+   - Final pass rate: 61/66 (92%)
+
+### January 5, 2026
+1. **Transaction History Feature**
+   - RPC function: `list_customer_transactions(customer_id, limit)`
+   - UI: Transaction History card in customer portal
+   - Color coding: Green (buy/deposit), Red (sell/withdrawal), Orange (fee)
+   - Test cases: TC6.8-TC6.10 passed
+
+2. **Security Hardening**
+   - Fixed customer_details RLS policies (was allowing all users)
+   - Migration: `fix_customer_details_rls_policies`
+   - Verified storage bucket RLS (kyc-documents)
+   - Audited JWT verification on all edge functions
+   - Test cases: ST1-ST3 all passed
+
+3. **Deposit Ledger Fix**
+   - Issue: Backdated deposits not posted to ledger_lines
+   - Root cause: ef_post_ledger_and_balances date range filtering
+   - Solution: Manual backfill + documentation for future cases
+   - UI enhancement: Map "topup" → "Deposit" display name
+
+4. **Admin Operations Manual**
+   - Created comprehensive 13,000+ word operations guide
+   - 10 sections covering daily operations, onboarding, KYC approval, support, monitoring
+   - Production-ready documentation for admin team
+   - Location: docs/ADMIN_OPERATIONS_GUIDE.md
 - ✅ CI bands must exist for signal_date
 - ✅ Trade window must not be expired (current_date <= signal_date + 1)
 - ✅ Logs all actions to alert_events table
