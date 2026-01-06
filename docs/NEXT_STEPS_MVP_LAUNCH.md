@@ -1,28 +1,30 @@
 # BitWealth LTH PVR - Next Steps to MVP Launch
 
-**Date:** January 5, 2026  
-**Launch Target:** January 10, 2026 (5 days)  
-**Current Progress:** 88% Complete (53/60 tests passed)
+**Date:** January 6, 2026  
+**Launch Target:** January 10, 2026 (4 days)  
+**Current Progress:** 95% Complete (63/66 tests passed, email branding deployed, pre-deployment checklist active)
 
 ---
 
 ## Current Status Summary
 
 ### ✅ Completed (Ready for Production)
-- **6-Milestone Onboarding Pipeline:** 100% built, 88% tested
+- **6-Milestone Onboarding Pipeline:** 100% built, 95% tested ✅
   - M1 (Prospect): 100% tested ✅
   - M2 (Strategy): 100% tested ✅
   - M3 (KYC): 100% tested ✅
   - M4 (VALR): 100% tested ✅
-  - M5 (Deposit): 100% tested ✅ (13/14 tests, 1 skipped)
-  - M6 (Active): 90% tested ✅ (9/10 tests)
-- **Customer Portal MVP:** Dashboard with balances, zero balance support, inactive customer view-only mode
-- **Balance Reconciliation:** Hourly automated polling (VALR API, pg_cron Job #32)
-- **Admin Portal:** Customer management, KYC verification, VALR setup, active customer list
-- **Integration Tests:** All 3 passed (IT1, IT2, IT3)
-
-### ⏳ In Progress / Pending
-- **TC6.2:** Trading Pipeline Inclusion (requires pipeline run tonight at 03:00 UTC)
+  - M5 (Deposit): 93% tested ✅ (13/14 tests, 1 skipped)
+  - M6 (Active): 100% tested ✅ (16/16 tests, including TC6.2)
+- **Customer Portal MVP:** Dashboard with balances, transaction history, zero balance support, inactive customer view-only mode ✅
+- **Balance Reconciliation:** Hourly automated polling (VALR API, pg_cron Job #32) ✅
+- **Admin Portal:** Customer management, KYC verification, VALR setup, active customer list ✅
+- **Integration Tests:** All 3 passed (IT1, IT2, IT3) ✅
+- **Security Tests:** All 3 passed (ST1, ST2, ST3) ✅
+- **Email Branding:** 17/17 templates deployed with text-only headers, Aptos font ✅
+- **Production Domain Setup:** Configure bitwealth.co.za with SSL - NOT STARTED ⚠️
+- **Database Backup:** Pre-launch full backup - NOT STARTED ⚠️
+- **Final E2E Test:** Customer 40 walkthrough - SCHEDULED (Jan 9) ⏳TC)
 - **Security Tests:** ST1-ST3 (RLS policies, storage access, JWT verification) - NOT STARTED
 - **Transaction History:** Customer portal needs transaction table view - NOT BUILT
 - **Statement Generation:** Basic PDF download feature - NOT BUILT (nice-to-have)
@@ -152,7 +154,7 @@
    - Add pipeline health monitoring dashboard
    - Set up uptime monitoring for edge functions (Pingdom/UptimeRobot)
 
-4. 📧 **Email Template Verification** ✅ COMPLETE
+4. 📧 **Email Template Design & Deployment** ✅ COMPLETE (2026-01-06)
    - [x] Send test emails for all 8 templates:
      1. prospect_notification ✅ VERIFIED
      2. prospect_confirmation ✅ VERIFIED
@@ -164,7 +166,10 @@
      8. kyc_verified_notification ✅ EXISTS (not used in current flow)
    - [x] Verify formatting, links, placeholders ✅ All working (Integration TestUser 2026-01-04)
    - [x] Document results in EMAIL_TEMPLATE_VERIFICATION.md ✅ COMPLETE
-   - **Result:** 8/8 templates working, no issues found
+   - [x] Apply professional branding (text-only headers, Aptos font) ✅ DEPLOYED
+   - **Design:** Text-only "BitWealth" headers (gold #F39C12), Aptos font with fallbacks
+   - **KYC Template:** Custom "📋 KYC Registration" header (professional, contextual)
+   - **Result:** 17/17 templates updated in production database, no logo rendering issues
 
 ---
 
@@ -202,39 +207,13 @@
 ---
 
 ### Day 25 (Jan 9, 2026) - SOFT LAUNCH PREP
-
-**Morning (2-3 hours):**
-1. 📋 **Launch Communication Plan**
-   - Email template for existing prospects
-   - Website banner announcement
-   - Social media posts (if applicable)
-
-2. 🎯 **Pilot Customer Selection**
-   - Select 1-2 trusted prospects for soft launch
-   - Send personalized invitations
-   - Schedule onboarding calls
-
-**Afternoon (2-3 hours):**
-3. 🔍 **Final Smoke Tests**
-   - Test all public pages (index.html, register.html, portal.html)
-   - Test customer portal (customer-portal.html)
-   - Test admin portal (all modules)
-   - Check mobile responsiveness
-
-4. 📝 **Launch Checklist Review**
-   - Review all completed tasks
-   - Identify any last-minute issues
-   - Prepare contingency plans
-
----
-
-### Day 26 (Jan 10, 2026) - LAUNCH DAY 🚀
+10, 2026) - LAUNCH DAY 🚀
 
 **Morning (9:00 SAST):**
-1. ✅ **Go-Live Activation**
-   - Enable public prospect form (if disabled)
-   - Send invitations to pilot customers
-   - Announce soft launch to team
+1. ✅ **Go-Live Activation (Soft Launch)**
+   - Enable public prospect form on production website
+   - Send invitations to 2-3 pilot customers (trusted prospects)
+   - Announce soft launch internally
 
 **Throughout Day:**
 2. 🔍 **Intensive Monitoring**
@@ -242,7 +221,7 @@
    - Monitor alert events (lth_pvr.alert_events)
    - Check email delivery (email_logs table)
    - Track customer registrations (customer_details table)
-
+   - Verify trading pipeline includes new customers
 3. 🆘 **Rapid Response**
    - Address issues immediately
    - Communicate with pilot customers
@@ -323,8 +302,8 @@
 ### Must Have (Go/No-Go)
 - ✅ All 6 milestones functional end-to-end
 - ✅ Customer portal accessible and displays balances
-- ⏳ Security tests passed (ST1-ST3)
-- ⏳ Trading pipeline includes active customers (TC6.2)
+- ✅ Admin operations manual complete (2026-01-05)
+- ✅ Email templates verified AND branded (all 17 deployed 2026-01-06mers (TC6.2)
 - ⏳ Transaction history view working
 - ❌ Admin operations manual complete
 - ❌ Email templates verified (all 8 tested)
@@ -336,9 +315,9 @@
 - Advanced charts and analytics
 
 ### Launch Readiness Score
-- **Current:** 70% ready (7/10 must-haves complete)
+- **Current:** 80% ready (8/10 must-haves complete)
 - **Target:** 100% by Jan 9 EOD
-- **Confidence:** High (3 critical items, 2 days available)
+- **Confidence:** High (2 critical items remaining: Security testing + Transaction history)
 
 ---
 
@@ -362,9 +341,10 @@
 ---
 
 ## Post-Launch Plan (Month 1)
-
-### Week 1 (Jan 10-17)
-- Monitor system stability
+95% ready (9/11 must-haves complete)
+- **Remaining:** 2 items (production domain + backup)
+- **Target:** 100% by Jan 9 EOD
+- **Confidence:** VERY HIGH - essentially launch-ready
 - Fix critical bugs immediately
 - Onboard 2-5 pilot customers
 - Gather customer feedback
@@ -389,6 +369,36 @@
 
 ---
 
-**Document Status:** Living document - update daily during launch week  
-**Last Updated:** 2026-01-05 13:00 SAST  
-**Next Review:** 2026-01-06 09:00 SAST
+**Document Status:** Living do9:00 SAST  
+**Next Review:** 2026-01-07 09:00 SAST
+
+---
+
+## 📋 Quick Reference: Remaining Tasks
+
+### CRITICAL (Must Complete Before Launch):
+1. **Configure Production Domain** (Jan 7, 4-5 hours)
+   - Register domain or configure subdomain
+   - Set up DNS + SSL certificate
+   - Deploy website to production hosting
+   - Update WEBSITE_URL environment variable
+   - Test from production domain
+
+2. **Database Backup** (Jan 8, 30 minutes)
+   - Full PostgreSQL dump via Supabase dashboard
+   - Download kyc-documents storage bucket
+   - Export edge function code + env vars
+   - Save backups to multiple locations
+
+3. **Final End-to-End Test** (Jan 9, 2-3 hours)
+   - Customer 40 walkthrough (all 6 milestones)
+   - Verify from production domain
+   - Wait for Jan 10 03:00 UTC trading pipeline
+   - Confirm customer included in trading
+
+### LAUNCH DAY (Jan 10):
+- Soft launch with 2-3 pilot customers
+- Intensive monitoring throughout day
+- Rapid response to any issues
+- Evening review and go/no-go for full launchT  
+**Next Review:** 2026-01-07 09:00 SAST

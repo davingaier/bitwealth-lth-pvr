@@ -750,7 +750,7 @@ SELECT net.http_post(
 **Schedule:** Daily at 03:00 UTC (automated via pg_cron)
 
 **6-Step Process:**
-1. **CI Bands Fetch** (03:00) - Get LTH PVR bands from CryptoQuant
+1. **CI Bands Fetch** (03:00) - Get LTH PVR bands from ChartInspect
 2. **Generate Decisions** (03:05) - Determine buy/sell/hold for each customer
 3. **Create Order Intents** (03:10) - Size orders based on available capital
 4. **Execute Orders** (03:15) - Place LIMIT orders on VALR
@@ -794,7 +794,7 @@ SELECT lth_pvr.get_pipeline_status();
 ### Pipeline Resume
 
 **When to Use:**
-- CI bands fetch failed (CryptoQuant API down)
+- CI bands fetch failed (ChartInspect API down)
 - Order execution failed (VALR API issue)
 - Ledger posting incomplete
 
@@ -1059,7 +1059,7 @@ Alert Digest for 2026-01-06
 You have 3 unacknowledged alerts (2 errors, 1 critical):
 
 CRITICAL ALERTS (1):
-- [03:05] ef_fetch_ci_bands: CryptoQuant API returned 429 (rate limit)
+- [03:05] ef_fetch_ci_bands: ChartInspect API returned 429 (rate limit)
   Context: {"retry_count": 3, "trade_date": "2026-01-06"}
 
 ERROR ALERTS (2):
@@ -1174,8 +1174,8 @@ LIMIT 7;
 - **Fix:** Customer never progressed past M3, KYC not approved or M4 failed
 - **Resolution:** Check KYC status, manually approve if needed, verify M4 subaccount creation succeeded
 
-**"CryptoQuant API returned 429"**
-- **Cause:** Rate limit exceeded on CryptoQuant API
+**"ChartInspect API returned 429"**
+- **Cause:** Rate limit exceeded on ChartInspect API
 - **Fix:** Wait 30 minutes (guard function retries automatically)
 - **Resolution:** If persistent, check API key limits or upgrade plan
 
@@ -1437,7 +1437,7 @@ SELECT registration_status FROM customer_details WHERE customer_id = [ID];
 **Same-Day Escalation (< 4 hours):**
 - Trading pipeline completely failing (no workaround)
 - VALR API integration broken
-- CryptoQuant API failing (after retries)
+- ChartInspect API failing (after retries)
 - Multiple customers reporting same issue
 
 **Next-Day Escalation:**
@@ -1456,7 +1456,7 @@ SELECT registration_status FROM customer_details WHERE customer_id = [ID];
 **Third-Party Support:**
 - VALR Support: support@valr.com
 - Supabase Support: https://supabase.com/support
-- CryptoQuant Support: support@cryptoquant.com
+- ChartInspect Support: support@chartinspect.com (or appropriate contact)
 
 ---
 

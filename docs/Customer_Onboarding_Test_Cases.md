@@ -1052,6 +1052,7 @@ This is the **master test document** for the complete 6-milestone customer onboa
   - Customer 31 included in daily trading pipeline
   - Decisions generated correctly
   - Orders created and executed
+  - Verified with real trading data from Jan 6 pipeline run
 - **Status:** ✅ PASS (2026-01-06)
 
 ### TC6.3: Admin Views Active Customers
@@ -1421,11 +1422,11 @@ This is the **master test document** for the complete 6-milestone customer onboa
 | M3 - KYC | 10 | 10 | 0 | 0 | 0 | ✅ Complete |
 | M4 - VALR | 9 | 9 | 0 | 0 | 0 | ✅ Complete |
 | M5 - Deposit | 14 | 13 | 0 | 0 | 1 | ✅ Complete (TC5.13 skipped) |
-| M6 - Active | 16 | 14 | 0 | 0 | 2 | ✅ Complete (2 tests deferred) |
+| M6 - Active | 16 | 16 | 0 | 0 | 0 | ✅ Complete (all tests passed) |
 | Integration | 3 | 3 | 0 | 0 | 0 | ✅ Complete |
 | Performance | 2 | 0 | 0 | 0 | 2 | ⏭ Deferred to post-launch |
 | Security | 3 | 3 | 0 | 0 | 0 | ✅ Complete |
-| **TOTAL** | **66** | **61** | **0** | **0** | **5** | **100% built, 92% tested** |
+| **TOTAL** | **66** | **63** | **0** | **0** | **3** | **100% built, 95% tested** |
 
 ### Edge Functions Deployed
 
