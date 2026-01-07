@@ -309,6 +309,30 @@ Deno.serve(async (req) => {
 
     console.log("Balance reconciliation complete:", results);
 
+    // If any funding events were created (discrepancies > 0 and no errors), trigger ledger posting
+    if (results.discrepancies > 0 && results.errors === 0) {
+      console.log(`Triggering ef_post_ledger_and_balances to process ${results.discrepancies} funding event(s)...`);
+      try {
+        const ledgerResponse = await fetch(`${supabaseUrl}/functions/v1/ef_post_ledger_and_balances`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (ledgerResponse.ok) {
+          const ledgerResult = await ledgerResponse.json();
+          console.log("Ledger posting completed:", ledgerResult);
+        } else {
+          console.error("Ledger posting failed:", await ledgerResponse.text());
+        }
+      } catch (ledgerError) {
+        console.error("Error triggering ledger posting:", ledgerError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
