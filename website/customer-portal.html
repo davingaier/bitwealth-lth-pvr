@@ -518,8 +518,12 @@
                 // Populate table
                 const tbody = document.getElementById('transactionTableBody');
                 tbody.innerHTML = transactions.map(tx => {
-                    // Format date
-                    const date = new Date(tx.trade_date).toLocaleDateString();
+                    // Format date as DD/MM/YYYY
+                    const dateObj = new Date(tx.trade_date);
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const year = dateObj.getFullYear();
+                    const date = `${day}/${month}/${year}`;
                     
                     // Determine type display and color
                     let typeDisplay = tx.kind.charAt(0).toUpperCase() + tx.kind.slice(1);
