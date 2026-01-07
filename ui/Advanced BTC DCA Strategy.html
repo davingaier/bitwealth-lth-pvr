@@ -7213,7 +7213,7 @@ This will:
         try {
           const { data, error } = await supabaseClient.rpc('update_customer_fee_rate', {
             p_customer_id: parseInt(customerId),
-            p_new_rate: newFeeRate
+            p_new_fee_rate: newFeeRate
           });
 
           if (error) throw error;
@@ -7230,7 +7230,9 @@ This will:
           const customer = allCustomers.find(c => c.customer_id == customerId);
           if (customer) customer.fee_rate = newFeeRate;
 
-          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${data.previous_rate_percentage}%, New: ${data.new_rate_percentage}%`, 'success');
+          const prevPercent = (data.previous_fee_rate * 100).toFixed(2);
+          const newPercent = (data.new_fee_rate * 100).toFixed(2);
+          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${prevPercent}%, New: ${newPercent}%`, 'success');
         } catch (err) {
           console.error('update fee error:', err);
           showMessage(`Failed to update fee: ${err.message}`, 'error');
