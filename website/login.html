@@ -228,9 +228,14 @@
                     .eq('email', email)
                     .single();
                 
+                console.log('Customer lookup result:', { customer, customerError });
+                
                 if (customerError || !customer) {
+                    console.error('Customer lookup failed:', customerError);
                     throw new Error('Customer profile not found');
                 }
+                
+                console.log('Customer status:', customer.registration_status);
                 
                 formMessage.className = 'form-message success';
                 formMessage.textContent = 'Login successful! Redirecting...';
@@ -239,17 +244,23 @@
                 setTimeout(() => {
                     const status = customer.registration_status;
                     
+                    console.log('Redirecting based on status:', status);
+                    
                     if (status === 'kyc') {
                         // Need to upload ID document
+                        console.log('Redirecting to upload-kyc.html');
                         window.location.href = `upload-kyc.html?customer_id=${customer.customer_id}`;
                     } else if (status === 'active' || status === 'inactive') {
                         // Full portal access
+                        console.log('Redirecting to customer-portal.html (active/inactive)');
                         window.location.href = 'customer-portal.html';
                     } else if (status === 'deposit' || status === 'setup') {
                         // Show onboarding status in portal
+                        console.log('Redirecting to customer-portal.html (deposit/setup)');
                         window.location.href = 'customer-portal.html';
                     } else {
                         // Default: redirect to portal
+                        console.log('Redirecting to customer-portal.html (default)');
                         window.location.href = 'customer-portal.html';
                     }
                 }, 1000);
