@@ -426,7 +426,10 @@
 
                 // Check if we have portfolio data
                 if (!portfolios || portfolios.length === 0) {
-                    // No portfolio found - show "trading starts tomorrow" message
+                    // No portfolio found - customer still in onboarding
+                    document.getElementById('noDataMessage').innerHTML = 
+                        '<strong>⏳ Portfolio Not Ready</strong><br>' +
+                        'Your portfolio is being set up. You will be notified when your account is ready for trading.';
                     document.getElementById('noDataMessage').style.display = 'block';
                     document.getElementById('dashboardData').style.display = 'none';
                     return;
@@ -454,34 +457,40 @@
                     // For now, just show 0% - ROI calculation would need contribution data
                     document.getElementById('roiValue').textContent = '0.00%';
 
-                    // Update noDataMessage for inactive customers
+                    // Update noDataMessage based on status and trade history
                     if (portfolio.status === 'inactive') {
                         document.getElementById('noDataMessage').innerHTML = 
                             '<strong>⏸ Account Inactive</strong><br>' +
                             'Your account is currently inactive. Trading is paused. Contact support to reactivate your account.';
                         document.getElementById('noDataMessage').style.display = 'block';
-                    } else {
-                        // Active customer with no trading data yet
+                    } else if (portfolio.status === 'active' && !portfolio.has_trading_history) {
+                        // Active customer with no trading decisions yet
                         document.getElementById('noDataMessage').innerHTML = 
                             '<strong>Trading starts tomorrow!</strong><br>' +
                             'Your account is active. The first trading decision will be generated at 03:00 UTC tomorrow morning. Check back then to see your portfolio performance!';
+                        document.getElementById('noDataMessage').style.display = 'block';
+                    } else {
+                        // Active customer with trade history (decisions exist) - hide message
                         document.getElementById('noDataMessage').style.display = 'none';
                     }
 
                     // Show dashboard
                     document.getElementById('dashboardData').style.display = 'block';
                 } else {
-                    // Portfolio not active/inactive yet OR no balance data - show "trading starts tomorrow"
+                    // Portfolio not active/inactive yet OR no balance data - show onboarding message
                     document.getElementById('noDataMessage').innerHTML = 
-                        '<strong>Trading starts tomorrow!</strong><br>' +
-                        'Your account is active. The first trading decision will be generated at 03:00 UTC tomorrow morning. Check back then to see your portfolio performance!';
+                        '<strong>⏳ Account Setup In Progress</strong><br>' +
+                        'Your portfolio is being configured. You will be notified when your account is ready for trading.';
                     document.getElementById('noDataMessage').style.display = 'block';
                     document.getElementById('dashboardData').style.display = 'none';
                 }
 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
-                // On error, keep showing "trading starts tomorrow" message
+                // On error, show generic message
+                document.getElementById('noDataMessage').innerHTML = 
+                    '<strong>⚠️ Unable to Load Dashboard</strong><br>' +
+                    'There was an error loading your portfolio data. Please refresh the page or contact support if the problem persists.';
                 document.getElementById('noDataMessage').style.display = 'block';
                 document.getElementById('dashboardData').style.display = 'none';
             }
