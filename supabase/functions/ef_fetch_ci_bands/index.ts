@@ -285,10 +285,12 @@ Deno.serve(async (req: Request) => {
 
     if (!chk.data) {
       console.warn("latest CI day missing (yesterday), refetching 1 day window");
+      // CRITICAL: Use explicit start/end dates to fetch yesterday only
+      // Using &days=1 would fetch today's data which changes throughout the day
       const url1d =
         `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=${
           encodeURIComponent(mode)
-        }&days=1`;
+        }&start=${encodeURIComponent(expectedDate)}&end=${encodeURIComponent(expectedDate)}`;
       try {
         const json2 = await fetchJSONWithRetry(
           url1d,

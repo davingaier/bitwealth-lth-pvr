@@ -360,9 +360,7 @@
             if (!session) {
                 showMessage('Please log in to upload your ID document.', 'error');
                 setTimeout(() => {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const customerId = urlParams.get('customer_id');
-                    window.location.href = `/login.html?customer_id=${customerId || ''}`;
+                    window.location.href = 'login.html';
                 }, 2000);
                 return;
             }
@@ -523,7 +521,7 @@
 
                 // Redirect to portal after 3 seconds
                 setTimeout(() => {
-                    window.location.href = '/portal.html';
+                    window.location.href = 'customer-portal.html';
                 }, 3000);
 
             } catch (error) {

@@ -186,10 +186,10 @@
                     const status = customer.registration_status;
                     
                     if (status === 'kyc') {
-                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                        window.location.href = `upload-kyc.html?customer_id=${customer.customer_id}`;
                     } else {
                         // Active customers go to portal
-                        window.location.href = '/customer-portal.html';
+                        window.location.href = 'customer-portal.html';
                     }
                 }
             }
@@ -241,16 +241,16 @@
                     
                     if (status === 'kyc') {
                         // Need to upload ID document
-                        window.location.href = `/upload-kyc.html?customer_id=${customer.customer_id}`;
+                        window.location.href = `upload-kyc.html?customer_id=${customer.customer_id}`;
                     } else if (status === 'active' || status === 'inactive') {
                         // Full portal access
-                        window.location.href = '/customer-portal.html';
+                        window.location.href = 'customer-portal.html';
                     } else if (status === 'deposit' || status === 'setup') {
                         // Show onboarding status in portal
-                        window.location.href = '/customer-portal.html';
+                        window.location.href = 'customer-portal.html';
                     } else {
                         // Default: redirect to portal
-                        window.location.href = '/customer-portal.html';
+                        window.location.href = 'customer-portal.html';
                     }
                 }, 1000);
                 
