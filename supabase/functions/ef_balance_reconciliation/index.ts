@@ -237,8 +237,7 @@ Deno.serve(async (req) => {
               amount: Math.abs(btcChange),
               ext_ref: `AUTO_RECON_${today}_BTC`,
               occurred_at: new Date().toISOString(),
-              idempotency_key: `RECON_${customer.customer_id}_${today}_BTC_${Date.now()}`,
-              notes: `Automated reconciliation: VALR API shows ${valrBTC} BTC, recorded ${recordedBTC} BTC`
+              idempotency_key: `RECON_${customer.customer_id}_${today}_BTC_${Date.now()}`
             });
           }
 
@@ -253,8 +252,7 @@ Deno.serve(async (req) => {
               amount: Math.abs(usdtChange),
               ext_ref: `AUTO_RECON_${today}_USDT`,
               occurred_at: new Date().toISOString(),
-              idempotency_key: `RECON_${customer.customer_id}_${today}_USDT_${Date.now()}`,
-              notes: `Automated reconciliation: VALR API shows ${valrUSDT} USDT, recorded ${recordedUSDT} USDT`
+              idempotency_key: `RECON_${customer.customer_id}_${today}_USDT_${Date.now()}`
             });
           }
 
