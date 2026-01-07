@@ -706,6 +706,9 @@ section {
     font-size: 16px;
     font-family: inherit;
     transition: var(--transition);
+    width: 100%;
+    box-sizing: border-box;
+    max-width: 100%;
 }
 
 .form-group input:focus,
