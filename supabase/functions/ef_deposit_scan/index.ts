@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
                 to_email: customer.email,
                 data: {
                   first_name: customer.first_names,
-                  portal_url: `${websiteUrl}/website/portal.html`,
+                  portal_url: `${websiteUrl}/customer-portal.html`,
                   website_url: websiteUrl,
                 },
               }),
