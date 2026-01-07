@@ -5,13 +5,6 @@
   # No build command needed for static HTML site
   command = ""
 
-[[redirects]]
-  # SPA fallback - not needed for this static site, but good to have
-  from = "/*"
-  to = "/index.html"
-  status = 200
-  force = false
-
 [[headers]]
   # Security headers
   for = "/*"
