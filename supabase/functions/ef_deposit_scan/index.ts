@@ -240,34 +240,32 @@ Deno.serve(async (req) => {
             console.log(`✓ Set trade_start_date for customer ${customer.customer_id}`);
           }
 
-          // Send admin notification emails (to both admin addresses)
-          const adminEmails = ["admin@bitwealth.co.za", "davin.gaier@gmail.com"];
-          for (const adminEmail of adminEmails) {
-            try {
-              await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": req.headers.get("authorization") || "",
+          // Send admin notification email
+          const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": req.headers.get("authorization") || "",
+              },
+              body: JSON.stringify({
+                template_key: "funds_deposited_admin_notification",
+                to_email: adminEmail,
+                data: {
+                  first_name: customer.first_names,
+                  last_name: customer.last_name,
+                  customer_id: customer.customer_id,
+                  email: customer.email,
+                  balances: balances
+                    .filter((b: any) => parseFloat(b.available || "0") > 0)
+                    .map((b: any) => `${b.currency}: ${b.available}`)
+                    .join(", "),
                 },
-                body: JSON.stringify({
-                  template_key: "funds_deposited_admin_notification",
-                  to_email: adminEmail,
-                  data: {
-                    first_name: customer.first_names,
-                    last_name: customer.last_name,
-                    customer_id: customer.customer_id,
-                    email: customer.email,
-                    balances: balances
-                      .filter((b: any) => parseFloat(b.available || "0") > 0)
-                      .map((b: any) => `${b.currency}: ${b.available}`)
-                      .join(", "),
-                  },
-                }),
-              });
-            } catch (emailError) {
-              console.error(`Error sending admin email to ${adminEmail}:`, emailError);
-            }
+              }),
+            });
+          } catch (emailError) {
+            console.error(`Error sending admin email to ${adminEmail}:`, emailError);
           }
 
           // Send customer welcome email
