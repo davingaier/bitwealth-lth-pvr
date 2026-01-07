@@ -4,6 +4,10 @@
   
   # No build command needed for static HTML site
   command = ""
+  
+  # Only trigger builds when files in website/ directory change
+  # This prevents builds when docs, edge functions, or other files are modified
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- website/"
 
 [[headers]]
   # Security headers
