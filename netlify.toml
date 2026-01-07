@@ -1,0 +1,22 @@
+[build]
+  # Directory to deploy (where your website HTML files are)
+  publish = "website"
+  
+  # No build command needed for static HTML site
+  command = ""
+
+[[redirects]]
+  # SPA fallback - not needed for this static site, but good to have
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false
+
+[[headers]]
+  # Security headers
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
