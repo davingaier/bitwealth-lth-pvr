@@ -75,7 +75,7 @@ Transform basic landing page into professional multi-product showcase with compe
 - Performance: Lazy load chart data after page render
 
 **Data Calculation (one-time):**
-- Run back-test for LTH PVR from 2020-01-01 to 2025-12-31 (upfront: $10,000, monthly: $5,000)
+- Run back-test for LTH PVR from 2020-01-01 to 2025-12-31 (upfront: $10,000, monthly: $1,000)
 - Calculate Standard DCA for same parameters
 - Extract final NAV and ROI % for both strategies
 - Hardcode values in HTML (no dynamic queries for landing page performance)
@@ -1048,7 +1048,7 @@ CREATE POLICY platform_fees_customer_read ON lth_pvr.platform_fees
 ### Required Data
 1. **LTH PVR Back-Test Results (2020-2025):**
    - Run full back-test using existing `lth_pvr_bt` schema
-   - Parameters: Upfront $10,000, Monthly $5,000
+   - Parameters: Upfront $10,000, Monthly $1,000
    - Extract: Daily NAV, Final ROI %, Annualized ROI %
    - Save results for use in landing page and product page charts
 
@@ -1309,7 +1309,7 @@ supabase functions deploy ef_post_ledger_and_balances --project-ref wqnmxpooabme
 
 ## Implementation Decisions (Confirmed 2026-01-08)
 
-1. **Back-Test Data:** ✅ Run 2020-2025 back-test using existing back-testing system (upfront $10,000, monthly $5,000)
+1. **Back-Test Data:** ✅ Run 2020-2025 back-test using existing back-testing system (upfront $10,000, monthly $1,000)
 
 2. **BTC Price History:** ✅ Reuse existing back-test infrastructure - analyze current logic using `lth_pvr.ci_bands_daily` and existing BTC price data. DO NOT create new tables or functions.
 
