@@ -202,6 +202,11 @@ BEGIN
     WHERE id = v_request_id;
     
     -- Create back-test parameters with VALR exchange fees AND BitWealth fees
+    -- NOTE: We do NOT set b1-b11 (CI band trade size percentages) here.
+    -- ef_bt_execute will automatically apply its defaultBands when b1-b11 are null/zero:
+    -- B1=0.22796, B2=0.21397, B3=0.19943, B4=0.18088, B5=0.12229, 
+    -- B6=0.00157, B7=0.002, B8=0.00441, B9=0.01287, B10=0.033, B11=0.09572
+    -- These percentages work with actual CryptoQuant price levels from lth_pvr.ci_bands_daily
     INSERT INTO lth_pvr_bt.bt_params (
         bt_run_id,
         start_date,
@@ -214,8 +219,7 @@ BEGIN
         platform_fee_pct,
         momo_len,
         momo_thr,
-        enable_retrace,
-        b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11
+        enable_retrace
     ) VALUES (
         v_bt_run_id,
         p_start_date,
@@ -226,10 +230,9 @@ BEGIN
         18.0,    -- 18 bps (0.18%) VALR exchange fee for USDT/ZAR trades (charged in USDT)
         0.10,    -- 10% (0.10) BitWealth performance fee (high-water mark)
         0.0075,  -- 0.75% (0.0075) BitWealth platform fee on contributions
-        30,      -- 30-day momentum length
-        0.02,    -- 2% momentum threshold
-        true,    -- Enable retrace logic
-        0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55  -- CI bands
+        5,       -- 5-day momentum length (matching Admin UI default)
+        0.00,    -- 0% momentum threshold (matching Admin UI default)
+        false    -- Disable retrace logic (matching Admin UI default)
     );
     
     -- Get remaining requests
