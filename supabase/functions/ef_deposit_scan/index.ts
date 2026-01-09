@@ -183,23 +183,25 @@ Deno.serve(async (req) => {
           }
 
           // CRITICAL: Create lth_pvr.customer_strategies row for trading pipeline inclusion
-          // Get portfolio details (strategy_version_id, exchange_account_id)
+          // Get portfolio details (portfolio_id, exchange_account_id)
           const { data: portfolioData, error: portfolioDataError } = await supabase
             .from("customer_portfolios")
-            .select("portfolio_id, strategy_code")
+            .select("portfolio_id, exchange_account_id")
             .eq("customer_id", customer.customer_id)
             .single();
 
           if (portfolioDataError) {
             console.error(`Error fetching portfolio data for ${customer.customer_id}:`, portfolioDataError);
           } else {
-            // Get strategy_version_id from lth_pvr.strategy_versions
+            // Get latest strategy_version_id from lth_pvr.strategy_versions
+            // (In production, there should be only one strategy_version per org)
             const { data: strategyVersion, error: strategyVersionError } = await supabase
               .schema("lth_pvr")
               .from("strategy_versions")
               .select("strategy_version_id")
-              .eq("strategy_code", portfolioData.strategy_code)
-              .eq("is_latest", true)
+              .eq("org_id", customer.org_id)
+              .order("created_at", { ascending: false })
+              .limit(1)
               .single();
 
             if (strategyVersionError) {
@@ -213,7 +215,7 @@ Deno.serve(async (req) => {
                   org_id: customer.org_id,
                   customer_id: customer.customer_id,
                   strategy_version_id: strategyVersion.strategy_version_id,
-                  exchange_account_id: portfolio.exchange_account_id,
+                  exchange_account_id: portfolioData.exchange_account_id,
                   live_enabled: true,
                   effective_from: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
                   portfolio_id: portfolioData.portfolio_id,
@@ -289,6 +291,74 @@ Deno.serve(async (req) => {
             });
           } catch (emailError) {
             console.error("Error sending customer email:", emailError);
+          }
+
+          // SELF-CONTAINED ACCOUNTING: Create funding events + ledger entries immediately
+          // This ensures customer has complete accounting records at activation time
+          console.log(`Creating funding events for customer ${customer.customer_id}...`);
+          
+          // Create exchange_funding_event for each non-zero balance
+          for (const bal of balances) {
+            const available = parseFloat(bal.available || "0");
+            if (available <= 0) continue;
+
+            const asset = bal.currency;
+            if (!["BTC", "USDT"].includes(asset)) continue;
+
+            // Create funding event with idempotency
+            const idempotencyKey = `ACTIVATION:${customer.customer_id}:${asset}:${new Date().toISOString()}`;
+            
+            try {
+              const { error: fundingError } = await supabase.schema("lth_pvr")
+                .from("exchange_funding_events")
+                .insert({
+                  org_id: customer.org_id,
+                  customer_id: customer.customer_id,
+                  exchange_account_id: account.exchange_account_id,
+                  kind: "deposit",
+                  asset: asset,
+                  amount: available,
+                  ext_ref: `initial_deposit_${customer.customer_id}_${asset}`,
+                  occurred_at: new Date().toISOString(),
+                  idempotency_key: idempotencyKey,
+                });
+
+              if (fundingError) {
+                // Ignore duplicate key errors (already processed)
+                if (!fundingError.message.includes("duplicate key")) {
+                  console.error(`Error creating funding event for ${customer.customer_id}:`, fundingError);
+                }
+              } else {
+                console.log(`✓ Created funding event: ${asset} ${available}`);
+              }
+            } catch (fundingCreateError) {
+              console.error(`Exception creating funding event for ${customer.customer_id}:`, fundingCreateError);
+            }
+          }
+
+          // Call ef_post_ledger_and_balances to create ledger lines and balances_daily
+          console.log(`Posting ledger and balances for customer ${customer.customer_id}...`);
+          try {
+            const ledgerResponse = await fetch(`${supabaseUrl}/functions/v1/ef_post_ledger_and_balances`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": req.headers.get("authorization") || "",
+              },
+              body: JSON.stringify({
+                from_date: new Date().toISOString().split('T')[0],
+                to_date: new Date().toISOString().split('T')[0],
+              }),
+            });
+
+            if (ledgerResponse.ok) {
+              const ledgerResult = await ledgerResponse.json();
+              console.log(`✓ Ledger posted:`, ledgerResult);
+            } else {
+              console.error(`Error posting ledger for ${customer.customer_id}:`, await ledgerResponse.text());
+            }
+          } catch (ledgerError) {
+            console.error(`Exception posting ledger for ${customer.customer_id}:`, ledgerError);
           }
 
           results.activated++;

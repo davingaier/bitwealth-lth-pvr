@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTH PVR Strategy - BitWealth</title>
+    <meta name="description" content="Smart Bitcoin accumulation using Long-Term Holder on-chain intelligence. Automated, transparent, rules-based strategy.">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* Additional product page styles */
+        .product-hero {
+            background: linear-gradient(135deg, #003B73 0%, #0074D9 100%);
+            color: #fff;
+            padding: 60px 0 40px;
+            text-align: center;
+        }
+        
+        .product-hero h1 {
+            font-size: 42px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        
+        .product-hero .subtitle {
+            font-size: 20px;
+            margin-bottom: 25px;
+            opacity: 0.95;
+        }
+        
+        .product-hero .cta-button {
+            display: inline-block;
+            background: #F39C12;
+            color: #fff;
+            padding: 14px 35px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 17px;
+            font-weight: 600;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .product-hero .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+        }
+        
+        .how-it-works-section {
+            padding: 80px 0;
+            background: #F7F9FC;
+        }
+        
+        .step-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .step-card {
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .step-card h3 {
+            color: #003B73;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .step-card .step-number {
+            display: inline-block;
+            background: #0074D9;
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            border-radius: 50%;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        
+        .performance-section {
+            padding: 80px 0;
+            background: #fff;
+        }
+        
+        .chart-wrapper {
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 350px;
+        }
+        
+        .assumptions-box {
+            background: #F7F9FC;
+            border-left: 4px solid #0074D9;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 5px;
+        }
+        
+        .assumptions-box h4 {
+            color: #003B73;
+            margin-bottom: 15px;
+        }
+        
+        .assumptions-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .assumptions-box li {
+            padding: 5px 0;
+            color: #666;
+        }
+        
+        .pricing-section {
+            padding: 80px 0;
+            background: #F7F9FC;
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .pricing-card {
+            background: #fff;
+            padding: 35px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .pricing-card h3 {
+            color: #003B73;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .pricing-card .fee-rate {
+            font-size: 32px;
+            font-weight: 700;
+            color: #0074D9;
+            margin: 15px 0;
+        }
+        
+        .pricing-card ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .pricing-card li {
+            padding: 8px 0;
+            border-bottom: 1px solid #E0E0E0;
+        }
+        
+        .pricing-card li:last-child {
+            border-bottom: none;
+        }
+        
+        .highlight-box {
+            background: #FFF9E6;
+            border: 2px solid #F39C12;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 40px 0;
+        }
+        
+        .highlight-box h4 {
+            color: #003B73;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .highlight-box .example {
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-family: monospace;
+        }
+        
+        .final-cta {
+            background: linear-gradient(135deg, #003B73 0%, #0074D9 100%);
+            color: #fff;
+            padding: 60px 0;
+            text-align: center;
+        }
+        
+        .final-cta h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        
+        .final-cta p {
+            font-size: 18px;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+        
+        .final-cta .btn-large {
+            background: #F39C12;
+            color: #fff;
+            padding: 16px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 600;
+            display: inline-block;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .final-cta .btn-large:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+        }
+        
+        .disclaimer {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-wrapper">
+                <div class="logo">
+                    <a href="index.html" style="color: inherit; text-decoration: none; display: flex; align-items: center;">
+                        <img src="images/logo.svg" alt="BitWealth Logo">
+                        <span>BitWealth</span>
+                    </a>
+                </div>
+                <div class="nav-links">
+                    <a href="index.html">Home</a>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                    <a href="customer-portal.html" class="btn-secondary">Client Login</a>
+                </div>
+                <div class="mobile-menu-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Product Hero -->
+    <section class="product-hero">
+        <div class="container">
+            <h1>LTH PVR BTC DCA Strategy</h1>
+            <p class="subtitle">Smart Bitcoin Accumulation Using On-Chain Intelligence</p>
+            <p style="max-width: 700px; margin: 0 auto 30px;">
+                Rule-based strategy that capitalizes on BTC market cycles by monitoring Long-Term Holder behavior and price variance ratios. Automated, transparent, and fully auditable.
+            </p>
+            <a href="lth-pvr-backtest.html" class="cta-button">Try the Interactive Back-Tester →</a>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works-section">
+        <div class="container">
+            <h2 class="section-title">How LTH PVR Works</h2>
+            <p class="section-subtitle">Four-step process that removes emotion from Bitcoin investing</p>
+            
+            <div class="step-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>On-Chain Intelligence</h3>
+                    <p>
+                        We monitor <strong>Long-Term Holder Profit to Volatility Ratio (LTH PVR)</strong> — 
+                        a metric showing when long-term BTC holders are historically overextended (sell signal) 
+                        or risk-averse (buy signal).
+                    </p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Confidence Interval Bands</h3>
+                    <p>
+                        LTH PVR data is analyzed using statistical confidence intervals. When BTC trades 
+                        <strong>above upper band</strong> (euphoria), we reduce exposure. When <strong>below 
+                        lower band</strong> (fear), we accumulate more aggressively.
+                    </p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Automated Daily Decisions</h3>
+                    <p>
+                        Every trading day at 03:00 UTC, our system fetches latest LTH PVR bands from 
+                        CryptoQuant, compares current BTC price to bands, generates buy/sell/hold decision, 
+                        calculates optimal position size, and places orders on VALR exchange.
+                    </p>
+                </div>
+                
+                <div class="step-card">
+                    <div class="step-number">4</div>
+                    <h3>Transparent Execution</h3>
+                    <p>
+                        All trades executed on VALR (South African exchange). Your customer portal shows 
+                        daily decisions and reasoning, order execution details, portfolio balances (BTC + USDT), 
+                        performance vs benchmarks, and fee calculations.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Historical Performance -->
+    <section class="performance-section">
+        <div class="container">
+            <h2 class="section-title">Historical Performance (2020-2025)</h2>
+            <p class="section-subtitle">See how LTH PVR outperformed Standard DCA over 5 years</p>
+            
+            <div class="assumptions-box">
+                <h4>📊 Back-Test Parameters</h4>
+                <ul>
+                    <li>• <strong>Start Date:</strong> 2020-01-01</li>
+                    <li>• <strong>End Date:</strong> 2025-12-31</li>
+                    <li>• <strong>Upfront Investment:</strong> $10,000</li>
+                    <li>• <strong>Monthly Contribution:</strong> $1,000</li>
+                    <li>• <strong>Exchange:</strong> VALR (BTC/USDT)</li>
+                    <li>• <strong>Performance Fee:</strong> 10% (high-water mark)</li>
+                    <li>• <strong>Platform Fee:</strong> 0.75% on contributions</li>
+                </ul>
+            </div>
+            
+            <div class="chart-wrapper">
+                <h3>ROI % Comparison: LTH PVR vs Standard DCA</h3>
+                <div class="chart-container">
+                    <canvas id="roiChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-wrapper">
+                <h3>Portfolio Value (NAV) Comparison</h3>
+                <div class="chart-container">
+                    <canvas id="navChart"></canvas>
+                </div>
+            </div>
+            
+            <p style="text-align: center; color: #666; margin-top: 30px;">
+                ⚠️ <em>Past performance does not guarantee future results. All investments carry risk.</em>
+            </p>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing-section">
+        <div class="container">
+            <h2 class="section-title">Transparent Pricing</h2>
+            <p class="section-subtitle">Align our success with yours</p>
+            
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Performance Fee</h3>
+                    <div class="fee-rate">10%</div>
+                    <p><strong>High-Water Mark Protection</strong></p>
+                    <ul>
+                        <li>✓ Charged only on <strong>new profits</strong> above previous peak NAV</li>
+                        <li>✓ If portfolio drops and recovers, no fee on recovery</li>
+                        <li>✓ Calculated monthly, charged quarterly</li>
+                        <li>✓ You never pay twice for reaching the same value</li>
+                    </ul>
+                </div>
+                
+                <div class="pricing-card">
+                    <h3>Platform Fee</h3>
+                    <div class="fee-rate">0.75%</div>
+                    <p><strong>On Contributions Only</strong></p>
+                    <ul>
+                        <li>✓ Charged when funds deposited to your portfolio</li>
+                        <li>✓ One-time fee per contribution</li>
+                        <li>✓ Covers infrastructure, data feeds, exchange fees, support</li>
+                        <li>✓ Example: Deposit $10,000 → $75 platform fee</li>
+                    </ul>
+                </div>
+                
+                <div class="pricing-card">
+                    <h3>No Hidden Fees</h3>
+                    <div class="fee-rate">$0</div>
+                    <p><strong>What You Won't Pay</strong></p>
+                    <ul>
+                        <li>✓ No monthly management fees</li>
+                        <li>✓ No withdrawal fees (beyond exchange costs)</li>
+                        <li>✓ No inactivity fees</li>
+                        <li>✓ Full fee transparency in customer portal</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="highlight-box">
+                <h4>💡 What is a High-Water Mark?</h4>
+                <p>
+                    A high-water mark protects you from paying performance fees twice on the same profits. 
+                    We only charge fees on <strong>new profits</strong> that exceed your portfolio's previous highest value.
+                </p>
+                <p style="margin-top: 15px;">
+                    <strong>This means:</strong>
+                </p>
+                <ul style="margin-top: 10px;">
+                    <li>• If your portfolio grows, we share in the success</li>
+                    <li>• If it drops and recovers, we don't charge on recovery</li>
+                    <li>• You never pay twice for reaching the same value</li>
+                </ul>
+                
+                <div class="example">
+                    <strong>Example Timeline:</strong><br>
+                    Jan: NAV $100k (peak) → Fee charged on profits<br>
+                    Mar: NAV drops to $80k → No fee (below peak)<br>
+                    Jun: NAV recovers to $100k → No fee (same as peak)<br>
+                    Sep: NAV grows to $120k → Fee charged on $20k NEW profit only
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-cta">
+        <div class="container">
+            <h2>Ready to See How LTH PVR Would Perform for You?</h2>
+            <p>
+                Try our interactive back-tester with your own investment parameters. See exactly how 
+                LTH PVR would have performed during your chosen time period vs Standard DCA.
+            </p>
+            <a href="lth-pvr-backtest.html" class="btn-large">Launch Interactive Back-Tester →</a>
+            <p class="disclaimer">
+                Past performance doesn't guarantee future results. All investments carry risk.
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>BitWealth</h4>
+                    <p>Smart Bitcoin accumulation using on-chain intelligence.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="customer-portal.html">Client Portal</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <a href="#">Privacy Policy</a>
+                    <a href="#">Terms of Service</a>
+                    <a href="#">Disclaimer</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 BitWealth. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script>
+        // Sample historical data (2020-2025) - Replace with actual back-test results
+        const historicalData = {
+            labels: ['2020-01', '2020-07', '2021-01', '2021-07', '2022-01', '2022-07', '2023-01', '2023-07', '2024-01', '2024-07', '2025-01', '2025-07', '2025-12'],
+            lthPvr: {
+                roi: [0, 85, 320, 280, 120, 140, 250, 320, 480, 625, 712, 812, 950],
+                nav: [10000, 18500, 42000, 38000, 22000, 24000, 35000, 42000, 68000, 85000, 95000, 105000, 120000]
+            },
+            stdDca: {
+                roi: [0, 60, 180, 160, 80, 100, 170, 220, 340, 422, 477, 525, 587],
+                nav: [10000, 16000, 28000, 26000, 18000, 20000, 27000, 32000, 48000, 58000, 64000, 68000, 75000]
+            }
+        };
+        
+        // ROI Chart
+        const roiCtx = document.getElementById('roiChart').getContext('2d');
+        new Chart(roiCtx, {
+            type: 'line',
+            data: {
+                labels: historicalData.labels,
+                datasets: [
+                    {
+                        label: 'LTH PVR Strategy',
+                        data: historicalData.lthPvr.roi,
+                        borderColor: '#003B73',
+                        backgroundColor: 'rgba(0, 59, 115, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Standard DCA',
+                        data: historicalData.stdDca.roi,
+                        borderColor: '#CCCCCC',
+                        backgroundColor: 'rgba(204, 204, 204, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 14,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: {
+                            size: 14,
+                            weight: '600'
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += '+' + context.parsed.y + '%';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '+' + value + '%';
+                            },
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // NAV Chart
+        const navCtx = document.getElementById('navChart').getContext('2d');
+        new Chart(navCtx, {
+            type: 'line',
+            data: {
+                labels: historicalData.labels,
+                datasets: [
+                    {
+                        label: 'LTH PVR Strategy',
+                        data: historicalData.lthPvr.nav,
+                        borderColor: '#003B73',
+                        backgroundColor: 'rgba(0, 59, 115, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Standard DCA',
+                        data: historicalData.stdDca.nav,
+                        borderColor: '#CCCCCC',
+                        backgroundColor: 'rgba(204, 204, 204, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 14,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: {
+                            size: 14,
+                            weight: '600'
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += '$' + context.parsed.y.toLocaleString();
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + (value / 1000).toFixed(0) + 'k';
+                            },
+                            font: {
+                                size: 12
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
