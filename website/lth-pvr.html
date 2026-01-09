@@ -11,109 +11,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-        /* Additional product page styles */
-        .product-hero {
-            background: linear-gradient(135deg, #003B73 0%, #0074D9 100%);
-            color: #fff;
-            padding: 60px 0 40px;
-            text-align: center;
-        }
-        
-        .product-hero h1 {
-            font-size: 42px;
-            font-weight: 700;
-            margin-bottom: 15px;
-        }
-        
-        .product-hero .subtitle {
-            font-size: 20px;
-            margin-bottom: 25px;
-            opacity: 0.95;
-        }
-        
-        .product-hero .cta-button {
-            display: inline-block;
-            background: #F39C12;
-            color: #fff;
-            padding: 14px 35px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 17px;
-            font-weight: 600;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        
-        .product-hero .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
-        }
-        
-        .how-it-works-section {
-            padding: 80px 0;
-            background: #F7F9FC;
-        }
-        
-        .step-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 30px;
-            margin-top: 40px;
-        }
-        
-        .step-card {
-            background: #fff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        .step-card h3 {
-            color: #003B73;
-            font-size: 20px;
-            margin-bottom: 15px;
-        }
-        
-        .step-card .step-number {
-            display: inline-block;
-            background: #0074D9;
-            color: #fff;
-            width: 40px;
-            height: 40px;
-            line-height: 40px;
-            text-align: center;
-            border-radius: 50%;
-            font-weight: 700;
-            margin-bottom: 15px;
-        }
-        
-        .performance-section {
-            padding: 80px 0;
-            background: #fff;
-        }
-        
-        .chart-wrapper {
-            background: #fff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        
+        /* Product-specific adjustments to shared styles */
         .chart-container {
             position: relative;
             height: 350px;
         }
         
         .assumptions-box {
-            background: #F7F9FC;
-            border-left: 4px solid #0074D9;
+            background: var(--bg-card);
+            border-left: 4px solid var(--gold);
             padding: 20px;
             margin: 30px 0;
-            border-radius: 5px;
+            border-radius: 8px;
         }
         
         .assumptions-box h4 {
-            color: #003B73;
+            color: var(--text-primary);
             margin-bottom: 15px;
         }
         
@@ -124,115 +37,35 @@
         
         .assumptions-box li {
             padding: 5px 0;
-            color: #666;
-        }
-        
-        .pricing-section {
-            padding: 80px 0;
-            background: #F7F9FC;
-        }
-        
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 30px;
-            margin-top: 40px;
-        }
-        
-        .pricing-card {
-            background: #fff;
-            padding: 35px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        .pricing-card h3 {
-            color: #003B73;
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        
-        .pricing-card .fee-rate {
-            font-size: 32px;
-            font-weight: 700;
-            color: #0074D9;
-            margin: 15px 0;
-        }
-        
-        .pricing-card ul {
-            list-style: none;
-            padding: 0;
-        }
-        
-        .pricing-card li {
-            padding: 8px 0;
-            border-bottom: 1px solid #E0E0E0;
-        }
-        
-        .pricing-card li:last-child {
-            border-bottom: none;
+            color: var(--text-secondary);
         }
         
         .highlight-box {
-            background: #FFF9E6;
-            border: 2px solid #F39C12;
+            background: var(--bg-card);
+            border: 2px solid var(--gold);
             border-radius: 10px;
             padding: 25px;
             margin: 40px 0;
         }
         
         .highlight-box h4 {
-            color: #003B73;
+            color: var(--gold);
             font-size: 20px;
             margin-bottom: 15px;
         }
         
         .highlight-box .example {
-            background: #fff;
+            background: var(--bg-darker);
             padding: 15px;
             border-radius: 5px;
             margin-top: 15px;
-            font-family: monospace;
-        }
-        
-        .final-cta {
-            background: linear-gradient(135deg, #003B73 0%, #0074D9 100%);
-            color: #fff;
-            padding: 60px 0;
-            text-align: center;
-        }
-        
-        .final-cta h2 {
-            font-size: 36px;
-            margin-bottom: 20px;
-        }
-        
-        .final-cta p {
-            font-size: 18px;
-            margin-bottom: 30px;
-            opacity: 0.95;
-        }
-        
-        .final-cta .btn-large {
-            background: #F39C12;
-            color: #fff;
-            padding: 16px 40px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 18px;
-            font-weight: 600;
-            display: inline-block;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        
-        .final-cta .btn-large:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+            font-family: 'Courier New', monospace;
+            color: var(--text-secondary);
         }
         
         .disclaimer {
             font-size: 14px;
-            color: rgba(255,255,255,0.7);
+            color: var(--text-tertiary);
             margin-top: 20px;
         }
     </style>
@@ -255,6 +88,7 @@
                     <a href="index.html#about">About</a>
                     <a href="index.html#contact">Contact</a>
                     <a href="customer-portal.html" class="btn-secondary">Client Login</a>
+                    <a href="index.html#signup" class="btn-primary">Sign Up</a>
                 </div>
                 <div class="mobile-menu-toggle">
                     <span></span>
@@ -266,74 +100,86 @@
     </nav>
 
     <!-- Product Hero -->
-    <section class="product-hero">
+    <section class="hero">
+        <div class="hero-background">
+            <div class="gradient-orb orb-1"></div>
+            <div class="gradient-orb orb-2"></div>
+        </div>
         <div class="container">
-            <h1>LTH PVR BTC DCA Strategy</h1>
-            <p class="subtitle">Smart Bitcoin Accumulation Using On-Chain Intelligence</p>
-            <p style="max-width: 700px; margin: 0 auto 30px;">
-                Rule-based strategy that capitalizes on BTC market cycles by monitoring Long-Term Holder behavior and price variance ratios. Automated, transparent, and fully auditable.
-            </p>
-            <a href="lth-pvr-backtest.html" class="cta-button">Try the Interactive Back-Tester →</a>
+            <div class="hero-content">
+                <h1 class="hero-title"><span class="gradient-text">LTH PVR</span> BTC DCA Strategy</h1>
+                <p class="hero-subtitle">Smart Bitcoin Accumulation Using On-Chain Intelligence</p>
+                <p class="hero-description">
+                    Rule-based strategy that capitalizes on BTC market cycles by monitoring Long-Term Holder behavior and profit to volatility ratios. Automated, transparent, and fully auditable.
+                </p>
+                <div class="hero-cta">
+                    <a href="lth-pvr-backtest.html" class="btn-primary">Try the Interactive Back-Tester →</a>
+                </div>
+            </div>
         </div>
     </section>
 
     <!-- How It Works -->
-    <section class="how-it-works-section">
+    <section class="how-section">
         <div class="container">
-            <h2 class="section-title">How LTH PVR Works</h2>
-            <p class="section-subtitle">Four-step process that removes emotion from Bitcoin investing</p>
-            
-            <div class="step-grid">
-                <div class="step-card">
-                    <div class="step-number">1</div>
+            <div class="feature-card" style="padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
+                <h2 style="margin-bottom: 24px;">How LTH PVR Works</h2>
+                <p class="section-subtitle" style="margin-bottom: 48px;">Four-step process that removes emotion from Bitcoin investing</p>
+                
+                <div class="how-grid">
+                <div class="how-card">
+                    <div class="how-icon">📊</div>
                     <h3>On-Chain Intelligence</h3>
-                    <p>
+                    <p style="margin-bottom: 16px;">
                         We monitor <strong>Long-Term Holder Profit to Volatility Ratio (LTH PVR)</strong> — 
                         a metric showing when long-term BTC holders are historically overextended (sell signal) 
                         or risk-averse (buy signal).
                     </p>
                 </div>
                 
-                <div class="step-card">
-                    <div class="step-number">2</div>
+                <div class="how-card">
+                    <div class="how-icon">📈</div>
                     <h3>Confidence Interval Bands</h3>
-                    <p>
-                        LTH PVR data is analyzed using statistical confidence intervals. When BTC trades 
-                        <strong>above upper band</strong> (euphoria), we reduce exposure. When <strong>below 
-                        lower band</strong> (fear), we accumulate more aggressively.
+                    <p style="margin-bottom: 16px;">
+                        LTH PVR data is analyzed using statistical confidence intervals divided into <strong>11 bands</strong>. 
+                        Each band has its own position size weighting. When BTC trades <strong>above the median band</strong> 
+                        (euphoria), we reduce exposure with incrementally larger trigger sells. When <strong>below median band</strong> 
+                        (fear), we accumulate more aggressively with larger position sizes.
                     </p>
                 </div>
                 
-                <div class="step-card">
-                    <div class="step-number">3</div>
+                <div class="how-card">
+                    <div class="how-icon">🤖</div>
                     <h3>Automated Daily Decisions</h3>
-                    <p>
-                        Every trading day at 03:00 UTC, our system fetches latest LTH PVR bands from 
-                        CryptoQuant, compares current BTC price to bands, generates buy/sell/hold decision, 
+                    <p style="margin-bottom: 16px;">
+                        Every trading day at 03:00 UTC, our system fetches the latest LTH PVR data from our 
+                        BTC blockchain node, compares current BTC price to bands, generates buy/sell/hold decision, 
                         calculates optimal position size, and places orders on VALR exchange.
                     </p>
                 </div>
                 
-                <div class="step-card">
-                    <div class="step-number">4</div>
+                <div class="how-card">
+                    <div class="how-icon">✅</div>
                     <h3>Transparent Execution</h3>
-                    <p>
+                    <p style="margin-bottom: 16px;">
                         All trades executed on VALR (South African exchange). Your customer portal shows 
                         daily decisions and reasoning, order execution details, portfolio balances (BTC + USDT), 
                         performance vs benchmarks, and fee calculations.
                     </p>
                 </div>
             </div>
+            </div>
         </div>
     </section>
 
     <!-- Historical Performance -->
-    <section class="performance-section">
+    <section class="features-section">
         <div class="container">
-            <h2 class="section-title">Historical Performance (2020-2025)</h2>
-            <p class="section-subtitle">See how LTH PVR outperformed Standard DCA over 5 years</p>
-            
-            <div class="assumptions-box">
+            <div class="feature-card" style="padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
+                <h2 style="margin-bottom: 24px;">Historical Performance (2020-2025)</h2>
+                <p class="section-subtitle" style="margin-bottom: 48px;">See how LTH PVR outperformed Standard DCA over 5 years</p>
+                
+                <div class="assumptions-box">
                 <h4>📊 Back-Test Parameters</h4>
                 <ul>
                     <li>• <strong>Start Date:</strong> 2020-01-01</li>
@@ -346,66 +192,64 @@
                 </ul>
             </div>
             
-            <div class="chart-wrapper">
+            <div class="feature-card" style="margin-bottom: 32px;">
                 <h3>ROI % Comparison: LTH PVR vs Standard DCA</h3>
                 <div class="chart-container">
                     <canvas id="roiChart"></canvas>
                 </div>
             </div>
             
-            <div class="chart-wrapper">
-                <h3>Portfolio Value (NAV) Comparison</h3>
+            <div class="feature-card" style="margin-bottom: 32px;">
+                <h3>Portfolio Value (NAV) Comparison: LTH PVR vs Standard DCA</h3>
                 <div class="chart-container">
                     <canvas id="navChart"></canvas>
                 </div>
             </div>
             
-            <p style="text-align: center; color: #666; margin-top: 30px;">
+            <p style="text-align: center; color: var(--text-tertiary); margin-top: 40px;">
                 ⚠️ <em>Past performance does not guarantee future results. All investments carry risk.</em>
             </p>
+            </div>
         </div>
     </section>
 
     <!-- Pricing -->
     <section class="pricing-section">
         <div class="container">
-            <h2 class="section-title">Transparent Pricing</h2>
+            <h2>Transparent Pricing</h2>
             <p class="section-subtitle">Align our success with yours</p>
             
             <div class="pricing-grid">
                 <div class="pricing-card">
-                    <h3>Performance Fee</h3>
-                    <div class="fee-rate">10%</div>
-                    <p><strong>High-Water Mark Protection</strong></p>
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">10% Performance Fee</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">With High-Water Mark Protection</span></div>
                     <ul>
-                        <li>✓ Charged only on <strong>new profits</strong> above previous peak NAV</li>
-                        <li>✓ If portfolio drops and recovers, no fee on recovery</li>
-                        <li>✓ Calculated monthly, charged quarterly</li>
-                        <li>✓ You never pay twice for reaching the same value</li>
+                        <li>Charged only on <strong>new profits</strong> above previous peak NAV</li>
+                        <li>If portfolio drops and recovers, no fee on recovery</li>
+                        <li>Calculated monthly, charged quarterly</li>
+                        <li>You never pay twice for reaching the same value</li>
                     </ul>
                 </div>
                 
                 <div class="pricing-card">
-                    <h3>Platform Fee</h3>
-                    <div class="fee-rate">0.75%</div>
-                    <p><strong>On Contributions Only</strong></p>
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">0.75% Platform Fee</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">On Contributions Only</span></div>
                     <ul>
-                        <li>✓ Charged when funds deposited to your portfolio</li>
-                        <li>✓ One-time fee per contribution</li>
-                        <li>✓ Covers infrastructure, data feeds, exchange fees, support</li>
-                        <li>✓ Example: Deposit $10,000 → $75 platform fee</li>
+                        <li>Charged when funds deposited to your portfolio</li>
+                        <li>One-time fee per contribution</li>
+                        <li>Covers infrastructure, data feeds, regulatory compliance, support</li>
+                        <li>Example: Deposit $1,000 → $7.50 platform fee</li>
                     </ul>
                 </div>
                 
                 <div class="pricing-card">
-                    <h3>No Hidden Fees</h3>
-                    <div class="fee-rate">$0</div>
-                    <p><strong>What You Won't Pay</strong></p>
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">No Hidden Fees</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">What You Won’t Pay</span></div>
                     <ul>
-                        <li>✓ No monthly management fees</li>
-                        <li>✓ No withdrawal fees (beyond exchange costs)</li>
-                        <li>✓ No inactivity fees</li>
-                        <li>✓ Full fee transparency in customer portal</li>
+                        <li>No monthly management fees</li>
+                        <li>No withdrawal fees (beyond exchange costs)</li>
+                        <li>No inactivity fees</li>
+                        <li>Full fee transparency in customer portal</li>
                     </ul>
                 </div>
             </div>
@@ -437,15 +281,17 @@
     </section>
 
     <!-- Final CTA -->
-    <section class="final-cta">
+    <section class="cta-section">
         <div class="container">
-            <h2>Ready to See How LTH PVR Would Perform for You?</h2>
-            <p>
+            <h2 style="margin-bottom: 32px;">Ready to See How LTH PVR Would Perform for You?</h2>
+            <p class="cta-text" style="font-size: 20px; line-height: 1.8; margin-bottom: 48px;">
                 Try our interactive back-tester with your own investment parameters. See exactly how 
                 LTH PVR would have performed during your chosen time period vs Standard DCA.
             </p>
-            <a href="lth-pvr-backtest.html" class="btn-large">Launch Interactive Back-Tester →</a>
-            <p class="disclaimer">
+            <div class="cta-buttons">
+                <a href="lth-pvr-backtest.html" class="btn-primary btn-large">Launch Interactive Back-Tester →</a>
+            </div>
+            <p class="disclaimer" style="margin-top: 32px; line-height: 1.8;">
                 Past performance doesn't guarantee future results. All investments carry risk.
             </p>
         </div>
@@ -508,8 +354,8 @@
                     {
                         label: 'LTH PVR Strategy',
                         data: historicalData.lthPvr.roi,
-                        borderColor: '#003B73',
-                        backgroundColor: 'rgba(0, 59, 115, 0.1)',
+                        borderColor: '#FFB400',
+                        backgroundColor: 'rgba(255, 180, 0, 0.1)',
                         borderWidth: 3,
                         pointRadius: 4,
                         pointHoverRadius: 6,
@@ -519,8 +365,8 @@
                     {
                         label: 'Standard DCA',
                         data: historicalData.stdDca.roi,
-                        borderColor: '#CCCCCC',
-                        backgroundColor: 'rgba(204, 204, 204, 0.1)',
+                        borderColor: '#6B7896',
+                        backgroundColor: 'rgba(107, 120, 150, 0.1)',
                         borderWidth: 2,
                         pointRadius: 3,
                         pointHoverRadius: 5,
@@ -543,6 +389,7 @@
                         labels: {
                             usePointStyle: true,
                             padding: 20,
+                            color: '#A8B2D1',
                             font: {
                                 size: 14,
                                 weight: '600'
@@ -550,7 +397,7 @@
                         }
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
                         padding: 12,
                         titleFont: {
                             size: 14,
@@ -576,9 +423,11 @@
                 scales: {
                     x: {
                         grid: {
-                            display: false
+                            display: false,
+                            color: 'rgba(255, 255, 255, 0.05)'
                         },
                         ticks: {
+                            color: '#A8B2D1',
                             font: {
                                 size: 12
                             }
@@ -587,9 +436,10 @@
                     y: {
                         beginAtZero: true,
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: 'rgba(255, 255, 255, 0.05)'
                         },
                         ticks: {
+                            color: '#A8B2D1',
                             callback: function(value) {
                                 return '+' + value + '%';
                             },
@@ -612,8 +462,8 @@
                     {
                         label: 'LTH PVR Strategy',
                         data: historicalData.lthPvr.nav,
-                        borderColor: '#003B73',
-                        backgroundColor: 'rgba(0, 59, 115, 0.1)',
+                        borderColor: '#FFB400',
+                        backgroundColor: 'rgba(255, 180, 0, 0.1)',
                         borderWidth: 3,
                         pointRadius: 4,
                         pointHoverRadius: 6,
@@ -623,8 +473,8 @@
                     {
                         label: 'Standard DCA',
                         data: historicalData.stdDca.nav,
-                        borderColor: '#CCCCCC',
-                        backgroundColor: 'rgba(204, 204, 204, 0.1)',
+                        borderColor: '#6B7896',
+                        backgroundColor: 'rgba(107, 120, 150, 0.1)',
                         borderWidth: 2,
                         pointRadius: 3,
                         pointHoverRadius: 5,
@@ -647,6 +497,7 @@
                         labels: {
                             usePointStyle: true,
                             padding: 20,
+                            color: '#A8B2D1',
                             font: {
                                 size: 14,
                                 weight: '600'
@@ -654,7 +505,7 @@
                         }
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
                         padding: 12,
                         titleFont: {
                             size: 14,
@@ -680,9 +531,11 @@
                 scales: {
                     x: {
                         grid: {
-                            display: false
+                            display: false,
+                            color: 'rgba(255, 255, 255, 0.05)'
                         },
                         ticks: {
+                            color: '#A8B2D1',
                             font: {
                                 size: 12
                             }
@@ -691,9 +544,10 @@
                     y: {
                         beginAtZero: false,
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: 'rgba(255, 255, 255, 0.05)'
                         },
                         ticks: {
+                            color: '#A8B2D1',
                             callback: function(value) {
                                 return '$' + (value / 1000).toFixed(0) + 'k';
                             },

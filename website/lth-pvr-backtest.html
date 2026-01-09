@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Back-Tester - LTH PVR BTC DCA - BitWealth</title>
+    <meta name="description" content="Test the LTH PVR strategy with your own investment parameters">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <style>
+        .backtest-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 32px;
+            margin-top: 40px;
+        }
+        
+        .params-panel {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px;
+            height: fit-content;
+            position: sticky;
+            top: 100px;
+        }
+        
+        .results-panel {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px;
+            min-height: 600px;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-darker);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(255, 180, 0, 0.1);
+        }
+        
+        .form-group small {
+            display: block;
+            color: var(--text-tertiary);
+            margin-top: 4px;
+            font-size: 12px;
+        }
+        
+        .spinner-container {
+            display: none;
+            text-align: center;
+            padding: 80px 0;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 180, 0, 0.1);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 24px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinner-text {
+            color: var(--text-secondary);
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .results-content {
+            display: none;
+        }
+        
+        .results-summary {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+        
+        .summary-card {
+            background: var(--bg-darker);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        
+        .summary-card h4 {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .summary-metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .summary-metric:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .metric-value {
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 16px;
+        }
+        
+        .metric-value.positive {
+            color: var(--gold);
+        }
+        
+        .chart-section {
+            margin-bottom: 40px;
+        }
+        
+        .chart-section h3 {
+            color: var(--text-primary);
+            font-size: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 500px;
+            background: var(--bg-darker);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .error-message {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            color: #F44336;
+            margin-bottom: 24px;
+        }
+        
+        .rate-limit-info {
+            background: rgba(255, 180, 0, 0.1);
+            border: 1px solid rgba(255, 180, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--gold);
+            font-size: 13px;
+            margin-top: 16px;
+        }
+        
+        .cta-section-small {
+            text-align: center;
+            padding: 40px;
+            background: var(--bg-darker);
+            border-radius: 12px;
+            margin-top: 40px;
+        }
+        
+        .cta-section-small h3 {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+        
+        .cta-section-small p {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+        
+        @media (max-width: 1024px) {
+            .backtest-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .params-panel {
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-wrapper">
+                <div class="logo">
+                    <a href="index.html" style="color: inherit; text-decoration: none; display: flex; align-items: center;">
+                        <img src="images/logo.svg" alt="BitWealth Logo">
+                        <span>BitWealth</span>
+                    </a>
+                </div>
+                <div class="nav-links">
+                    <a href="index.html">Home</a>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                    <a href="customer-portal.html" class="btn-secondary">Client Login</a>
+                    <a href="index.html#signup" class="btn-primary">Sign Up</a>
+                </div>
+                <div class="mobile-menu-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Header -->
+    <section class="hero" style="padding: 80px 0 40px;">
+        <div class="container">
+            <h1 class="hero-title" style="font-size: 42px;">Interactive <span class="gradient-text">Back-Tester</span></h1>
+            <p class="hero-description" style="margin-bottom: 0;">
+                Test the LTH PVR strategy with your own investment parameters and compare against Standard DCA
+            </p>
+        </div>
+    </section>
+
+    <!-- Back-Test Tool -->
+    <section style="padding: 40px 0 120px;">
+        <div class="container">
+            <div class="backtest-container">
+                <!-- Parameters Panel -->
+                <div class="params-panel">
+                    <h3 style="margin-bottom: 24px; font-size: 20px;">Back-Test Parameters</h3>
+                    
+                    <form id="backtestForm">
+                        <div class="form-group">
+                            <label for="email">Email Address *</label>
+                            <input type="email" id="email" name="email" required placeholder="your@email.com">
+                            <small>Required for lead tracking. Max 10 back-tests per day.</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="startDate">Start Date *</label>
+                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2018-01-01" max="2025-12-31">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="endDate">End Date *</label>
+                            <input type="date" id="endDate" name="endDate" required value="2025-12-31" min="2018-01-01" max="2025-12-31">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="upfront">Upfront Investment (USD)</label>
+                            <input type="number" id="upfront" name="upfront" min="0" step="100" value="10000" placeholder="10000">
+                            <small>Initial lump sum deposit</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="monthly">Monthly Contribution (USD)</label>
+                            <input type="number" id="monthly" name="monthly" min="0" step="100" value="1000" placeholder="1000">
+                            <small>Recurring monthly deposit</small>
+                        </div>
+                        
+                        <button type="submit" id="submitBtn" class="btn-primary" style="width: 100%; margin-top: 16px;">
+                            Run Back-Test
+                        </button>
+                        
+                        <div id="rateLimitInfo" class="rate-limit-info" style="display: none;">
+                            <strong>Remaining today:</strong> <span id="remainingCount">10</span> back-tests
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Results Panel -->
+                <div class="results-panel">
+                    <!-- Initial State -->
+                    <div id="initialState" class="initial-state" style="text-align: center; padding: 120px 40px; color: var(--text-tertiary);">
+                        <div style="font-size: 64px; margin-bottom: 24px;">📊</div>
+                        <h3 style="color: var(--text-secondary); margin-bottom: 16px;">Enter Your Parameters</h3>
+                        <p>Fill in the form on the left and click "Run Back-Test" to see how LTH PVR would have performed with your investment strategy.</p>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div id="loadingState" class="spinner-container">
+                        <div class="spinner"></div>
+                        <div class="spinner-text">Back-test running...</div>
+                        <p style="color: var(--text-tertiary); margin-top: 16px; font-size: 14px;">
+                            This may take up to 10 minutes depending on server load and start-end date range selected. Please do not close or refresh the page.
+                        </p>
+                    </div>
+                    
+                    <!-- Error State -->
+                    <div id="errorState" style="display: none;">
+                        <div class="error-message" id="errorMessage"></div>
+                        <button onclick="resetForm()" class="btn-secondary">Try Again</button>
+                    </div>
+                    
+                    <!-- Results State -->
+                    <div id="resultsState" class="results-content">
+                        <h2 style="margin-bottom: 32px;">Back-Test Results</h2>
+                        
+                        <!-- Summary Cards -->
+                        <div class="results-summary">
+                            <div class="summary-card">
+                                <h4>🎯 LTH PVR Strategy</h4>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Final NAV</span>
+                                    <span class="metric-value positive" id="lthFinalNav">$0</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total ROI</span>
+                                    <span class="metric-value positive" id="lthROI">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">CAGR</span>
+                                    <span class="metric-value" id="lthCAGR">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total Contributions</span>
+                                    <span class="metric-value" id="lthContrib">$0</span>
+                                </div>
+                            </div>
+                            
+                            <div class="summary-card">
+                                <h4>📈 Standard DCA</h4>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Final NAV</span>
+                                    <span class="metric-value" id="stdFinalNav">$0</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total ROI</span>
+                                    <span class="metric-value" id="stdROI">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">CAGR</span>
+                                    <span class="metric-value" id="stdCAGR">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total Contributions</span>
+                                    <span class="metric-value" id="stdContrib">$0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Charts -->
+                        <div class="chart-section">
+                            <h3>ROI % Comparison</h3>
+                            <div class="chart-container">
+                                <canvas id="roiChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-section">
+                            <h3>Portfolio Value (NAV) Comparison</h3>
+                            <div class="chart-container">
+                                <canvas id="navChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <button id="resetBtn" class="btn-primary" style="width: 100%; margin-top: 24px; display: none;" onclick="resetForm()">
+                            Run Another Back-Test
+                        </button>
+                        
+                        <!-- CTA -->
+                        <div class="cta-section-small">
+                            <h3>Ready to Start Investing?</h3>
+                            <p>Open an account and let LTH PVR manage your Bitcoin accumulation strategy automatically.</p>
+                            <a href="index.html#signup" class="btn-primary btn-large">Get Started →</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>BitWealth</h4>
+                    <p>Smart Bitcoin accumulation using on-chain intelligence.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="customer-portal.html">Client Portal</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <a href="#">Privacy Policy</a>
+                    <a href="#">Terms of Service</a>
+                    <a href="#">Disclaimer</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 BitWealth. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
+        
+        let currentRequestId = null;
+        let pollingInterval = null;
+        let roiChart = null;
+        let navChart = null;
+        
+        // Form submission
+        document.getElementById('backtestForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                p_email: document.getElementById('email').value,
+                p_start_date: document.getElementById('startDate').value,
+                p_end_date: document.getElementById('endDate').value,
+                p_upfront_usdt: parseFloat(document.getElementById('upfront').value) || 0,
+                p_monthly_usdt: parseFloat(document.getElementById('monthly').value) || 0
+            };
+            
+            // Disable submit button
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = 'Running...';
+            
+            // Show loading state
+            showState('loading');
+            
+            try {
+                // Call RPC function
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/run_public_backtest`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentRequestId = result.request_id;
+                    
+                    // Update rate limit info
+                    document.getElementById('remainingCount').textContent = result.remaining;
+                    document.getElementById('rateLimitInfo').style.display = 'block';
+                    
+                    // Start polling for results
+                    startPolling();
+                } else {
+                    showError(result.error);
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        });
+        
+        function startPolling() {
+            // Poll every 2 seconds
+            pollingInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_backtest_results`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                        },
+                        body: JSON.stringify({ p_request_id: currentRequestId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'completed' && result.daily_results) {
+                        clearInterval(pollingInterval);
+                        displayResults(result);
+                    } else if (result.status === 'failed') {
+                        clearInterval(pollingInterval);
+                        showError(result.error_message || 'Back-test failed');
+                    }
+                } catch (error) {
+                    clearInterval(pollingInterval);
+                    showError('Polling error: ' + error.message);
+                }
+            }, 2000);
+            
+            // Timeout after 15 minutes
+            setTimeout(() => {
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                    showError('Back-test timed out. Please try again.');
+                }
+            }, 900000);
+        }
+        
+        function displayResults(data) {
+            // Re-enable submit button and show reset button
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = 'Run Back-Test';
+            document.getElementById('resetBtn').style.display = 'block';
+            
+            showState('results');
+            
+            // Update summary metrics
+            const lth = data.lth_pvr_summary;
+            const std = data.std_dca_summary;
+            
+            document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav);
+            document.getElementById('lthROI').textContent = '+' + (lth.total_roi || 0).toFixed(2) + '%';
+            document.getElementById('lthCAGR').textContent = (lth.cagr || 0).toFixed(2) + '%';
+            document.getElementById('lthContrib').textContent = '$' + formatNumber(lth.contrib_net || 0);
+            
+            document.getElementById('stdFinalNav').textContent = '$' + formatNumber(std.final_nav);
+            document.getElementById('stdROI').textContent = '+' + (std.total_roi || 0).toFixed(2) + '%';
+            document.getElementById('stdCAGR').textContent = (std.cagr || 0).toFixed(2) + '%';
+            document.getElementById('stdContrib').textContent = '$' + formatNumber(std.contrib_net || 0);
+            
+            // Prepare chart data
+            const labels = data.daily_results.map(r => r.date);
+            const lthRoi = data.daily_results.map(r => r.lth_pvr_roi);
+            const stdRoi = data.daily_results.map(r => r.std_dca_roi);
+            const lthNav = data.daily_results.map(r => r.lth_pvr_nav);
+            const stdNav = data.daily_results.map(r => r.std_dca_nav);
+            
+            // Draw charts
+            drawROIChart(labels, lthRoi, stdRoi);
+            drawNAVChart(labels, lthNav, stdNav);
+        }
+        
+        function drawROIChart(labels, lthData, stdData) {
+            const ctx = document.getElementById('roiChart').getContext('2d');
+            
+            if (roiChart) roiChart.destroy();
+            
+            roiChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'LTH PVR Strategy',
+                            data: lthData,
+                            borderColor: '#FFB400',
+                            backgroundColor: 'rgba(255, 180, 0, 0.1)',
+                            borderWidth: 0.75,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Standard DCA',
+                            data: stdData,
+                            borderColor: '#6B7896',
+                            backgroundColor: 'rgba(107, 120, 150, 0.1)',
+                            borderWidth: 0.5,
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#A8B2D1' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#A8B2D1' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#A8B2D1',
+                                callback: (value) => '+' + value + '%'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function drawNAVChart(labels, lthData, stdData) {
+            const ctx = document.getElementById('navChart').getContext('2d');
+            
+            if (navChart) navChart.destroy();
+            
+            navChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'LTH PVR Strategy',
+                            data: lthData,
+                            borderColor: '#FFB400',
+                            backgroundColor: 'rgba(255, 180, 0, 0.1)',
+                            borderWidth: 0.75,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Standard DCA',
+                            data: stdData,
+                            borderColor: '#6B7896',
+                            backgroundColor: 'rgba(107, 120, 150, 0.1)',
+                            borderWidth: 0.5,
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#A8B2D1' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#A8B2D1' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#A8B2D1',
+                                callback: (value) => '$' + formatNumber(value)
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function showState(state) {
+            document.getElementById('initialState').style.display = state === 'initial' ? 'block' : 'none';
+            document.getElementById('loadingState').style.display = state === 'loading' ? 'block' : 'none';
+            document.getElementById('errorState').style.display = state === 'error' ? 'block' : 'none';
+            document.getElementById('resultsState').style.display = state === 'results' ? 'block' : 'none';
+        }
+        
+        function showError(message) {
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = 'Run Back-Test';
+            document.getElementById('errorMessage').textContent = message;
+            showState('error');
+        }
+        
+        function resetForm() {
+            // Reset button states
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = 'Run Back-Test';
+            document.getElementById('resetBtn').style.display = 'none';
+            
+            // Clear form
+            document.getElementById('backtestForm').reset();
+            document.getElementById('startDate').value = '2020-01-01';
+            document.getElementById('endDate').value = '2025-12-31';
+            document.getElementById('upfront').value = '10000';
+            document.getElementById('monthly').value = '1000';
+            
+            showState('initial');
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+        }
+        
+        function formatNumber(num) {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(num);
+        }
+        
+        // Set max date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('endDate').setAttribute('max', today);
+    </script>
+</body>
+</html>

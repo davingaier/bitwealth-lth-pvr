@@ -83,7 +83,8 @@ a {
 
 .btn-primary {
     background: var(--gradient-gold);
-    color: var(--bg-dark);
+    color: #000000;
+    font-weight: 700;
 }
 
 .btn-primary:hover {
@@ -540,6 +541,19 @@ section {
     padding: 12px 0;
     color: var(--text-secondary);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.fee-rate {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--gold);
+    margin: 24px 0 32px;
+    text-align: center;
+    line-height: 1.2;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
 }
 
 .pricing-card .btn-primary,
