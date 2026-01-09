@@ -114,8 +114,10 @@ Deno.serve(async (req)=>{
       throw new Error("start_date and end_date required in bt_params");
     }
     // Interpret fees as basis points (e.g. 8 bps = 0.08%)
-    const tradeFeeRate = toNum(params.maker_bps_trade, 0) / 10000;
-    const contribFeeRate = toNum(params.maker_bps_contrib, 0) / 10000;
+    const tradeFeeRate = toNum(params.maker_bps_trade, 0) / 10000;  // VALR BTC/USDT exchange fee (8 bps, charged in BTC)
+    const contribFeeRate = toNum(params.maker_bps_contrib, 0) / 10000;  // VALR USDT/ZAR exchange fee (18 bps, charged in USDT)
+    const platformFeeRate = toNum(params.platform_fee_pct, 0);  // BitWealth platform fee (0.75%, charged on contributions)
+    const performanceFeeRate = toNum(params.performance_fee_pct, 0);  // BitWealth performance fee (10%, high-water mark)
     const upfront = toNum(params.upfront_contrib_usdt, 0);
     const monthly = toNum(params.monthly_contrib_usdt, 0);
     const momoLen = Math.max(1, Math.trunc(toNum(params.momo_len, 5)));
@@ -221,15 +223,23 @@ Deno.serve(async (req)=>{
     let btcBal = 0;
     let usdtBal = 0;
     let contribGrossCum = 0;
-    let contribFeeCum = 0;
+    let contribFeeCum = 0;  // VALR USDT/ZAR fees (18 bps)
     let contribNetCum = 0;
+    let platformFeesCum = 0;  // BitWealth platform fees (0.75%)
+    let performanceFeesCum = 0;  // BitWealth performance fees (10% with high-water mark)
+    let highWaterMark = 0;  // For performance fee calculation
+    let exchangeFeesBtcCum = 0;  // VALR BTC/USDT fees in BTC
+    let exchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees in USDT
     let firstContribDate = null;
+    let lastMonthForPerfFee = null;  // Track monthly performance fee calculation
     // Std DCA state
     let stdBtcBal = 0;
     let stdUsdtBal = 0;
     let stdContribGrossCum = 0;
     let stdContribFeeCum = 0;
     let stdContribNetCum = 0;
+    let stdExchangeFeesBtcCum = 0;  // VALR BTC/USDT fees
+    let stdExchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees
     let stdFirstContribDate = null;
     const resultsDaily = [];
     const ledgerRows = [];
@@ -247,11 +257,18 @@ Deno.serve(async (req)=>{
     // Contribution helpers
     const applyContribLth = (row, gross)=>{
       if (gross <= 0) return 0;
-      const fee = gross * contribFeeRate;
-      const net = gross - fee;
+      // Step 1: Deduct VALR USDT/ZAR exchange fee (18 bps) - conversion happens first
+      const exchangeFee = gross * contribFeeRate;
+      const afterExchangeFee = gross - exchangeFee;
+      // Step 2: Deduct BitWealth platform fee (0.75% of remaining)
+      const platformFee = afterExchangeFee * platformFeeRate;
+      const net = afterExchangeFee - platformFee;
+      
       usdtBal += net;
       contribGrossCum += gross;
-      contribFeeCum += fee;
+      contribFeeCum += exchangeFee;
+      platformFeesCum += platformFee;
+      exchangeFeesUsdtCum += exchangeFee;
       contribNetCum += net;
       const tradeDate = row.close_date; // simulate on CI close date
       const closeDate = row.close_date;
@@ -268,7 +285,7 @@ Deno.serve(async (req)=>{
         fee_usdt: 0,
         note: "Contribution"
       });
-      if (fee > 0) {
+      if (exchangeFee > 0) {
         ledgerRows.push({
           bt_run_id,
           org_id,
@@ -278,19 +295,36 @@ Deno.serve(async (req)=>{
           amount_btc: 0,
           amount_usdt: 0,
           fee_btc: 0,
-          fee_usdt: fee,
-          note: "Contribution fee"
+          fee_usdt: exchangeFee,
+          note: "VALR USDT/ZAR exchange fee"
+        });
+      }
+      if (platformFee > 0) {
+        ledgerRows.push({
+          bt_run_id,
+          org_id,
+          trade_date: tradeDate,
+          close_date: closeDate,
+          kind: "fee",
+          amount_btc: 0,
+          amount_usdt: 0,
+          fee_btc: 0,
+          fee_usdt: platformFee,
+          note: "BitWealth platform fee"
         });
       }
       return net;
     };
     const applyContribStd = (row, gross)=>{
       if (gross <= 0) return 0;
-      const fee = gross * contribFeeRate;
-      const net = gross - fee;
+      // STD_DCA benchmark: only VALR exchange fees (NO BitWealth fees)
+      const exchangeFee = gross * contribFeeRate;  // VALR USDT/ZAR fee (18 bps)
+      const net = gross - exchangeFee;
+      
       stdUsdtBal += net;
       stdContribGrossCum += gross;
-      stdContribFeeCum += fee;
+      stdContribFeeCum += exchangeFee;
+      stdExchangeFeesUsdtCum += exchangeFee;
       stdContribNetCum += net;
       const tradeDate = row.close_date; // simulate on CI close date
       if (!stdFirstContribDate) stdFirstContribDate = tradeDate;
@@ -322,10 +356,11 @@ Deno.serve(async (req)=>{
         if (netStd > 0 && px > 0) {
           const tradeUsdt = netStd;
           const tradeBtcGross = tradeUsdt / px;
-          const feeBtc = tradeBtcGross * tradeFeeRate;
+          const feeBtc = tradeBtcGross * tradeFeeRate;  // VALR BTC/USDT exchange fee in BTC
           const btcNet = tradeBtcGross - feeBtc;
           stdUsdtBal -= tradeUsdt;
           stdBtcBal += btcNet;
+          stdExchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
           stdLedger.push({
             bt_run_id,
             org_id,
@@ -349,10 +384,11 @@ Deno.serve(async (req)=>{
         const tradeUsdt = baseUsdt * decision.pct;
         if (tradeUsdt > 0) {
           const tradeBtcGross = tradeUsdt / px;
-          const feeBtc = tradeBtcGross * tradeFeeRate;
+          const feeBtc = tradeBtcGross * tradeFeeRate;  // VALR BTC/USDT exchange fee in BTC
           const btcNet = tradeBtcGross - feeBtc;
           usdtBal -= tradeUsdt;
           btcBal += btcNet;
+          exchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
           ledgerRows.push({
             bt_run_id,
             org_id,
@@ -376,7 +412,7 @@ Deno.serve(async (req)=>{
               amount_usdt: 0,
               fee_btc: feeBtc,
               fee_usdt: 0,
-              note: "Trade fee (BUY)"
+              note: "VALR BTC/USDT trade fee (BUY)"
             });
           }
           orderRows.push({
@@ -395,10 +431,11 @@ Deno.serve(async (req)=>{
         const baseBtc = btcBal;
         const tradeBtcGross = baseBtc * decision.pct;
         if (tradeBtcGross > 0) {
-          const feeBtc = tradeBtcGross * tradeFeeRate;
+          const feeBtc = tradeBtcGross * tradeFeeRate;  // VALR BTC/USDT exchange fee in BTC
           const grossUsdt = tradeBtcGross * px;
           btcBal -= tradeBtcGross + feeBtc;
           usdtBal += grossUsdt;
+          exchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
           ledgerRows.push({
             bt_run_id,
             org_id,
@@ -422,7 +459,7 @@ Deno.serve(async (req)=>{
               amount_usdt: 0,
               fee_btc: feeBtc,
               fee_usdt: 0,
-              note: "Trade fee (SELL)"
+              note: "VALR BTC/USDT trade fee (SELL)"
             });
           }
           orderRows.push({
@@ -438,7 +475,40 @@ Deno.serve(async (req)=>{
           });
         }
       }
-      // LTH daily NAV + performance
+      // Monthly performance fee calculation (high-water mark)
+      let performanceFeeToday = 0;
+      if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
+        // Month-end: calculate performance fee on NAV gains above high-water mark
+        const currentNav = usdtBal + btcBal * px;
+        if (currentNav > highWaterMark && performanceFeeRate > 0) {
+          const profitAboveHWM = currentNav - highWaterMark;
+          performanceFeeToday = profitAboveHWM * performanceFeeRate;
+          // Deduct performance fee from USDT balance
+          usdtBal -= performanceFeeToday;
+          performanceFeesCum += performanceFeeToday;
+          // Update high-water mark to current NAV (before fee deduction)
+          highWaterMark = currentNav;
+          // Record performance fee in ledger
+          ledgerRows.push({
+            bt_run_id,
+            org_id,
+            trade_date: tradeDate,
+            close_date: closeDate,
+            kind: "fee",
+            amount_btc: 0,
+            amount_usdt: 0,
+            fee_btc: 0,
+            fee_usdt: performanceFeeToday,
+            note: "BitWealth performance fee (10% on profit above high-water mark)"
+          });
+        } else if (currentNav > highWaterMark) {
+          // Update high-water mark even if no fee charged
+          highWaterMark = currentNav;
+        }
+      }
+      lastMonthForPerfFee = monthKey;
+      
+      // LTH daily NAV + performance (AFTER performance fee deduction)
       const nav = usdtBal + btcBal * px;
       const totalRoi = computeRoi(nav, contribGrossCum);
       const cagr = computeCagr(nav, contribGrossCum, firstContribDate, tradeDate);
@@ -462,7 +532,12 @@ Deno.serve(async (req)=>{
         contrib_fee_usdt_cum: contribFeeCum,
         contrib_net_usdt_cum: contribNetCum,
         total_roi_percent: totalRoi,
-        cagr_percent: cagr
+        cagr_percent: cagr,
+        platform_fees_paid_usdt: platformFeesCum,
+        performance_fees_paid_usdt: performanceFeeToday,
+        exchange_fees_paid_btc: exchangeFeesBtcCum,
+        exchange_fees_paid_usdt: exchangeFeesUsdtCum,
+        high_water_mark_usdt: highWaterMark
       });
       // Std DCA daily NAV + performance
       const stdNav = stdUsdtBal + stdBtcBal * px;
@@ -481,7 +556,9 @@ Deno.serve(async (req)=>{
         contrib_fee_usdt_cum: stdContribFeeCum,
         contrib_net_usdt_cum: stdContribNetCum,
         total_roi_percent: stdRoi,
-        cagr_percent: stdCagr
+        cagr_percent: stdCagr,
+        total_exchange_fees_btc: stdExchangeFeesBtcCum,
+        total_exchange_fees_usdt: stdExchangeFeesUsdtCum
       });
     }
     // Persist all results

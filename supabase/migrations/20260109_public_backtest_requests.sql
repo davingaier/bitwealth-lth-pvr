@@ -201,19 +201,35 @@ BEGIN
         status = 'running'
     WHERE id = v_request_id;
     
-    -- Create back-test parameters
+    -- Create back-test parameters with VALR exchange fees AND BitWealth fees
     INSERT INTO lth_pvr_bt.bt_params (
         bt_run_id,
-        upfront_usdt,
-        monthly_usdt,
+        start_date,
+        end_date,
+        upfront_contrib_usdt,
+        monthly_contrib_usdt,
+        maker_bps_trade,
+        maker_bps_contrib,
         performance_fee_pct,
-        platform_fee_pct
+        platform_fee_pct,
+        momo_len,
+        momo_thr,
+        enable_retrace,
+        b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11
     ) VALUES (
         v_bt_run_id,
+        p_start_date,
+        p_end_date,
         p_upfront_usdt,
         p_monthly_usdt,
-        0.10,  -- 10% performance fee
-        0.0075 -- 0.75% platform fee
+        8.0,     -- 8 bps (0.08%) VALR exchange fee for BTC/USDT trades (charged in BTC)
+        18.0,    -- 18 bps (0.18%) VALR exchange fee for USDT/ZAR trades (charged in USDT)
+        0.10,    -- 10% (0.10) BitWealth performance fee (high-water mark)
+        0.0075,  -- 0.75% (0.0075) BitWealth platform fee on contributions
+        30,      -- 30-day momentum length
+        0.02,    -- 2% momentum threshold
+        true,    -- Enable retrace logic
+        0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55  -- CI bands
     );
     
     -- Get remaining requests

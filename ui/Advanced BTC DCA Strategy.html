@@ -2149,12 +2149,19 @@
           <label for="btMonthlyUsdt"><strong>Monthly USDT contribution:</strong></label>
           <input id="btMonthlyUsdt" type="number" min="0" step="0.01" value="30">
 
-          <!-- Fees -->
-          <label for="btBtcFeePct"><strong>BTCUSDT Fee %:</strong></label>
-          <input id="btBtcFeePct" type="number" min="0" step="0.01" value="0.08">
+          <!-- Exchange Fees (VALR) -->
+          <label for="btBtcFeePct"><strong>VALR BTC/USDT Fee (bps):</strong></label>
+          <input id="btBtcFeePct" type="number" min="0" step="0.01" value="8" title="8 bps = 0.08% - VALR exchange fee for BTC/USDT trades (charged in BTC)">
 
-          <label for="btContribFeePct"><strong>USDT Contribution Fee %:</strong></label>
-          <input id="btContribFeePct" type="number" min="0" step="0.01" value="0.18">
+          <label for="btContribFeePct"><strong>VALR USDT/ZAR Fee (bps):</strong></label>
+          <input id="btContribFeePct" type="number" min="0" step="0.01" value="18" title="18 bps = 0.18% - VALR exchange fee for USDT/ZAR conversions (charged in USDT)">
+
+          <!-- BitWealth Fees -->
+          <label for="btPlatformFeePct"><strong>BitWealth Platform Fee (%):</strong></label>
+          <input id="btPlatformFeePct" type="number" min="0" max="100" step="0.01" value="0.75" title="0.75% - BitWealth platform fee on all contributions">
+
+          <label for="btPerformanceFeePct"><strong>BitWealth Performance Fee (%):</strong></label>
+          <input id="btPerformanceFeePct" type="number" min="0" max="100" step="1" value="10" title="10% - BitWealth performance fee on monthly profits (high-water mark)">
 
           <!-- Chart type -->
           <label for="btReportTypeSelect"><strong>Chart type:</strong></label>
@@ -2990,11 +2997,13 @@
 
       const upfront  = upfrontEl  ? (parseFloat(upfrontEl.value || '0')  || 0) : 0;
       const monthly  = monthlyEl  ? (parseFloat(monthlyEl.value || '0')  || 0) : 0;
-      const tradePct = tradeFeeEl ? (parseFloat(tradeFeeEl.value || '0') || 0) : 0;
-      const contrPct = contribFeeEl ? (parseFloat(contribFeeEl.value || '0') || 0) : 0;
+      
+      // Exchange fees are in basis points (8 bps, 18 bps)
+      const tradeBps = tradeFeeEl ? (parseFloat(tradeFeeEl.value || '8') || 8) : 8;
+      const contrBps = contribFeeEl ? (parseFloat(contribFeeEl.value || '18') || 18) : 18;
 
-      const maker_bps_trade   = btPctToBps(tradePct);
-      const maker_bps_contrib = btPctToBps(contrPct);
+      const maker_bps_trade   = tradeBps;      // Already in basis points (e.g., 8 bps = 0.08%)
+      const maker_bps_contrib = contrBps;      // Already in basis points (e.g., 18 bps = 0.18%)
 
       // org_id – try customersCache first, then fall back to my_orgs RPC
       let orgId = null;
@@ -3049,6 +3058,9 @@
         }
 
         // 2) Create bt_params row for this run (in lth_pvr_bt schema)
+        const platformFeePct = parseFloat(document.getElementById('btPlatformFeePct')?.value || 0.75) / 100;
+        const performanceFeePct = parseFloat(document.getElementById('btPerformanceFeePct')?.value || 10) / 100;
+        
         const { error: paramsErr } = await btDb
           .from('bt_params')
           .insert({
@@ -3058,7 +3070,9 @@
           upfront_contrib_usdt:  upfront,
           monthly_contrib_usdt:  monthly,
           maker_bps_trade,
-          maker_bps_contrib
+          maker_bps_contrib,
+          platform_fee_pct:      platformFeePct,      // BitWealth platform fee (0.75% default)
+          performance_fee_pct:   performanceFeePct    // BitWealth performance fee (10% default)
           // B1–B11 + momentum / gating stay on DB defaults for now (aligned with EF / Python)
         });
 
