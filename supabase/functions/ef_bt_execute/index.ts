@@ -477,9 +477,13 @@ Deno.serve(async (req)=>{
         }
       }
       // Monthly performance fee calculation (high-water mark)
+      // Only runs on the first day of a new month (when month changes)
       let performanceFeeToday = 0;
-      if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
-        // Month-end: charge performance fee on NAV gains above high-water mark
+      const isNewMonth = (monthKey !== lastMonthForPerfFee);
+      const isNotFirstMonth = (lastMonthForPerfFee !== null);
+      
+      if (isNewMonth && isNotFirstMonth) {
+        // Month boundary: calculate performance fee on NAV gains above high-water mark
         const currentNav = usdtBal + btcBal * px;
         const contribSinceHWM = contribNetCum - hwmContribNetCum;
         const navForPerfFee = currentNav - contribSinceHWM;
@@ -503,20 +507,21 @@ Deno.serve(async (req)=>{
             fee_usdt: performanceFeeToday,
             note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
-        }
-        
-        // Update high-water mark only at month-end (after fee calculation)
-        // Recalculate NAV after fee deduction
-        const navAfterFee = usdtBal + btcBal * px;
-        const navForHWM = navAfterFee - contribSinceHWM;
-        if (navForHWM > highWaterMark) {
-          highWaterMark = navForHWM;
+          
+          // Update high-water mark after charging fee (to NAV after fee)
+          const navAfterFee = usdtBal + btcBal * px;
+          highWaterMark = navAfterFee - contribSinceHWM;
+          hwmContribNetCum = contribNetCum;
+        } else if (navForPerfFee > highWaterMark) {
+          // Update high-water mark even if no fee charged (new peak reached)
+          highWaterMark = navForPerfFee;
           hwmContribNetCum = contribNetCum;
         }
+        // If navForPerfFee <= highWaterMark, don't update (still below peak)
       }
       lastMonthForPerfFee = monthKey;
       
-      // Initialize high-water mark on first day (after all trading activity)
+      // Initialize high-water mark on first day ONLY (after all trading activity)
       if (i === 0) {
         const initialNav = usdtBal + btcBal * px;
         highWaterMark = initialNav;
