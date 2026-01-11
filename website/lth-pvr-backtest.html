@@ -16,7 +16,12 @@
             display: grid;
             grid-template-columns: 400px 1fr;
             gap: 32px;
-            margin-top: 40px;
+            margin-top: 20px;
+            transition: grid-template-columns 0.3s ease;
+        }
+        
+        .backtest-container.params-collapsed {
+            grid-template-columns: 60px 1fr;
         }
         
         .params-panel {
@@ -27,6 +32,42 @@
             height: fit-content;
             position: sticky;
             top: 100px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .params-panel.collapsed {
+            padding: 16px;
+            width: 60px;
+        }
+        
+        .params-panel.collapsed .params-content {
+            display: none;
+        }
+        
+        .params-panel .expand-btn {
+            display: none;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            cursor: pointer;
+            padding: 12px 8px;
+            background: var(--gold);
+            color: var(--bg-primary);
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            text-align: center;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        
+        .params-panel.collapsed .expand-btn {
+            display: block;
+        }
+        
+        .params-panel .expand-btn:hover {
+            background: var(--gold-hover);
+            transform: scale(1.05);
         }
         
         .results-panel {
@@ -249,7 +290,7 @@
     </nav>
 
     <!-- Page Header -->
-    <section class="hero" style="padding: 80px 0 40px;">
+    <section class="hero" style="padding: 40px 0 20px;">
         <div class="container">
             <h1 class="hero-title" style="font-size: 42px;">Interactive <span class="gradient-text">Back-Tester</span></h1>
             <p class="hero-description" style="margin-bottom: 0;">
@@ -259,14 +300,16 @@
     </section>
 
     <!-- Back-Test Tool -->
-    <section style="padding: 40px 0 120px;">
+    <section style="padding: 20px 0 120px;">
         <div class="container">
             <div class="backtest-container">
                 <!-- Parameters Panel -->
-                <div class="params-panel">
-                    <h3 style="margin-bottom: 24px; font-size: 20px;">Back-Test Parameters</h3>
-                    
-                    <form id="backtestForm">
+                <div class="params-panel" id="paramsPanel">
+                    <div class="expand-btn" onclick="toggleParams()">📊 Show Parameters</div>
+                    <div class="params-content">
+                        <h3 style="margin-bottom: 24px; font-size: 20px;">Back-Test Parameters</h3>
+                        
+                        <form id="backtestForm">
                         <div class="form-group">
                             <label for="email">Email Address *</label>
                             <input type="email" id="email" name="email" required placeholder="your@email.com">
@@ -303,6 +346,7 @@
                             <strong>Remaining today:</strong> <span id="remainingCount">10</span> <span id="remainingLabel">back-tests</span>
                         </div>
                     </form>
+                    </div>
                 </div>
                 
                 <!-- Results Panel -->
@@ -492,6 +536,9 @@
             // Disable submit button
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('submitBtn').textContent = 'Running...';
+            
+            // Collapse parameters panel to make room for results
+            collapseParams();
             
             // Show loading state
             showState('loading');
@@ -731,11 +778,39 @@
             document.getElementById('resultsState').style.display = state === 'results' ? 'block' : 'none';
         }
         
+        function toggleParams() {
+            const panel = document.getElementById('paramsPanel');
+            const container = document.querySelector('.backtest-container');
+            
+            if (panel.classList.contains('collapsed')) {
+                panel.classList.remove('collapsed');
+                container.classList.remove('params-collapsed');
+            } else {
+                panel.classList.add('collapsed');
+                container.classList.add('params-collapsed');
+            }
+        }
+        
+        function collapseParams() {
+            const panel = document.getElementById('paramsPanel');
+            const container = document.querySelector('.backtest-container');
+            panel.classList.add('collapsed');
+            container.classList.add('params-collapsed');
+        }
+        
+        function expandParams() {
+            const panel = document.getElementById('paramsPanel');
+            const container = document.querySelector('.backtest-container');
+            panel.classList.remove('collapsed');
+            container.classList.remove('params-collapsed');
+        }
+        
         function showError(message) {
             document.getElementById('submitBtn').disabled = false;
             document.getElementById('submitBtn').textContent = 'Run Back-Test';
             document.getElementById('errorMessage').textContent = message;
             showState('error');
+            expandParams(); // Expand params on error
         }
         
         function resetForm() {
@@ -752,6 +827,7 @@
             document.getElementById('monthly').value = '1000';
             
             showState('initial');
+            expandParams(); // Expand params on reset
             if (pollingInterval) {
                 clearInterval(pollingInterval);
             }
