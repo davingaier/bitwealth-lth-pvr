@@ -228,6 +228,7 @@ Deno.serve(async (req)=>{
     let platformFeesCum = 0;  // BitWealth platform fees (0.75%)
     let performanceFeesCum = 0;  // BitWealth performance fees (10% with high-water mark)
     let highWaterMark = 0;  // For performance fee calculation
+    let hwmContribGrossCum = 0; // Track cumulative contributions at last HWM update
     let exchangeFeesBtcCum = 0;  // VALR BTC/USDT fees in BTC
     let exchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees in USDT
     let firstContribDate = null;
@@ -483,16 +484,20 @@ Deno.serve(async (req)=>{
       // Monthly performance fee calculation (high-water mark)
       let performanceFeeToday = 0;
       if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
-        // Month-end: calculate performance fee on NAV gains above high-water mark
+        // Month-end: calculate performance fee on NAV gains above high-water mark, net of new contributions
         const currentNav = usdtBal + btcBal * px;
-        if (currentNav > highWaterMark && performanceFeeRate > 0) {
-          const profitAboveHWM = currentNav - highWaterMark;
+        const contribSinceHWM = contribGrossCum - hwmContribGrossCum;
+        // Only charge performance fee on NAV gains above HWM, net of new contributions
+        const navForPerfFee = currentNav - contribSinceHWM;
+        if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
+          const profitAboveHWM = navForPerfFee - highWaterMark;
           performanceFeeToday = profitAboveHWM * performanceFeeRate;
           // Deduct performance fee from USDT balance
           usdtBal -= performanceFeeToday;
           performanceFeesCum += performanceFeeToday;
-          // Update high-water mark to current NAV (before fee deduction)
-          highWaterMark = currentNav;
+          // Update high-water mark and contribution marker to current values (before fee deduction)
+          highWaterMark = navForPerfFee;
+          hwmContribGrossCum = contribGrossCum;
           // Record performance fee in ledger
           ledgerRows.push({
             bt_run_id,
@@ -504,11 +509,12 @@ Deno.serve(async (req)=>{
             amount_usdt: 0,
             fee_btc: 0,
             fee_usdt: performanceFeeToday,
-            note: "BitWealth performance fee (10% on profit above high-water mark)"
+            note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
-        } else if (currentNav > highWaterMark) {
-          // Update high-water mark even if no fee charged
-          highWaterMark = currentNav;
+        } else if (navForPerfFee > highWaterMark) {
+          // Update high-water mark and contribution marker even if no fee charged
+          highWaterMark = navForPerfFee;
+          hwmContribGrossCum = contribGrossCum;
         }
       }
       lastMonthForPerfFee = monthKey;
