@@ -16,7 +16,7 @@
             display: grid;
             grid-template-columns: 400px 1fr;
             gap: 32px;
-            margin-top: 8px;
+            margin-top: 0;
             transition: grid-template-columns 0.3s ease;
         }
         
@@ -290,9 +290,9 @@
     </nav>
 
     <!-- Page Header -->
-    <section class="hero" style="padding: 20px 0 10px;">
+    <section class="hero" style="padding: 12px 0 8px;">
         <div class="container">
-            <h1 class="hero-title" style="font-size: 42px; margin-bottom: 8px;">Interactive <span class="gradient-text">Back-Tester</span></h1>
+            <h1 class="hero-title" style="font-size: 42px; margin-bottom: 4px; margin-top: 0;">Interactive <span class="gradient-text">Back-Tester</span></h1>
             <p class="hero-description" style="margin-bottom: 0;">
                 Test the LTH PVR strategy with your own investment parameters and compare against Standard DCA
             </p>
@@ -300,7 +300,7 @@
     </section>
 
     <!-- Back-Test Tool -->
-    <section style="padding: 10px 0 120px;">
+    <section style="padding: 8px 0 120px;">
         <div class="container">
             <div class="backtest-container">
                 <!-- Parameters Panel -->
@@ -655,8 +655,8 @@
             
             // Prepare chart data with null safety
             const labels = (data.daily_results || []).map(r => r.date);
-            const lthRoi = (data.daily_results || []).map(r => r.lth_pvr_roi || 0);
-            const stdRoi = (data.daily_results || []).map(r => r.std_dca_roi || 0);
+            const lthRoi = (data.daily_results || []).map(r => (r.lth_pvr_roi || 0) * 100);
+            const stdRoi = (data.daily_results || []).map(r => (r.std_dca_roi || 0) * 100);
             const lthNav = (data.daily_results || []).map(r => r.lth_pvr_nav || 0);
             const stdNav = (data.daily_results || []).map(r => r.std_dca_nav || 0);
             
