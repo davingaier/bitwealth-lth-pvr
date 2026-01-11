@@ -481,15 +481,14 @@ Deno.serve(async (req)=>{
           });
         }
       }
-      // Calculate current NAV adjusted for new contributions (for HWM tracking)
-      const currentNav = usdtBal + btcBal * px;
-      const contribSinceHWM = contribNetCum - hwmContribNetCum;
-      const navForPerfFee = currentNav - contribSinceHWM;
-      
       // Monthly performance fee calculation (high-water mark)
       let performanceFeeToday = 0;
       if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
         // Month-end: charge performance fee on NAV gains above high-water mark
+        const currentNav = usdtBal + btcBal * px;
+        const contribSinceHWM = contribNetCum - hwmContribNetCum;
+        const navForPerfFee = currentNav - contribSinceHWM;
+        
         if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
           const profitAboveHWM = navForPerfFee - highWaterMark;
           performanceFeeToday = profitAboveHWM * performanceFeeRate;
@@ -513,7 +512,11 @@ Deno.serve(async (req)=>{
       }
       lastMonthForPerfFee = monthKey;
       
-      // Update high-water mark daily (not just at month-end)
+      // Update high-water mark daily (after any performance fee deduction)
+      const currentNav = usdtBal + btcBal * px;
+      const contribSinceHWM = contribNetCum - hwmContribNetCum;
+      const navForPerfFee = currentNav - contribSinceHWM;
+      
       if (navForPerfFee > highWaterMark) {
         highWaterMark = navForPerfFee;
         hwmContribNetCum = contribNetCum;
