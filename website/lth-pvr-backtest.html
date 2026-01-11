@@ -16,7 +16,7 @@
             display: grid;
             grid-template-columns: 400px 1fr;
             gap: 32px;
-            margin-top: 20px;
+            margin-top: 8px;
             transition: grid-template-columns 0.3s ease;
         }
         
@@ -290,9 +290,9 @@
     </nav>
 
     <!-- Page Header -->
-    <section class="hero" style="padding: 40px 0 20px;">
+    <section class="hero" style="padding: 20px 0 10px;">
         <div class="container">
-            <h1 class="hero-title" style="font-size: 42px;">Interactive <span class="gradient-text">Back-Tester</span></h1>
+            <h1 class="hero-title" style="font-size: 42px; margin-bottom: 8px;">Interactive <span class="gradient-text">Back-Tester</span></h1>
             <p class="hero-description" style="margin-bottom: 0;">
                 Test the LTH PVR strategy with your own investment parameters and compare against Standard DCA
             </p>
@@ -300,7 +300,7 @@
     </section>
 
     <!-- Back-Test Tool -->
-    <section style="padding: 20px 0 120px;">
+    <section style="padding: 10px 0 120px;">
         <div class="container">
             <div class="backtest-container">
                 <!-- Parameters Panel -->
@@ -518,6 +518,7 @@
         
         let currentRequestId = null;
         let pollingInterval = null;
+        let timeoutId = null;
         let roiChart = null;
         let navChart = null;
         
@@ -597,19 +598,22 @@
                     
                     if (result.status === 'completed' && result.daily_results) {
                         clearInterval(pollingInterval);
+                        if (timeoutId) clearTimeout(timeoutId);
                         displayResults(result);
                     } else if (result.status === 'failed') {
                         clearInterval(pollingInterval);
+                        if (timeoutId) clearTimeout(timeoutId);
                         showError(result.error_message || 'Back-test failed');
                     }
                 } catch (error) {
                     clearInterval(pollingInterval);
+                    if (timeoutId) clearTimeout(timeoutId);
                     showError('Polling error: ' + error.message);
                 }
             }, 2000);
             
             // Timeout after 15 minutes
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
                 if (pollingInterval) {
                     clearInterval(pollingInterval);
                     showError('Back-test timed out. Please try again.');
@@ -678,7 +682,8 @@
                             backgroundColor: 'rgba(255, 180, 0, 0.1)',
                             borderWidth: 0.75,
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            pointRadius: 0
                         },
                         {
                             label: 'Standard DCA',
@@ -687,7 +692,8 @@
                             backgroundColor: 'rgba(107, 120, 150, 0.1)',
                             borderWidth: 0.5,
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            pointRadius: 0
                         }
                     ]
                 },
@@ -708,7 +714,7 @@
                             grid: { color: 'rgba(255, 255, 255, 0.05)' },
                             ticks: {
                                 color: '#A8B2D1',
-                                callback: (value) => '+' + value + '%'
+                                callback: (value) => (value >= 0 ? '+' : '') + value.toFixed(2) + '%'
                             }
                         }
                     }
@@ -733,7 +739,8 @@
                             backgroundColor: 'rgba(255, 180, 0, 0.1)',
                             borderWidth: 0.75,
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            pointRadius: 0
                         },
                         {
                             label: 'Standard DCA',
@@ -742,7 +749,8 @@
                             backgroundColor: 'rgba(107, 120, 150, 0.1)',
                             borderWidth: 0.5,
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            pointRadius: 0
                         }
                     ]
                 },
