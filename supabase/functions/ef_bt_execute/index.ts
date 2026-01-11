@@ -352,6 +352,11 @@ Deno.serve(async (req)=>{
       if (grossContribToday > 0) {
         applyContribLth(row, grossContribToday);
         const netStd = applyContribStd(row, grossContribToday);
+        // Initialize high-water mark on first contribution day
+        if (i === 0 && upfront > 0) {
+          const initialNav = usdtBal + btcBal * px;
+          highWaterMark = initialNav;
+        }
         // Std DCA: invest net contribution immediately on that trade_date
         if (netStd > 0 && px > 0) {
           const tradeUsdt = netStd;

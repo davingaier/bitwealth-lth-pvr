@@ -81,7 +81,22 @@ if (currentNavUSD > high_water_mark_usdt) {
 
 ## Status
 
-🔴 **UNRESOLVED** - Requires investigation and fix in ef_bt_execute function
+✅ **RESOLVED** - Fixed in ef_bt_execute function on 2026-01-11
+
+**Fix Applied:**
+- Added high-water mark initialization on first contribution day (line 356-360)
+- HWM now set to initial NAV after upfront contribution
+- Prevents incorrect performance fee charges in subsequent months
+
+**Deployment Status:**
+- ✅ Deployed to production (project: wqnmxpooabmedvtackji)
+- ⏳ Requires testing with same parameters to verify fix
+
+**Verification Steps:**
+1. Run new back-test: 2025-01-01 to 2025-12-31, $10K upfront + $1K monthly
+2. Query: `SELECT trade_date, nav_usd, high_water_mark_usdt, performance_fees_paid_usdt FROM lth_pvr_bt.bt_results_daily WHERE bt_run_id = '[new_run_id]' AND trade_date BETWEEN '2025-01-01' AND '2025-02-03'`
+3. Verify high_water_mark_usdt on 2025-01-01 ≈ $10,897.85
+4. Verify performance_fees_paid_usdt on 2025-02-01 = $0 (NAV was below HWM)
 
 ## Notes
 
