@@ -510,18 +510,17 @@ Deno.serve(async (req)=>{
             note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
         }
+        
+        // Update high-water mark only at month-end (after fee calculation)
+        // Recalculate NAV after fee deduction
+        const navAfterFee = usdtBal + btcBal * px;
+        const navForHWM = navAfterFee - contribSinceHWM;
+        if (navForHWM > highWaterMark) {
+          highWaterMark = navForHWM;
+          hwmContribNetCum = contribNetCum;
+        }
       }
       lastMonthForPerfFee = monthKey;
-      
-      // Update high-water mark daily (after any performance fee deduction)
-      const currentNav = usdtBal + btcBal * px;
-      const contribSinceHWM = contribNetCum - hwmContribNetCum;
-      const navForPerfFee = currentNav - contribSinceHWM;
-      
-      if (navForPerfFee > highWaterMark) {
-        highWaterMark = navForPerfFee;
-        hwmContribNetCum = contribNetCum;
-      }
       
       // LTH daily NAV + performance (AFTER performance fee deduction)
       const nav = usdtBal + btcBal * px;
