@@ -228,7 +228,7 @@ Deno.serve(async (req)=>{
     let platformFeesCum = 0;  // BitWealth platform fees (0.75%)
     let performanceFeesCum = 0;  // BitWealth performance fees (10% with high-water mark)
     let highWaterMark = 0;  // For performance fee calculation
-    let hwmContribGrossCum = 0; // Track cumulative contributions at last HWM update
+    let hwmContribNetCum = 0; // Track cumulative NET contributions at last HWM update
     let exchangeFeesBtcCum = 0;  // VALR BTC/USDT fees in BTC
     let exchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees in USDT
     let firstContribDate = null;
@@ -486,8 +486,8 @@ Deno.serve(async (req)=>{
       if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
         // Month-end: calculate performance fee on NAV gains above high-water mark, net of new contributions
         const currentNav = usdtBal + btcBal * px;
-        const contribSinceHWM = contribGrossCum - hwmContribGrossCum;
-        // Only charge performance fee on NAV gains above HWM, net of new contributions
+        const contribSinceHWM = contribNetCum - hwmContribNetCum;
+        // Only charge performance fee on NAV gains above HWM, net of new NET contributions
         const navForPerfFee = currentNav - contribSinceHWM;
         if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
           const profitAboveHWM = navForPerfFee - highWaterMark;
@@ -497,7 +497,7 @@ Deno.serve(async (req)=>{
           performanceFeesCum += performanceFeeToday;
           // Update high-water mark and contribution marker to current values (before fee deduction)
           highWaterMark = navForPerfFee;
-          hwmContribGrossCum = contribGrossCum;
+          hwmContribNetCum = contribNetCum;
           // Record performance fee in ledger
           ledgerRows.push({
             bt_run_id,
@@ -514,7 +514,7 @@ Deno.serve(async (req)=>{
         } else if (navForPerfFee > highWaterMark) {
           // Update high-water mark and contribution marker even if no fee charged
           highWaterMark = navForPerfFee;
-          hwmContribGrossCum = contribGrossCum;
+          hwmContribNetCum = contribNetCum;
         }
       }
       lastMonthForPerfFee = monthKey;
