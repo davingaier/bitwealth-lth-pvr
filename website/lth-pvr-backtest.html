@@ -12,6 +12,26 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     
     <style>
+        /* Override hero for back-test page */
+        .hero {
+            min-height: auto;
+            padding: 60px 0 40px;
+        }
+        
+        .hero-title {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+        
+        .hero-description {
+            font-size: 16px;
+            margin-bottom: 0;
+        }
+        
+        .backtest-section {
+            padding: 40px 0 120px;
+        }
+        
         .backtest-container {
             display: grid;
             grid-template-columns: 400px 1fr;
@@ -290,17 +310,17 @@
     </nav>
 
     <!-- Page Header -->
-    <section class="hero" style="padding: 12px 0 8px;">
+    <section class="hero">
         <div class="container">
-            <h1 class="hero-title" style="font-size: 42px; margin-bottom: 4px; margin-top: 0;">Interactive <span class="gradient-text">Back-Tester</span></h1>
-            <p class="hero-description" style="margin-bottom: 0;">
+            <h1 class="hero-title">Interactive <span class="gradient-text">Back-Tester</span></h1>
+            <p class="hero-description">
                 Test the LTH PVR strategy with your own investment parameters and compare against Standard DCA
             </p>
         </div>
     </section>
 
     <!-- Back-Test Tool -->
-    <section style="padding: 8px 0 120px;">
+    <section class="backtest-section">
         <div class="container">
             <div class="backtest-container">
                 <!-- Parameters Panel -->
@@ -634,7 +654,7 @@
             const std = data.std_dca_summary || {};
             
             document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav || 0);
-            document.getElementById('lthROI').textContent = '+' + (lth.total_roi || 0).toFixed(2) + '%';
+            document.getElementById('lthROI').textContent = '+' + (lth.final_roi_pct || 0).toFixed(2) + '%';
             document.getElementById('lthCAGR').textContent = (lth.cagr || 0).toFixed(2) + '%';
             document.getElementById('lthContrib').textContent = '$' + formatNumber(lth.contrib_net || 0);
             
@@ -645,7 +665,7 @@
             document.getElementById('lthExchangeFee').textContent = '$' + formatNumber(lthExchangeFeeUSD);
             
             document.getElementById('stdFinalNav').textContent = '$' + formatNumber(std.final_nav || 0);
-            document.getElementById('stdROI').textContent = '+' + (std.total_roi || 0).toFixed(2) + '%';
+            document.getElementById('stdROI').textContent = '+' + (std.final_roi_pct || 0).toFixed(2) + '%';
             document.getElementById('stdCAGR').textContent = (std.cagr || 0).toFixed(2) + '%';
             document.getElementById('stdContrib').textContent = '$' + formatNumber(std.contrib_net || 0);
             
@@ -655,8 +675,8 @@
             
             // Prepare chart data with null safety
             const labels = (data.daily_results || []).map(r => r.date);
-            const lthRoi = (data.daily_results || []).map(r => (r.lth_pvr_roi || 0) * 100);
-            const stdRoi = (data.daily_results || []).map(r => (r.std_dca_roi || 0) * 100);
+            const lthRoi = (data.daily_results || []).map(r => r.lth_pvr_roi || 0);
+            const stdRoi = (data.daily_results || []).map(r => r.std_dca_roi || 0);
             const lthNav = (data.daily_results || []).map(r => r.lth_pvr_nav || 0);
             const stdNav = (data.daily_results || []).map(r => r.std_dca_nav || 0);
             
