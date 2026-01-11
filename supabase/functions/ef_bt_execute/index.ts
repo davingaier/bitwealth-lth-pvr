@@ -357,6 +357,7 @@ Deno.serve(async (req)=>{
         if (i === 0 && upfront > 0) {
           const initialNav = usdtBal + btcBal * px;
           highWaterMark = initialNav;
+          hwmContribNetCum = contribNetCum; // Initialize contribution marker
         }
         // Std DCA: invest net contribution immediately on that trade_date
         if (netStd > 0 && px > 0) {
