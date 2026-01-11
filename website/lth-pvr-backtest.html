@@ -654,9 +654,10 @@
             const std = data.std_dca_summary || {};
             
             document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav || 0);
-            document.getElementById('lthROI').textContent = '+' + (lth.total_roi || 0).toFixed(2) + '%';
+            const lthRoi = (lth.total_roi || 0);
+            document.getElementById('lthROI').textContent = (lthRoi >= 0 ? '+' : '') + lthRoi.toFixed(2) + '%';
             document.getElementById('lthCAGR').textContent = (lth.cagr || 0).toFixed(2) + '%';
-            document.getElementById('lthContrib').textContent = '$' + formatNumber(lth.contrib_net || 0);
+            document.getElementById('lthContrib').textContent = '$' + formatNumber(lth.contrib_gross || 0);
             
             // LTH PVR fees (convert BTC fees to USD using final BTC price if available)
             const lthExchangeFeeUSD = (lth.total_exchange_fees_usdt || 0) + ((lth.total_exchange_fees_btc || 0) * (data.daily_results?.[data.daily_results.length - 1]?.lth_pvr_nav || 0) / (lth.final_nav || 1));
@@ -665,9 +666,10 @@
             document.getElementById('lthExchangeFee').textContent = '$' + formatNumber(lthExchangeFeeUSD);
             
             document.getElementById('stdFinalNav').textContent = '$' + formatNumber(std.final_nav || 0);
-            document.getElementById('stdROI').textContent = '+' + (std.total_roi || 0).toFixed(2) + '%';
+            const stdRoi = (std.total_roi || 0);
+            document.getElementById('stdROI').textContent = (stdRoi >= 0 ? '+' : '') + stdRoi.toFixed(2) + '%';
             document.getElementById('stdCAGR').textContent = (std.cagr || 0).toFixed(2) + '%';
-            document.getElementById('stdContrib').textContent = '$' + formatNumber(std.contrib_net || 0);
+            document.getElementById('stdContrib').textContent = '$' + formatNumber(std.contrib_gross || 0);
             
             // Standard DCA fees (VALR exchange fees only - NO BitWealth fees)
             const stdExchangeFeeUSD = (std.total_exchange_fees_usdt || 0) + ((std.total_exchange_fees_btc || 0) * (data.daily_results?.[data.daily_results.length - 1]?.std_dca_nav || 0) / (std.final_nav || 1));
