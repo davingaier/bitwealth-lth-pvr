@@ -481,23 +481,21 @@ Deno.serve(async (req)=>{
           });
         }
       }
+      // Calculate current NAV adjusted for new contributions (for HWM tracking)
+      const currentNav = usdtBal + btcBal * px;
+      const contribSinceHWM = contribNetCum - hwmContribNetCum;
+      const navForPerfFee = currentNav - contribSinceHWM;
+      
       // Monthly performance fee calculation (high-water mark)
       let performanceFeeToday = 0;
       if (monthKey !== lastMonthForPerfFee && lastMonthForPerfFee !== null) {
-        // Month-end: calculate performance fee on NAV gains above high-water mark, net of new contributions
-        const currentNav = usdtBal + btcBal * px;
-        const contribSinceHWM = contribNetCum - hwmContribNetCum;
-        // Only charge performance fee on NAV gains above HWM, net of new NET contributions
-        const navForPerfFee = currentNav - contribSinceHWM;
+        // Month-end: charge performance fee on NAV gains above high-water mark
         if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
           const profitAboveHWM = navForPerfFee - highWaterMark;
           performanceFeeToday = profitAboveHWM * performanceFeeRate;
           // Deduct performance fee from USDT balance
           usdtBal -= performanceFeeToday;
           performanceFeesCum += performanceFeeToday;
-          // Update high-water mark and contribution marker to current values (before fee deduction)
-          highWaterMark = navForPerfFee;
-          hwmContribNetCum = contribNetCum;
           // Record performance fee in ledger
           ledgerRows.push({
             bt_run_id,
@@ -511,13 +509,15 @@ Deno.serve(async (req)=>{
             fee_usdt: performanceFeeToday,
             note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
-        } else if (navForPerfFee > highWaterMark) {
-          // Update high-water mark and contribution marker even if no fee charged
-          highWaterMark = navForPerfFee;
-          hwmContribNetCum = contribNetCum;
         }
       }
       lastMonthForPerfFee = monthKey;
+      
+      // Update high-water mark daily (not just at month-end)
+      if (navForPerfFee > highWaterMark) {
+        highWaterMark = navForPerfFee;
+        hwmContribNetCum = contribNetCum;
+      }
       
       // LTH daily NAV + performance (AFTER performance fee deduction)
       const nav = usdtBal + btcBal * px;
