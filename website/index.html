@@ -559,8 +559,8 @@
             const contactSubmitBtn = document.getElementById('contactSubmitBtn');
             const contactFormMessage = document.getElementById('contactFormMessage');
             
-            // Get reCAPTCHA response
-            const captchaResponse = grecaptcha.getResponse(1); // Second reCAPTCHA instance
+            // Get reCAPTCHA response (widget ID 0 - this is the first/only reCAPTCHA on the page)
+            const captchaResponse = grecaptcha.getResponse();
             if (!captchaResponse) {
                 contactFormMessage.style.display = 'block';
                 contactFormMessage.className = 'form-message error';
@@ -597,19 +597,19 @@
                     contactFormMessage.className = 'form-message success';
                     contactFormMessage.textContent = result.message || 'Thank you! We\'ll get back to you within 24 hours.';
                     document.getElementById('contactForm').reset();
-                    grecaptcha.reset(1); // Reset second reCAPTCHA instance
+                    grecaptcha.reset(); // Reset reCAPTCHA
                 } else {
                     contactFormMessage.style.display = 'block';
                     contactFormMessage.className = 'form-message error';
                     contactFormMessage.textContent = result.error || 'Something went wrong. Please try again.';
-                    grecaptcha.reset(1);
+                    grecaptcha.reset();
                 }
             } catch (error) {
                 contactFormMessage.style.display = 'block';
                 contactFormMessage.className = 'form-message error';
                 contactFormMessage.textContent = 'Network error. Please check your connection and try again.';
                 console.error('Contact form error:', error);
-                grecaptcha.reset(1);
+                grecaptcha.reset();
             } finally {
                 contactSubmitBtn.disabled = false;
                 contactSubmitBtn.textContent = 'Send Message';
