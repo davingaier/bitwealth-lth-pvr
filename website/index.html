@@ -559,9 +559,19 @@
             const contactSubmitBtn = document.getElementById('contactSubmitBtn');
             const contactFormMessage = document.getElementById('contactFormMessage');
             
+            // Check if reCAPTCHA is loaded
+            if (typeof grecaptcha === 'undefined') {
+                contactFormMessage.style.display = 'block';
+                contactFormMessage.className = 'form-message error';
+                contactFormMessage.textContent = 'reCAPTCHA not loaded. Please refresh the page.';
+                return;
+            }
+            
             // Get reCAPTCHA response (widget ID 0 - this is the first/only reCAPTCHA on the page)
             const captchaResponse = grecaptcha.getResponse();
-            if (!captchaResponse) {
+            console.log('reCAPTCHA response:', captchaResponse);
+            
+            if (!captchaResponse || captchaResponse.length === 0) {
                 contactFormMessage.style.display = 'block';
                 contactFormMessage.className = 'form-message error';
                 contactFormMessage.textContent = 'Please complete the CAPTCHA verification';
