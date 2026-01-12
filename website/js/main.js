@@ -102,16 +102,8 @@ if (signupForm) {
     });
 }
 
-const contactForm = document.querySelector('.contact-form');
-if (contactForm) {
-    contactForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        // In production, this would send to your backend
-        alert('Message sent! We\'ll get back to you soon.');
-        contactForm.reset();
-    });
-}
+// Contact form is now handled inline in index.html with reCAPTCHA validation
+// Old handler removed to prevent conflicts
 
 // Parallax effect for hero background orbs
 window.addEventListener('scroll', () => {
