@@ -595,6 +595,19 @@
                 
                 const result = await response.json();
                 
+                // Log full response for debugging
+                console.log('Response status:', response.status);
+                console.log('Response data:', result);
+                
+                // Check if response is not OK
+                if (!response.ok) {
+                    const errorMsg = result.message || result.error || result.hint || 'Unknown error occurred';
+                    console.error('API Error:', errorMsg);
+                    grecaptcha.reset();
+                    showError(errorMsg);
+                    return;
+                }
+                
                 if (result.success) {
                     currentRequestId = result.request_id;
                     
