@@ -53,18 +53,19 @@
    - **Result:** First performance fee now correctly charged on Feb 1, 2020
    - **Deployment:** `supabase functions deploy ef_bt_execute --no-verify-jwt`
 
-**In Progress:**
-- 🔄 Phase 2B: LTH PVR Product Page
-  - HTML structure design complete
-  - Awaiting implementation start
+**Completed:**
+- ✅ Phase 2A: Landing Page Product Catalog (2026-01-09)
+- ✅ Phase 2B: LTH PVR Product Page with Real Data (2026-01-12)
+- ✅ Phase 2C: Interactive Back-Tester with reCAPTCHA (2026-01-12)
 
 **Pending:**
-- ⏳ Phase 2B: Product page charts and styling
-- ⏳ Phase 2C: hCaptcha implementation (frontend + backend)
 - ⏳ Phase 2D: Analytics tracking and pricing model update
+- ⏳ Production deployment and monitoring
+- ⏳ Marketing campaign launch
 
 **Key Decisions Made:**
-- 2026-01-12: Selected hCaptcha over Google reCAPTCHA for privacy compliance
+- 2026-01-12: Switched to Google reCAPTCHA v2 after discovering hCaptcha is not free (initially selected hCaptcha for privacy)
+- 2026-01-12: Used real database back-test results for product page charts (quarterly granularity for 2020-2025)
 - 2026-01-09: Confirmed back-tester uses async execution model (cron-based polling)
 - 2026-01-09: Kept original landing page structure, added product catalog section
 - 2026-01-08: Confirmed reuse of existing back-test infrastructure (no new tables)
@@ -73,7 +74,10 @@
 - ✅ `ef_execute_public_backtests` - Deployed 2026-01-09
 - ✅ `ef_deposit_scan` - Deployed 2026-01-09
 - ✅ `ef_bt_execute` - Deployed 2026-01-11 (HWM fix)
-- ✅ Website `lth-pvr-backtest.html` - Deployed 2026-01-09
+- ✅ Website `lth-pvr.html` - Deployed 2026-01-12 (real data)
+- ✅ Website `lth-pvr-backtest.html` - Deployed 2026-01-12 (reCAPTCHA)
+- ✅ Migration `20260112_add_recaptcha_verification.sql` - Applied 2026-01-12
+- ✅ Migration `20260112_fix_recaptcha_bt_runs_status.sql` - Applied 2026-01-12
 - ✅ 6 CI bands fix migrations - Applied 2026-01-09
 
 ---
