@@ -52,11 +52,13 @@
 3. **Website Contact Form Updates** (`website/index.html`)
    - **reCAPTCHA Integration:**
      - Added `<script src="https://www.google.com/recaptcha/api.js">` to head
-     - Added `<div class="g-recaptcha">` widget to contact form (second instance, widget ID=1)
-     - Site key configured in HTML data-sitekey attribute
+     - Added `<div class="g-recaptcha">` widget to contact form
+     - Uses same reCAPTCHA site key as back-test form (shared configuration)
+     - Widget ID 0 (first/only reCAPTCHA on landing page)
    - **Form Field IDs:** `contactName`, `contactEmail`, `contactMessage`
    - **JavaScript Handler:**
-     - Validates reCAPTCHA completion before submission
+     - Validates reCAPTCHA completion before submission with `grecaptcha.getResponse()`
+     - Checks for empty response and displays inline error if not completed
      - Calls `ef_contact_form_submit` edge function
      - Displays success/error messages inline (`#contactFormMessage`)
      - Resets form and reCAPTCHA on success
@@ -65,23 +67,40 @@
 
 4. **Security & Anti-Spam:**
    - **reCAPTCHA v2:** Server-side verification prevents bot submissions
+   - **Client-Side Validation:** Prevents form submission if reCAPTCHA not completed
    - **Email Validation:** Basic regex check for valid email format
    - **Database Storage:** All submissions logged for abuse tracking
    - **Rate Limiting:** Future enhancement - can query `contact_form_submissions` by email/date for rate limits
+
+**Bug Fixes:**
+1. **Conflicting Event Handler** (2026-01-12)
+   - **Problem:** Old event handler in `js/main.js` was intercepting contact form submission and showing browser alert popup "Message sent! We'll get back to you soon." This prevented reCAPTCHA validation from running.
+   - **Solution:** Removed lines 105-113 from `js/main.js` that contained `contactForm.addEventListener('submit')` handler
+   - **Result:** Contact form now uses only the inline handler in `index.html` with proper reCAPTCHA validation
+
+2. **reCAPTCHA Widget ID** (2026-01-12)
+   - **Problem:** JavaScript was trying to access widget ID 1 with `grecaptcha.getResponse(1)`, but contact form uses widget ID 0 (first reCAPTCHA on page)
+   - **Solution:** Changed `grecaptcha.getResponse(1)` to `grecaptcha.getResponse()` (defaults to widget 0)
+   - **Impact:** reCAPTCHA validation now works correctly, blocking submission when checkbox not checked
+
+3. **reCAPTCHA Site Key Mismatch** (2026-01-12)
+   - **Problem:** Contact form initially used different site key than back-test form, causing "ERROR for site owner: Invalid site key"
+   - **Solution:** Updated contact form to use same working site key as back-test form
+   - **Note:** Both forms now share same reCAPTCHA configuration (site key + secret key)
 
 **Technical Details:**
 - **SMTP Integration:** Uses existing `sendHTMLEmail()` function from `_shared/smtp.ts`
 - **Email Service:** Direct SMTP (not Resend API) via nodemailer
 - **Environment Variables Required:**
-  - `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA secret key for server-side verification
+  - `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA secret key for server-side verification (shared with back-test form)
   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` - Already configured
 - **Database Migration:** `supabase/migrations/20260112_add_contact_form_submissions.sql`
 
 **User Experience:**
 1. User fills out contact form on website landing page
-2. Completes reCAPTCHA challenge
+2. Completes reCAPTCHA challenge (required - form won't submit without it)
 3. Clicks "Send Message" button
-4. Sees success message: "Thank you! We'll get back to you within 24 hours."
+4. Sees inline success message: "Thank you! We'll get back to you within 24 hours."
 5. Receives auto-reply email confirmation immediately
 6. Admin receives notification email at info@bitwealth.co.za with full message details
 
@@ -91,12 +110,14 @@
 - Identify failed emails: `admin_notified_at IS NULL` or `auto_reply_sent_at IS NULL`
 - Future enhancement: Build admin UI panel to view/respond to submissions
 
-**Testing:**
-- Manual test with real submission after deployment
-- Verify both emails received (admin + auto-reply)
-- Verify database record created with correct timestamps
-- Test reCAPTCHA failure case (invalid token)
-- Test email validation (invalid email format)
+**Production Status:**
+- ✅ Database migration applied
+- ✅ Edge function deployed
+- ✅ Website form updated and deployed
+- ✅ reCAPTCHA validation working (blocks submission without checkbox)
+- ✅ Admin notification emails sending to info@bitwealth.co.za
+- ✅ Auto-reply emails sending to submitters
+- ✅ All bugs fixed and tested
 
 ### v0.6.16 – Phase 2 Public Website Complete
 **Date:** 2026-01-12  
