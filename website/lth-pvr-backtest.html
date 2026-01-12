@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     
     <style>
         /* Override hero for back-test page */
@@ -358,6 +359,14 @@
                             <small>Recurring monthly deposit</small>
                         </div>
                         
+                        <!-- Google reCAPTCHA Widget -->
+                        <div class="form-group">
+                            <div class="g-recaptcha" data-sitekey="6LdIS0gsAAAAAJdcnk9-PE7MEHF8nrWMGprLQr31" data-theme="dark"></div>
+                            <small style="color: var(--text-tertiary); margin-top: 8px; display: block;">
+                                Please complete the security check to continue
+                            </small>
+                        </div>
+                        
                         <button type="submit" id="submitBtn" class="btn-primary" style="width: 100%; margin-top: 16px;">
                             Run Back-Test
                         </button>
@@ -546,8 +555,16 @@
         document.getElementById('backtestForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            // Get Google reCAPTCHA response token
+            const captchaResponse = grecaptcha.getResponse();
+            if (!captchaResponse) {
+                alert('Please complete the CAPTCHA verification');
+                return;
+            }
+            
             const formData = {
                 p_email: document.getElementById('email').value,
+                p_captcha_token: captchaResponse,
                 p_start_date: document.getElementById('startDate').value,
                 p_end_date: document.getElementById('endDate').value,
                 p_upfront_usdt: parseFloat(document.getElementById('upfront').value) || 0,
@@ -590,9 +607,13 @@
                     // Start polling for results
                     startPolling();
                 } else {
+                    // Reset reCAPTCHA on error
+                    grecaptcha.reset();
                     showError(result.error);
                 }
             } catch (error) {
+                // Reset reCAPTCHA on error
+                grecaptcha.reset();
                 showError('Network error: ' + error.message);
             }
         });
