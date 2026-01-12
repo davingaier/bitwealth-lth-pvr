@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
     <!-- Navigation -->
@@ -414,14 +415,14 @@
                         <span class="contact-icon">📧</span>
                         <div>
                             <strong>Email</strong>
-                            <p>info@bitwealth.com</p>
+                            <p>info@bitwealth.co.za</p>
                         </div>
                     </div>
                     <div class="contact-item">
                         <span class="contact-icon">💬</span>
                         <div>
                             <strong>Support</strong>
-                            <p>support@bitwealth.com</p>
+                            <p>support@bitwealth.co.za</p>
                         </div>
                     </div>
                     <div class="contact-item">
@@ -433,11 +434,17 @@
                     </div>
                 </div>
                 
-                <form class="contact-form">
-                    <input type="text" placeholder="Your Name" required>
-                    <input type="email" placeholder="Your Email" required>
-                    <textarea placeholder="Your Message" rows="5" required></textarea>
-                    <button type="submit" class="btn-primary">Send Message</button>
+                <form id="contactForm" class="contact-form">
+                    <input type="text" id="contactName" placeholder="Your Name" required>
+                    <input type="email" id="contactEmail" placeholder="Your Email" required>
+                    <textarea id="contactMessage" placeholder="Your Message" rows="5" required></textarea>
+                    
+                    <!-- Google reCAPTCHA -->
+                    <div class="g-recaptcha" data-sitekey="6LdJOqAqAAAAALnCrUYHhKW6rKB__ijYsU_4_Aq2" style="margin: 16px 0;"></div>
+                    
+                    <div id="contactFormMessage" class="form-message" style="display: none;"></div>
+                    
+                    <button type="submit" id="contactSubmitBtn" class="btn-primary">Send Message</button>
                 </form>
             </div>
         </div>
@@ -542,6 +549,70 @@
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Interest';
+            }
+        });
+        
+        // Contact Form Handler
+        document.getElementById('contactForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const contactSubmitBtn = document.getElementById('contactSubmitBtn');
+            const contactFormMessage = document.getElementById('contactFormMessage');
+            
+            // Get reCAPTCHA response
+            const captchaResponse = grecaptcha.getResponse(1); // Second reCAPTCHA instance
+            if (!captchaResponse) {
+                contactFormMessage.style.display = 'block';
+                contactFormMessage.className = 'form-message error';
+                contactFormMessage.textContent = 'Please complete the CAPTCHA verification';
+                return;
+            }
+            
+            const formData = {
+                name: document.getElementById('contactName').value.trim(),
+                email: document.getElementById('contactEmail').value.trim(),
+                message: document.getElementById('contactMessage').value.trim(),
+                captcha_token: captchaResponse
+            };
+            
+            // Disable submit button
+            contactSubmitBtn.disabled = true;
+            contactSubmitBtn.textContent = 'Sending...';
+            contactFormMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_contact_form_submit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    contactFormMessage.style.display = 'block';
+                    contactFormMessage.className = 'form-message success';
+                    contactFormMessage.textContent = result.message || 'Thank you! We\'ll get back to you within 24 hours.';
+                    document.getElementById('contactForm').reset();
+                    grecaptcha.reset(1); // Reset second reCAPTCHA instance
+                } else {
+                    contactFormMessage.style.display = 'block';
+                    contactFormMessage.className = 'form-message error';
+                    contactFormMessage.textContent = result.error || 'Something went wrong. Please try again.';
+                    grecaptcha.reset(1);
+                }
+            } catch (error) {
+                contactFormMessage.style.display = 'block';
+                contactFormMessage.className = 'form-message error';
+                contactFormMessage.textContent = 'Network error. Please check your connection and try again.';
+                console.error('Contact form error:', error);
+                grecaptcha.reset(1);
+            } finally {
+                contactSubmitBtn.disabled = false;
+                contactSubmitBtn.textContent = 'Send Message';
             }
         });
     </script>
