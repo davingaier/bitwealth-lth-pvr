@@ -414,7 +414,8 @@
                                     label += ': ';
                                 }
                                 if (context.parsed.y !== null) {
-                                    label += '+' + context.parsed.y + '%';
+                                    const value = context.parsed.y;
+                                    label += (value >= 0 ? '+' : '') + value + '%';
                                 }
                                 return label;
                             }
@@ -442,7 +443,7 @@
                         ticks: {
                             color: '#A8B2D1',
                             callback: function(value) {
-                                return '+' + value + '%';
+                                return (value >= 0 ? '+' : '') + value + '%';
                             },
                             font: {
                                 size: 12
