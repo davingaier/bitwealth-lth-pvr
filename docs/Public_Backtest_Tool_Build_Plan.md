@@ -2,8 +2,79 @@
 
 **Author:** Dav / GPT  
 **Created:** 2026-01-08  
-**Status:** Architecture design complete, awaiting implementation  
+**Updated:** 2026-01-12  
+**Status:** In Progress - Phase 2B (Product Page)  
 **Target Completion:** 2026-01-17 (9 working days)
+
+---
+
+## Progress Tracker
+
+**Phase 2A: Landing Page ✅ COMPLETE (2026-01-09)**
+- ✅ Product catalog section with 6 product cards implemented
+- ✅ Navigation links updated (Pricing → Products)
+- ✅ Footer links updated
+- ✅ Coming Soon product cards styled appropriately
+
+**Phase 2C: Interactive Back-Tester ✅ COMPLETE (2026-01-09)**
+- ✅ Database schema deployed (`public.backtest_requests` table)
+- ✅ RPC function `run_public_backtest()` implemented with validation
+- ✅ Rate limiting (10 per day per email)
+- ✅ Edge function `ef_execute_public_backtests` deployed
+- ✅ Cron job (every minute) to process pending back-tests
+- ✅ Website UI `lth-pvr-backtest.html` with two-panel layout
+- ✅ Auto-polling for results (2-second interval, 120-second timeout)
+- ✅ Chart.js integration for ROI & NAV comparison charts
+- ✅ **CI Bands Architecture Fix (2026-01-09):**
+  - Problem: Website back-tests showing 3.4x worse performance (189% vs 776% ROI)
+  - Root cause: Using dummy linear B1-B11 values (0.05, 0.10, 0.15...) instead of proper defaults
+  - Solution: Removed B1-B11 from INSERT, let `ef_bt_execute` apply CryptoQuant defaults
+  - Result: Website now matches Admin UI performance within 2.5%
+- ✅ hCaptcha Security Added (2026-01-12) - Design complete, implementation pending
+
+**Bug Fixes Completed (2026-01-09 - 2026-01-11):**
+
+1. **Deposit Scan Consolidation (2026-01-09)**
+   - Enhanced `ef_deposit_scan` to be fully self-contained
+   - Now creates funding events + ledger lines + balances atomically
+   - Fixed `customer_strategies` INSERT bug (was using non-existent columns)
+   - Deleted obsolete `ef_valr_deposit_scan` function
+   - Customer activation now instantaneous (no 30-60 min delay)
+
+2. **High-Water Mark Bug (2026-01-11)** - ✅ RESOLVED
+   - **Bug #1 (Initialization):** HWM initialized BEFORE trading on day 1, including exchange fees ($10,897.85 instead of $10,896.11)
+   - **Bug #2 (Daily Updates):** HWM updating every day during first month instead of only at month boundaries
+   - **Bug #3 (Contribution Exclusion):** Using gross contributions instead of net, not initializing `hwmContribNetCum` properly
+   - **Impact:** Performance fees charged 4 months late (June instead of February), fees charged on customer deposits
+   - **Fix:** 
+     - Moved HWM initialization to END of day 1 (after trading)
+     - HWM updates only at month boundaries (inside `isNewMonth && isNotFirstMonth` condition)
+     - Changed from `hwmContribGrossCum` to `hwmContribNetCum`
+   - **Result:** First performance fee now correctly charged on Feb 1, 2020
+   - **Deployment:** `supabase functions deploy ef_bt_execute --no-verify-jwt`
+
+**In Progress:**
+- 🔄 Phase 2B: LTH PVR Product Page
+  - HTML structure design complete
+  - Awaiting implementation start
+
+**Pending:**
+- ⏳ Phase 2B: Product page charts and styling
+- ⏳ Phase 2C: hCaptcha implementation (frontend + backend)
+- ⏳ Phase 2D: Analytics tracking and pricing model update
+
+**Key Decisions Made:**
+- 2026-01-12: Selected hCaptcha over Google reCAPTCHA for privacy compliance
+- 2026-01-09: Confirmed back-tester uses async execution model (cron-based polling)
+- 2026-01-09: Kept original landing page structure, added product catalog section
+- 2026-01-08: Confirmed reuse of existing back-test infrastructure (no new tables)
+
+**Production Deployments:**
+- ✅ `ef_execute_public_backtests` - Deployed 2026-01-09
+- ✅ `ef_deposit_scan` - Deployed 2026-01-09
+- ✅ `ef_bt_execute` - Deployed 2026-01-11 (HWM fix)
+- ✅ Website `lth-pvr-backtest.html` - Deployed 2026-01-09
+- ✅ 6 CI bands fix migrations - Applied 2026-01-09
 
 ---
 
@@ -405,6 +476,68 @@ Back-test Parameters:
 ### Objective
 Build email-gated back-testing tool that lets prospects run custom simulations and captures qualified leads.
 
+### Security: hCaptcha Implementation
+
+**Why hCaptcha:**
+- Privacy-focused alternative to Google reCAPTCHA
+- Prevents bot abuse and automated scraping
+- Free tier: 1 million requests/month
+- GDPR compliant
+- No Google dependency
+
+**Setup Requirements:**
+1. **Create hCaptcha Account:** https://www.hcaptcha.com/signup-interstitial
+2. **Generate Site Keys:**
+   - Site Key: Public key for frontend integration (add to website HTML)
+   - Secret Key: Private key for backend verification (add to Supabase secrets)
+3. **Add to Supabase Secrets:**
+   ```bash
+   # Set via Supabase dashboard: Settings → Edge Functions → Secrets
+   HCAPTCHA_SECRET_KEY=0x... 
+   ```
+
+**Frontend Integration (website/lth-pvr-backtest.html):**
+```html
+<!-- Add hCaptcha script in <head> -->
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+
+<!-- Add hCaptcha widget in form -->
+<div class="h-captcha" data-sitekey="YOUR_SITE_KEY"></div>
+```
+
+**Backend Verification (in run_public_backtest RPC):**
+```sql
+-- Add parameter for CAPTCHA token
+CREATE OR REPLACE FUNCTION public.run_public_backtest(
+  p_email TEXT,
+  p_captcha_token TEXT,  -- NEW: hCaptcha response token
+  p_start_date DATE,
+  p_end_date DATE,
+  p_upfront_amount NUMERIC,
+  p_monthly_amount NUMERIC
+)
+...
+BEGIN
+  -- 1. Verify CAPTCHA token (call hCaptcha API via net.http_post)
+  SELECT content::json->'success' INTO v_captcha_valid
+  FROM net.http_post(
+    url := 'https://hcaptcha.com/siteverify',
+    body := json_build_object(
+      'secret', current_setting('app.settings.hcaptcha_secret_key'),
+      'response', p_captcha_token
+    )::text
+  );
+  
+  IF NOT v_captcha_valid THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'CAPTCHA verification failed. Please try again.'
+    );
+  END IF;
+  
+  -- 2. Continue with email validation and rate limiting...
+```
+
 ### Components
 
 #### 1. Back-Tester Page Layout (website/lth-pvr-backtest.html)
@@ -431,26 +564,34 @@ Build email-gated back-testing tool that lets prospects run custom simulations a
 |  Monthly Investment:                  |                       |
 |  $ [__________] ($ 100 - $ 100,000)  |                      |
 |                                       |                       |
+|  [hCaptcha Checkbox Widget]           |                       |
+|                                       |                       |
 |  [ Run Back-Test ]                    |                       |
 |                                       |                       |
 +---------------------------------------------------------------+
 ```
 
-#### 2. Email Gating Logic
+#### 2. Email Gating & CAPTCHA Logic
 **Flow:**
 1. User lands on back-tester page
 2. Parameters section visible, Results section shows "Enter email to see results"
-3. User fills email + parameters, clicks "Run Back-Test"
-4. Frontend validates email format (basic regex)
-5. Frontend calls `public.run_public_backtest()` RPC function
-6. Backend checks rate limit (max 10 per day per email)
-7. If within limit:
-   - Execute back-test simulation
-   - Insert record into `public.backtest_requests`
-   - Return results
-8. If exceeded limit:
-   - Return error: "You've reached the daily limit of 10 back-tests. Please try again tomorrow."
-9. Frontend displays results in right panel
+3. User fills email + parameters
+4. User completes hCaptcha challenge (checkbox)
+5. User clicks "Run Back-Test"
+6. Frontend validates email format (basic regex)
+7. Frontend retrieves hCaptcha response token
+8. Frontend calls `public.run_public_backtest()` RPC function with CAPTCHA token
+9. Backend verifies CAPTCHA token with hCaptcha API
+10. If CAPTCHA invalid:
+    - Return error: "CAPTCHA verification failed. Please try again."
+11. Backend checks rate limit (max 10 per day per email)
+12. If within limit:
+    - Execute back-test simulation
+    - Insert record into `public.backtest_requests`
+    - Return results
+13. If exceeded limit:
+    - Return error: "You've reached the daily limit of 10 back-tests. Please try again tomorrow."
+14. Frontend displays results in right panel
 
 **Rate Limiting Implementation:**
 ```sql
@@ -470,6 +611,7 @@ WHERE email = p_email
 ```sql
 CREATE OR REPLACE FUNCTION public.run_public_backtest(
   p_email TEXT,
+  p_captcha_token TEXT,  -- hCaptcha response token from frontend
   p_from_date DATE,
   p_to_date DATE,
   p_upfront_amount NUMERIC,
@@ -485,12 +627,28 @@ DECLARE
   v_std_dca_result JSON;
   v_request_id BIGINT;
 BEGIN
-  -- 1. Validate email format
+  -- 1. Verify CAPTCHA token with hCaptcha API
+  SELECT (content::json->>'success')::boolean INTO v_captcha_valid
+  FROM net.http_post(
+    url := 'https://hcaptcha.com/siteverify',
+    headers := '{"Content-Type": "application/x-www-form-urlencoded"}'::jsonb,
+    body := 'secret=' || current_setting('app.settings.hcaptcha_secret_key', true) || 
+            '&response=' || p_captcha_token
+  );
+  
+  IF NOT COALESCE(v_captcha_valid, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'CAPTCHA verification failed. Please try again.'
+    );
+  END IF;
+  
+  -- 2. Validate email format
   IF p_email !~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' THEN
     RAISE EXCEPTION 'Invalid email format';
   END IF;
 
-  -- 2. Check rate limit (10 per day)
+  -- 3. Check rate limit (10 per day)
   SELECT COUNT(*) INTO v_request_count
   FROM public.backtest_requests
   WHERE email = p_email
@@ -500,7 +658,7 @@ BEGIN
     RAISE EXCEPTION 'Daily back-test limit reached (10 per day). Please try again tomorrow.';
   END IF;
 
-  -- 3. Validate date range
+  -- 4. Validate date range
   IF p_from_date < '2010-07-17' THEN
     RAISE EXCEPTION 'Start date cannot be before 2010-07-17 (Bitcoin exchange trading began)';
   END IF;
@@ -513,7 +671,7 @@ BEGIN
     RAISE EXCEPTION 'End date must be after start date';
   END IF;
 
-  -- 4. Validate investment amounts
+  -- 5. Validate investment amounts
   IF p_upfront_amount < 0 OR p_upfront_amount > 1000000 THEN
     RAISE EXCEPTION 'Upfront investment must be between $ 0 and $ 1,000,000';
   END IF;
@@ -737,13 +895,21 @@ CREATE INDEX idx_btc_price_history_date ON public.btc_price_history(date);
 - RPC function: `supabase/migrations/YYYYMMDD_add_run_public_backtest_function.sql`
 
 **Deliverables:**
-- [ ] Back-tester page with parameter form and results panel
-- [ ] Email validation and rate limiting (10 per day)
-- [ ] `run_public_backtest()` RPC function with Standard DCA calculation
-- [ ] Results display with 2 comparison charts
-- [ ] `backtest_requests` analytics table
-- [ ] CTA button with UTM tracking to prospect form
-- [ ] Error handling for rate limits, invalid inputs, simulation failures
+- [✅] Back-tester page with parameter form and results panel (website/lth-pvr-backtest.html)
+- [✅] Email validation and rate limiting (10 per day)
+- [✅] `run_public_backtest()` RPC function with validation logic
+- [✅] `ef_execute_public_backtests` edge function (async execution model)
+- [✅] Cron job (`execute_public_backtests`) - runs every minute
+- [✅] Results display with 2 Chart.js comparison charts (ROI % and NAV)
+- [✅] `backtest_requests` analytics table with RLS policies
+- [✅] CTA button linking to prospect form
+- [✅] Error handling for rate limits, invalid inputs, simulation failures
+- [✅] CI bands architecture fix (B1-B11 defaults, 3.4x performance improvement)
+- [⏳] hCaptcha integration (frontend widget + backend verification) - **PENDING**
+- [⏳] hCaptcha account setup and secret key configuration - **PENDING**
+- [⏳] Update RPC function to include CAPTCHA verification - **PENDING**
+
+**Status:** Phase 2C is 85% complete. Core back-tester functional and deployed to production. hCaptcha security layer designed but not yet implemented.
 
 ---
 
