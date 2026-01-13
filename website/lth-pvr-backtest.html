@@ -555,10 +555,24 @@
         document.getElementById('backtestForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            // Check if reCAPTCHA is loaded
+            if (typeof grecaptcha === 'undefined') {
+                alert('Security verification not loaded. Please refresh the page and try again.');
+                return;
+            }
+            
             // Get Google reCAPTCHA response token
-            const captchaResponse = grecaptcha.getResponse();
+            let captchaResponse;
+            try {
+                captchaResponse = grecaptcha.getResponse();
+            } catch (error) {
+                console.error('reCAPTCHA error:', error);
+                alert('Security verification error. Please refresh the page and try again.');
+                return;
+            }
+            
             if (!captchaResponse) {
-                alert('Please complete the CAPTCHA verification');
+                alert('Please complete the CAPTCHA verification by checking the box above.');
                 return;
             }
             
@@ -626,8 +640,15 @@
                 }
             } catch (error) {
                 // Reset reCAPTCHA on error
-                grecaptcha.reset();
-                showError('Network error: ' + error.message);
+                if (typeof grecaptcha !== 'undefined') {
+                    try {
+                        grecaptcha.reset();
+                    } catch (e) {
+                        console.error('Failed to reset reCAPTCHA:', e);
+                    }
+                }
+                console.error('Form submission error:', error);
+                showError('Network error: ' + error.message + '. Please check your internet connection and try again.');
             }
         });
         
