@@ -3,13 +3,35 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-12
+**Last updated:** 2026-01-13
 
 ---
 
 ## 0. Change Log
 
-### v0.6.17 (current) – Contact Form Email Notifications
+### v0.6.18 (current) – Back-Test Form Field Validation Fix
+**Date:** 2026-01-13  
+**Purpose:** Fixed overly restrictive field validation on public back-test form that prevented users from entering valid investment amounts.
+
+**Bug Fix:**
+- **Problem:** HTML input fields for "Upfront Investment" and "Monthly Contribution" had `step="100"` attribute, forcing values to be multiples of $100. This blocked valid amounts like $650, $1,250, etc.
+- **Root Cause:** Browser HTML5 form validation prevents submission when value doesn't match step increment
+- **Solution:** Changed `step="100"` to `step="1"` on both input fields
+- **Impact:** Users can now enter any whole dollar amount (e.g., $650, $1,250, $3,575)
+
+**Files Modified:**
+- `website/lth-pvr-backtest.html` (Lines 352, 358)
+
+**Validation Rules After Fix:**
+- **Upfront Investment:** `type="number"`, `min="0"`, `step="1"` (any non-negative whole dollar amount)
+- **Monthly Contribution:** `type="number"`, `min="0"`, `step="1"` (any non-negative whole dollar amount)
+- **Backend:** Validates amounts are non-negative and at least one is > 0 (no step constraint)
+
+**Production Status:** ✅ COMPLETE – Ready for deployment to bitwealth.co.za
+
+---
+
+### v0.6.17 – Contact Form Email Notifications
 **Date:** 2026-01-12  
 **Purpose:** Implemented contact form email notification system with reCAPTCHA verification, database storage, admin notifications to info@bitwealth.co.za, and auto-reply confirmations to submitters.
 
