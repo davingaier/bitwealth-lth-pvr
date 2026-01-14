@@ -173,25 +173,34 @@
         
         // Check if already logged in
         async function checkSession() {
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                // Find customer and redirect based on status
-                const { data: customer } = await supabaseClient
-                    .from('customer_details')
-                    .select('customer_id, registration_status')
-                    .eq('email', session.user.email)
-                    .single();
+            try {
+                const { data: { session } } = await supabaseClient.auth.getSession();
                 
-                if (customer) {
-                    const status = customer.registration_status;
+                // Only proceed if we have a valid session with email
+                if (session && session.user && session.user.email) {
+                    // Find customer and redirect based on status
+                    const { data: customerData, error: customerError } = await supabaseClient
+                        .from('customer_details')
+                        .select('customer_id, registration_status')
+                        .eq('email', session.user.email)
+                        .order('customer_id', { ascending: false })
+                        .limit(1);
                     
-                    if (status === 'kyc') {
-                        window.location.href = `upload-kyc.html?customer_id=${customer.customer_id}`;
-                    } else {
-                        // Active customers go to portal
-                        window.location.href = 'customer-portal.html';
+                    if (!customerError && customerData && customerData.length > 0) {
+                        const customer = customerData[0];
+                        const status = customer.registration_status;
+                        
+                        if (status === 'kyc') {
+                            window.location.href = `upload-kyc.html?customer_id=${customer.customer_id}`;
+                        } else {
+                            // Active customers go to portal
+                            window.location.href = 'customer-portal.html';
+                        }
                     }
                 }
+            } catch (error) {
+                console.log('Session check error (not critical):', error);
+                // Silently fail - user just stays on login page
             }
         }
         
