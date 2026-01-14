@@ -3,13 +3,66 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-13
+**Last updated:** 2026-01-14
 
 ---
 
 ## 0. Change Log
 
-### v0.6.18 (current) – Back-Test Form Field Validation Fix
+### v0.6.19 (current) – Back-Test Form UX Improvements & Standard DCA Data Fix
+**Date:** 2026-01-14  
+**Purpose:** Enhanced back-test form error handling, fixed date validation for LTH PVR data lag, and resolved missing Standard DCA benchmark data in results.
+
+**Bug Fixes:**
+
+1. **reCAPTCHA Error Handling**
+   - **Problem:** Silent failures when reCAPTCHA not loaded (ad blockers, slow network)
+   - **Solution:** Added checks for `grecaptcha` object existence with user-friendly error messages
+   - **Impact:** Users now see "Security verification not loaded. Please refresh the page and try again." instead of nothing happening
+   - **Files:** `website/lth-pvr-backtest.html` (Lines 559-576, 628-635)
+
+2. **Date Validation for LTH PVR Data Lag**
+   - **Problem:** End date allowed "today" but LTH PVR on-chain data only available up to yesterday
+   - **Solution:** 
+     - JavaScript validation: Check `endDate > yesterday` with clear error message
+     - HTML `max` attribute: Set to yesterday dynamically
+     - Error message: "End date must be yesterday or earlier (YYYY-MM-DD). LTH PVR on-chain data is updated daily and only available up to yesterday."
+   - **Impact:** Prevents users from selecting invalid dates that would cause back-test failures
+   - **Files:** `website/lth-pvr-backtest.html` (Lines 559-570, 954-958)
+
+3. **Missing Standard DCA Contribution Data**
+   - **Problem:** Standard DCA column showed "$0" for Total Contributions despite correct calculations in database
+   - **Root Cause:** `get_backtest_results()` function returned `contrib_net` but JavaScript UI looked for `contrib_gross`
+   - **Solution:** Added `contrib_gross` field to both `lth_pvr_summary` and `std_dca_summary` JSON objects (mapped to same value as `contrib_net`)
+   - **Impact:** Standard DCA benchmark now displays correctly with matching contribution totals
+   - **Migration:** `supabase/migrations/20260114_fix_backtest_contrib_gross_field.sql`
+
+**Enhancements:**
+
+4. **Client-Side Form Validation Improvements**
+   - Pre-reCAPTCHA date validation to avoid wasting CAPTCHA attempts
+   - Sequential validation: dates → reCAPTCHA → submission
+   - Safer reCAPTCHA reset with try-catch blocks
+
+5. **Debug Logging**
+   - Added console logging for LTH PVR Summary, Standard DCA Summary, and daily results count
+   - Helps diagnose data issues in browser console
+
+**Files Modified:**
+- `website/lth-pvr-backtest.html` - Form validation, error handling, date logic
+- `supabase/migrations/20260114_fix_backtest_contrib_gross_field.sql` - SQL function fix
+
+**Testing:**
+- ✅ Future date selection blocked with helpful message
+- ✅ reCAPTCHA load failures handled gracefully
+- ✅ Standard DCA data now displays correctly
+- ✅ Form validation runs in correct order (dates first, CAPTCHA second)
+
+**Production Status:** ✅ COMPLETE – Migration applied, ready for website deployment
+
+---
+
+### v0.6.18 – Back-Test Form Field Validation Fix
 **Date:** 2026-01-13  
 **Purpose:** Fixed overly restrictive field validation on public back-test form that prevented users from entering valid investment amounts.
 
