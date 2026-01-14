@@ -115,7 +115,7 @@
                     <p class="text-secondary">Your BitWealth Investment Dashboard</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn-secondary" id="downloadStatement" style="display: none;">Download Statement</button>
+                    <button class="btn-secondary" id="downloadStatement" onclick="downloadStatement()" style="display: none;">Download Statement</button>
                     <div class="user-avatar" id="userAvatar">?</div>
                 </div>
             </header>
@@ -372,6 +372,9 @@
                 // Show content
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
+                
+                // Show download statement button
+                document.getElementById('downloadStatement').style.display = 'inline-block';
 
             } catch (error) {
                 console.error('Error loading customer data:', error);
@@ -776,6 +779,87 @@
                 console.error('Error loading transaction history:', error);
                 document.getElementById('transactionLoading').style.display = 'none';
                 document.getElementById('transactionError').style.display = 'block';
+            }
+        }
+
+        async function downloadStatement() {
+            if (!customerData || !customerData.customer_id) {
+                alert('Customer data not loaded');
+                return;
+            }
+
+            // Prompt for month/year
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1; // 1-12
+
+            // For now, default to last month (or current if we're past the 5th)
+            const defaultMonth = now.getDate() > 5 ? currentMonth : (currentMonth === 1 ? 12 : currentMonth - 1);
+            const defaultYear = (defaultMonth === 12 && currentMonth === 1) ? currentYear - 1 : currentYear;
+
+            const monthInput = prompt(`Enter month (1-12):`, defaultMonth.toString());
+            if (!monthInput) return;
+
+            const yearInput = prompt(`Enter year (e.g., ${currentYear}):`, defaultYear.toString());
+            if (!yearInput) return;
+
+            const month = parseInt(monthInput);
+            const year = parseInt(yearInput);
+
+            if (isNaN(month) || month < 1 || month > 12 || isNaN(year) || year < 2020 || year > currentYear) {
+                alert('Invalid month or year');
+                return;
+            }
+
+            try {
+                // Show loading state
+                const downloadBtn = document.getElementById('downloadStatement');
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'Generating...';
+                downloadBtn.disabled = true;
+
+                // Call edge function
+                const response = await fetch(`${sb.supabaseUrl}/functions/v1/ef_generate_statement`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sb.supabaseKey}`
+                    },
+                    body: JSON.stringify({
+                        customer_id: customerData.customer_id,
+                        year: year,
+                        month: month
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to generate statement');
+                }
+
+                // Download PDF
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `BitWealth_Statement_${month}_${year}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                // Reset button
+                downloadBtn.textContent = originalText;
+                downloadBtn.disabled = false;
+
+            } catch (error) {
+                console.error('Error downloading statement:', error);
+                alert(`Failed to generate statement: ${error.message}`);
+                
+                // Reset button
+                const downloadBtn = document.getElementById('downloadStatement');
+                downloadBtn.textContent = 'Download Statement';
+                downloadBtn.disabled = false;
             }
         }
 
