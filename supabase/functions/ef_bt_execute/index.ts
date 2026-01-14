@@ -259,6 +259,8 @@ Deno.serve(async (req)=>{
     let platformFeeToday = 0;  // Track daily platform fees for correct aggregation
     let exchangeFeeBtcToday = 0;  // Track daily BTC exchange fees
     let exchangeFeeUsdtToday = 0;  // Track daily USDT exchange fees
+    let stdExchangeFeeBtcToday = 0;  // Track daily Standard DCA BTC exchange fees
+    let stdExchangeFeeUsdtToday = 0;  // Track daily Standard DCA USDT exchange fees
     const applyContribLth = (row, gross)=>{
       if (gross <= 0) return 0;
       // Step 1: Deduct VALR USDT/ZAR exchange fee (18 bps) - conversion happens first
@@ -331,6 +333,7 @@ Deno.serve(async (req)=>{
       stdContribGrossCum += gross;
       stdContribFeeCum += exchangeFee;
       stdExchangeFeesUsdtCum += exchangeFee;
+      stdExchangeFeeUsdtToday += exchangeFee;  // Track daily USDT fees
       stdContribNetCum += net;
       const tradeDate = row.close_date; // simulate on CI close date
       if (!stdFirstContribDate) stdFirstContribDate = tradeDate;
@@ -354,6 +357,8 @@ Deno.serve(async (req)=>{
       platformFeeToday = 0;
       exchangeFeeBtcToday = 0;
       exchangeFeeUsdtToday = 0;
+      stdExchangeFeeBtcToday = 0;
+      stdExchangeFeeUsdtToday = 0;
       // Contributions: upfront on first day, monthly on first day of month
       let grossContribToday = 0;
       if (i === 0 && upfront > 0) grossContribToday += upfront;
@@ -371,6 +376,7 @@ Deno.serve(async (req)=>{
           stdUsdtBal -= tradeUsdt;
           stdBtcBal += btcNet;
           stdExchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
+          stdExchangeFeeBtcToday += feeBtc;  // Track daily BTC fees
           stdLedger.push({
             bt_run_id,
             org_id,
@@ -588,8 +594,8 @@ Deno.serve(async (req)=>{
         contrib_net_usdt_cum: stdContribNetCum,
         total_roi_percent: stdRoi,
         cagr_percent: stdCagr,
-        total_exchange_fees_btc: stdExchangeFeesBtcCum,
-        total_exchange_fees_usdt: stdExchangeFeesUsdtCum
+        total_exchange_fees_btc: stdExchangeFeeBtcToday,
+        total_exchange_fees_usdt: stdExchangeFeeUsdtToday
       });
     }
     // Persist all results
