@@ -555,6 +555,22 @@
         document.getElementById('backtestForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            // Validate dates first (before reCAPTCHA check to avoid wasting CAPTCHA attempts)
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Reset time to midnight for fair comparison
+            
+            if (endDate > today) {
+                alert('End date cannot be in the future. Please select a date up to yesterday (' + new Date(today.getTime() - 86400000).toISOString().split('T')[0] + ').');
+                return;
+            }
+            
+            if (startDate >= endDate) {
+                alert('Start date must be before end date. Please adjust your date range.');
+                return;
+            }
+            
             // Check if reCAPTCHA is loaded
             if (typeof grecaptcha === 'undefined') {
                 alert('Security verification not loaded. Please refresh the page and try again.');
