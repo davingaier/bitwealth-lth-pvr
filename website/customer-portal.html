@@ -87,7 +87,7 @@
                     <span class="icon">📜</span>
                     <span>Transactions</span>
                 </a>
-                <a href="#statements" class="nav-item">
+                <a href="#statements" class="nav-item" onclick="scrollToSection('statements'); return false;">
                     <span class="icon">📄</span>
                     <span>Statements</span>
                 </a>
@@ -115,7 +115,6 @@
                     <p class="text-secondary">Your BitWealth Investment Dashboard</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn-secondary" id="downloadStatement" onclick="downloadStatement()" style="display: none;">Download Statement</button>
                     <div class="user-avatar" id="userAvatar">?</div>
                 </div>
             </header>
@@ -288,6 +287,55 @@
                 </div>
             </section>
 
+            <!-- Statements Section -->
+            <section id="statements" style="margin-top: 32px;">
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <h2>📄 Monthly Statements</h2>
+                    </div>
+                    <div style="padding: 20px;">
+                        <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                            Download your monthly investment statement as a PDF. Includes performance summary, transaction history, and portfolio details.
+                        </p>
+                        
+                        <div style="display: flex; gap: 15px; align-items: end; flex-wrap: wrap;">
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-size: 14px; color: var(--text-secondary);">Month</label>
+                                <select id="statementMonth" style="padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: var(--text-primary); font-size: 14px; min-width: 150px;">
+                                    <option value="1">January</option>
+                                    <option value="2">February</option>
+                                    <option value="3">March</option>
+                                    <option value="4">April</option>
+                                    <option value="5">May</option>
+                                    <option value="6">June</option>
+                                    <option value="7">July</option>
+                                    <option value="8">August</option>
+                                    <option value="9">September</option>
+                                    <option value="10">October</option>
+                                    <option value="11">November</option>
+                                    <option value="12">December</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label style="display: block; margin-bottom: 5px; font-size: 14px; color: var(--text-secondary);">Year</label>
+                                <select id="statementYear" style="padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: var(--text-primary); font-size: 14px; min-width: 120px;">
+                                    <!-- Years will be populated by JavaScript -->
+                                </select>
+                            </div>
+                            
+                            <button onclick="downloadStatement()" class="btn-primary" style="padding: 10px 24px; background: var(--gold); color: var(--bg-dark); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">
+                                📥 Download PDF
+                            </button>
+                        </div>
+                        
+                        <div id="statementStatus" style="margin-top: 15px; padding: 12px; border-radius: 8px; display: none;">
+                            <!-- Status messages will appear here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             </div> <!-- End #content -->
         </main> <!-- End dashboard-main -->
     </div> <!-- End dashboard-container -->
@@ -372,9 +420,6 @@
                 // Show content
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
-                
-                // Show download statement button
-                document.getElementById('downloadStatement').style.display = 'inline-block';
 
             } catch (error) {
                 console.error('Error loading customer data:', error);
@@ -784,46 +829,27 @@
 
         async function downloadStatement() {
             if (!customerData || !customerData.customer_id) {
-                alert('Customer data not loaded');
+                showStatementStatus('Customer data not loaded', 'error');
                 return;
             }
 
-            // Prompt for month/year
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth() + 1; // 1-12
+            const month = parseInt(document.getElementById('statementMonth').value);
+            const year = parseInt(document.getElementById('statementYear').value);
 
-            // For now, default to last month (or current if we're past the 5th)
-            const defaultMonth = now.getDate() > 5 ? currentMonth : (currentMonth === 1 ? 12 : currentMonth - 1);
-            const defaultYear = (defaultMonth === 12 && currentMonth === 1) ? currentYear - 1 : currentYear;
-
-            const monthInput = prompt(`Enter month (1-12):`, defaultMonth.toString());
-            if (!monthInput) return;
-
-            const yearInput = prompt(`Enter year (e.g., ${currentYear}):`, defaultYear.toString());
-            if (!yearInput) return;
-
-            const month = parseInt(monthInput);
-            const year = parseInt(yearInput);
-
-            if (isNaN(month) || month < 1 || month > 12 || isNaN(year) || year < 2020 || year > currentYear) {
-                alert('Invalid month or year');
+            if (isNaN(month) || isNaN(year)) {
+                showStatementStatus('Please select a valid month and year', 'error');
                 return;
             }
 
             try {
-                // Show loading state
-                const downloadBtn = document.getElementById('downloadStatement');
-                const originalText = downloadBtn.textContent;
-                downloadBtn.textContent = 'Generating...';
-                downloadBtn.disabled = true;
+                showStatementStatus('Generating PDF statement...', 'loading');
 
                 // Call edge function
-                const response = await fetch(`${sb.supabaseUrl}/functions/v1/ef_generate_statement`, {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_generate_statement`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${sb.supabaseKey}`
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
                     },
                     body: JSON.stringify({
                         customer_id: customerData.customer_id,
@@ -848,19 +874,57 @@
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
 
-                // Reset button
-                downloadBtn.textContent = originalText;
-                downloadBtn.disabled = false;
+                showStatementStatus('Statement downloaded successfully!', 'success');
 
             } catch (error) {
                 console.error('Error downloading statement:', error);
-                alert(`Failed to generate statement: ${error.message}`);
-                
-                // Reset button
-                const downloadBtn = document.getElementById('downloadStatement');
-                downloadBtn.textContent = 'Download Statement';
-                downloadBtn.disabled = false;
+                showStatementStatus(`Failed to generate statement: ${error.message}`, 'error');
             }
+        }
+
+        function showStatementStatus(message, type) {
+            const statusDiv = document.getElementById('statementStatus');
+            statusDiv.style.display = 'block';
+            
+            if (type === 'loading') {
+                statusDiv.style.background = 'rgba(59, 130, 246, 0.1)';
+                statusDiv.style.borderLeft = '4px solid #3b82f6';
+                statusDiv.style.color = '#3b82f6';
+            } else if (type === 'success') {
+                statusDiv.style.background = 'rgba(34, 197, 94, 0.1)';
+                statusDiv.style.borderLeft = '4px solid #22c55e';
+                statusDiv.style.color = '#22c55e';
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            } else if (type === 'error') {
+                statusDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+                statusDiv.style.borderLeft = '4px solid #ef4444';
+                statusDiv.style.color = '#ef4444';
+            }
+            
+            statusDiv.textContent = message;
+        }
+
+        function initializeStatementForm() {
+            // Populate year dropdown (last 3 years)
+            const yearSelect = document.getElementById('statementYear');
+            const currentYear = new Date().getFullYear();
+            
+            for (let year = currentYear; year >= currentYear - 2; year--) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            }
+            
+            // Set default to current month/year (or previous month if before 5th)
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const defaultMonth = now.getDate() > 5 ? currentMonth : (currentMonth === 1 ? 12 : currentMonth - 1);
+            
+            document.getElementById('statementMonth').value = defaultMonth;
+            document.getElementById('statementYear').value = currentYear;
         }
 
         async function logout() {
@@ -869,6 +933,7 @@
         }
 
         // Initialize on page load
+        initializeStatementForm();
         initPortal();
     </script>
 </body>
