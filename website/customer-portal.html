@@ -577,28 +577,33 @@
                 // Build activity HTML
                 let activityHTML = '';
                 transactions.forEach(tx => {
-                    const action = tx.tran_type;
-                    const amount = parseFloat(tx.amount || 0);
-                    const asset = tx.asset;
-                    const timestamp = tx.tran_date;
+                    const action = tx.kind;
+                    const btcAmount = parseFloat(tx.amount_btc || 0);
+                    const usdtAmount = parseFloat(tx.amount_usdt || 0);
+                    const timestamp = tx.trade_date;
                     
                     let icon = '💰';
                     let description = '';
                     
-                    if (action === 'deposit') {
+                    if (action === 'deposit' || action === 'topup') {
                         icon = '💵';
-                        description = `Deposit ${amount.toFixed(2)} ${asset}`;
+                        description = `Deposit $${Math.abs(usdtAmount).toFixed(2)} USDT`;
                     } else if (action === 'buy') {
                         icon = '📈';
-                        description = `Bought ${amount.toFixed(8)} ${asset}`;
+                        description = `Bought ${Math.abs(btcAmount).toFixed(8)} BTC`;
                     } else if (action === 'sell') {
                         icon = '📉';
-                        description = `Sold ${amount.toFixed(8)} ${asset}`;
+                        description = `Sold ${Math.abs(btcAmount).toFixed(8)} BTC`;
                     } else if (action === 'withdrawal') {
                         icon = '💸';
-                        description = `Withdrawal ${amount.toFixed(2)} ${asset}`;
+                        description = `Withdrawal $${Math.abs(usdtAmount).toFixed(2)} USDT`;
                     } else {
-                        description = `${action} ${amount.toFixed(8)} ${asset}`;
+                        // Generic fallback
+                        if (btcAmount !== 0) {
+                            description = `${action} ${Math.abs(btcAmount).toFixed(8)} BTC`;
+                        } else {
+                            description = `${action} $${Math.abs(usdtAmount).toFixed(2)} USDT`;
+                        }
                     }
                     
                     activityHTML += `
