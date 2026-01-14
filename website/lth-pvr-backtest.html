@@ -560,9 +560,10 @@
             const endDate = new Date(document.getElementById('endDate').value);
             const today = new Date();
             today.setHours(0, 0, 0, 0); // Reset time to midnight for fair comparison
+            const yesterday = new Date(today.getTime() - 86400000); // LTH PVR data only available up to yesterday
             
-            if (endDate > today) {
-                alert('End date cannot be in the future. Please select a date up to yesterday (' + new Date(today.getTime() - 86400000).toISOString().split('T')[0] + ').');
+            if (endDate > yesterday) {
+                alert('End date must be yesterday or earlier (' + yesterday.toISOString().split('T')[0] + '). LTH PVR on-chain data is updated daily and only available up to yesterday.');
                 return;
             }
             
