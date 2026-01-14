@@ -567,7 +567,7 @@
 
                 if (error) throw error;
 
-                const activityList = document.getElementById('activityList');
+                const activityList = document.getElementById('recentActivity');
                 
                 if (!transactions || transactions.length === 0) {
                     activityList.innerHTML = '<div class="activity-item"><div class="activity-content"><div class="activity-title">No activity yet</div><div class="activity-time">Check back after your first trade</div></div></div>';
@@ -616,7 +616,7 @@
 
             } catch (error) {
                 console.error('Error loading activity:', error);
-                document.getElementById('activityList').innerHTML = '<div class="activity-item"><div class="activity-content"><div class="activity-title">Unable to load activity</div></div></div>';
+                document.getElementById('recentActivity').innerHTML = '<div class="activity-item"><div class="activity-content"><div class="activity-title">Unable to load activity</div></div></div>';
             }
         }
 
@@ -629,7 +629,7 @@
 
                 if (error) throw error;
 
-                const metricsList = document.getElementById('metricsList');
+                const metricsList = document.getElementById('strategyMetrics');
                 
                 if (!portfolios || portfolios.length === 0) {
                     metricsList.innerHTML = '<div class="metric-item"><div class="metric-label">No data available</div><div class="metric-value">--</div></div>';
@@ -686,7 +686,7 @@
 
             } catch (error) {
                 console.error('Error loading metrics:', error);
-                document.getElementById('metricsList').innerHTML = '<div class="metric-item"><div class="metric-label">Unable to load metrics</div><div class="metric-value">--</div></div>';
+                document.getElementById('strategyMetrics').innerHTML = '<div class="metric-item"><div class="metric-label">Unable to load metrics</div><div class="metric-value">--</div></div>';
             }
         }
 
