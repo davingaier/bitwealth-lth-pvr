@@ -9,7 +9,29 @@
 
 ## 0. Change Log
 
-### v0.6.20 (current) – Back-Test Execution & Aggregation Bug Fixes
+### v0.6.21 – Post-Launch Enhancement Phase
+**Date:** 2026-01-14  
+**Purpose:** Transition to post-launch enhancements after successful MVP launch on January 10, 2026.
+
+**Launch Status:**
+- ✅ MVP launched successfully on January 10, 2026
+- ✅ 6-milestone customer onboarding pipeline operational
+- ✅ Customer portal with real-time balance dashboard
+- ✅ Public back-test tool functional and accurate
+- ✅ Contact form with email notifications
+- ✅ All integration and security tests passed
+
+**Post-Launch Work (Week 1):**
+- v0.6.17 - Contact form implementation (Jan 12)
+- v0.6.18 - Back-test field validation fix (Jan 13)
+- v0.6.19 - Back-test UX improvements (Jan 14)
+- v0.6.20 - Back-test bug fixes (Jan 14)
+
+**Next Priority:** Transaction history view for customer portal (see [POST_LAUNCH_ENHANCEMENTS.md](POST_LAUNCH_ENHANCEMENTS.md))
+
+---
+
+### v0.6.20 – Back-Test Execution & Aggregation Bug Fixes
 **Date:** 2026-01-14  
 **Purpose:** Fixed critical bugs in back-test execution causing incorrect fee calculations and database schema mismatches.
 
