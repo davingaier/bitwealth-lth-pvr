@@ -9,7 +9,88 @@
 
 ## 0. Change Log
 
-### v0.6.19 (current) – Back-Test Form UX Improvements & Standard DCA Data Fix
+### v0.6.20 (current) – Back-Test Execution & Aggregation Bug Fixes
+**Date:** 2026-01-14  
+**Purpose:** Fixed critical bugs in back-test execution causing incorrect fee calculations and database schema mismatches.
+
+**Critical Bug Fixes:**
+
+1. **Back-Test SQL Function Column Name Mismatches**
+   - **Problem:** `get_backtest_results()` referenced non-existent columns causing 400 errors during polling
+   - **Root Cause #1:** Function used `bt.id` but `bt_runs` table primary key is `bt_run_id`
+   - **Root Cause #2:** Function used old column names (`nav_total`, `roi_pct`, `cagr_pct`) instead of actual schema (`nav_usd`, `total_roi_percent`, `cagr_percent`)
+   - **Root Cause #3:** Ambiguous `trade_date` column in JOIN clause (both tables have it)
+   - **Solution:** 
+     - Changed JOIN: `LEFT JOIN lth_pvr_bt.bt_runs bt ON br.bt_run_id = bt.bt_run_id`
+     - Updated all column references to match actual schema
+     - Qualified ambiguous columns: `lth.trade_date` in ORDER BY and SELECT
+   - **Impact:** Back-test polling now succeeds, results display correctly
+   - **Migrations:** `20260114_fix_backtest_contrib_gross_field_v4_correct_pk.sql`, `v5`, `v6`
+
+2. **Standard DCA CAGR Explosion (473,492%)**
+   - **Problem:** Standard DCA showed absurdly high CAGR values
+   - **Root Cause:** SQL function used `MAX(cagr_percent)` which picked up day 2's value (1-day annualization = explosive growth)
+   - **Technical Detail:** With 1-day time period: `(11258/11000)^(365/1) - 1 = 473492%`
+   - **Solution:** Use final day's CAGR instead of MAX using CTEs with `ORDER BY trade_date DESC LIMIT 1`
+   - **Impact:** Realistic CAGR now displays (e.g., -10.30% for negative performance)
+   - **Migration:** `20260114_fix_backtest_cagr_use_final_day_v7.sql`
+
+3. **Fee Aggregation Catastrophic Over-Counting**
+   - **Problem:** Platform fees showing $45,159 instead of ~$165; Exchange fees $10,858 instead of ~$150
+   - **Root Cause:** `ef_bt_execute` stored **cumulative** fee values on every day, then SQL SUM() multiplied them by number of days
+   - **Example:** Platform fee $82.35 stored on day 1, then day 2, then day 3... → SUM = $82.35 × 365 = $30,057 (plus monthly increments)
+   - **Solution:** 
+     - Created daily fee tracker variables: `platformFeeToday`, `exchangeFeeBtcToday`, `exchangeFeeUsdtToday`
+     - Reset to 0 at start of each loop iteration
+     - Accumulate fees only on days when transactions occur
+     - Store **daily** values in `bt_results_daily` instead of cumulative
+     - SQL SUM() now correctly adds up daily values
+   - **Impact:** Realistic fee calculations: Platform ~$165 (0.75% of $22k), Performance ~$277 (10% of profits), Exchange ~$150
+   - **Files:** `supabase/functions/ef_bt_execute/index.ts`
+
+4. **Standard DCA Fee Over-Counting ($183,641)**
+   - **Problem:** Same cumulative storage bug for Standard DCA benchmark
+   - **Solution:** Added `stdExchangeFeeBtcToday` and `stdExchangeFeeUsdtToday` daily trackers
+   - **Impact:** Standard DCA exchange fees now realistic (~$40-50)
+
+5. **Variable Scoping Error**
+   - **Problem:** `exchangeFeeBtcToday is not defined` runtime error
+   - **Root Cause:** Daily fee variables declared inside loop but referenced by closure functions defined before loop
+   - **Solution:** Moved variable declarations outside loop (before helper functions), reset inside loop
+
+6. **Date Validation Timezone Bug**
+   - **Problem:** Yesterday validation showed wrong date (2026-01-12 instead of 2026-01-13 when today is 2026-01-14)
+   - **Root Cause:** `new Date(dateString)` parsed as UTC, compared against local time causing off-by-one
+   - **Solution:** Parse dates explicitly as local midnight using `new Date(dateString + 'T00:00:00')`
+   - **Impact:** Accurate date validation, yesterday now correctly accepted
+
+**Technical Implementation:**
+
+- **CTE-Based Aggregation:** Replaced multiple subqueries with Common Table Expressions for proper separation of final-day values vs. cumulative sums
+- **Daily Fee Tracking Pattern:**
+  ```typescript
+  // Reset at start of each day
+  platformFeeToday = 0;
+  exchangeFeeBtcToday = 0;
+  // Accumulate during day
+  platformFeeToday += fee;
+  // Store daily value
+  platform_fees_paid_usdt: platformFeeToday
+  ```
+
+**Migrations Applied:**
+1. `20260114_fix_backtest_contrib_gross_field_v4_correct_pk.sql` - Fixed bt_run_id JOIN
+2. `20260114_fix_backtest_column_names_v5.sql` - Fixed schema column names
+3. `20260114_fix_backtest_ambiguous_trade_date_v6.sql` - Disambiguated columns
+4. `20260114_fix_backtest_cagr_use_final_day_v7.sql` - Fixed CAGR calculation
+5. `20260114_fix_backtest_fee_aggregation_v8.sql` - Fixed fee aggregation with CTEs
+
+**Edge Function Deployments:**
+- `ef_bt_execute` - 4 deployments with daily fee tracking fixes
+
+---
+
+### v0.6.19 – Back-Test Form UX Improvements & Standard DCA Data Fix
 **Date:** 2026-01-14  
 **Purpose:** Enhanced back-test form error handling, fixed date validation for LTH PVR data lag, and resolved missing Standard DCA benchmark data in results.
 
