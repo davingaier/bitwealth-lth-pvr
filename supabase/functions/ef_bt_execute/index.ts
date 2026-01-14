@@ -256,6 +256,9 @@ Deno.serve(async (req)=>{
     };
     let lastMonth = null;
     // Contribution helpers
+    let platformFeeToday = 0;  // Track daily platform fees for correct aggregation
+    let exchangeFeeBtcToday = 0;  // Track daily BTC exchange fees
+    let exchangeFeeUsdtToday = 0;  // Track daily USDT exchange fees
     const applyContribLth = (row, gross)=>{
       if (gross <= 0) return 0;
       // Step 1: Deduct VALR USDT/ZAR exchange fee (18 bps) - conversion happens first
@@ -269,7 +272,9 @@ Deno.serve(async (req)=>{
       contribGrossCum += gross;
       contribFeeCum += exchangeFee;
       platformFeesCum += platformFee;
+      platformFeeToday += platformFee;  // Accumulate today's platform fees
       exchangeFeesUsdtCum += exchangeFee;
+      exchangeFeeUsdtToday += exchangeFee;  // Track daily USDT fees
       contribNetCum += net;
       const tradeDate = row.close_date; // simulate on CI close date
       const closeDate = row.close_date;
@@ -345,6 +350,10 @@ Deno.serve(async (req)=>{
       const closeDate = row.close_date;
       const px = toNum(row.btc_price_usd, 0);
       const monthKey = tradeDate.slice(0, 7); // YYYY-MM
+      // Reset daily fee trackers
+      platformFeeToday = 0;
+      exchangeFeeBtcToday = 0;
+      exchangeFeeUsdtToday = 0;
       // Contributions: upfront on first day, monthly on first day of month
       let grossContribToday = 0;
       if (i === 0 && upfront > 0) grossContribToday += upfront;
@@ -390,6 +399,7 @@ Deno.serve(async (req)=>{
           usdtBal -= tradeUsdt;
           btcBal += btcNet;
           exchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
+          exchangeFeeBtcToday += feeBtc;  // Track daily BTC fees
           ledgerRows.push({
             bt_run_id,
             org_id,
@@ -437,6 +447,7 @@ Deno.serve(async (req)=>{
           btcBal -= tradeBtcGross + feeBtc;
           usdtBal += grossUsdt;
           exchangeFeesBtcCum += feeBtc;  // Track cumulative BTC fees
+          exchangeFeeBtcToday += feeBtc;  // Track daily BTC fees
           ledgerRows.push({
             bt_run_id,
             org_id,
@@ -478,7 +489,7 @@ Deno.serve(async (req)=>{
       }
       // Monthly performance fee calculation (high-water mark)
       // Only runs on the first day of a new month (when month changes)
-      let performanceFeeToday = 0;
+      let performanceFeeThisMonth = 0;
       const isNewMonth = (monthKey !== lastMonthForPerfFee);
       const isNotFirstMonth = (lastMonthForPerfFee !== null);
       
@@ -490,10 +501,10 @@ Deno.serve(async (req)=>{
         
         if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
           const profitAboveHWM = navForPerfFee - highWaterMark;
-          performanceFeeToday = profitAboveHWM * performanceFeeRate;
+          performanceFeeThisMonth = profitAboveHWM * performanceFeeRate;
           // Deduct performance fee from USDT balance
-          usdtBal -= performanceFeeToday;
-          performanceFeesCum += performanceFeeToday;
+          usdtBal -= performanceFeeThisMonth;
+          performanceFeesCum += performanceFeeThisMonth;
           // Record performance fee in ledger
           ledgerRows.push({
             bt_run_id,
@@ -504,7 +515,7 @@ Deno.serve(async (req)=>{
             amount_btc: 0,
             amount_usdt: 0,
             fee_btc: 0,
-            fee_usdt: performanceFeeToday,
+            fee_usdt: performanceFeeThisMonth,
             note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
           
@@ -553,10 +564,10 @@ Deno.serve(async (req)=>{
         contrib_net_usdt_cum: contribNetCum,
         total_roi_percent: totalRoi,
         cagr_percent: cagr,
-        platform_fees_paid_usdt: platformFeesCum,
-        performance_fees_paid_usdt: performanceFeeToday,
-        exchange_fees_paid_btc: exchangeFeesBtcCum,
-        exchange_fees_paid_usdt: exchangeFeesUsdtCum,
+        platform_fees_paid_usdt: platformFeeToday,
+        performance_fees_paid_usdt: performanceFeeThisMonth,
+        exchange_fees_paid_btc: exchangeFeeBtcToday,
+        exchange_fees_paid_usdt: exchangeFeeUsdtToday,
         high_water_mark_usdt: highWaterMark
       });
       // Std DCA daily NAV + performance
