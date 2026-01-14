@@ -53,52 +53,121 @@
 
 ## 🗓️ Week 2 Roadmap (Jan 17-24)
 
-### Priority 1: Transaction History View 🎯 NEXT
-**Status:** NOT STARTED  
-**Effort:** 2-3 hours  
+### ✅ Priority 1: Transaction History View (COMPLETE)
+**Status:** ✅ DEPLOYED (2026-01-05)  
+**Effort:** 3 hours (actual)  
 **Value:** HIGH (customer-facing visibility)
 
-**Implementation Plan:**
-1. **Database Layer**
-   - Create RPC function: `public.list_customer_transactions(p_customer_id BIGINT, p_limit INT)`
-   - Returns: trade_date, kind, amount_btc, amount_usdt, fee_btc, fee_usdt, note
+**What Was Built:**
+1. **Database Layer** ✅
+   - RPC function: `public.list_customer_transactions(p_customer_id BIGINT, p_limit INT)`
+   - Returns: trade_date, kind, amount_btc, amount_usdt, fee_btc, fee_usdt, note, created_at
    - Source: `lth_pvr.ledger_lines` table
-   - Security: RLS policy ensures customers see only their own transactions
+   - Security: SECURITY DEFINER with customer_id parameter filtering
+   - File: `supabase/functions/public.list_customer_transactions.fn.sql`
 
-2. **UI Layer** (`website/customer-portal.html`)
-   - Add "Transactions" section below dashboard stats
-   - Simple table: Date | Type | BTC | USDT | Fee | Note
-   - Color coding:
-     - Green: deposits, BUY orders
-     - Red: withdrawals, SELL orders
-     - Blue: fees
-   - Display last 50 transactions (paginated)
-   - Responsive design for mobile
+2. **UI Layer** ✅ (`website/customer-portal.html` lines 254-290)
+   - Transaction History card with full table
+   - Columns: Date | Type | BTC | USDT | Fee (BTC) | Fee (USDT) | Note
+   - Color coding implemented:
+     - Green badges: deposits, BUY orders, topups
+     - Red badges: withdrawals, SELL orders
+     - Orange badges: fees
+   - Amount color coding (green for positive, red for negative)
+   - Date formatting: DD/MM/YYYY
+   - Handles empty state: "📭 No transactions yet"
+   - Displays last 100 transactions
 
-3. **Testing**
-   - Test with Customer 31 (has deposit + withdrawal transactions)
-   - Verify RLS policy prevents cross-customer access
-   - Test with zero transactions (new customer)
-   - Test with 50+ transactions (pagination)
+3. **Features** ✅
+   - Monospace font for numeric values (better alignment)
+   - Note truncation for long descriptions (40 char limit with tooltip)
+   - Loading state with spinner
+   - Error state with retry message
+   - Maps "topup" kind to "Deposit" for user-friendly display
 
-**Files to Create/Modify:**
-```
-supabase/migrations/
-  20260117_add_list_customer_transactions_rpc.sql
-
-website/
-  customer-portal.html (lines 200-280, add Transactions section)
-```
-
-**Success Criteria:**
-- ✅ Customer can view all trading activity
-- ✅ Deposits/withdrawals from balance reconciliation visible
-- ✅ Exchange fees and BitWealth fees clearly shown
-- ✅ Data refreshes when balance updates
+**Production Status:** ✅ DEPLOYED AND TESTED
 
 ---
 
-### Priority 2: Statement Generation (PDF Download)
+### Priority 2: UI Transformation 🎯 CURRENT PRIORITY
+**Status:** NOT STARTED  
+**Effort:** 4-6 hours  
+**Value:** HIGH (professional appearance, better UX)
+
+**Objective:** Transform `customer-portal.html` to use the modern dashboard design from `portal.html`, then deprecate the demo file.
+
+**Current State Analysis:**
+- **customer-portal.html**: Functional backend integration, basic card-based UI (blue gradient background)
+- **portal.html**: Professional dashboard design with sidebar navigation, modern stat boxes, dark theme (demo data, no backend)
+
+**Design System Comparison:**
+
+| Component | customer-portal.html | portal.html | Decision |
+|-----------|---------------------|-------------|----------|
+| **Layout** | Single column, full-width cards | Sidebar + main content area | ✅ Use portal.html |
+| **Navigation** | None (single page) | Left sidebar with icons | ✅ Use portal.html |
+| **Header** | Simple text header with logout | Top bar with user avatar, actions | ✅ Use portal.html |
+| **Stats Display** | Simple grid in card | Large stat boxes with icons | ✅ Use portal.html |
+| **Color Scheme** | Blue gradient (#1e3a8a → #3b82f6) | Dark theme (--bg-dark, --bg-card) | ✅ Use portal.html |
+| **Typography** | Basic sans-serif | Inter font family | ✅ Use portal.html |
+| **Backend** | ✅ Real Supabase integration | ❌ Demo data only | ✅ Keep customer-portal |
+
+**Implementation Plan:**
+
+**Phase 1: Merge CSS and Structure (2-3 hours)**
+1. Add `css/portal.css` import to customer-portal.html
+2. Restructure HTML to use sidebar + main content layout
+3. Replace card-based stats with dashboard-stats grid
+4. Add sidebar navigation (Dashboard active, others coming soon)
+5. Update color scheme to use CSS variables from portal.css
+
+**Phase 2: Preserve Functionality (1-2 hours)**
+6. Keep all existing Supabase RPC calls and data loading
+7. Maintain authentication/session logic
+8. Preserve transaction history table (already built)
+9. Keep onboarding status tracker (unique to customer-portal)
+10. Retain portfolio list functionality
+
+**Phase 3: Enhance with Portal Features (1-2 hours)**
+11. Add user avatar with initials in header
+12. Add "Download Statement" button (placeholder for future feature)
+13. Implement Recent Activity card (from transaction history data)
+14. Add Strategy Metrics card (calculated from customer data)
+15. Make navigation items functional (link to sections on page)
+
+**Phase 4: Testing & Cleanup (30 min)**
+16. Test with Customer 31 (active with transactions)
+17. Test responsive behavior (mobile, tablet, desktop)
+18. Delete portal.html and portal.js (demo files)
+19. Update login.html redirect to point to customer-portal.html
+
+**Files to Modify:**
+```
+website/
+  customer-portal.html (restructure entire file ~600 lines)
+  css/portal.css (already exists, may need minor tweaks)
+
+Files to Delete:
+  website/portal.html (demo file)
+  website/js/portal.js (demo script)
+```
+
+**Success Criteria:**
+- ✅ Professional dark theme dashboard with sidebar
+- ✅ All existing functionality preserved (transactions, balances, status)
+- ✅ Responsive design works on mobile/tablet/desktop
+- ✅ User avatar shows customer initials
+- ✅ Navigation sidebar present (future-ready)
+- ✅ No broken links or styling issues
+
+**Next Steps After Completion:**
+- Statement generation (download PDF from header button)
+- Performance charts (populate chart placeholder)
+- Withdrawal request form (activate Withdrawals nav item)
+
+---
+
+### Priority 3: Statement Generation (PDF Download)
 **Status:** NOT STARTED  
 **Effort:** 4-6 hours  
 **Value:** MEDIUM (monthly reporting)
@@ -136,7 +205,7 @@ website/
 
 ---
 
-### Priority 3: Admin Portal UX Improvements
+### Priority 4: Admin Portal UX Improvements
 **Status:** NOT STARTED  
 **Effort:** 3-4 hours  
 **Value:** MEDIUM (operational efficiency)
@@ -283,13 +352,14 @@ website/
 
 ## 🚀 Next Action Items (Priority Order)
 
-1. **TODAY (Jan 14):** Create transaction history RPC function
-2. **TODAY (Jan 14):** Add Transactions section to customer portal UI
-3. **TODAY (Jan 14):** Test with Customer 31 (verify data displays correctly)
-4. **Jan 15:** Deploy transaction history to production
-5. **Jan 15:** Monitor for errors/performance issues
-6. **Jan 17:** Begin statement generation feature
-7. **Jan 20:** Begin admin portal UX improvements
+1. **TODAY (Jan 14):** ✅ COMPLETE - Transaction history already deployed
+2. **TODAY (Jan 14):** Begin UI transformation - Add portal.css to customer-portal.html
+3. **TODAY (Jan 14):** Restructure customer-portal.html with sidebar layout
+4. **TODAY (Jan 14):** Update stats display to use dashboard-stats grid
+5. **Jan 15:** Complete UI transformation and test thoroughly
+6. **Jan 15:** Delete portal.html demo file
+7. **Jan 17:** Begin statement generation feature
+8. **Jan 20:** Begin admin portal UX improvements
 
 ---
 
