@@ -942,9 +942,11 @@
             }).format(num);
         }
         
-        // Set max date to today
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('endDate').setAttribute('max', today);
+        // Set max date to yesterday (LTH PVR data only available up to yesterday)
+        const today = new Date();
+        const yesterday = new Date(today.getTime() - 86400000);
+        const yesterdayString = yesterday.toISOString().split('T')[0];
+        document.getElementById('endDate').setAttribute('max', yesterdayString);
     </script>
 </body>
 </html>
