@@ -725,6 +725,11 @@
             const lth = data.lth_pvr_summary || {};
             const std = data.std_dca_summary || {};
             
+            // Debug logging
+            console.log('LTH PVR Summary:', lth);
+            console.log('Standard DCA Summary:', std);
+            console.log('Daily Results Count:', data.daily_results?.length);
+            
             document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav || 0);
             const lthRoiValue = (lth.total_roi || 0);
             document.getElementById('lthROI').textContent = (lthRoiValue >= 0 ? '+' : '') + lthRoiValue.toFixed(2) + '%';
