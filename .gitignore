@@ -43,3 +43,7 @@ node_modules/
 
 # Local Netlify folder
 .netlify
+
+# Documentation files that might contain secrets
+QUICK_DEPLOY_*.md
+STATEMENT_*.md
