@@ -986,16 +986,16 @@
                 const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
                 const prevMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear;
                 
+                // Define variables that are needed outside the loop
+                const isCurrentYear = selectedYear === thisYear;
+                const isPreviousMonthYear = selectedYear === prevMonthYear;
+                const isFutureYear = selectedYear > thisYear;
+                
                 monthSelect.innerHTML = '';
                 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                                    'July', 'August', 'September', 'October', 'November', 'December'];
                 
                 for (let m = 1; m <= 12; m++) {
-                    // Only allow months up to previous month (not current month)
-                    const isCurrentYear = selectedYear === thisYear;
-                    const isPreviousMonthYear = selectedYear === prevMonthYear;
-                    const isFutureYear = selectedYear > thisYear;
-                    
                     // Skip if future year or future/current month in current year
                     if (isFutureYear) continue;
                     if (isCurrentYear && m >= thisMonth) continue;
