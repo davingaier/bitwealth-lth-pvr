@@ -435,6 +435,62 @@
     <div id="management-module" class="module">
       <h2>Customer Management</h2>
 
+      <!-- Dashboard Metrics Card -->
+      <div class="card" style="max-width:980px;margin-bottom:1rem;">
+        <h3 style="margin:0 0 1rem;">Dashboard Metrics</h3>
+        <div id="dashboardMetricsLoading" style="text-align:center;padding:2rem;color:var(--muted);">
+          Loading metrics...
+        </div>
+        <div id="dashboardMetricsContent" style="display:none;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;">
+            <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">
+                Total Customers
+              </div>
+              <div id="metricTotalCustomers" style="font-size:1.75rem;font-weight:600;color:var(--ink);">
+                —
+              </div>
+            </div>
+            <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">
+                Active Customers
+              </div>
+              <div id="metricActiveCustomers" style="font-size:1.75rem;font-weight:600;color:#10b981;">
+                —
+              </div>
+            </div>
+            <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">
+                Total AUM
+              </div>
+              <div id="metricTotalAUM" style="font-size:1.75rem;font-weight:600;color:var(--ink);">
+                —
+              </div>
+            </div>
+            <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">
+                Avg Portfolio NAV
+              </div>
+              <div id="metricAvgNAV" style="font-size:1.75rem;font-weight:600;color:var(--ink);">
+                —
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:1rem;align-items:center;padding-top:.75rem;border-top:1px solid var(--border);">
+            <div style="flex:1;">
+              <span style="font-size:.85rem;color:var(--muted);">Active Alerts (Last 7 Days):</span>
+              <span id="metricAlerts" style="margin-left:.5rem;">—</span>
+            </div>
+            <div style="font-size:.75rem;color:var(--muted);">
+              <span id="metricUpdatedAt">—</span>
+            </div>
+          </div>
+        </div>
+        <div id="dashboardMetricsError" style="display:none;text-align:center;padding:2rem;color:#ef4444;">
+          Failed to load metrics. Please refresh the page.
+        </div>
+      </div>
+
       <div class="card" style="max-width:980px">
         <nav style="display:flex;gap:.5rem;margin-bottom:.75rem;">
           <button id="cmTabNew"  type="button" class="cm-tab cm-tab--active">Create New Client</button>
@@ -5149,6 +5205,81 @@
       }
     }
 
+    // Load Dashboard Metrics
+    async function loadDashboardMetrics() {
+      const loading = document.getElementById('dashboardMetricsLoading');
+      const content = document.getElementById('dashboardMetricsContent');
+      const error = document.getElementById('dashboardMetricsError');
+      
+      if (!supabaseClient) {
+        if (loading) loading.style.display = 'none';
+        if (error) {
+          error.textContent = 'Supabase client not available';
+          error.style.display = 'block';
+        }
+        return;
+      }
+      
+      try {
+        const { data, error: rpcError } = await supabaseClient.rpc('get_admin_dashboard_metrics');
+        
+        if (rpcError) throw rpcError;
+        
+        // Hide loading, show content
+        if (loading) loading.style.display = 'none';
+        if (content) content.style.display = 'block';
+        if (error) error.style.display = 'none';
+        
+        // Populate metrics
+        const metricTotalCustomers = document.getElementById('metricTotalCustomers');
+        const metricActiveCustomers = document.getElementById('metricActiveCustomers');
+        const metricTotalAUM = document.getElementById('metricTotalAUM');
+        const metricAvgNAV = document.getElementById('metricAvgNAV');
+        const metricAlerts = document.getElementById('metricAlerts');
+        const metricUpdatedAt = document.getElementById('metricUpdatedAt');
+        
+        if (metricTotalCustomers) metricTotalCustomers.textContent = data.total_customers || 0;
+        if (metricActiveCustomers) metricActiveCustomers.textContent = data.active_customers || 0;
+        
+        if (metricTotalAUM) {
+          const aum = parseFloat(data.total_aum_usd) || 0;
+          metricTotalAUM.textContent = `$${aum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+        
+        if (metricAvgNAV) {
+          const avg = parseFloat(data.avg_nav_usd) || 0;
+          metricAvgNAV.textContent = `$${avg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+        
+        if (metricAlerts && data.alerts) {
+          const critical = data.alerts.critical || 0;
+          const errorCount = data.alerts.error || 0;
+          const warn = data.alerts.warn || 0;
+          
+          let alertHTML = '';
+          if (critical > 0) alertHTML += `<span style="color:#dc2626;font-weight:600;">${critical} Critical</span>`;
+          if (errorCount > 0) alertHTML += (alertHTML ? ' · ' : '') + `<span style="color:#ef4444;">${errorCount} Error</span>`;
+          if (warn > 0) alertHTML += (alertHTML ? ' · ' : '') + `<span style="color:#f59e0b;">${warn} Warning</span>`;
+          if (!alertHTML) alertHTML = '<span style="color:#10b981;">No Active Alerts</span>';
+          
+          metricAlerts.innerHTML = alertHTML;
+        }
+        
+        if (metricUpdatedAt && data.updated_at) {
+          const updated = new Date(data.updated_at);
+          metricUpdatedAt.textContent = `Updated: ${updated.toLocaleTimeString()}`;
+        }
+        
+      } catch (err) {
+        console.error('Failed to load dashboard metrics:', err);
+        if (loading) loading.style.display = 'none';
+        if (error) {
+          error.textContent = `Failed to load metrics: ${err.message || 'Unknown error'}`;
+          error.style.display = 'block';
+        }
+      }
+    }
+
     // Hook into init when customers are loaded
     (function cmInitAfterLoad(){
       const ready = () => typeof supabaseClient!=='undefined' && supabaseClient && Array.isArray(customersCache);
@@ -5157,6 +5288,7 @@
         clearInterval(interval);
         cmBindTabs();
         cmBindForms();
+        loadDashboardMetrics(); // Load dashboard metrics after customers loaded
       }, 200);
     })();
 
