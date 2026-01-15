@@ -417,6 +417,9 @@
                 // Load transaction history
                 await loadTransactionHistory(customerData.customer_id);
 
+                // Initialize statement form with customer's account creation date
+                initializeStatementForm();
+
                 // Show content
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
@@ -842,7 +845,48 @@
             }
 
             try {
-                showStatementStatus('Generating PDF statement...', 'loading');
+                showStatementStatus('Checking for existing statement...', 'loading');
+
+                // Calculate expected filename (SDD convention)
+                const lastDay = new Date(year, month, 0).getDate();
+                const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                const lastName = customerData.last_name.replace(/\s+/g, '_');
+                const firstNames = customerData.first_names.replace(/\s+/g, '_');
+                const monthPadded = String(month).padStart(2, '0');
+                const filename = `${endDate}_${lastName}_${firstNames}_statement_M${monthPadded}_${year}.pdf`;
+                const storagePath = `${ORG_ID}/customer-${customerData.customer_id}/${filename}`;
+
+                // Try to get existing statement from storage bucket
+                const { data: existingFile } = await sb
+                    .storage
+                    .from('customer-statements')
+                    .list(`${ORG_ID}/customer-${customerData.customer_id}`, {
+                        search: filename
+                    });
+
+                if (existingFile && existingFile.length > 0) {
+                    // Pre-generated statement exists, get signed URL
+                    const { data: signedData } = await sb
+                        .storage
+                        .from('customer-statements')
+                        .createSignedUrl(storagePath, 60 * 60 * 24 * 30); // 30-day expiry
+
+                    if (signedData?.signedUrl) {
+                        showStatementStatus('Downloading pre-generated statement...', 'loading');
+                        const a = document.createElement('a');
+                        a.href = signedData.signedUrl;
+                        a.download = filename;
+                        a.target = '_blank';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        showStatementStatus('Statement downloaded successfully!', 'success');
+                        return;
+                    }
+                }
+
+                // No pre-generated statement, generate new one
+                showStatementStatus('Generating new PDF statement...', 'loading');
 
                 // Call edge function
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_generate_statement`, {
@@ -912,24 +956,78 @@
         }
 
         function initializeStatementForm() {
-            // Populate year dropdown (last 3 years)
+            // Populate year dropdown (from account creation year to current year)
             const yearSelect = document.getElementById('statementYear');
+            const monthSelect = document.getElementById('statementMonth');
             const currentYear = new Date().getFullYear();
+            const currentMonth = new Date().getMonth() + 1; // 1-12
             
-            for (let year = currentYear; year >= currentYear - 2; year--) {
+            // Get account creation date from customer data (will be set after login)
+            const accountCreatedYear = customerData?.created_at 
+                ? new Date(customerData.created_at).getFullYear()
+                : currentYear - 2; // Default to 2 years ago if not available
+            
+            // Populate years from account creation to current
+            yearSelect.innerHTML = '';
+            for (let year = currentYear; year >= accountCreatedYear; year--) {
                 const option = document.createElement('option');
                 option.value = year;
                 option.textContent = year;
                 yearSelect.appendChild(option);
             }
             
-            // Set default to current month/year (or previous month if before 5th)
-            const now = new Date();
-            const currentMonth = now.getMonth() + 1;
-            const defaultMonth = now.getDate() > 5 ? currentMonth : (currentMonth === 1 ? 12 : currentMonth - 1);
+            // Function to update available months based on selected year
+            function updateAvailableMonths() {
+                const selectedYear = parseInt(yearSelect.value);
+                const now = new Date();
+                const thisYear = now.getFullYear();
+                const thisMonth = now.getMonth() + 1; // 1-12
+                const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
+                const prevMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear;
+                
+                monthSelect.innerHTML = '';
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                   'July', 'August', 'September', 'October', 'November', 'December'];
+                
+                for (let m = 1; m <= 12; m++) {
+                    // Only allow months up to previous month
+                    const isCurrentYear = selectedYear === thisYear;
+                    const isPreviousMonthYear = selectedYear === prevMonthYear;
+                    const isFutureYear = selectedYear > thisYear;
+                    
+                    // Skip if future year or future month in current year
+                    if (isFutureYear) continue;
+                    if (isCurrentYear && m >= thisMonth) continue;
+                    
+                    // Skip if before account creation
+                    if (customerData?.created_at) {
+                        const accountCreated = new Date(customerData.created_at);
+                        const accountYear = accountCreated.getFullYear();
+                        const accountMonth = accountCreated.getMonth() + 1;
+                        
+                        if (selectedYear < accountYear) continue;
+                        if (selectedYear === accountYear && m < accountMonth) continue;
+                    }
+                    
+                    const option = document.createElement('option');
+                    option.value = m;
+                    option.textContent = monthNames[m - 1];
+                    monthSelect.appendChild(option);
+                }
+                
+                // Set default to previous month
+                if (monthSelect.querySelector(`option[value="${prevMonth}"]`) && isPreviousMonthYear) {
+                    monthSelect.value = prevMonth;
+                } else if (monthSelect.options.length > 0) {
+                    monthSelect.value = monthSelect.options[monthSelect.options.length - 1].value;
+                }
+            }
             
-            document.getElementById('statementMonth').value = defaultMonth;
-            document.getElementById('statementYear').value = currentYear;
+            // Update months when year changes
+            yearSelect.addEventListener('change', updateAvailableMonths);
+            
+            // Initial population
+            updateAvailableMonths();
         }
 
         async function logout() {
@@ -938,7 +1036,7 @@
         }
 
         // Initialize on page load
-        initializeStatementForm();
+        // Note: initializeStatementForm() is called after customer data loads
         initPortal();
     </script>
 </body>

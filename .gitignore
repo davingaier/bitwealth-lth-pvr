@@ -40,3 +40,6 @@ node_modules/
 *.pkg
 *.deb
 *.rpm
+
+# Local Netlify folder
+.netlify
