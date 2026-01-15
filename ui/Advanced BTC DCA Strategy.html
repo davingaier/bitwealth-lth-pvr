@@ -532,10 +532,39 @@
         <form id="cmFormEdit" class="cm-form" style="display:none;">
           <h3 style="margin:.25rem 0 1rem">Edit Client Details</h3>
 
+          <!-- Search and Filter Controls -->
+          <div style="display:flex;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:flex-end;">
+            <label style="flex:1;min-width:250px;">
+              <span class="label-line">Search customers</span>
+              <input 
+                id="cmSearchInput" 
+                type="text" 
+                placeholder="Search by name, email, or ID..." 
+                style="width:100%;" 
+              />
+            </label>
+            <label style="min-width:180px;">
+              <span class="label-line">Filter by status</span>
+              <select id="cmStatusFilter">
+                <option value="">All statuses</option>
+                <option value="prospect">Prospect</option>
+                <option value="kyc">KYC Verification</option>
+                <option value="setup">Account Setup</option>
+                <option value="deposit">Awaiting Deposit</option>
+                <option value="active" selected>Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+            <button type="button" id="cmClearFilters" style="height:var(--control-height);white-space:nowrap;">
+              Clear Filters
+            </button>
+          </div>
+
           <div style="margin-bottom:.75rem;">
             <label><strong>Select client:</strong>
               <select id="cmEditSelect"><option value="">Loading customers…</option></select>
             </label>
+            <div id="cmMatchCount" style="font-size:.85rem;color:var(--muted);margin-top:.25rem;"></div>
           </div>
 
           <div class="cm-grid">
@@ -4048,7 +4077,12 @@
           setNativeOptions(sel, opts);
         }
         if(txSel) setNativeOptions(txSel, opts);
-        if(editSel) setNativeOptions(editSel, opts);
+        if(editSel) {
+          setNativeOptions(editSel, opts);
+          // Initialize filter functionality after customers loaded
+          bindCustomerFilters();
+          filterCustomersInEdit(); // Apply default filters (active only)
+        }
 
         if(typeof window.Choices!=="undefined"){
           if(sel){
@@ -4095,6 +4129,82 @@
         if(txSel) setNativeOptions(txSel,msg);
         if(editSel) setNativeOptions(editSel,msg);
         showInlineError('reportsError','Could not load customers (network/CORS/timeout).');
+      }
+    }
+
+    // Customer Search & Filter functionality
+    function filterCustomersInEdit() {
+      const searchInput = document.getElementById('cmSearchInput');
+      const statusFilter = document.getElementById('cmStatusFilter');
+      const editSel = document.getElementById('cmEditSelect');
+      const matchCount = document.getElementById('cmMatchCount');
+      
+      if (!editSel || !customersCache) return;
+      
+      const searchTerm = searchInput?.value.toLowerCase() || '';
+      const statusValue = statusFilter?.value || '';
+      
+      // Filter customers based on search and status
+      let filtered = customersCache.filter(r => {
+        // Status filter
+        if (statusValue && String(r.registration_status || '').toLowerCase() !== statusValue) {
+          return false;
+        }
+        
+        // Search filter (name, email, or customer_id)
+        if (searchTerm) {
+          const fullName = `${r.first_names || ''} ${r.last_name || ''}`.toLowerCase();
+          const email = String(r.email_address || '').toLowerCase();
+          const id = String(r.customer_id || '');
+          
+          if (!fullName.includes(searchTerm) && 
+              !email.includes(searchTerm) && 
+              !id.includes(searchTerm)) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      // Update match count display
+      if (matchCount) {
+        matchCount.textContent = `${filtered.length} customer${filtered.length !== 1 ? 's' : ''} found`;
+      }
+      
+      // Update select options
+      const opts = ['<option value="">Select customer…</option>'].concat(
+        filtered.map(r => `<option value="${r.customer_id}">${r.last_name}, ${r.first_names}</option>`)
+      ).join('');
+      
+      setNativeOptions(editSel, opts);
+      
+      return filtered;
+    }
+
+    // Bind filter event listeners
+    function bindCustomerFilters() {
+      const searchInput = document.getElementById('cmSearchInput');
+      const statusFilter = document.getElementById('cmStatusFilter');
+      const clearBtn = document.getElementById('cmClearFilters');
+      
+      if (searchInput && !searchInput._bound) {
+        searchInput.addEventListener('input', filterCustomersInEdit);
+        searchInput._bound = true;
+      }
+      
+      if (statusFilter && !statusFilter._bound) {
+        statusFilter.addEventListener('change', filterCustomersInEdit);
+        statusFilter._bound = true;
+      }
+      
+      if (clearBtn && !clearBtn._bound) {
+        clearBtn.addEventListener('click', () => {
+          if (searchInput) searchInput.value = '';
+          if (statusFilter) statusFilter.value = '';
+          filterCustomersInEdit();
+        });
+        clearBtn._bound = true;
       }
     }
 
