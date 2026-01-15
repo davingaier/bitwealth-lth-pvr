@@ -589,19 +589,19 @@
           <h3 style="margin:.25rem 0 1rem">Edit Client Details</h3>
 
           <!-- Search and Filter Controls -->
-          <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:flex-end;">
-            <label style="width:240px;">
+          <div style="display:flex;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:flex-end;">
+            <label style="flex:1;max-width:300px;">
               <span class="label-line">Search customers</span>
               <input 
                 id="cmSearchInput" 
                 type="text" 
-                placeholder="Search by name, email..." 
+                placeholder="Search by name, email, or ID..." 
                 style="width:100%;" 
               />
             </label>
-            <label style="width:160px;">
+            <label style="width:180px;">
               <span class="label-line">Filter by status</span>
-              <select id="cmStatusFilter">
+              <select id="cmStatusFilter" style="width:100%;">
                 <option value="" selected>All statuses</option>
                 <option value="prospect">Prospect</option>
                 <option value="kyc">KYC Verification</option>
