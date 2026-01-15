@@ -47,7 +47,17 @@
    - Variable scoping error resolved
    - Date validation timezone bug fixed
 
-**Impact:** Public back-test tool now production-ready with accurate results.
+5. ✅ **v0.6.21** - Statement generation system (Jan 15)
+   - PDF generation with professional formatting
+   - Right-aligned numbers, NAV terminology, fee breakdown
+   - Benchmark comparison table (LTH PVR vs Standard DCA)
+   - Month dropdown restrictions (account creation → previous month)
+   - Automated monthly generation cron job (00:01 UTC, 1st of month)
+   - Email notifications with download links
+   - Pre-generated statement retrieval from storage bucket
+   - SDD file naming convention
+
+**Impact:** Customers can now download monthly investment statements with full transaction history, performance metrics, and benchmark comparisons. Automated generation ensures statements are ready on the 1st of each month.
 
 ---
 
@@ -199,44 +209,187 @@ Files to Delete:
 ---
 
 ### Priority 3: Statement Generation (PDF Download)
-**Status:** NOT STARTED  
-**Effort:** 4-6 hours  
-**Value:** MEDIUM (monthly reporting)
+**Status:** ✅ COMPLETE (2026-01-15)
+**Effort:** 8 hours (actual)  
+**Value:** HIGH (monthly reporting)
 
-**Implementation Plan:**
-1. **Backend Edge Function**
-   - Create `ef_generate_statement_pdf`
+**What Was Built:**
+
+1. **Edge Function: ef_generate_statement** ✅
    - Parameters: customer_id, year, month
-   - Queries:
-     - `lth_pvr.balances_daily` (opening/closing NAV)
-     - `lth_pvr.ledger_lines` (all transactions)
-     - `customer_portfolios` (strategy details)
-     - `lth_pvr.std_dca_balances_daily` (benchmark comparison)
-   - Generate PDF using jsPDF library
-   - Return as downloadable blob
+   - Queries: balances_daily, ledger_lines, customer_portfolios, std_dca_balances_daily
+   - PDF Generation: jsPDF library (2.5.1)
+   - Returns: JSON with downloadUrl (signed 30-day expiry)
+   - Storage: Uploads to customer-statements bucket with SDD naming
 
-2. **PDF Design**
-   - Header: BitWealth logo, customer name, statement period
-   - Section 1: Performance Summary
-     - Opening balance, closing balance, net change
+2. **PDF Design Enhancements** ✅
+   - **Header:** Customer name, Customer ID, Statement Period (logo placeholder added)
+   - **Performance Summary:**
+     - Opening/Closing Net Asset Value (terminology updated)
+     - Contributions, Net Change with %
      - ROI %, CAGR %
-     - Total fees paid
-   - Section 2: Transaction History
-     - Table of all transactions for month
-   - Section 3: Benchmark Comparison
-     - LTH PVR vs Standard DCA chart
-   - Footer: Disclaimer, contact info
+     - Fee Breakdown: Platform ($0), Performance ($0), Exchange Fees
+     - Total Fees Paid (bold)
+     - BTC/USDT Balances
+     - All numeric values right-aligned for professional appearance
+   - **Benchmark Comparison:**
+     - 3-column table: Metric | LTH PVR Bitcoin DCA | Standard DCA
+     - Rows: NAV, ROI, CAGR
+     - Outperformance summary
+   - **Transaction History:**
+     - 8 columns with right-aligned numbers
+     - Rolling BTC/USDT balances
+     - Totals row at bottom
+     - Replaces "topup" with "deposit" for display
+   - **Footer:**
+     - Shows actual filename (SDD convention)
+     - Generated date, page number
+     - Adjusted margins to prevent overflow
 
-3. **UI Integration**
-   - Add "Download Statement" button to portal dashboard
-   - Month/year selector dropdown
-   - Generate on-demand (no pre-generation)
+3. **UI Integration** ✅
+   - Month/year dropdowns with smart filtering
+   - Month dropdown restricted to past months only (account creation → previous month)
+   - Checks storage bucket first for pre-generated statements
+   - Generates on-demand if not found
+   - Download via signed URL
 
-**Deferred to:** Jan 20-22 (Week 2 mid-point)
+4. **Automated Monthly Generation** ✅
+   - **Edge Function: ef_monthly_statement_generator**
+   - **Schedule:** pg_cron job runs 00:01 UTC on 1st of every month
+   - Generates previous month's statements for all active customers
+   - Sends professional email notification with download link
+   - Email template: Modern HTML design with BitWealth branding
+
+5. **Storage Architecture** ✅
+   - Bucket: customer-statements (private)
+   - Path: `{org_id}/customer-{id}/{filename}`
+   - Filename: `CCYY-MM-DD_LastName_FirstNames_statement_M##_CCYY.pdf`
+   - RLS Policies: Customers view own, service role full access
+   - 5MB file size limit, PDF only
+
+**Files Modified:**
+- `supabase/functions/ef_generate_statement/index.ts` (450 lines)
+- `supabase/functions/ef_monthly_statement_generator/index.ts` (220 lines)
+- `website/customer-portal.html` (statement section + download logic)
+- `supabase/migrations/20260115_add_monthly_statement_generation_cron.sql`
+
+**Known Issues:**
+- ✅ FIXED: Month dropdown showing no options (ORG_ID undefined)
+- ✅ FIXED: Month dropdown logic (correctly excludes current month)
+- ⏳ Logo: 522KB file too large for PDF embedding (needs compression to <50KB)
+
+**Production Status:** ✅ DEPLOYED AND FUNCTIONAL
 
 ---
 
-### Priority 4: Admin Portal UX Improvements
+### Priority 4: Statement Generation Enhancements
+**Status:** PLANNED  
+**Effort:** 6-8 hours  
+**Value:** MEDIUM (professional polish)
+
+**Planned Improvements:**
+
+#### 4.1 Logo Optimization
+**Effort:** 30 minutes  
+**Priority:** MEDIUM
+- Current logo is 522KB (too large for PDF embedding)
+- **Action:** Compress to <50KB using TinyPNG or ImageOptim
+- Target: 20x20 pixels at 72 DPI, PNG format
+- Update `ef_generate_statement/index.ts` with optimized base64
+
+#### 4.2 Multi-Page Support
+**Effort:** 1 hour  
+**Priority:** LOW
+- Current PDF only shows "Page 1" hardcoded
+- **Action:** Add dynamic page numbering
+- jsPDF code: Track page count, update footer dynamically
+- Format: `Page ${currentPage} of ${totalPages}`
+
+#### 4.3 Performance Metrics Period Clarification
+**Effort:** 30 minutes  
+**Priority:** MEDIUM
+- ROI and CAGR calculated from inception but not labeled
+- **Action:** Add "Since Inception: DD MMM YYYY" under ROI/CAGR
+- Improves transparency for customers
+
+#### 4.4 Visual Table Enhancements
+**Effort:** 1 hour  
+**Priority:** LOW
+- Benchmark table has basic styling
+- **Action:** Add subtle background colors, border lines
+- Use `doc.setFillColor(240, 247, 255)` for header rows
+- Add thin borders around table cells
+
+#### 4.5 Transaction Type Icons
+**Effort:** 45 minutes  
+**Priority:** LOW
+- Text-only transaction types (deposit, buy, sell, withdrawal)
+- **Action:** Add emoji icons before text
+- deposit: 💰, withdrawal: 💸, buy: 📈, sell: 📉
+- Makes transaction scanning faster
+
+#### 4.6 Year-to-Date Summary Section
+**Effort:** 2 hours  
+**Priority:** MEDIUM
+- No YTD summary for months after January
+- **Action:** Add YTD section if month != January
+- Show: YTD Contributions, YTD Fees, YTD Net Change, YTD ROI
+- Helps customers track annual progress
+
+#### 4.7 Footnotes and Disclaimers
+**Effort:** 30 minutes  
+**Priority:** MEDIUM
+- No explanation for $0 platform/performance fees
+- **Action:** Add small disclaimer at bottom
+- Text: "Platform and Performance Fees coming in Q2 2026. Exchange Fees charged by VALR."
+- Font size 7, gray text, bottom of page 1
+
+#### 4.8 CSV Export Option
+**Effort:** 3 hours  
+**Priority:** LOW
+- Customers may want transaction data in spreadsheet format
+- **Action:** Add "Download as CSV" button next to PDF button
+- Export: Date, Type, BTC Amount, USDT Amount, Fee BTC, Fee USDT, BTC Balance, USDT Balance
+- Useful for tax reporting and personal analysis
+
+#### 4.9 Statement Archive UI
+**Effort:** 2 hours  
+**Priority:** MEDIUM
+- Current UI: Manual month/year selection only
+- **Action:** Add statement history list below dropdown
+- Display: Month/Year, Status (Generated/Not Available), File Size, Download link
+- Faster access to historical statements without dropdown navigation
+
+#### 4.10 Mobile PDF Optimization
+**Effort:** 2 hours  
+**Priority:** LOW
+- jsPDF may not render optimally on mobile browsers
+- **Action:** Test on iOS Safari, Android Chrome
+- Adjust font sizes and column widths if needed
+- Consider separate mobile-optimized template
+
+#### 4.11 Error Handling in Email Delivery
+**Effort:** 2 hours  
+**Priority:** HIGH
+- Email failures are logged but no retry mechanism
+- **Action:** Log failed emails to lth_pvr.alert_events
+- Implement 3-attempt retry with exponential backoff
+- Send admin notification if >5 emails fail in one batch
+
+#### 4.12 Statement History Audit Table
+**Effort:** 1 hour  
+**Priority:** MEDIUM
+- No tracking of statement generation/download events
+- **Action:** Create lth_pvr.statement_history table
+- Columns: customer_id, year, month, generated_at, emailed_at, download_count, file_size_kb
+- Enables analytics: How often do customers download? Which months most popular?
+
+**Total Effort:** 17-18 hours  
+**Recommended Timeline:** Week 4-5 (Jan 24 - Feb 7)
+
+---
+
+### Priority 5: Admin Portal UX Improvements
 **Status:** NOT STARTED  
 **Effort:** 3-4 hours  
 **Value:** MEDIUM (operational efficiency)
@@ -347,8 +500,9 @@ Files to Delete:
 - ⏳ Email delivery rate > 95%
 
 ### Week 2 Targets (Jan 17-24)
-- [ ] Transaction history implemented
-- [ ] Statement generation functional
+- [✅] Transaction history implemented (Jan 5)
+- [✅] Statement generation functional (Jan 15)
+- [✅] UI transformation complete (Jan 14)
 - [ ] 5-10 active customers
 - [ ] < 24hr response time for support requests
 
@@ -383,14 +537,13 @@ Files to Delete:
 
 ## 🚀 Next Action Items (Priority Order)
 
-1. **TODAY (Jan 14):** ✅ COMPLETE - Transaction history already deployed
-2. **TODAY (Jan 14):** Begin UI transformation - Add portal.css to customer-portal.html
-3. **TODAY (Jan 14):** Restructure customer-portal.html with sidebar layout
-4. **TODAY (Jan 14):** Update stats display to use dashboard-stats grid
-5. **Jan 15:** Complete UI transformation and test thoroughly
-6. **Jan 15:** Delete portal.html demo file
-7. **Jan 17:** Begin statement generation feature
-8. **Jan 20:** Begin admin portal UX improvements
+1. **✅ COMPLETE (Jan 5):** Transaction history deployed
+2. **✅ COMPLETE (Jan 14):** UI transformation complete
+3. **✅ COMPLETE (Jan 15):** Statement generation deployed
+4. **Jan 16-17:** Test December 2025 statement generation with Customer 31
+5. **Jan 17-20:** Begin Admin Portal UX improvements (search, filters, bulk ops)
+6. **Jan 20-24:** Statement generation enhancements (logo, YTD summary, disclaimers)
+7. **Jan 24:** Begin withdrawal request system planning
 
 ---
 
@@ -405,5 +558,5 @@ Files to Delete:
 ---
 
 **Document Status:** Active roadmap  
-**Last Updated:** January 14, 2026  
-**Next Review:** January 17, 2026 (Week 2 planning)
+**Last Updated:** January 15, 2026  
+**Next Review:** January 17, 2026 (Week 2 mid-point)
