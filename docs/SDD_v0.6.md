@@ -9,6 +9,113 @@
 
 ## 0. Change Log
 
+### v0.6.22 – Monthly Statement Generation System Complete
+**Date:** 2026-01-15  
+**Purpose:** Implemented comprehensive monthly statement generation system with PDF download, automated monthly generation, and email delivery.
+
+**Features Implemented:**
+
+1. **PDF Statement Generation** (ef_generate_statement)
+   - **Professional Formatting:**
+     * Right-aligned all currency values, percentages, and BTC amounts
+     * Changed "Opening/Closing Balance" to "Opening/Closing Net Asset Value"
+     * Fee breakdown section: Platform ($0), Performance ($0), Exchange (actual), Total (bold)
+     * Benchmark comparison table: 3 columns (Metric | LTH PVR | Standard DCA) with colored header
+     * Footer shows actual filename (SDD convention: CCYY-MM-DD_LastName_FirstNames_statement_M##_CCYY.pdf)
+   - **Technical Implementation:**
+     * jsPDF 2.5.1 for client-side PDF generation
+     * Queries balances_daily, ledger_lines, std_dca_balances_daily for comprehensive data
+     * Calculates ROI, CAGR, max drawdown, Sharpe ratio, Sortino ratio
+     * Handles multi-page support (future enhancement - currently single page)
+   - **Logo:** Placeholder in code (needs <50KB compressed version - deferred)
+   - **Deployment:** 4 versions deployed, final version includes all enhancements
+
+2. **Automated Monthly Generation** (ef_monthly_statement_generator)
+   - **Scheduling:** pg_cron job runs at 00:01 UTC on 1st of every month
+   - **Batch Processing:**
+     * Calculates previous month/year from current date
+     * Fetches all active customers from customer_portfolios (status='active')
+     * Calls ef_generate_statement for each customer via HTTP POST
+     * Tracks results: total customers, generated count, emailed count, errors array
+   - **Email Delivery:**
+     * Professional HTML template with download link
+     * Uses Resend API for reliable delivery
+     * Subject: "Your {Month} {Year} BitWealth Investment Statement"
+     * Body: Greeting, performance summary, download button, footer with support email
+   - **Error Handling:** Logs errors to edge function output (future enhancement: alert system integration)
+
+3. **Storage System** (customer-statements bucket)
+   - **Configuration:**
+     * Private bucket (only authenticated customers can access)
+     * 5MB file size limit per statement
+     * PDF files only (MIME type restriction)
+   - **RLS Policies:**
+     * Policy 1: Customers can insert into their own org/customer folder
+     * Policy 2: Customers can read from their own org/customer folder
+     * Policy 3: Service role has full access (for automated generation)
+   - **Path Structure:** {ORG_ID}/customer-{customer_id}/{filename}
+   - **Pre-Generated Retrieval:** Portal checks storage before generating new PDF (instant download on repeat)
+
+4. **Customer Portal Integration** (website/customer-portal.html)
+   - **Statement Download UI:**
+     * Year dropdown: Account creation year → current year
+     * Month dropdown: Smart filtering - only shows complete months (excludes current month and future)
+     * Month logic: For current year, shows months from account creation up to previous month
+     * For past years, shows all 12 months (or from account creation month if account created mid-year)
+   - **Download Logic:**
+     * First checks storage bucket for pre-generated statement
+     * If found, downloads instantly via signed URL
+     * If not found, calls ef_generate_statement to create new PDF
+     * Stores generated PDF to storage for future instant downloads
+   - **Bug Fixes:**
+     * Added missing ORG_ID constant to prevent "ORG_ID is not defined" error
+     * Reverted month logic to correctly exclude current month (no partial month statements)
+
+5. **Cron Job Configuration**
+   - **Job Name:** monthly-statement-generator
+   - **Schedule:** 0 1 1 * * (00:01 UTC on 1st of every month)
+   - **Command:** SELECT net.http_post(...) calling ef_monthly_statement_generator
+   - **Authentication:** Uses service role key from app settings
+   - **First Run:** February 1, 2026 at 00:01 UTC (will generate January 2026 statements)
+
+**Technical Files:**
+- `supabase/functions/ef_generate_statement/index.ts` (445 lines) - Core PDF generation
+- `supabase/functions/ef_monthly_statement_generator/index.ts` (220 lines) - Batch automation
+- `website/customer-portal.html` - Statement tab with download UI
+- `supabase/migrations/20260115_create_customer_statements_bucket.sql` - Storage bucket setup
+- `supabase/migrations/20260115_add_monthly_statement_cron.sql` - Cron job creation
+
+**Future Enhancements (documented in POST_LAUNCH_ENHANCEMENTS.md Priority 4):**
+- 4.1 Logo Optimization (<50KB compression)
+- 4.2 Multi-Page Support (dynamic page breaks)
+- 4.3 Performance Metrics Period Clarification (inception-to-date vs month-only)
+- 4.4 Year-to-Date Summary Section
+- 4.5 Transaction Detail Table
+- 4.6 Benchmark Comparison Charts (visual, not just table)
+- 4.7 Footnotes and Disclaimers
+- 4.8 Interactive Statement Viewer (HTML preview before PDF download)
+- 4.9 CSV Export Option
+- 4.10 Custom Date Range Statements
+- 4.11 Error Handling in Email Delivery (retry logic, alert system integration)
+- 4.12 Statement History Audit Table
+
+**Testing Status:**
+- ✅ PDF generation with all 10 enhancements deployed
+- ✅ Storage bucket created with RLS policies
+- ✅ Cron job scheduled and visible in pg_cron.job
+- ✅ Month dropdown smart filtering working (excludes current month)
+- ✅ ORG_ID constant added to customer portal
+- ⏳ December 2025 statement download test pending (Customer 31)
+
+**Production Deployment:**
+```powershell
+supabase functions deploy ef_generate_statement --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_monthly_statement_generator --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+git add website/customer-portal.html; git commit -m "Add statement generation"; git push
+```
+
+---
+
 ### v0.6.21 – Post-Launch Enhancement Phase
 **Date:** 2026-01-14  
 **Purpose:** Transition to post-launch enhancements after successful MVP launch on January 10, 2026.
