@@ -343,6 +343,7 @@
     <script>
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
+        const ORG_ID = 'b0a77009-03b9-44a1-ae1d-34f157d44a8b'; // BitWealth organization ID
 
         const { createClient } = supabase;
         const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -990,12 +991,12 @@
                                    'July', 'August', 'September', 'October', 'November', 'December'];
                 
                 for (let m = 1; m <= 12; m++) {
-                    // Only allow months up to previous month
+                    // Only allow months up to previous month (not current month)
                     const isCurrentYear = selectedYear === thisYear;
                     const isPreviousMonthYear = selectedYear === prevMonthYear;
                     const isFutureYear = selectedYear > thisYear;
                     
-                    // Skip if future year or future month in current year
+                    // Skip if future year or future/current month in current year
                     if (isFutureYear) continue;
                     if (isCurrentYear && m >= thisMonth) continue;
                     
