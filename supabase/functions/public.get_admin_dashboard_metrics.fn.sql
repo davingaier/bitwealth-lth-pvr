@@ -15,20 +15,24 @@ DECLARE
   v_alert_error INT;
   v_alert_warn INT;
 BEGIN
-  -- Get org_id from app settings
-  v_org_id := current_setting('app.settings.org_id', true)::UUID;
+  -- Get org_id from app settings (with fallback)
+  BEGIN
+    v_org_id := current_setting('app.settings.org_id', false)::UUID;
+  EXCEPTION WHEN OTHERS THEN
+    v_org_id := NULL;
+  END;
   
   -- Total customers (all statuses)
   SELECT COUNT(*)
   INTO v_total_customers
   FROM public.customer_details
-  WHERE org_id = v_org_id;
+  WHERE v_org_id IS NULL OR org_id = v_org_id;
   
   -- Active customers (registration_status = 'active')
   SELECT COUNT(*)
   INTO v_active_customers
   FROM public.customer_details
-  WHERE org_id = v_org_id
+  WHERE (v_org_id IS NULL OR org_id = v_org_id)
     AND registration_status = 'active';
   
   -- Total AUM (sum of latest NAV for all active customers)
@@ -40,7 +44,7 @@ BEGIN
       b.nav_usd
     FROM lth_pvr.balances_daily b
     INNER JOIN public.customer_details cd ON cd.customer_id = b.customer_id
-    WHERE cd.org_id = v_org_id
+    WHERE (v_org_id IS NULL OR cd.org_id = v_org_id)
       AND cd.registration_status = 'active'
     ORDER BY b.customer_id, b.date DESC
   ) latest_navs;
@@ -59,7 +63,7 @@ BEGIN
     COUNT(*) FILTER (WHERE severity = 'warn') AS warn
   INTO v_alert_critical, v_alert_error, v_alert_warn
   FROM lth_pvr.alert_events
-  WHERE org_id = v_org_id
+  WHERE (v_org_id IS NULL OR org_id = v_org_id)
     AND created_at >= NOW() - INTERVAL '7 days'
     AND resolved_at IS NULL;
   

@@ -590,7 +590,7 @@
 
           <!-- Search and Filter Controls -->
           <div style="display:flex;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:flex-end;">
-            <label style="flex:1;min-width:250px;">
+            <label style="flex:1;min-width:250px;max-width:400px;">
               <span class="label-line">Search customers</span>
               <input 
                 id="cmSearchInput" 
@@ -602,12 +602,12 @@
             <label style="min-width:180px;">
               <span class="label-line">Filter by status</span>
               <select id="cmStatusFilter">
-                <option value="">All statuses</option>
+                <option value="" selected>All statuses</option>
                 <option value="prospect">Prospect</option>
                 <option value="kyc">KYC Verification</option>
                 <option value="setup">Account Setup</option>
                 <option value="deposit">Awaiting Deposit</option>
-                <option value="active" selected>Active</option>
+                <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
             </label>
