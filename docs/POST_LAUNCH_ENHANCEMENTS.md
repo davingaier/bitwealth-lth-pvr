@@ -390,34 +390,674 @@ Files to Delete:
 ---
 
 ### Priority 5: Admin Portal UX Improvements
-**Status:** NOT STARTED  
-**Effort:** 3-4 hours  
+**Status:** ✅ COMPLETE (2026-01-20)  
+**Effort:** 4 hours (actual)  
 **Value:** MEDIUM (operational efficiency)
 
-**Planned Improvements:**
-1. **Customer Search/Filter**
-   - Search by name, email, customer_id
-   - Filter by status (prospect, kyc, setup, deposit, active, inactive)
-   - Sort by creation date, NAV, status
+**What Was Built:**
+1. **Customer Search/Filter** ✅
+   - Search by name, email, customer_id (real-time filtering)
+   - Filter by status dropdown (All statuses, prospect, kyc, setup, deposit, active, inactive)
+   - Clear button resets filters
+   - Match count displayed ("17 customers")
+   - Default filter changed to "All statuses" (was "active" only)
 
-2. **Bulk Operations**
-   - Select multiple KYC documents for approval
-   - Batch status changes
-   - Export customer list to CSV
+2. **Dashboard Metrics** ✅
+   - Total active customers: 17
+   - Active portfolios: 6
+   - Total AUM: $157,183
+   - Unresolved alerts: 0
+   - Live org_id filtering fixed
 
-3. **KYC Document Viewer Enhancements**
-   - Larger modal for document review
-   - Zoom in/out functionality
-   - Side-by-side comparison (ID vs selfie)
-   - Rejection reason dropdown with notes
+**Deferred:**
+- Bulk Operations (batch status changes, CSV export)
+- KYC Document Viewer Enhancements (zoom, side-by-side)
 
-4. **Dashboard Metrics**
-   - Total active customers
-   - Total AUM (assets under management)
-   - Monthly performance summary
-   - Alert counts by severity
+**Production Status:** ✅ DEPLOYED
 
-**Deferred to:** Jan 23-24 (Week 2 end)
+---
+
+### Task 5: Real Customer Fees with HWM Logic (v0.6.23)
+**Status:** ⏳ IN PROGRESS (2026-01-20)  
+**Effort:** 20-24 hours (estimated)  
+**Value:** CRITICAL (revenue generation)
+
+**Objective:** Align live trading fees with back-tester HWM (High Water Mark) logic from v0.6.15, fix platform fee bug, and consolidate duplicate table architecture.
+
+---
+
+#### 🔴 Critical Prerequisite: Table Consolidation
+
+**Problem Identified:**
+- `public.customer_portfolios` (global multi-strategy table) ❌
+- `lth_pvr.customer_strategies` (LTH_PVR-specific trading table) ❌
+- **Duplication Issue:** "Portfolio" and "strategy" used interchangeably, causing unnecessary complexity
+- **Current State:** 22 edge functions reference both tables (ef_generate_decisions, ef_deposit_scan, ef_execute_orders, etc.)
+
+**Solution: Consolidate into Single Source of Truth**
+- **New Table:** `public.customer_strategies` (replaces both tables)
+- **Rationale:** Strategy-specific schemas (lth_pvr, future adv_dca, etc.) should NOT contain customer routing tables. Customer→Strategy mapping belongs in `public` schema.
+- **Migration Strategy:** Zero-downtime consolidation with column merging
+
+**Consolidated Schema Design:**
+```sql
+CREATE TABLE public.customer_strategies (
+  customer_strategy_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES public.organizations(id),
+  customer_id BIGINT NOT NULL REFERENCES public.customer_details(customer_id),
+  
+  -- Strategy assignment
+  strategy_code TEXT NOT NULL REFERENCES public.strategies(strategy_code),
+  strategy_version_id UUID REFERENCES lth_pvr.strategy_versions(strategy_version_id),
+  
+  -- Exchange routing
+  exchange TEXT NOT NULL DEFAULT 'VALR',
+  exchange_account_id UUID NOT NULL REFERENCES lth_pvr.exchange_accounts(exchange_account_id),
+  exchange_subaccount TEXT,
+  
+  -- Trading configuration
+  base_asset TEXT NOT NULL DEFAULT 'BTC',
+  quote_asset TEXT NOT NULL DEFAULT 'USDT',
+  min_order_usdt NUMERIC(20,2) DEFAULT 1.00,
+  
+  -- Fee configuration (strategy-specific overrides)
+  performance_fee_rate NUMERIC(5,4) DEFAULT NULL,  -- NULL = use strategy default (0.10 for LTH_PVR)
+  platform_fee_rate NUMERIC(5,4) DEFAULT NULL,     -- NULL = use strategy default (0.0075)
+  
+  -- Status & lifecycle
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'paused', 'closed')),
+  live_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
+  effective_to DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  
+  -- UI metadata
+  label TEXT NOT NULL,  -- e.g., "John Doe - LTH PVR BTC DCA"
+  
+  UNIQUE(customer_id, strategy_code, effective_from)
+);
+
+CREATE INDEX idx_customer_strategies_org_cust ON public.customer_strategies(org_id, customer_id, strategy_code, status);
+CREATE INDEX idx_customer_strategies_live ON public.customer_strategies(org_id, strategy_code, live_enabled) WHERE live_enabled = TRUE;
+```
+
+**Migration Steps:**
+1. **Migration 1:** Create new `public.customer_strategies` table with all columns
+2. **Migration 2:** Backfill data from both `customer_portfolios` and `lth_pvr.customer_strategies` with LEFT JOIN merging
+3. **Migration 3:** Update all 22 edge functions to query new table
+4. **Migration 4:** Deprecate old tables (rename to `_deprecated_customer_portfolios` and `_deprecated_lth_pvr_customer_strategies`)
+5. **Migration 5:** Drop deprecated tables after 30-day safety period
+
+**Affected Edge Functions (22):**
+- ef_generate_decisions
+- ef_deposit_scan
+- ef_execute_orders
+- ef_fee_monthly_close
+- ef_valr_create_subaccount
+- ef_confirm_strategy
+- ef_balance_reconciliation
+- ef_monthly_statement_generator
+- ef_generate_statement
+- RPC: list_customer_portfolios
+- RPC: get_customer_dashboard
+- UI: Advanced BTC DCA Strategy.html (portfolio dropdown)
+- UI: customer-portal.html (dashboard)
+- (Plus 9 more - full audit required)
+
+---
+
+#### Fee Implementation Specifications
+
+**User Answers to Clarifying Questions (2026-01-20):**
+
+**Q1a: Fee Defaults Per Strategy**
+✅ **ANSWER:** Yes, default fee rates per strategy (10% performance, 0.75% platform for LTH_PVR), with admin UI override capability at customer_strategy level.
+
+**Implementation:**
+- Create `lth_pvr.strategy_fee_defaults` table:
+  ```sql
+  CREATE TABLE lth_pvr.strategy_fee_defaults (
+    strategy_code TEXT PRIMARY KEY REFERENCES public.strategies(strategy_code),
+    performance_fee_rate NUMERIC(5,4) NOT NULL DEFAULT 0.10,  -- 10%
+    platform_fee_rate NUMERIC(5,4) NOT NULL DEFAULT 0.0075,   -- 0.75%
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  INSERT INTO lth_pvr.strategy_fee_defaults VALUES ('LTH_PVR', 0.10, 0.0075);
+  ```
+- Admin UI: Add "Fee Overrides" section in portfolio editing
+- Edge functions: Coalesce customer_strategies.performance_fee_rate with strategy defaults
+
+---
+
+**Q2a: BTC Deposit Platform Fee - Charge Method**
+✅ **ANSWER:** Charge 0.75% of BTC amount (e.g., 0.1 BTC deposit → 0.00075 BTC platform fee).
+
+**Q2b: BTC Deposit Platform Fee - Deduction Method**
+✅ **ANSWER:** Deduct proportionally from BTC deposit itself (0.1 BTC → 0.09925 BTC after 0.75% fee). Once transferred to BitWealth main account, auto-convert to USDT via MARKET order.
+
+**Implementation:**
+- Modify `ef_deposit_scan` (lines 230-250):
+  ```typescript
+  const depositedBTC = transaction.amount_btc;
+  const platformFeeRate = await getPlatformFeeRate(customer_id);  // 0.0075
+  const platformFeeBTC = depositedBTC * platformFeeRate;  // 0.00075 BTC
+  const netBTC = depositedBTC - platformFeeBTC;  // 0.09925 BTC
+  
+  // Insert ledger entry
+  await sb.from("ledger_lines").insert({
+    customer_id,
+    kind: "deposit",
+    amount_btc: netBTC,  // Customer receives 0.09925 BTC
+    platform_fee_btc: platformFeeBTC,  // 0.00075 BTC
+    note: `Crypto deposit (0.75% platform fee: ${platformFeeBTC} BTC)`
+  });
+  
+  // Transfer platform fee to main account
+  await transferPlatformFeeToMainAccount(platformFeeBTC, "BTC");
+  ```
+- New helper function: `transferPlatformFeeToMainAccount(amount, currency)`
+- VALR API call: `POST /v1/account/subaccount/transfer` (confirmed available, 20/s rate limit)
+- Auto-convert BTC→USDT after transfer using MARKET order
+
+---
+
+**Q3a: Interim Performance Fee at Withdrawal - Logic**
+✅ **ANSWER:** Use same HWM logic (compare current NAV to HWM, charge 10% on profit).
+
+**Q3b: Interim Performance Fee at Withdrawal - HWM Update**
+✅ **ANSWER:** HWM updates immediately after interim fee. **However**, if withdrawal request is declined or fails, HWM should revert to pre-withdrawal value.
+
+**Implementation:**
+- New edge function: `ef_calculate_interim_performance_fee`
+  ```typescript
+  async function calculateInterimPerformanceFee(customer_id, withdrawal_request_id) {
+    const state = await getCustomerState(customer_id);  // Current NAV, HWM, hwmContribNetCum
+    const performanceFeeRate = await getPerformanceFeeRate(customer_id);  // 0.10
+    
+    const nav = state.nav_usd;
+    const hwm = state.high_water_mark_usd ?? nav;  // Initialize if first time
+    const contributionsNet = state.hwm_contrib_net_cum ?? 0;
+    
+    if (nav <= hwm + contributionsNet) {
+      return { fee_usd: 0, new_hwm: hwm };  // No profit, no fee
+    }
+    
+    const profit = nav - (hwm + contributionsNet);
+    const performanceFee = profit * performanceFeeRate;  // 10% of profit
+    const newHWM = nav - contributionsNet;  // Update HWM after fee deduction
+    
+    // Store pre-withdrawal state for potential reversion
+    await sb.from("lth_pvr.withdrawal_fee_snapshots").insert({
+      withdrawal_request_id,
+      customer_id,
+      snapshot_date: new Date(),
+      pre_withdrawal_hwm: hwm,
+      pre_withdrawal_contrib_net_cum: contributionsNet,
+      calculated_performance_fee: performanceFee,
+      new_hwm: newHWM
+    });
+    
+    return { fee_usd: performanceFee, new_hwm: newHWM };
+  }
+  ```
+- New table: `lth_pvr.withdrawal_fee_snapshots` (stores pre-withdrawal state)
+- Withdrawal cancellation handler: Revert HWM from snapshot
+- Withdrawal failure handler: Revert HWM from snapshot
+- Withdrawal success: Delete snapshot (state is permanent)
+
+---
+
+**Q4a: Auto BTC→USDT Conversion - Approval Required**
+✅ **ANSWER:** Require customer approval. Show message: "Insufficient USDT. Sell 0.05 BTC to cover $500 fee?"
+
+**Q4b: Auto BTC→USDT Conversion - Order Type**
+✅ **ANSWER:** Attempt LIMIT order first, fall back to MARKET if not filled in 5 minutes (same logic as `ef_poll_orders`).
+
+**Q4c: Auto BTC→USDT Conversion - Slippage Buffer**
+✅ **ANSWER:** Yes, add 2% buffer rule. **CRITICAL:** Must be stipulated in compliance agreements.
+
+**Implementation:**
+- New edge function: `ef_auto_convert_btc_to_usdt`
+  ```typescript
+  async function autoConvertBTCtoUSDT(customer_id, required_usdt) {
+    const btcPrice = await getBTCPrice();  // e.g., $50,000
+    const btcRequired = required_usdt / btcPrice;  // e.g., 0.01 BTC for $500 USDT
+    const btcWithBuffer = btcRequired * 1.02;  // 2% slippage buffer → 0.0102 BTC
+    
+    const btcBalance = await getBTCBalance(customer_id);
+    
+    if (btcBalance < btcWithBuffer) {
+      throw new Error(`Insufficient BTC: ${btcBalance} (need ${btcWithBuffer})`);
+    }
+    
+    // Create customer approval request
+    const approvalRequest = await sb.from("lth_pvr.fee_conversion_approvals").insert({
+      customer_id,
+      btc_amount: btcWithBuffer,
+      usdt_target: required_usdt,
+      status: "pending",
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000)  // 24hr expiry
+    }).select().single();
+    
+    // Send email notification
+    await sendEmail({
+      template: "fee_conversion_approval",
+      subject: "Action Required: Approve BTC Sale for Fee Payment",
+      data: {
+        btc_amount: btcWithBuffer,
+        usdt_target: required_usdt,
+        approval_url: `https://bitwealth.co.za/approve-conversion/${approvalRequest.id}`
+      }
+    });
+    
+    return { status: "awaiting_approval", approval_id: approvalRequest.id };
+  }
+  
+  // Customer clicks approval link
+  async function executeApprovedConversion(approval_id) {
+    const approval = await getApproval(approval_id);
+    
+    // Place LIMIT order 1% below current price
+    const btcPrice = await getBTCPrice();
+    const limitPrice = btcPrice * 0.99;  // 1% below market
+    
+    const orderId = await placeVALROrder({
+      pair: "BTCUSDT",
+      side: "SELL",
+      type: "LIMIT",
+      quantity: approval.btc_amount,
+      price: limitPrice,
+      customerOrderId: `fee-conversion-${approval_id}`
+    });
+    
+    // Monitor order for 5 minutes
+    const filled = await monitorOrderWithTimeout(orderId, 5 * 60 * 1000);
+    
+    if (!filled) {
+      // Cancel LIMIT, place MARKET order
+      await cancelVALROrder(orderId);
+      const marketOrderId = await placeVALROrder({
+        pair: "BTCUSDT",
+        side: "SELL",
+        type: "MARKET",
+        baseAmount: approval.btc_amount
+      });
+    }
+  }
+  ```
+- New table: `lth_pvr.fee_conversion_approvals`
+- New email template: `fee_conversion_approval`
+- **Compliance:** Update `customer_agreements` table to include 2% slippage disclosure
+
+---
+
+**Q5a: VALR Fee Transfer - Timing**
+✅ **ANSWER:** Real-time transfer (immediately after platform fee deduction).
+
+**Q5b: VALR Fee Transfer - API Availability**
+✅ **CONFIRMED:** VALR has `/v1/account/subaccount/transfer` API endpoint.
+- **Rate Limit:** 20 requests/second
+- **Permission:** "Transfer" scope required on API Key
+- **Headers:** Same HMAC authentication as other VALR endpoints
+
+**Implementation:**
+- New helper module: `supabase/functions/_shared/valrTransfer.ts`
+  ```typescript
+  export async function transferBetweenSubaccounts(
+    fromSubaccountId: string,
+    toSubaccountId: string,  // "primary" for main account
+    currency: string,  // "BTC" or "USDT"
+    amount: number
+  ) {
+    const timestamp = Date.now().toString();
+    const path = "/v1/account/subaccount/transfer";
+    const body = JSON.stringify({
+      fromSubaccountId,
+      toSubaccountId,
+      currency,
+      amount: amount.toString()
+    });
+    
+    const signature = await signVALR(timestamp, "POST", path, body, VALR_API_SECRET);
+    
+    const response = await fetch(`${VALR_API_BASE}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VALR-API-KEY": VALR_API_KEY,
+        "X-VALR-SIGNATURE": signature,
+        "X-VALR-TIMESTAMP": timestamp
+      },
+      body
+    });
+    
+    if (!response.ok) {
+      throw new Error(`VALR transfer failed: ${await response.text()}`);
+    }
+    
+    return await response.json();
+  }
+  ```
+- Usage in `ef_post_ledger_and_balances`:
+  ```typescript
+  // After recording platform fee in ledger
+  await transferBetweenSubaccounts(
+    customerSubaccountId,
+    "primary",  // BitWealth main account
+    "USDT",
+    platformFeeUSDT
+  );
+  ```
+
+---
+
+**Q6a: Platform Fee Calculation - Confirm NET vs GROSS**
+✅ **ANSWER:** Platform fee should be charged on NET USDT (after VALR conversion fee), not GROSS ZAR.
+
+**Bug Identified in Back-Tester:**
+- **Current Code** (ef_bt_execute/index.ts, applyContrib function):
+  ```typescript
+  // ❌ WRONG: Charges platform fee on GROSS
+  const platformFee = gross * platformFeeRate;  // Charges on ZAR amount BEFORE exchange fee
+  ```
+- **Correct Code:**
+  ```typescript
+  // ✅ CORRECT: Charges platform fee on NET USDT (after VALR fee)
+  const exchangeFeeUSDT = gross * VALR_CONVERSION_FEE_RATE;  // 0.18% = 0.0018
+  const netUSDT = gross - exchangeFeeUSDT;
+  const platformFee = netUSDT * platformFeeRate;  // Charges on NET USDT
+  ```
+
+**Fix Required:**
+1. Update `ef_bt_execute/index.ts` applyContrib() function (lines ~350-370)
+2. Rerun all public back-tests to correct historical data
+3. Update SDD v0.6.24 with platform fee bug fix documentation
+4. Apply same NET-based logic to live trading in `ef_post_ledger_and_balances`
+
+---
+
+**Q7a: Invoice Payment Tracking**
+✅ **ANSWER:** Yes, track payment status in invoice table.
+
+**Implementation:**
+- Create `lth_pvr.fee_invoices` table:
+  ```sql
+  CREATE TABLE lth_pvr.fee_invoices (
+    invoice_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL,
+    customer_id BIGINT NOT NULL REFERENCES public.customer_details(customer_id),
+    invoice_month DATE NOT NULL,  -- First day of month (e.g., 2026-01-01)
+    invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    
+    -- Fee breakdown
+    platform_fees_due NUMERIC(20,2) NOT NULL DEFAULT 0,
+    platform_fees_paid NUMERIC(20,2) NOT NULL DEFAULT 0,
+    performance_fees_due NUMERIC(20,2) NOT NULL DEFAULT 0,
+    performance_fees_paid NUMERIC(20,2) NOT NULL DEFAULT 0,
+    exchange_fees_paid NUMERIC(20,2) NOT NULL DEFAULT 0,  -- Info only, paid to VALR directly
+    
+    total_fees_due NUMERIC(20,2) GENERATED ALWAYS AS (platform_fees_due + performance_fees_due) STORED,
+    total_fees_paid NUMERIC(20,2) GENERATED ALWAYS AS (platform_fees_paid + performance_fees_paid) STORED,
+    balance_outstanding NUMERIC(20,2) GENERATED ALWAYS AS ((platform_fees_due + performance_fees_due) - (platform_fees_paid + performance_fees_paid)) STORED,
+    
+    -- Status tracking
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'partial', 'paid', 'overdue')),
+    due_date DATE NOT NULL,  -- e.g., 15th of following month
+    paid_date DATE,
+    
+    -- Metadata
+    emailed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    UNIQUE(customer_id, invoice_month)
+  );
+  
+  CREATE INDEX idx_fee_invoices_customer ON lth_pvr.fee_invoices(customer_id);
+  CREATE INDEX idx_fee_invoices_status ON lth_pvr.fee_invoices(status, due_date);
+  ```
+- Monthly invoice generation: `ef_fee_monthly_close` (replace old non-HWM logic)
+- Payment recording: `ef_record_fee_payment` (updates `*_fees_paid` columns)
+- Overdue alerts: Cron job checks `due_date < CURRENT_DATE AND status != 'paid'`
+
+---
+
+#### Database Schema Changes
+
+**New Tables:**
+1. `public.customer_strategies` (consolidates customer_portfolios + lth_pvr.customer_strategies)
+2. `lth_pvr.strategy_fee_defaults` (default fee rates per strategy)
+3. `lth_pvr.fee_invoices` (monthly invoice tracking with payment status)
+4. `lth_pvr.withdrawal_fee_snapshots` (stores pre-withdrawal HWM state for reversion)
+5. `lth_pvr.fee_conversion_approvals` (BTC→USDT conversion approval workflow)
+
+**Modified Tables:**
+- `lth_pvr.ledger_lines` - Add columns:
+  - `amount_zar NUMERIC(20,2)`
+  - `exchange_rate NUMERIC(20,8)`  -- ZAR→USDT rate
+  - `platform_fee_usdt NUMERIC(20,8)`
+  - `performance_fee_usdt NUMERIC(20,8)`
+  - Keep existing: `fee_btc`, `fee_usdt` (VALR exchange fees)
+
+- `lth_pvr.customer_state_daily` - Add columns:
+  - `high_water_mark_usd NUMERIC(20,2)`
+  - `hwm_contrib_net_cum NUMERIC(20,2)`  -- Net contributions since HWM
+  - `last_perf_fee_month DATE`  -- Prevents double-charging
+
+- `lth_pvr.balances_daily` - Add column:
+  - `platform_fees_paid_cum NUMERIC(20,2)`
+  - `performance_fees_paid_cum NUMERIC(20,2)`
+
+**Deprecated Tables:**
+- `public.customer_portfolios` → Rename to `_deprecated_customer_portfolios` (after migration)
+- `lth_pvr.customer_strategies` → Rename to `_deprecated_lth_pvr_customer_strategies` (after migration)
+- `lth_pvr.fee_configs` → Already customer-level (will be replaced by strategy-level defaults + overrides)
+
+---
+
+#### Edge Function Changes
+
+**New Functions:**
+1. `ef_calculate_performance_fees` - Monthly HWM-based fee calculation
+2. `ef_calculate_interim_performance_fee` - Mid-month withdrawal fee calculation
+3. `ef_auto_convert_btc_to_usdt` - BTC→USDT conversion for fee payment
+4. `ef_record_fee_payment` - Update invoice payment status
+5. `ef_revert_withdrawal_fees` - Revert HWM if withdrawal cancelled/failed
+
+**Modified Functions:**
+1. `ef_post_ledger_and_balances` - Add platform fee on deposits, ZAR tracking, real-time transfer to main account
+2. `ef_deposit_scan` - Add BTC deposit platform fee (0.75% deducted from deposit)
+3. `ef_bt_execute` - Fix platform fee bug (NET vs GROSS), update applyContrib() function
+4. `ef_fee_monthly_close` - Replace with HWM-based logic (currently uses old nav_end - nav_start)
+5. All 22 functions referencing customer_portfolios/customer_strategies - Update to use new consolidated table
+
+---
+
+#### Admin UI Changes
+
+**Fee Management Card Updates:**
+- Current: Customer-level fee editing (lines 794-829)
+- New: Strategy-level fee editing with portfolio dropdown
+- Show: Performance Fee %, Platform Fee %, "Using Strategy Default" indicator
+- RPC: `update_portfolio_fee_rates(portfolio_id, performance_rate, platform_rate)` (replaces `update_customer_fee_rate`)
+
+**Invoice Management Module (New):**
+- List all invoices: Month, Customer, Total Due, Total Paid, Outstanding, Status
+- Filter: Overdue, Pending, Paid
+- Actions: Mark as Paid, Send Reminder Email, Download PDF
+- RPC: `list_fee_invoices(org_id, status_filter)`
+
+---
+
+#### Compliance & Legal Requirements
+
+**Customer Agreements Update:**
+1. **2% Slippage Buffer Disclosure:**
+   - Add to `customer_agreements` table, version 1.1
+   - Text: "When converting BTC to USDT for fee payment, BitWealth may sell up to 2% more BTC than the exact fee amount to account for market price fluctuations. Any excess USDT will be returned to your account."
+
+2. **Platform Fee Disclosure:**
+   - "BitWealth charges a 0.75% platform fee on all ZAR deposits (charged in USDT after currency conversion). This fee is separate from VALR's 0.18% conversion fee."
+
+3. **Performance Fee Disclosure:**
+   - "BitWealth charges a 10% performance fee on profits exceeding your previous High Water Mark. Fees are calculated and deducted monthly, or at the time of withdrawal requests."
+
+**Email Templates (3 new):**
+1. `fee_invoice_monthly` - Monthly fee invoice with breakdown
+2. `fee_conversion_approval` - BTC→USDT conversion approval request
+3. `fee_overdue_reminder` - 7-day and 14-day overdue notices
+
+---
+
+#### Testing Strategy
+
+**Test Document:** `docs/TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md`
+
+**Layer 1: Development Subaccount ($50-100 real funds)**
+- TC1.1: ZAR deposit → Platform fee charged on NET USDT ✅
+- TC1.2: BTC deposit → 0.75% fee deducted, auto-converted to USDT ✅
+- TC1.3: Month-end HWM profit → 10% performance fee charged ✅
+- TC1.4: Month-end HWM loss → No performance fee, HWM unchanged ✅
+- TC1.5: Withdrawal request → Interim performance fee calculated ✅
+- TC1.6: Withdrawal declined → HWM reverted to pre-withdrawal state ✅
+- TC1.7: Insufficient USDT → BTC conversion approval workflow ✅
+- TC1.8: Invoice generation → Correct breakdown (platform vs performance) ✅
+
+**Layer 2: Back-Tester Validation**
+- TC2.1: Run back-test with fees enabled → Compare live trading result
+- TC2.2: Platform fee NET vs GROSS → Verify bug fix
+- TC2.3: Performance fee HWM logic → Month-boundary-only updates
+- TC2.4: Net contributions tracking → Excludes performance fees
+
+**Layer 3: Manual SQL Testing**
+- TC3.1: `SELECT lth_pvr.calculate_performance_fee(customer_id)` → Verify formula
+- TC3.2: Simulate withdrawal → Check `withdrawal_fee_snapshots` insertion
+- TC3.3: Simulate cancellation → Verify HWM reversion
+- TC3.4: Invoice query → `SELECT * FROM lth_pvr.fee_invoices WHERE status = 'overdue'`
+
+**Layer 4: Unit Tests (TypeScript with Deno)**
+- TC4.1: `calculatePerformanceFee()` function → Edge cases (zero profit, negative NAV)
+- TC4.2: `transferBetweenSubaccounts()` → VALR API mocking
+- TC4.3: `autoConvertBTCtoUSDT()` → Slippage buffer calculation
+
+---
+
+#### Implementation Phases
+
+**Phase 0: Table Consolidation (Days 1-3)**
+1. Create `public.customer_strategies` table
+2. Backfill data from both source tables
+3. Update all 22 edge functions
+4. Update Admin UI portfolio dropdown
+5. Test with Customer 31 (ensure no data loss)
+6. Deploy consolidation
+7. Deprecate old tables
+
+**Phase 1: Schema & Migrations (Days 4-5)**
+1. Add HWM columns to `customer_state_daily`
+2. Add fee columns to `ledger_lines`
+3. Create `strategy_fee_defaults`, `fee_invoices`, `withdrawal_fee_snapshots`, `fee_conversion_approvals` tables
+4. Insert default fees: LTH_PVR (10% performance, 0.75% platform)
+5. Deploy migrations to development
+
+**Phase 2: Platform Fees (Days 6-7)**
+1. Update `ef_post_ledger_and_balances` → Platform fee on ZAR deposits
+2. Update `ef_deposit_scan` → BTC deposit fees (0.75% deduction)
+3. Implement `transferBetweenSubaccounts()` helper (VALR API)
+4. Test real-time transfer with development subaccount
+5. Fix `ef_bt_execute` platform fee bug (NET vs GROSS)
+6. Rerun public back-tests
+
+**Phase 3: Performance Fees (Days 8-10)**
+1. Create `ef_calculate_performance_fees` → Monthly HWM logic
+2. Create `ef_calculate_interim_performance_fee` → Withdrawal HWM logic
+3. Update `customer_state_daily` initialization (day 1 HWM)
+4. Create `ef_revert_withdrawal_fees` → Cancellation handler
+5. Schedule cron: 1st of month, 00:05 UTC
+6. Test with Customer 31 historical data
+
+**Phase 4: BTC Conversion & Invoicing (Days 11-13)**
+1. Create `ef_auto_convert_btc_to_usdt` → Approval workflow
+2. Create `fee_conversion_approval` email template
+3. Implement LIMIT→MARKET fallback (5-minute timeout)
+4. Create `ef_record_fee_payment` → Invoice updates
+5. Create `ef_fee_monthly_close` → Invoice generation (replace old logic)
+6. Create `fee_invoice_monthly` email template
+7. Test approval flow end-to-end
+
+**Phase 5: Admin UI & RPC Updates (Days 14-15)**
+1. Update fee management card → Strategy-level editing
+2. Create `update_portfolio_fee_rates()` RPC
+3. Add invoice management module → List/filter/mark paid
+4. Create `list_fee_invoices()` RPC
+5. Update customer agreements with fee disclosures
+6. Test Admin UI with multiple strategies
+
+**Phase 6: Testing & Documentation (Days 16-17)**
+1. Execute all test cases (Layers 1-4)
+2. Update SDD v0.6.24 with fee implementation details
+3. Update POST_LAUNCH_ENHANCEMENTS.md (this document)
+4. Create `TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md`
+5. Update compliance documentation
+6. Deploy to production
+
+---
+
+#### Known Risks & Mitigation
+
+**Risk 1: VALR Transfer API Failures**
+- **Impact:** Platform fees not transferred to main account (revenue loss)
+- **Mitigation:** Implement retry logic (3 attempts, exponential backoff), alert on failure, manual reconciliation report
+
+**Risk 2: HWM Reversion Bugs**
+- **Impact:** Customer charged twice, or not charged (revenue/reputation loss)
+- **Mitigation:** Extensive testing with withdrawal cancellations, manual verification for first 10 withdrawals, database transaction rollback on failure
+
+**Risk 3: BTC→USDT Slippage Exceeds 2%**
+- **Impact:** Insufficient USDT after conversion (customer needs to approve again)
+- **Mitigation:** Monitor actual slippage in first 30 days, adjust buffer to 3% if needed (requires customer agreement update)
+
+**Risk 4: Table Consolidation Migration Failure**
+- **Impact:** Data loss, trading pipeline broken
+- **Mitigation:** Zero-downtime migration with side-by-side tables, rollback script tested in staging, 30-day deprecation period before deletion
+
+**Risk 5: Platform Fee Bug Impact on Existing Back-Tests**
+- **Impact:** Public website shows incorrect historical performance
+- **Mitigation:** Rerun all 24,818 back-tests with corrected fee logic, display "Recalculated Jan 2026" badge
+
+---
+
+#### Success Metrics
+
+**Week 1 Validation (Days 1-7):**
+- ✅ Table consolidation complete, zero data loss
+- ✅ Platform fees charged correctly on 5+ deposits
+- ✅ VALR transfers successful (100% success rate)
+- ✅ Back-tester bug fixed, public data refreshed
+
+**Week 2 Validation (Days 8-14):**
+- ✅ Performance fees calculated correctly for 3+ customers
+- ✅ HWM logic matches back-tester (zero discrepancy)
+- ✅ Withdrawal interim fees tested (3+ scenarios)
+- ✅ BTC conversion approval workflow functional
+
+**Week 3 Production (Days 15-21):**
+- ✅ First monthly invoice sent to all active customers
+- ✅ Admin UI fee management functional
+- ✅ Customer agreements updated and re-signed
+- ✅ Revenue tracking dashboard accurate
+
+**Financial Impact:**
+- Platform fees: ~$50-100/month per customer (assuming $10K/month deposits at 0.75%)
+- Performance fees: Variable (10% on profits)
+- Target: $500-1,000 monthly recurring revenue by end of implementation
+
+---
+
+**Implementation Start Date:** January 21, 2026  
+**Estimated Completion:** February 10, 2026  
+**Status:** Phase 0 (Table Consolidation) in progress
 
 ---
 

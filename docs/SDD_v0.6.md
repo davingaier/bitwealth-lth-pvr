@@ -3,11 +3,188 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-14
+**Last updated:** 2026-01-20
 
 ---
 
 ## 0. Change Log
+
+### v0.6.23 – Real Customer Fees with HWM Logic (IN PROGRESS)
+**Date:** 2026-01-20 (Started)  
+**Purpose:** Implement production-ready fee system aligned with back-tester HWM (High Water Mark) logic, fix platform fee bug, and consolidate duplicate table architecture.
+
+**Critical Architectural Changes:**
+
+1. **Table Consolidation: customer_portfolios + customer_strategies → public.customer_strategies**
+   - **Problem Identified:** 
+     * `public.customer_portfolios` and `lth_pvr.customer_strategies` used interchangeably (portfolio/strategy synonyms)
+     * Unnecessary duplication across 22 edge functions
+     * Violates design principle: Strategy-specific schemas should NOT contain customer routing tables
+   - **Solution:**
+     * New table: `public.customer_strategies` (single source of truth)
+     * Merges columns from both tables
+     * Adds fee configuration columns (performance_fee_rate, platform_fee_rate with strategy defaults fallback)
+   - **Migration Strategy:**
+     * Zero-downtime consolidation with side-by-side tables
+     * Backfill data with LEFT JOIN merging
+     * Update 22 edge functions to use new table
+     * 30-day deprecation period before old table deletion
+   - **Affected Components:** ef_generate_decisions, ef_deposit_scan, ef_execute_orders, ef_fee_monthly_close, ef_valr_create_subaccount, ef_confirm_strategy, ef_balance_reconciliation, list_customer_portfolios RPC, Admin UI portfolio dropdown, plus 13 more
+
+2. **VALR Subaccount Transfer API Confirmed**
+   - **Endpoint:** `POST /v1/account/subaccount/transfer`
+   - **Rate Limit:** 20 requests/second
+   - **Permission Required:** "Transfer" scope on API Key
+   - **Purpose:** Real-time platform fee transfer from customer subaccount to BitWealth main account
+   - **Implementation:** New shared module `supabase/functions/_shared/valrTransfer.ts`
+
+**Fee System Specifications (Based on User Requirements):**
+
+3. **Strategy-Level Fee Defaults with Portfolio Overrides**
+   - **Default Rates:**
+     * LTH_PVR Performance Fee: 10% (charged on HWM profits monthly)
+     * LTH_PVR Platform Fee: 0.75% (charged on NET USDT after VALR conversion fee)
+   - **New Table:** `lth_pvr.strategy_fee_defaults`
+   - **Admin UI:** Fee override capability at customer_strategies level (NULL = use strategy default)
+
+4. **Platform Fee Implementation**
+   - **ZAR Deposits:**
+     * Charge 0.75% on NET USDT (after VALR's 0.18% conversion fee)
+     * Real-time transfer to main account via VALR API
+   - **BTC Deposits:**
+     * Charge 0.75% of BTC amount (e.g., 0.1 BTC → 0.00075 BTC fee)
+     * Deduct proportionally from deposit (customer receives 0.09925 BTC)
+     * Auto-convert fee to USDT via MARKET order after transfer to main account
+   - **Bug Fix Required:** Back-tester currently charges platform fee on GROSS (before VALR fee) instead of NET
+     * Affected File: `ef_bt_execute/index.ts` applyContrib() function (lines ~350-370)
+     * Impact: All public back-tests need recalculation with corrected fee logic
+
+5. **Performance Fee Implementation (HWM Logic from v0.6.15)**
+   - **Monthly Calculation:**
+     * Compare current NAV to High Water Mark (HWM)
+     * Charge 10% only on profit exceeding HWM + net contributions since HWM
+     * Update HWM only on month boundaries (1st of month at 00:05 UTC)
+     * Net contributions = contributions - performance fees (excludes fees from HWM calc)
+   - **Interim Calculation (Withdrawal Requests):**
+     * Use same HWM logic mid-month for withdrawal fee calculation
+     * Update HWM immediately after interim fee deduction
+     * Store pre-withdrawal state in `lth_pvr.withdrawal_fee_snapshots` for reversion
+     * Revert HWM if withdrawal declined or failed
+   - **New Edge Function:** `ef_calculate_performance_fees` (replaces old `ef_fee_monthly_close` non-HWM logic)
+   - **New Edge Function:** `ef_calculate_interim_performance_fee` (mid-month withdrawal fees)
+   - **New Edge Function:** `ef_revert_withdrawal_fees` (cancellation handler)
+
+6. **Automatic BTC→USDT Conversion for Fee Payment**
+   - **Trigger:** Insufficient USDT balance to cover fees
+   - **Approval Required:** Customer must approve via email link
+   - **Approval Message:** "Insufficient USDT. Sell 0.05 BTC to cover $500 fee?"
+   - **Order Strategy:** 
+     * Attempt LIMIT order 1% below market (5-minute timeout)
+     * Fall back to MARKET order if LIMIT not filled
+     * Same logic as `ef_poll_orders` fallback
+   - **Slippage Buffer:** 2% buffer rule (0.0102 BTC sold to cover 0.01 BTC needed)
+     * CRITICAL: Must be stipulated in customer_agreements (version 1.1 update required)
+   - **New Table:** `lth_pvr.fee_conversion_approvals` (tracks approval workflow)
+   - **New Edge Function:** `ef_auto_convert_btc_to_usdt`
+   - **New Email Template:** `fee_conversion_approval`
+
+7. **Invoice System with Payment Tracking**
+   - **New Table:** `lth_pvr.fee_invoices`
+   - **Columns:**
+     * platform_fees_due, platform_fees_paid
+     * performance_fees_due, performance_fees_paid
+     * exchange_fees_paid (info only, paid directly to VALR)
+     * total_fees_due, total_fees_paid, balance_outstanding (computed)
+     * status (pending, partial, paid, overdue)
+     * due_date, paid_date, emailed_at
+   - **Monthly Generation:** Replace `ef_fee_monthly_close` with HWM-based invoice creation
+   - **Payment Recording:** New `ef_record_fee_payment` edge function
+   - **Overdue Alerts:** Cron job checks due_date < CURRENT_DATE AND status != 'paid'
+   - **Email Templates:**
+     * `fee_invoice_monthly` - Monthly invoice with breakdown
+     * `fee_overdue_reminder` - 7-day and 14-day reminders
+
+**Database Schema Changes:**
+
+**New Tables:**
+1. `public.customer_strategies` - Consolidates customer_portfolios + lth_pvr.customer_strategies
+2. `lth_pvr.strategy_fee_defaults` - Default fee rates per strategy (10% perf, 0.75% platform)
+3. `lth_pvr.fee_invoices` - Monthly invoices with payment tracking (due, paid, outstanding)
+4. `lth_pvr.withdrawal_fee_snapshots` - Pre-withdrawal HWM state for reversion
+5. `lth_pvr.fee_conversion_approvals` - BTC→USDT conversion approval workflow
+
+**Modified Tables:**
+- `lth_pvr.ledger_lines` - Add: amount_zar, exchange_rate, platform_fee_usdt, performance_fee_usdt
+- `lth_pvr.customer_state_daily` - Add: high_water_mark_usd, hwm_contrib_net_cum, last_perf_fee_month
+- `lth_pvr.balances_daily` - Add: platform_fees_paid_cum, performance_fees_paid_cum
+
+**Deprecated Tables (30-day window):**
+- `public.customer_portfolios` → `_deprecated_customer_portfolios`
+- `lth_pvr.customer_strategies` → `_deprecated_lth_pvr_customer_strategies`
+- `lth_pvr.fee_configs` → Replaced by strategy defaults + customer_strategies overrides
+
+**Edge Functions:**
+
+**New:**
+1. `ef_calculate_performance_fees` - Monthly HWM-based fee calculation
+2. `ef_calculate_interim_performance_fee` - Mid-month withdrawal fee calculation
+3. `ef_auto_convert_btc_to_usdt` - BTC→USDT conversion with approval workflow
+4. `ef_record_fee_payment` - Update invoice payment status
+5. `ef_revert_withdrawal_fees` - Revert HWM if withdrawal cancelled/failed
+
+**Modified:**
+1. `ef_post_ledger_and_balances` - Add platform fee on deposits, ZAR tracking, real-time VALR transfer
+2. `ef_deposit_scan` - Add BTC deposit platform fee (0.75% deduction, auto-convert to USDT)
+3. `ef_bt_execute` - Fix platform fee bug (NET vs GROSS in applyContrib function)
+4. `ef_fee_monthly_close` - Replace with HWM-based logic (currently uses old nav_end - nav_start)
+5. All 22 functions referencing old tables - Update to use public.customer_strategies
+
+**Admin UI:**
+- Fee Management Card: Customer-level → Strategy-level editing with portfolio dropdown
+- New RPC: `update_portfolio_fee_rates(portfolio_id, performance_rate, platform_rate)`
+- Invoice Management Module: List invoices, filter by status, mark as paid, send reminders
+
+**Compliance Updates:**
+- Customer Agreements v1.1: Add 2% slippage buffer disclosure
+- Platform Fee Disclosure: 0.75% on NET USDT (after VALR's 0.18% conversion fee)
+- Performance Fee Disclosure: 10% on HWM profits, monthly or at withdrawal
+
+**Implementation Phases:**
+- **Phase 0 (Days 1-3):** Table consolidation with zero-downtime migration
+- **Phase 1 (Days 4-5):** Schema migrations and fee table creation
+- **Phase 2 (Days 6-7):** Platform fees implementation + VALR transfer integration
+- **Phase 3 (Days 8-10):** Performance fees HWM logic (monthly + interim)
+- **Phase 4 (Days 11-13):** BTC conversion workflow + invoice system
+- **Phase 5 (Days 14-15):** Admin UI updates + RPC functions
+- **Phase 6 (Days 16-17):** Testing (dev subaccount, back-tester validation, SQL, unit tests)
+
+**Testing Strategy:**
+- Layer 1: Development subaccount with $50-100 real funds (8 test cases)
+- Layer 2: Back-tester validation (compare live vs backtester, verify bug fix)
+- Layer 3: Manual SQL testing (performance fee formulas, HWM snapshots, reversion)
+- Layer 4: TypeScript unit tests with Deno (edge cases, VALR API mocking)
+
+**Known Risks:**
+1. VALR Transfer API failures (mitigation: retry logic, alerts, manual reconciliation)
+2. HWM reversion bugs (mitigation: extensive withdrawal cancellation testing)
+3. BTC→USDT slippage exceeds 2% (mitigation: monitor first 30 days, adjust buffer if needed)
+4. Table consolidation data loss (mitigation: zero-downtime migration, rollback script, 30-day safety period)
+5. Platform fee bug impact on public back-tests (mitigation: rerun all 24,818 back-tests with corrected logic)
+
+**Success Metrics:**
+- Week 1: Table consolidation complete, platform fees working, VALR transfers successful (100%)
+- Week 2: Performance fees accurate (matches back-tester), withdrawal fees tested (3+ scenarios)
+- Week 3: First monthly invoices sent, Admin UI functional, agreements re-signed
+- Financial: $500-1,000 monthly recurring revenue by implementation end
+
+**Status:** Phase 0 (Table Consolidation) in progress  
+**Completion Target:** February 10, 2026
+
+**Documentation:**
+- Detailed implementation plan: `docs/POST_LAUNCH_ENHANCEMENTS.md` → Task 5
+- Test cases: `docs/TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md` (to be created)
+
+---
 
 ### v0.6.22 – Monthly Statement Generation System Complete
 **Date:** 2026-01-15  
