@@ -409,24 +409,172 @@ Files to Delete:
    - Unresolved alerts: 0
    - Live org_id filtering fixed
 
-**Deferred:**
-- Bulk Operations (batch status changes, CSV export)
-- KYC Document Viewer Enhancements (zoom, side-by-side)
-
-**Production Status:** ✅ DEPLOYED
-
 ---
 
-### Task 5: Real Customer Fees with HWM Logic (v0.6.23)
-**Status:** ⏳ IN PROGRESS (2026-01-20)  
-**Effort:** 20-24 hours (estimated)  
+### Task 5: Real Customer Fees with HWM Logic (v0.6.23-v0.6.27)
+**Status:** ✅ PHASES 1-4 COMPLETE (2026-01-21)  
+**Effort:** 16 hours (actual, Phases 1-4)  
 **Value:** CRITICAL (revenue generation)
 
-**Objective:** Align live trading fees with back-tester HWM (High Water Mark) logic from v0.6.15, fix platform fee bug, and consolidate duplicate table architecture.
+**Objective:** Align live trading fees with back-tester HWM (High Water Mark) logic from v0.6.15, fix platform fee bug, and implement full fee system infrastructure.
 
 ---
 
-#### 🔴 Critical Prerequisite: Table Consolidation
+#### ✅ Phase 1: Database Schema (COMPLETE - v0.6.23)
+**Date:** 2026-01-21  
+**Status:** ✅ DEPLOYED
+
+**Changes:**
+1. **Extended `lth_pvr.ledger_lines`** with 4 new columns:
+   - `platform_fee_usdt` NUMERIC(20,8)
+   - `platform_fee_btc` NUMERIC(20,8)
+   - `performance_fee_usdt` NUMERIC(20,8)
+   - `conversion_approval_id` UUID
+
+2. **Created 5 new tables:**
+   - `lth_pvr.customer_state_daily` - HWM tracking (97 records initialized)
+   - `lth_pvr.fee_invoices` - Monthly invoice records
+   - `lth_pvr.withdrawal_fee_snapshots` - Reversion snapshots
+   - `lth_pvr.fee_conversion_approvals` - BTC→USDT approval workflow
+   - `lth_pvr.valr_transfer_log` - VALR transfer audit trail
+
+**Migration:** `20260121_phase1_fee_system_schema.sql`
+
+---
+
+#### ✅ Phase 2: Platform Fees (COMPLETE - v0.6.24)
+**Date:** 2026-01-21  
+**Status:** ✅ DEPLOYED
+
+**Changes:**
+1. **Created shared modules:**
+   - `_shared/valr.ts` (45 lines) - HMAC signature generation
+   - `_shared/valrTransfer.ts` (241 lines) - VALR transfer wrapper
+
+2. **Modified `ef_post_ledger_and_balances`:**
+   - Platform fee calculation: 0.75% on NET USDT (after VALR 0.18% fee)
+   - Platform fee calculation: 0.75% on BTC deposits
+   - VALR transfer integration via transferToMainAccount()
+   - Alert logging on transfer failures
+
+**Key Features:**
+- Platform fee charged on NET deposits (bug fix from back-tester)
+- VALR subaccount transfers with retry logic
+- Audit logging in `valr_transfer_log`
+- **BTC platform fees** transferred to BitWealth main account (auto-conversion to USDT deferred to Phase 4)
+
+**Documentation:** `FEE_PHASE_2_COMPLETE.md`
+
+---
+
+#### ✅ Phase 3: Performance Fees (COMPLETE - v0.6.25)
+**Date:** 2026-01-21  
+**Status:** ✅ DEPLOYED
+
+**Changes:**
+1. **Created `ef_calculate_performance_fees` (455 lines):**
+   - Monthly 10% performance fee on HWM profits
+   - Reads per-customer `performance_fee_rate` from `customer_strategies`
+   - HWM initialization for first-month customers
+   - VALR transfer via transferToMainAccount()
+   - Alert logging for insufficient USDT
+
+2. **Created `ef_calculate_interim_performance_fee` (295 lines):**
+   - Pre-withdrawal performance fee calculation
+   - Snapshot creation in `withdrawal_fee_snapshots`
+   - HWM updated immediately (assumes withdrawal succeeds)
+
+3. **Created `ef_revert_withdrawal_fees` (180 lines):**
+   - Revert HWM to pre-withdrawal state
+   - Create reversal ledger entry (positive amount = refund)
+   - Delete snapshot after reversion
+
+4. **Added pg_cron job:**
+   - Schedule: 00:05 UTC on 1st of month
+   - Job name: `monthly-performance-fees`
+   - Migration: `20260121_add_monthly_performance_fee_cron.sql`
+
+**Key Features:**
+- HWM formula: IF (NAV > HWM + net_contrib) THEN fee = (NAV - HWM - net_contrib) × 10%
+- Customer-specific fee rates (fallback 10% if NULL)
+- Withdrawal reversion capability
+- **Note:** VALR transfers NOT reversed (money stays in BitWealth, customer gets ledger credit)
+
+**Documentation:** `FEE_PHASE_3_COMPLETE.md`
+
+---
+
+#### ✅ Phase 4: BTC Conversion & Invoicing (COMPLETE - v0.6.27)
+**Date:** 2026-01-21  
+**Status:** ✅ DEPLOYED
+
+**Changes:**
+1. **Created `ef_auto_convert_btc_to_usdt` (465 lines):**
+   - Two-action workflow: create_request → execute_conversion
+   - Customer approval with 24h expiry
+   - LIMIT order at best ASK price (0.01% below) with 5-minute timeout
+   - Price movement monitoring: Cancel LIMIT if price moves >= 0.25%
+   - MARKET order fallback after timeout or price movement
+   - Email notification with approval link
+
+2. **Created `ef_fee_monthly_close` (265 lines):**
+   - Monthly fee aggregation (previous month)
+   - Invoice generation with due date = 15th of current month
+   - BTC→USD conversion at month-end price
+   - Admin email notification
+
+3. **Added pg_cron job:**
+   - Schedule: 00:10 UTC on 1st of month (5 min after performance fees)
+   - Job name: `monthly-fee-close`
+   - Migration: `20260121_add_monthly_fee_close_cron.sql`
+
+**Key Features:**
+- Order book pricing (best ASK for SELL orders)
+- 5-minute timeout with 10-second polling intervals
+- 0.25% price movement fallback trigger
+- 2% slippage buffer for BTC amount calculation
+- Monthly invoice workflow with admin notification
+
+**Documentation:** `FEE_PHASE_4_COMPLETE.md`
+
+---
+
+#### ⏳ Phase 5: Testing & Validation (IN PROGRESS)
+**Date:** 2026-01-21  
+**Status:** ⏳ PENDING  
+**Effort:** 8-12 hours (estimated)
+
+**Test Plan:** 4-layer testing approach (see `TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md`)
+
+**Layer 1: Development Subaccount Tests** (Real VALR Integration)
+- Fund dev subaccount: $100 USDT + 0.01 BTC
+- TC1.1: ZAR deposit → Platform fee on NET USDT
+- TC1.2: BTC deposit → 0.75% platform fee, auto-conversion
+- TC1.3: Month-end HWM profit → 10% performance fee
+- TC1.4: Month-end HWM loss → No fee, HWM unchanged
+- TC1.5: Withdrawal with interim fee → Snapshot created
+- TC1.6: Withdrawal reversion → HWM restored
+- TC1.7: BTC conversion approval → 24h expiry, LIMIT order with timeout
+- TC1.8: Monthly invoice generation → Fees aggregated, admin email
+
+**Layer 2: Back-Tester Validation**
+- Compare live trading vs back-tester fee calculations
+- Verify NET vs GROSS platform fee bug fix
+- Validate HWM logic matches back-tester
+
+**Layer 3: Manual SQL Testing**
+- Test HWM formulas with edge cases
+- Test withdrawal reversion scenarios
+- Test invoice aggregation accuracy
+
+**Layer 4: Unit Tests (Deno)**
+- Mock VALR API responses
+- Test error handling
+- Test edge cases (zero balance, negative contributions)
+
+---
+
+#### 🔴 Critical Prerequisite: Table Consolidation (DEFERRED)
 
 **Problem Identified:**
 - `public.customer_portfolios` (global multi-strategy table) ❌
