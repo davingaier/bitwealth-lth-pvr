@@ -1,153 +1,267 @@
-import { getServiceClient } from "./client.ts";
-Deno.serve(async ()=>{
-  const sb = getServiceClient();
-  const org_id = Deno.env.get("ORG_ID");
-  if (!org_id) return new Response("ORG_ID missing", {
-    status: 500
-  });
-  const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
-  const ms = monthStart.toISOString().slice(0, 10);
-  const me = monthEnd.toISOString().slice(0, 10);
-  const endPlus = new Date(monthEnd.getTime() + 86400000).toISOString();
-  // customers with fee config
-  const { data: cfgs, error } = await sb.from("lth_pvr.fee_configs").select("*").eq("org_id", org_id);
-  if (error) return new Response(error.message, {
-    status: 500
-  });
-  for (const cfg of cfgs ?? []){
-    // nav_start (<= monthStart last), nav_end (<= monthEnd last)
-    const { data: ns } = await sb.from("lth_pvr.balances_daily").select("nav_usd").eq("org_id", org_id).eq("customer_id", cfg.customer_id).lte("date", ms).order("date", {
-      ascending: false
-    }).limit(1);
-    const { data: ne } = await sb.from("lth_pvr.balances_daily").select("nav_usd").eq("org_id", org_id).eq("customer_id", cfg.customer_id).lte("date", me).order("date", {
-      ascending: false
-    }).limit(1);
-    const nav_start = +(ns?.[0]?.nav_usd ?? 0);
-    const nav_end = +(ne?.[0]?.nav_usd ?? 0);
-    // net flows (USDT) in-month
-    const { data: flows } = await sb.from("lth_pvr.exchange_funding_events").select("kind, amount").eq("org_id", org_id).eq("customer_id", cfg.customer_id).eq("asset", "USDT").gte("occurred_at", monthStart.toISOString()).lt("occurred_at", endPlus);
-    let net_flows = 0;
-    for (const f of flows ?? []){
-      if (f.kind === "deposit") net_flows += Number(f.amount ?? 0);
-      if (f.kind === "withdrawal") net_flows -= Number(f.amount ?? 0);
-    }
-    const profit = nav_end - nav_start - net_flows;
-    const fee_due = profit > 0 ? +(profit * Number(cfg.fee_rate ?? 0.10)).toFixed(2) : 0;
-    // upsert monthly fee record
-    const up = await sb.from("lth_pvr.fees_monthly").upsert({
-      org_id,
-      customer_id: cfg.customer_id,
-      month_start: ms,
-      month_end: me,
-      nav_start,
-      nav_end,
-      net_flows,
-      fee_rate: cfg.fee_rate,
-      fee_paid_usdt: 0,
-      arrears_usdt: 0,
-      status: "pending"
-    }, {
-      onConflict: "org_id,customer_id,month_start,month_end"
-    }).select("fee_id").single();
-    if (up.error) {
-      console.error(up.error);
-      continue;
-    }
-    const fee_id = up.data.fee_id;
-    if (fee_due <= 0) continue;
-    // available USDT (excludes reserve)
-    const av = await sb.rpc("fn_usdt_available_for_trading", {
-      p_org: org_id,
-      p_customer: cfg.customer_id
-    });
-    let remaining = fee_due;
-    if (cfg.settlement_mode === "invoice_only") {
-      // Invoice-only: no auto-deduction, just create/open invoice at full fee_due
-      const inv = await sb
-        .from("lth_pvr.fee_invoices")
-        .insert({
-          org_id,
-          customer_id: cfg.customer_id,
-          fee_id,
-          invoice_date: me,          // 'YYYY-MM-DD' string; Postgres will cast to date
-          amount_usdt: fee_due,
-          status: "open"
-        })
-        .select("invoice_id")
-        .single();
-       if (inv.error) {
-        console.error("fee_invoices insert error", inv.error);
-        // still mark as invoiced so we don’t keep retrying the same month
-        await sb
-          .from("lth_pvr.fees_monthly")
-          .update({
-            status: "invoiced",
-            invoiced_at: new Date().toISOString(),
-            note: "Invoice insert failed – see logs"
-          })
-          .eq("fee_id", fee_id);
-      } else {
-        await sb
-          .from("lth_pvr.fees_monthly")
-          .update({
-            status: "invoiced",
-            invoiced_at: new Date().toISOString()
-          })
-          .eq("fee_id", fee_id);
-      }
+// Edge Function: ef_fee_monthly_close
+// Purpose: Monthly fee aggregation and invoice generation
+// Schedule: pg_cron on 1st of month at 00:10 UTC (after performance fees at 00:05)
+// Deployed with: --no-verify-jwt
 
-      continue;
-    }
-    // 1) USDT deduction
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { logAlert } from "../_shared/alerting.ts";
 
-    const takeUsdt = Math.min(remaining, Number(av.data ?? 0));
-    if (takeUsdt > 0) {
-      await sb.from("lth_pvr.ledger_lines").insert({
-        org_id,
-        customer_id: cfg.customer_id,
-        date: me,
-        kind: "fee",
-        amount_usdt: takeUsdt,
-        note: "Performance fee (USDT)"
-      });
-      remaining = +(remaining - takeUsdt).toFixed(2);
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
+const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const orgId = Deno.env.get("ORG_ID");
+const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
+
+if (!supabaseUrl || !supabaseKey || !orgId) {
+  throw new Error("Missing required environment variables");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  db: { schema: "lth_pvr" }
+});
+
+interface FeeAggregation {
+  customer_id: number;
+  platform_fees_btc: number;
+  platform_fees_usdt: number;
+  performance_fees_usdt: number;
+  total_fees_usd: number;
+}
+
+Deno.serve(async (req) => {
+  try {
+    console.log("Starting monthly fee close and invoice generation...");
+
+    // Get previous month (we run on 1st, invoice for previous month)
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthStr = lastMonth.toISOString().substring(0, 7); // YYYY-MM
+    const lastMonthStart = `${lastMonthStr}-01`;
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+
+    console.log(`Aggregating fees for ${lastMonthStr} (${lastMonthStart} to ${lastMonthEnd})`);
+
+    // Check if already processed this month
+    const { data: existingInvoices, error: existingError } = await supabase
+      .from("fee_invoices")
+      .select("invoice_id")
+      .eq("org_id", orgId)
+      .eq("invoice_month", lastMonthStr);
+
+    if (existingError) {
+      throw existingError;
     }
-    // 2) Optional auto-sell BTC for the rest
-    if (remaining > 0 && cfg.settlement_mode === "usdt_or_sell_btc") {
-      const { data: ci } = await sb.from("lth_pvr.ci_bands_daily").select("btc_price").order("date", {
-        ascending: false
-      }).limit(1).single();
-      const price = Number(ci?.btc_price ?? 0);
-      // find customer trade fee bps from their latest strategy_version (from consolidated table)
-      const { data: csv } = await sb.schema("public").from("customer_strategies").select("strategy_version_id").eq("org_id", org_id).eq("customer_id", cfg.customer_id).order("effective_from", {
-        ascending: false
-      }).limit(1);
-      const svId = csv?.[0]?.strategy_version_id;
-      const { data: sv } = await sb.from("lth_pvr.strategy_versions").select("trade_fee_bps").eq("strategy_version_id", svId).limit(1);
-      const tradeFee = Number(sv?.[0]?.trade_fee_bps ?? 10) / 10000;
-      if (price > 0) {
-        const qty = +(remaining / (price * (1 - tradeFee))).toFixed(8);
-        await sb.from("lth_pvr.ledger_lines").insert({
-          org_id,
-          customer_id: cfg.customer_id,
-          date: me,
-          kind: "sell",
-          amount_btc: -qty,
-          amount_usdt: +(qty * price).toFixed(2),
-          fee_btc: +(qty * tradeFee).toFixed(8),
-          note: "Auto-sell to cover fee"
+
+    if (existingInvoices && existingInvoices.length > 0) {
+      console.log(`Invoices already generated for ${lastMonthStr}, skipping`);
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "Invoices already generated for this month",
+          invoice_count: existingInvoices.length 
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Aggregate platform fees (USDT and BTC)
+    const { data: platformFeesUsdt, error: platformUsdtError } = await supabase
+      .from("ledger_lines")
+      .select("customer_id, platform_fee_usdt")
+      .eq("org_id", orgId)
+      .gte("trade_date", lastMonthStart)
+      .lte("trade_date", lastMonthEnd)
+      .gt("platform_fee_usdt", 0);
+
+    if (platformUsdtError) throw platformUsdtError;
+
+    const { data: platformFeesBtc, error: platformBtcError } = await supabase
+      .from("ledger_lines")
+      .select("customer_id, platform_fee_btc")
+      .eq("org_id", orgId)
+      .gte("trade_date", lastMonthStart)
+      .lte("trade_date", lastMonthEnd)
+      .gt("platform_fee_btc", 0);
+
+    if (platformBtcError) throw platformBtcError;
+
+    // Aggregate performance fees
+    const { data: performanceFees, error: performanceError } = await supabase
+      .from("ledger_lines")
+      .select("customer_id, performance_fee_usdt")
+      .eq("org_id", orgId)
+      .gte("trade_date", lastMonthStart)
+      .lte("trade_date", lastMonthEnd)
+      .gt("performance_fee_usdt", 0);
+
+    if (performanceError) throw performanceError;
+
+    // Aggregate by customer
+    const feesByCustomer = new Map<number, FeeAggregation>();
+
+    for (const fee of (platformFeesUsdt || [])) {
+      const customerId = fee.customer_id;
+      if (!feesByCustomer.has(customerId)) {
+        feesByCustomer.set(customerId, {
+          customer_id: customerId,
+          platform_fees_btc: 0,
+          platform_fees_usdt: 0,
+          performance_fees_usdt: 0,
+          total_fees_usd: 0,
         });
-        remaining = 0;
       }
+      const agg = feesByCustomer.get(customerId)!;
+      agg.platform_fees_usdt += Number(fee.platform_fee_usdt || 0);
     }
-    await sb.from("lth_pvr.fees_monthly").update({
-      fee_paid_usdt: +(fee_due - remaining).toFixed(2),
-      arrears_usdt: +remaining.toFixed(2),
-      status: remaining > 0 ? "arrears" : "settled",
-      settled_at: new Date().toISOString()
-    }).eq("fee_id", fee_id);
+
+    for (const fee of (platformFeesBtc || [])) {
+      const customerId = fee.customer_id;
+      if (!feesByCustomer.has(customerId)) {
+        feesByCustomer.set(customerId, {
+          customer_id: customerId,
+          platform_fees_btc: 0,
+          platform_fees_usdt: 0,
+          performance_fees_usdt: 0,
+          total_fees_usd: 0,
+        });
+      }
+      const agg = feesByCustomer.get(customerId)!;
+      agg.platform_fees_btc += Number(fee.platform_fee_btc || 0);
+    }
+
+    for (const fee of (performanceFees || [])) {
+      const customerId = fee.customer_id;
+      if (!feesByCustomer.has(customerId)) {
+        feesByCustomer.set(customerId, {
+          customer_id: customerId,
+          platform_fees_btc: 0,
+          platform_fees_usdt: 0,
+          performance_fees_usdt: 0,
+          total_fees_usd: 0,
+        });
+      }
+      const agg = feesByCustomer.get(customerId)!;
+      agg.performance_fees_usdt += Number(fee.performance_fee_usdt || 0);
+    }
+
+    // Get BTC price for conversion (use last day of month)
+    const { data: ciData, error: ciError } = await supabase
+      .from("ci_bands_daily")
+      .select("btc_price")
+      .lte("date", lastMonthEnd)
+      .order("date", { ascending: false })
+      .limit(1)
+      .single();
+
+    const btcPrice = ciError ? 50000 : Number(ciData?.btc_price || 50000);
+
+    // Calculate total fees in USD
+    for (const [_, agg] of feesByCustomer) {
+      agg.total_fees_usd = 
+        agg.platform_fees_usdt + 
+        (agg.platform_fees_btc * btcPrice) + 
+        agg.performance_fees_usdt;
+    }
+
+    console.log(`Found ${feesByCustomer.size} customers with fees for ${lastMonthStr}`);
+
+    if (feesByCustomer.size === 0) {
+      console.log("No fees to invoice this month");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "No fees collected this month",
+          invoice_count: 0 
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create invoices
+    const invoicesToInsert = [];
+    const dueDate = new Date(now.getFullYear(), now.getMonth(), 15).toISOString().split('T')[0]; // 15th of current month
+
+    for (const [_, agg] of feesByCustomer) {
+      invoicesToInsert.push({
+        org_id: orgId,
+        customer_id: agg.customer_id,
+        invoice_month: lastMonthStr,
+        platform_fees_btc: agg.platform_fees_btc,
+        platform_fees_usdt: agg.platform_fees_usdt,
+        performance_fees_usdt: agg.performance_fees_usdt,
+        total_fees_usd: agg.total_fees_usd,
+        due_date: dueDate,
+        status: "unpaid",
+      });
+    }
+
+    const { data: insertedInvoices, error: insertError } = await supabase
+      .from("fee_invoices")
+      .insert(invoicesToInsert)
+      .select("invoice_id, customer_id, total_fees_usd");
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    console.log(`✓ Created ${insertedInvoices?.length} invoices`);
+
+    // Send invoice email to admin
+    const invoiceDetails = (insertedInvoices || []).map((inv: any) => ({
+      customer_id: inv.customer_id,
+      total_fees: inv.total_fees_usd,
+    }));
+
+    const totalFeesAllCustomers = invoiceDetails.reduce((sum, inv) => sum + Number(inv.total_fees), 0);
+
+    try {
+      await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": req.headers.get("authorization") || "",
+        },
+        body: JSON.stringify({
+          template_key: "monthly_fee_invoice_admin",
+          to_email: adminEmail,
+          data: {
+            invoice_month: lastMonthStr,
+            invoice_count: invoiceDetails.length,
+            total_fees_usd: totalFeesAllCustomers.toFixed(2),
+            due_date: dueDate,
+            invoice_details: invoiceDetails,
+          },
+        }),
+      });
+      console.log(`✓ Sent invoice email to ${adminEmail}`);
+    } catch (emailError) {
+      console.error("Error sending invoice email:", emailError);
+      await logAlert(
+        supabase,
+        "ef_fee_monthly_close",
+        "warn",
+        `Failed to send invoice email: ${emailError.message}`,
+        { invoice_month: lastMonthStr, invoice_count: invoiceDetails.length },
+        orgId,
+        null
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        invoice_month: lastMonthStr,
+        invoice_count: invoiceDetails.length,
+        total_fees_usd: totalFeesAllCustomers,
+        due_date: dueDate,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("Error in ef_fee_monthly_close:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
-  return new Response("ok");
 });

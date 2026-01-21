@@ -1,4 +1,6 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
+import { transferToMainAccount } from "../_shared/valrTransfer.ts";
+import { logAlert } from "../_shared/alerting.ts";
 
 // Minimal shapes we care about from v_fills_with_customer and exchange_funding_events
 type FillRow = {
@@ -233,11 +235,25 @@ Deno.serve(async (req: Request) => {
         const isDeposit = kind === "deposit";
         let amountBtc = 0;
         let amountUsdt = 0;
+        let platformFeeBtc = 0;
+        let platformFeeUsdt = 0;
 
         if (asset === "BTC") {
-          amountBtc = isDeposit ? amount : -amount;
+          if (isDeposit) {
+            // BTC deposits: deduct 0.75% platform fee
+            platformFeeBtc = amount * 0.0075;
+            amountBtc = amount - platformFeeBtc;
+          } else {
+            amountBtc = -amount; // withdrawal
+          }
         } else if (asset === "USDT") {
-          amountUsdt = isDeposit ? amount : -amount;
+          if (isDeposit) {
+            // USDT deposits: deduct 0.75% platform fee on NET amount (after VALR 0.18% conversion fee already deducted)
+            platformFeeUsdt = amount * 0.0075;
+            amountUsdt = amount - platformFeeUsdt;
+          } else {
+            amountUsdt = -amount; // withdrawal
+          }
         } else {
           console.warn("Skipping funding event with unsupported asset", f);
           continue;
@@ -250,16 +266,20 @@ Deno.serve(async (req: Request) => {
           kind: isDeposit ? "topup" : "withdrawal",
           amount_btc: amountBtc,
           amount_usdt: amountUsdt,
-          fee_btc: 0,
+          fee_btc: 0, // VALR exchange fees (not applicable to deposits)
           fee_usdt: 0,
+          platform_fee_btc: platformFeeBtc,
+          platform_fee_usdt: platformFeeUsdt,
           note,
         });
       }
 
       if (toInsertFunding.length > 0) {
-        const { error: insFundErr } = await sb
+        const { data: insertedRows, error: insFundErr } = await sb
           .from("ledger_lines")
-          .insert(toInsertFunding);
+          .insert(toInsertFunding)
+          .select("ledger_id, customer_id, platform_fee_btc, platform_fee_usdt");
+        
         if (insFundErr) {
           console.error(
             "Error inserting ledger_lines from funding events",
@@ -271,6 +291,112 @@ Deno.serve(async (req: Request) => {
           );
         }
         fundingInserted = toInsertFunding.length;
+
+        // Transfer platform fees to BitWealth main account
+        for (const row of (insertedRows ?? []) as any[]) {
+          const ledgerId = row.ledger_id;
+          const customerId = row.customer_id;
+          const feeBtc = Number(row.platform_fee_btc ?? 0);
+          const feeUsdt = Number(row.platform_fee_usdt ?? 0);
+
+          // Get customer's exchange account info (subaccount ID)
+          const { data: exchangeAcct, error: exAcctErr } = await sb
+            .schema("public")
+            .from("exchange_accounts")
+            .select("subaccount_id, account_id")
+            .eq("customer_id", customerId)
+            .eq("exchange", "VALR")
+            .single();
+
+          if (exAcctErr || !exchangeAcct) {
+            await logAlert(
+              sb,
+              "ef_post_ledger_and_balances",
+              "error",
+              `No exchange account found for customer ${customerId}`,
+              { customer_id: customerId, ledger_id: ledgerId },
+              org_id,
+              customerId,
+            );
+            console.error(`No exchange account for customer ${customerId}`);
+            continue;
+          }
+
+          const subaccountId = exchangeAcct.subaccount_id;
+          const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
+
+          // Transfer BTC platform fee if > 0
+          if (feeBtc > 0) {
+            const transferResult = await transferToMainAccount(
+              sb,
+              {
+                fromSubaccountId: subaccountId,
+                toAccount: mainAccountId,
+                currency: "BTC",
+                amount: feeBtc,
+                transferType: "platform_fee",
+              },
+              customerId,
+              ledgerId,
+            );
+
+            if (!transferResult.success) {
+              await logAlert(
+                sb,
+                "ef_post_ledger_and_balances",
+                "error",
+                `BTC platform fee transfer failed: ${transferResult.errorMessage}`,
+                {
+                  customer_id: customerId,
+                  ledger_id: ledgerId,
+                  amount_btc: feeBtc,
+                  error: transferResult.errorMessage,
+                },
+                org_id,
+                customerId,
+              );
+              console.error(
+                `BTC platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+              );
+            }
+          }
+
+          // Transfer USDT platform fee if > 0
+          if (feeUsdt > 0) {
+            const transferResult = await transferToMainAccount(
+              sb,
+              {
+                fromSubaccountId: subaccountId,
+                toAccount: mainAccountId,
+                currency: "USDT",
+                amount: feeUsdt,
+                transferType: "platform_fee",
+              },
+              customerId,
+              ledgerId,
+            );
+
+            if (!transferResult.success) {
+              await logAlert(
+                sb,
+                "ef_post_ledger_and_balances",
+                "error",
+                `USDT platform fee transfer failed: ${transferResult.errorMessage}`,
+                {
+                  customer_id: customerId,
+                  ledger_id: ledgerId,
+                  amount_usdt: feeUsdt,
+                  error: transferResult.errorMessage,
+                },
+                org_id,
+                customerId,
+              );
+              console.error(
+                `USDT platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+              );
+            }
+          }
+        }
       }
     }
 

@@ -413,18 +413,21 @@ WHERE customer_id = 999 AND snapshot_date = '2026-02-15';
 3. Approval request created in `lth_pvr.fee_conversion_approvals`
 4. Email sent to customer: "Approve sale of 0.000204 BTC to cover $10 fee?"
 5. Customer clicks approval link
-6. LIMIT order placed: SELL 0.000204 BTC at $49,500 (1% below market)
-7. LIMIT order not filled after 5 minutes
-8. LIMIT order cancelled, MARKET order placed: SELL 0.000204 BTC
-9. MARKET order fills at $49,800 → 0.000204 BTC = $10.16 USDT
-10. Performance fee $10 deducted from $10.16 USDT
-11. Excess $0.16 USDT returned to customer
+6. LIMIT order placed: SELL 0.000204 BTC at best ASK price minus 0.01% (e.g., $49,995 if best ASK is $50,000)
+7. Monitor order for 5 minutes with 10-second polling:
+   - If filled → Success, use execution price
+   - If price moves >= 0.25% → Cancel LIMIT, place MARKET order
+   - If 5 minutes elapsed → Cancel LIMIT, place MARKET order
+8. MARKET order (if triggered) fills at current market price
+9. Performance fee $10 deducted from USDT received
+10. Excess USDT returned to customer
 
 **Expected Results:**
 - ✅ Approval request created, email sent
-- ✅ LIMIT order placed at 1% below market
-- ✅ LIMIT order cancelled after 5-minute timeout
-- ✅ MARKET order placed and filled
+- ✅ LIMIT order placed slightly below best ASK (0.01% lower for competitive positioning)
+- ✅ Order monitoring: 10-second polling intervals for 5 minutes
+- ✅ Fallback triggers: Price movement >= 0.25% OR 5-minute timeout (whichever comes first)
+- ✅ LIMIT order cancelled before MARKET order placement
 - ✅ Ledger entries:
   - `kind` = 'btc_conversion', `amount_btc` = -0.000204, `amount_usdt` = +10.16
   - `kind` = 'performance_fee', `amount_usdt` = -10.00
