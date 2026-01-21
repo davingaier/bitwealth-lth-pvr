@@ -31,8 +31,8 @@ Deno.serve(async ()=>{
   
   for (const i of intents ?? []){
     try {
-      // find customer's exchange_account_id
-      const { data: cs } = await sb.from("customer_strategies").select("exchange_account_id").eq("org_id", org_id).eq("customer_id", i.customer_id).order("effective_from", {
+      // find customer's exchange_account_id (from consolidated table)
+      const { data: cs } = await sb.schema("public").from("customer_strategies").select("exchange_account_id").eq("org_id", org_id).eq("customer_id", i.customer_id).order("effective_from", {
         ascending: false
       }).limit(1);
       const exchange_account_id = cs?.[0]?.exchange_account_id ?? null;

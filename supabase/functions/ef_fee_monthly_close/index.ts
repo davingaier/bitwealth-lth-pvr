@@ -120,8 +120,8 @@ Deno.serve(async ()=>{
         ascending: false
       }).limit(1).single();
       const price = Number(ci?.btc_price ?? 0);
-      // find customer trade fee bps from their latest strategy_version
-      const { data: csv } = await sb.from("lth_pvr.customer_strategies").select("strategy_version_id").eq("org_id", org_id).eq("customer_id", cfg.customer_id).order("effective_from", {
+      // find customer trade fee bps from their latest strategy_version (from consolidated table)
+      const { data: csv } = await sb.schema("public").from("customer_strategies").select("strategy_version_id").eq("org_id", org_id).eq("customer_id", cfg.customer_id).order("effective_from", {
         ascending: false
       }).limit(1);
       const svId = csv?.[0]?.strategy_version_id;

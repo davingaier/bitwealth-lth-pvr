@@ -57,12 +57,13 @@ Deno.serve(async (_req: any)=>{
     const px = Number(ci.btc_price ?? 0);
     // If we start mid-pause and there's no prior state, we need today's pause flag.
     const pauseNow = await computeBearPauseAt(sb, org_id, signalStr);
-    // Active customers for this org (lth_pvr schema)
+    // Active customers for this org (public.customer_strategies)
     // CRITICAL: Only process customers with registration_status='active'
     let custs = null;
     {
-      // Query customer_strategies with live_enabled=true
+      // Query customer_strategies with live_enabled=true (consolidated table)
       const { data: cs, error: csErr } = await sb
+        .schema("public")
         .from("customer_strategies")
         .select("customer_id, strategy_version_id")
         .eq("org_id", org_id)

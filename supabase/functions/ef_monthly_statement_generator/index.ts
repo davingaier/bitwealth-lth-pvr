@@ -26,10 +26,10 @@ serve(async (req) => {
 
     console.log(`[ef_monthly_statement_generator] Generating statements for ${prevMonth}/${prevYear}`);
 
-    // Get all active customers with portfolios
-    const { data: portfolios, error: portfolioError } = await supabase
+    // Get all active customers with strategies (consolidated table)
+    const { data: strategies, error: strategyError } = await supabase
       .schema("public")
-      .from("customer_portfolios")
+      .from("customer_strategies")
       .select(`
         customer_id,
         status,
@@ -43,23 +43,23 @@ serve(async (req) => {
       .eq("org_id", ORG_ID)
       .eq("status", "active");
 
-    if (portfolioError) {
-      throw new Error(`Failed to fetch portfolios: ${portfolioError.message}`);
+    if (strategyError) {
+      throw new Error(`Failed to fetch strategies: ${strategyError.message}`);
     }
 
-    console.log(`[ef_monthly_statement_generator] Found ${portfolios?.length || 0} active customers`);
+    console.log(`[ef_monthly_statement_generator] Found ${strategies?.length || 0} active customers`);
 
     const results = {
-      total: portfolios?.length || 0,
+      total: strategies?.length || 0,
       generated: 0,
       emailed: 0,
       errors: [] as any[],
     };
 
     // Generate statements for each customer
-    for (const portfolio of portfolios || []) {
-      const customerId = portfolio.customer_id;
-      const customer = (portfolio as any).customer_details;
+    for (const strategy of strategies || []) {
+      const customerId = strategy.customer_id;
+      const customer = (strategy as any).customer_details;
 
       try {
         console.log(`[ef_monthly_statement_generator] Generating statement for customer ${customerId}`);

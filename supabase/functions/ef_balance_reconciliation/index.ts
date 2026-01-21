@@ -125,19 +125,19 @@ Deno.serve(async (req) => {
     const customerIds = customers.map(c => c.customer_id);
     console.log(`Found ${customerIds.length} active customers`);
 
-    // Get portfolios and exchange accounts
-    const { data: portfolios, error: portfolioError } = await supabase.schema("public")
-      .from("customer_portfolios")
-      .select("customer_id, portfolio_id, exchange_account_id")
+    // Get customer strategies and exchange accounts (consolidated table)
+    const { data: strategies, error: strategyError } = await supabase.schema("public")
+      .from("customer_strategies")
+      .select("customer_id, customer_strategy_id, exchange_account_id")
       .in("customer_id", customerIds)
       .not("exchange_account_id", "is", null);
 
-    if (portfolioError) {
-      console.error("Error loading customer portfolios:", portfolioError);
-      throw new Error(`Portfolio query failed: ${portfolioError.message || JSON.stringify(portfolioError)}`);
+    if (strategyError) {
+      console.error("Error loading customer strategies:", strategyError);
+      throw new Error(`Strategy query failed: ${strategyError.message || JSON.stringify(strategyError)}`);
     }
 
-    const exchangeAccountIds = (portfolios || []).map(p => p.exchange_account_id);
+    const exchangeAccountIds = (strategies || []).map(s => s.exchange_account_id);
     const { data: accounts, error: accountError } = await supabase.schema("public")
       .from("exchange_accounts")
       .select("exchange_account_id, subaccount_id, label")
@@ -160,11 +160,11 @@ Deno.serve(async (req) => {
       try {
         results.scanned++;
 
-        // Find customer for this account
-        const portfolio = portfolios?.find(p => p.exchange_account_id === account.exchange_account_id);
-        if (!portfolio) continue;
+        // Find customer for this account (from consolidated table)
+        const strategy = strategies?.find(s => s.exchange_account_id === account.exchange_account_id);
+        if (!strategy) continue;
 
-        const customer = customers.find(c => c.customer_id === portfolio.customer_id);
+        const customer = customers.find(c => c.customer_id === strategy.customer_id);
         if (!customer) continue;
 
         console.log(`Reconciling ${customer.first_names} ${customer.last_name} (${account.label})`);

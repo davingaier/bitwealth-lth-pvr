@@ -55,21 +55,21 @@ serve(async (req) => {
       );
     }
 
-    // Get portfolio details
-    const { data: portfolios, error: portfolioError } = await supabase
+    // Get customer strategy details (consolidated table)
+    const { data: strategies, error: strategyError } = await supabase
       .schema("public")
-      .from("customer_portfolios")
+      .from("customer_strategies")
       .select("*")
       .eq("customer_id", customer_id);
 
-    if (portfolioError || !portfolios || portfolios.length === 0) {
+    if (strategyError || !strategies || strategies.length === 0) {
       return new Response(
-        JSON.stringify({ error: "Portfolio not found" }),
+        JSON.stringify({ error: "Customer strategy not found" }),
         { status: 404, headers: { ...CORS, "Content-Type": "application/json" } }
       );
     }
 
-    const portfolio = portfolios[0];
+    const strategy = strategies[0];
 
     // Calculate date range for the month
     const startDate = new Date(year, month - 1, 1);

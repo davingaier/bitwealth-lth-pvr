@@ -84,44 +84,65 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if portfolio already exists
-    const { data: existingPortfolio } = await supabase
-      .from("customer_portfolios")
-      .select("portfolio_id")
+    // Check if customer strategy already exists (consolidated table)
+    const { data: existingStrategy } = await supabase
+      .schema("public")
+      .from("customer_strategies")
+      .select("customer_strategy_id")
       .eq("customer_id", customer_id)
       .eq("strategy_code", strategy_code)
       .single();
 
-    let portfolio_id;
+    let customer_strategy_id;
 
-    if (existingPortfolio) {
-      // Portfolio exists, just use it
-      portfolio_id = existingPortfolio.portfolio_id;
-      console.log(`Using existing portfolio ${portfolio_id} for customer ${customer_id}`);
+    if (existingStrategy) {
+      // Strategy exists, just use it
+      customer_strategy_id = existingStrategy.customer_strategy_id;
+      console.log(`Using existing customer_strategy ${customer_strategy_id} for customer ${customer_id}`);
     } else {
-      // Create new portfolio entry
-      const { data: newPortfolio, error: portfolioError } = await supabase
-        .from("customer_portfolios")
-        .insert({
-          org_id: customer.org_id,
-          customer_id: customer_id,
-          strategy_code: strategy_code,
-          status: "pending", // Will become 'active' when funds deposited (Milestone 5)
-          label: `${customer.first_names} ${customer.last_name} - ${strategy.name}`,
-        })
-        .select("portfolio_id")
+      // Get strategy version ID
+      const { data: strategyVersion, error: versionError } = await supabase
+        .schema("lth_pvr")
+        .from("strategy_versions")
+        .select("strategy_version_id")
+        .eq("org_id", customer.org_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .single();
 
-      if (portfolioError) {
-        console.error("Portfolio creation error:", portfolioError);
+      if (versionError || !strategyVersion) {
+        console.error("Error fetching strategy version:", versionError);
         return new Response(
-          JSON.stringify({ error: `Failed to create portfolio: ${portfolioError.message}` }),
+          JSON.stringify({ error: "Strategy version not found" }),
           { status: 500, headers: { "Content-Type": "application/json" } }
         );
       }
 
-      portfolio_id = newPortfolio.portfolio_id;
-      console.log(`Created new portfolio ${portfolio_id} for customer ${customer_id}`);
+      // Create new customer_strategy entry (consolidated table)
+      const { data: newStrategy, error: strategyError } = await supabase
+        .schema("public")
+        .from("customer_strategies")
+        .insert({
+          org_id: customer.org_id,
+          customer_id: customer_id,
+          strategy_code: strategy_code,
+          strategy_version_id: strategyVersion.strategy_version_id,
+          status: "pending", // Will become 'active' when funds deposited
+          label: `${customer.first_names} ${customer.last_name} - ${strategy.name}`,
+        })
+        .select("customer_strategy_id")
+        .single();
+
+      if (strategyError) {
+        console.error("Strategy creation error:", strategyError);
+        return new Response(
+          JSON.stringify({ error: `Failed to create strategy: ${strategyError.message}` }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      customer_strategy_id = newStrategy.customer_strategy_id;
+      console.log(`Created new customer_strategy ${customer_strategy_id} for customer ${customer_id}`);
     }
 
     // Update customer status to 'kyc' (Milestone 3)

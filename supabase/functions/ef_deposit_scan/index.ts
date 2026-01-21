@@ -106,21 +106,22 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${customers.length} customers in deposit status`);
 
-    // Get exchange accounts for these customers via customer_portfolios
+    // Get exchange accounts for these customers via customer_strategies (consolidated table)
     const customerIds = customers.map(c => c.customer_id);
-    const { data: portfolios, error: portfolioError } = await supabase
-      .from("customer_portfolios")
-      .select("customer_id, portfolio_id, exchange_account_id")
+    const { data: strategies, error: strategyError } = await supabase
+      .schema("public")
+      .from("customer_strategies")
+      .select("customer_id, customer_strategy_id, exchange_account_id")
       .in("customer_id", customerIds)
       .not("exchange_account_id", "is", null);
 
-    if (portfolioError) {
-      console.error("Error loading customer portfolios:", portfolioError);
-      throw portfolioError;
+    if (strategyError) {
+      console.error("Error loading customer strategies:", strategyError);
+      throw strategyError;
     }
 
     // Get the actual exchange accounts with subaccount IDs
-    const exchangeAccountIds = (portfolios || []).map(p => p.exchange_account_id);
+    const exchangeAccountIds = (strategies || []).map(s => s.exchange_account_id);
     const { data: accounts, error: accountError } = await supabase
       .from("exchange_accounts")
       .select("exchange_account_id, subaccount_id, label")
@@ -139,11 +140,11 @@ Deno.serve(async (req) => {
     for (const account of accounts || []) {
       results.scanned++;
 
-      // Find the portfolio and customer for this exchange account
-      const portfolio = portfolios?.find(p => p.exchange_account_id === account.exchange_account_id);
-      if (!portfolio) continue;
+      // Find the strategy and customer for this exchange account
+      const strategy = strategies?.find(s => s.exchange_account_id === account.exchange_account_id);
+      if (!strategy) continue;
 
-      const customer = customers.find(c => c.customer_id === portfolio.customer_id);
+      const customer = customers.find(c => c.customer_id === strategy.customer_id);
       if (!customer) continue;
 
       try {
@@ -172,61 +173,21 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Update portfolio status to 'active'
-          const { error: updatePortfolioError } = await supabase
-            .from("customer_portfolios")
-            .update({ status: "active" })
+          // Update customer_strategies status to 'active' and enable trading (consolidated table)
+          const { error: updateStrategyError } = await supabase
+            .schema("public")
+            .from("customer_strategies")
+            .update({ 
+              status: "active",
+              live_enabled: true,
+              effective_from: new Date().toISOString().split('T')[0] // Today's date (YYYY-MM-DD)
+            })
             .eq("customer_id", customer.customer_id);
 
-          if (updatePortfolioError) {
-            console.error(`Error updating portfolio for ${customer.customer_id}:`, updatePortfolioError);
-          }
-
-          // CRITICAL: Create lth_pvr.customer_strategies row for trading pipeline inclusion
-          // Get portfolio details (portfolio_id, exchange_account_id)
-          const { data: portfolioData, error: portfolioDataError } = await supabase
-            .from("customer_portfolios")
-            .select("portfolio_id, exchange_account_id")
-            .eq("customer_id", customer.customer_id)
-            .single();
-
-          if (portfolioDataError) {
-            console.error(`Error fetching portfolio data for ${customer.customer_id}:`, portfolioDataError);
+          if (updateStrategyError) {
+            console.error(`Error updating customer_strategies for ${customer.customer_id}:`, updateStrategyError);
           } else {
-            // Get latest strategy_version_id from lth_pvr.strategy_versions
-            // (In production, there should be only one strategy_version per org)
-            const { data: strategyVersion, error: strategyVersionError } = await supabase
-              .schema("lth_pvr")
-              .from("strategy_versions")
-              .select("strategy_version_id")
-              .eq("org_id", customer.org_id)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .single();
-
-            if (strategyVersionError) {
-              console.error(`Error fetching strategy version for ${customer.customer_id}:`, strategyVersionError);
-            } else {
-              // Create customer_strategies row
-              const { error: customerStrategyError } = await supabase
-                .schema("lth_pvr")
-                .from("customer_strategies")
-                .insert({
-                  org_id: customer.org_id,
-                  customer_id: customer.customer_id,
-                  strategy_version_id: strategyVersion.strategy_version_id,
-                  exchange_account_id: portfolioData.exchange_account_id,
-                  live_enabled: true,
-                  effective_from: new Date().toISOString().split('T')[0], // Today's date (YYYY-MM-DD)
-                  portfolio_id: portfolioData.portfolio_id,
-                });
-
-              if (customerStrategyError) {
-                console.error(`Error creating customer_strategies for ${customer.customer_id}:`, customerStrategyError);
-              } else {
-                console.log(`✓ Created customer_strategies row for customer ${customer.customer_id}`);
-              }
-            }
+            console.log(`✓ Updated customer_strategies: status=active, live_enabled=true for customer ${customer.customer_id}`);
           }
 
           // Set trade_start_date (date first strategy becomes active)

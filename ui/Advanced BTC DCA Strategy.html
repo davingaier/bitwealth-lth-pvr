@@ -3977,7 +3977,8 @@
           // 2) Fallback to the base table if the view is missing / blocked by RLS
           try{
             let q = supabaseClient
-              .from('customer_portfolios')
+              .schema('public')
+              .from('customer_strategies')
               .select('portfolio_id, org_id, customer_id, strategy_code, label, exchange, exchange_account_id, exchange_subaccount');
 
             if (orgId) q = q.eq('org_id', orgId);
@@ -6795,12 +6796,13 @@ This will:
 
         if (customerError) throw customerError;
 
-        // Get their portfolios
+        // Get their strategies (portfolios)
         const customerIds = (customers || []).map(c => c.customer_id);
         let portfolios = [];
         if (customerIds.length > 0) {
           const { data: portfolioData, error: portfolioError } = await supabaseClient
-            .from('customer_portfolios')
+            .schema('public')
+            .from('customer_strategies')
             .select('customer_id, portfolio_id, exchange_account_id')
             .in('customer_id', customerIds);
           
@@ -7235,9 +7237,10 @@ This will:
 
         if (customerError) throw customerError;
 
-        // Update portfolio status
+        // Update strategy (portfolio) status
         const { error: portfolioError } = await supabaseClient
-          .from('customer_portfolios')
+          .schema('public')
+          .from('customer_strategies')
           .update({ 
             status: 'inactive'
           })
