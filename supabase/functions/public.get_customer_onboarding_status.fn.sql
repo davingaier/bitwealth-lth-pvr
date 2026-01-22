@@ -36,7 +36,12 @@ BEGIN
       v_next_action := 'Waiting for admin to confirm interest and select strategy';
     WHEN 'kyc' THEN 
       v_milestone := 3;
-      v_next_action := 'Please upload your ID document';
+      -- Check if ID document already uploaded
+      IF v_customer.kyc_id_document_url IS NOT NULL THEN
+        v_next_action := 'ID document received - verification in progress';
+      ELSE
+        v_next_action := 'Please upload your ID document';
+      END IF;
     WHEN 'setup' THEN 
       v_milestone := 4;
       v_next_action := 'VALR account being set up - you will receive deposit instructions soon';
