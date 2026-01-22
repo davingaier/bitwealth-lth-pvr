@@ -16,6 +16,12 @@ if (!supabaseUrl || !supabaseKey || !orgId) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// CORS headers constant
+const corsHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+};
+
 interface ConfirmStrategyRequest {
   customer_id: number;
   strategy_code: string;
@@ -42,7 +48,7 @@ Deno.serve(async (req) => {
     if (!customer_id || !strategy_code) {
       return new Response(
         JSON.stringify({ error: "Missing required fields: customer_id, strategy_code" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -56,7 +62,7 @@ Deno.serve(async (req) => {
     if (customerError || !customer) {
       return new Response(
         JSON.stringify({ error: "Customer not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -66,7 +72,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           error: `Customer status is '${customer.registration_status}'. Only 'prospect' status customers can have strategy confirmed.`,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -80,7 +86,7 @@ Deno.serve(async (req) => {
     if (strategyError || !strategy) {
       return new Response(
         JSON.stringify({ error: `Strategy '${strategy_code}' not found` }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -114,11 +120,12 @@ Deno.serve(async (req) => {
         console.error("Error fetching strategy version:", versionError);
         return new Response(
           JSON.stringify({ error: "Strategy version not found" }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: corsHeaders }
         );
       }
 
       // Create new customer_strategy entry (consolidated table)
+      // Note: exchange_account_id will be NULL at this stage (added later at 'setup' status)
       const { data: newStrategy, error: strategyError } = await supabase
         .schema("public")
         .from("customer_strategies")
@@ -137,7 +144,7 @@ Deno.serve(async (req) => {
         console.error("Strategy creation error:", strategyError);
         return new Response(
           JSON.stringify({ error: `Failed to create strategy: ${strategyError.message}` }),
-          { status: 500, headers: { "Content-Type": "application/json" } }
+          { status: 500, headers: corsHeaders }
         );
       }
 
@@ -156,7 +163,7 @@ Deno.serve(async (req) => {
     if (updateError) {
       return new Response(
         JSON.stringify({ error: `Failed to update customer: ${updateError.message}` }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: corsHeaders }
       );
     }
 
@@ -219,10 +226,7 @@ Deno.serve(async (req) => {
       }),
       {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: corsHeaders,
       }
     );
   } catch (error) {
@@ -234,10 +238,7 @@ Deno.serve(async (req) => {
       }),
       {
         status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: corsHeaders,
       }
     );
   }

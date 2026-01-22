@@ -259,7 +259,7 @@ Deno.serve(async (req) => {
 
       exchangeAccountId = insertData.exchange_account_id;
       
-      // Link the new exchange account to the customer's portfolio
+      // Link the new exchange account to the customer's portfolio (old table)
       const { error: linkError } = await supabase
         .from("customer_portfolios")
         .update({ exchange_account_id: exchangeAccountId })
@@ -274,6 +274,26 @@ Deno.serve(async (req) => {
           "warn",
           `Failed to link exchange account to portfolio: ${linkError.message}`,
           { customer_id, portfolio_id: portfolio.portfolio_id, exchange_account_id: exchangeAccountId },
+          customer.org_id,
+          customer_id
+        );
+      }
+
+      // Link the new exchange account to customer_strategies (new consolidated table)
+      const { error: linkStrategyError } = await supabase
+        .schema("public")
+        .from("customer_strategies")
+        .update({ exchange_account_id: exchangeAccountId })
+        .eq("customer_id", customer_id);
+      
+      if (linkStrategyError) {
+        console.error("Error linking exchange account to customer_strategies:", linkStrategyError);
+        await logAlert(
+          supabase,
+          "ef_valr_create_subaccount",
+          "warn",
+          `Failed to link exchange account to customer_strategies: ${linkStrategyError.message}`,
+          { customer_id, exchange_account_id: exchangeAccountId },
           customer.org_id,
           customer_id
         );

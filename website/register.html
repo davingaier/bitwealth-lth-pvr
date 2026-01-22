@@ -133,12 +133,22 @@
                 
                 <div class="form-group">
                     <label for="password">Password *</label>
-                    <input type="password" id="password" name="password" required>
+                    <div style="position: relative;">
+                        <input type="password" id="password" name="password" required style="padding-right: 40px;">
+                        <button type="button" onclick="togglePassword('password', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #666;" title="Show/Hide Password">
+                            👁️
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="confirmPassword">Confirm Password *</label>
-                    <input type="password" id="confirmPassword" name="confirmPassword" required>
+                    <div style="position: relative;">
+                        <input type="password" id="confirmPassword" name="confirmPassword" required style="padding-right: 40px;">
+                        <button type="button" onclick="togglePassword('confirmPassword', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #666;" title="Show/Hide Password">
+                            👁️
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="password-requirements">
@@ -180,6 +190,18 @@
     </div>
     
     <script>
+        // Toggle password visibility
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.innerHTML = '👁️‍🗨️'; // eye with slash
+            } else {
+                input.type = 'password';
+                button.innerHTML = '👁️'; // eye
+            }
+        }
+        
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI1MzI3OTksImV4cCI6MjAzODEwODc5OX0.xXqvdCVBslEbh5rQcfAi9Y2vxeVmGEVr0zT0BdjS5yA';
         
@@ -262,12 +284,65 @@
                 
                 if (response.ok && result.success) {
                     formMessage.className = 'form-message success';
-                    formMessage.textContent = result.message || 'Account created successfully! Redirecting to login...';
+                    formMessage.textContent = 'Account created successfully! Logging you in...';
                     
-                    // Redirect to login page after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = 'login.html';
-                    }, 2000);
+                    // Auto-login the user after successful registration
+                    try {
+                        const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
+                            email: email,
+                            password: password
+                        });
+                        
+                        if (authError) {
+                            console.error('Auto-login failed:', authError);
+                            formMessage.textContent = 'Account created! Please log in manually.';
+                            setTimeout(() => {
+                                window.location.href = 'login.html';
+                            }, 2000);
+                            return;
+                        }
+                        
+                        // Get customer registration status to determine redirect
+                        const { data: customerData, error: customerError } = await supabaseClient
+                            .from('customer_details')
+                            .select('customer_id, registration_status')
+                            .eq('customer_id', parseInt(customerId))
+                            .single();
+                        
+                        if (customerError || !customerData) {
+                            console.error('Customer lookup failed:', customerError);
+                            window.location.href = 'login.html';
+                            return;
+                        }
+                        
+                        // Redirect based on registration status
+                        const status = customerData.registration_status;
+                        
+                        if (status === 'kyc') {
+                            // Need to upload ID document
+                            formMessage.textContent = 'Success! Redirecting to upload your ID...';
+                            setTimeout(() => {
+                                window.location.href = `upload-kyc.html?customer_id=${customerData.customer_id}`;
+                            }, 1500);
+                        } else if (status === 'deposit' || status === 'setup' || status === 'active' || status === 'inactive') {
+                            // Go to customer portal
+                            formMessage.textContent = 'Success! Redirecting to your portal...';
+                            setTimeout(() => {
+                                window.location.href = 'customer-portal.html';
+                            }, 1500);
+                        } else {
+                            // Default: redirect to portal
+                            setTimeout(() => {
+                                window.location.href = 'customer-portal.html';
+                            }, 1500);
+                        }
+                    } catch (loginError) {
+                        console.error('Auto-login error:', loginError);
+                        formMessage.textContent = 'Account created! Please log in manually.';
+                        setTimeout(() => {
+                            window.location.href = 'login.html';
+                        }, 2000);
+                    }
                 } else {
                     formMessage.className = 'form-message error';
                     formMessage.textContent = result.error || 'Failed to create account. Please try again.';

@@ -153,7 +153,12 @@
                 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" required>
+                    <div style="position: relative;">
+                        <input type="password" id="password" required style="padding-right: 40px;">
+                        <button type="button" onclick="togglePassword('password', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #666;" title="Show/Hide Password">
+                            👁️
+                        </button>
+                    </div>
                 </div>
                 
                 <button type="submit" id="submitBtn" class="btn-login">Log In</button>
@@ -166,6 +171,18 @@
     </div>
     
     <script>
+        // Toggle password visibility
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.innerHTML = '👁️‍🗨️'; // eye with slash
+            } else {
+                input.type = 'password';
+                button.innerHTML = '👁️'; // eye
+            }
+        }
+        
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
         
