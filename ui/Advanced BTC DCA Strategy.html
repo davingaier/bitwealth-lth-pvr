@@ -6728,14 +6728,20 @@ This will:
           
           if (response.ok && result.success) {
             showMessage(`✓ VALR subaccount created successfully for ${firstName} ${lastName}. Customer moved to Milestone 4.`, 'success');
+            // Refresh the VALR setup table to show the new subaccount
+            await loadSetupCustomers();
           } else {
             // Log error but don't block - admin can manually create later
             console.error('VALR subaccount creation failed:', result);
-            showMessage(`⚠️ ID verified but subaccount creation failed: ${result.message || 'Unknown error'}. You can create it manually.`, 'warning');
+            showMessage(`⚠️ ID verified but subaccount creation failed: ${result.error || result.message || 'Unknown error'}. You can create it manually.`, 'warning');
+            // Refresh to show retry button
+            await loadSetupCustomers();
           }
         } catch (valrError) {
           console.error('VALR subaccount creation error:', valrError);
           showMessage(`⚠️ ID verified but subaccount creation failed: ${valrError.message}. You can create it manually.`, 'warning');
+          // Refresh to show retry button
+          await loadSetupCustomers();
         }
 
         await loadPendingKyc();
