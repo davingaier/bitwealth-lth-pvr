@@ -199,9 +199,37 @@ Deno.serve(async (req) => {
 
         console.log(`Recorded: BTC=${recordedBTC}, USDT=${recordedUSDT}`);
 
+        // Get platform fees that haven't been transferred yet (status != 'completed')
+        // Only untransferred fees should still be in the subaccount
+        const { data: pendingTransfers } = await supabase.schema("lth_pvr")
+          .from("valr_transfer_log")
+          .select("amount, currency, status")
+          .eq("customer_id", customer.customer_id)
+          .neq("status", "completed")
+          .gte("created_at", today);
+
+        let pendingFeeBTC = 0;
+        let pendingFeeUSDT = 0;
+
+        if (pendingTransfers) {
+          for (const transfer of pendingTransfers) {
+            if (transfer.currency === "BTC") {
+              pendingFeeBTC += parseFloat(transfer.amount || "0");
+            } else if (transfer.currency === "USDT") {
+              pendingFeeUSDT += parseFloat(transfer.amount || "0");
+            }
+          }
+        }
+
+        console.log(`Pending (untransferred) fees: BTC=${pendingFeeBTC}, USDT=${pendingFeeUSDT}`);
+
+        // Expected VALR balance = customer ledger balance + pending fees (not yet transferred)
+        const expectedVALR_BTC = recordedBTC + pendingFeeBTC;
+        const expectedVALR_USDT = recordedUSDT + pendingFeeUSDT;
+
         // Check for discrepancies (allow 0.00000001 BTC and 0.01 USDT tolerance for rounding)
-        const btcDiff = Math.abs(valrBTC - recordedBTC);
-        const usdtDiff = Math.abs(valrUSDT - recordedUSDT);
+        const btcDiff = Math.abs(valrBTC - expectedVALR_BTC);
+        const usdtDiff = Math.abs(valrUSDT - expectedVALR_USDT);
 
         const hasBTCDiscrepancy = btcDiff > 0.00000001;
         const hasUSDTDiscrepancy = usdtDiff > 0.01;
@@ -215,19 +243,19 @@ Deno.serve(async (req) => {
             customer_name: `${customer.first_names} ${customer.last_name}`,
             btc_valr: valrBTC,
             btc_recorded: recordedBTC,
-            btc_diff: valrBTC - recordedBTC,
+            btc_expected: expectedVALR_BTC,
+            btc_diff: valrBTC - expectedVALR_BTC,
             usdt_valr: valrUSDT,
             usdt_recorded: recordedUSDT,
-            usdt_diff: valrUSDT - recordedUSDT,
+            usdt_expected: expectedVALR_USDT,
+            usdt_diff: valrUSDT - expectedVALR_USDT,
             action: "funding_events_created"
           };
           results.details.push(detail);
 
           // Create funding events for discrepancies
           const fundingEvents = [];
-
-          if (hasBTCDiscrepancy) {
-            const btcChange = valrBTC - recordedBTC;
+expectedVALR_BTC;
             fundingEvents.push({
               org_id: orgId,
               customer_id: customer.customer_id,
@@ -241,6 +269,8 @@ Deno.serve(async (req) => {
             });
           }
 
+          if (hasUSDTDiscrepancy) {
+            const usdtChange = valrUSDT - expectedVALR_
           if (hasUSDTDiscrepancy) {
             const usdtChange = valrUSDT - recordedUSDT;
             fundingEvents.push({

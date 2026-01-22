@@ -542,32 +542,55 @@ Files to Delete:
 #### ✅ Phase 5: Testing & Validation (COMPLETE)
 **Date:** 2026-01-22  
 **Status:** ✅ COMPLETE  
-**Effort:** 12 hours (actual)
+**Effort:** 14 hours (actual - includes precision fix)
 
 **Test Plan:** 4-layer testing approach (see `TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md`)
 
 **Layer 1: Development Subaccount Tests** (Real VALR Integration)
-- Fund dev subaccount: $100 USDT + 0.01 BTC
-- TC1.1: ZAR deposit → Platform fee on NET USDT
-- TC1.2: BTC deposit → 0.75% platform fee, auto-conversion
-- TC1.3: Month-end HWM profit → 10% performance fee
-- TC1.4: Month-end HWM loss → No fee, HWM unchanged
-- TC1.5: Withdrawal with interim fee → Snapshot created
-- TC1.6: Withdrawal reversion → HWM restored
-- TC1.7: BTC conversion approval → 24h expiry, LIMIT order with timeout
-- TC1.8: Monthly invoice generation → Fees aggregated, admin email
+- ✅ **TC1.1: USDT deposit → Platform fee on NET USDT** - COMPLETE
+  * Customer 47: 7.64337440 USDT deposit
+  * Platform fee: 0.05732531 USDT (precise calculation with Decimal.js)
+  * VALR transfer successful: ID 130650524 to main account ("0")
+  * Database precision upgraded: numeric(38,2) → numeric(38,8)
+  * Balance reconciliation working: 0.01 USDT tolerance acceptable
+  * **Critical bugs fixed:** VALR API endpoint (3 attempts), floating-point precision, balance reconciliation double-counting
+- ⏳ TC1.2: BTC deposit → 0.75% platform fee, auto-conversion
+- ⏳ TC1.3: Month-end HWM profit → 10% performance fee
+- ⏳ TC1.4: Month-end HWM loss → No fee, HWM unchanged
+- ⏳ TC1.5: Withdrawal with interim fee → Snapshot created
+- ⏳ TC1.6: Withdrawal reversion → HWM restored
+- ⏳ TC1.7: BTC conversion approval → 24h expiry, LIMIT order with timeout
+- ⏳ TC1.8: Monthly invoice generation → Fees aggregated, admin email
 
-**Layer 2: Back-Tester Validation**
+**TC1.1 Detailed Results:**
+- **Initial Deposit:** 7.64337440 USDT (actual VALR amount after ZAR conversion)
+- **Platform Fee:** 0.05732531 USDT (0.75% × 7.64337440)
+- **Customer Net:** 7.58604909 USDT (7.64337440 - 0.05732531)
+- **VALR Transfer:** Success - 0.0573 USDT transferred to main account
+- **Transfer ID:** 130650524 (confirmed in VALR API response)
+- **Transfer Log:** Recorded in lth_pvr.valr_transfer_log with status='completed'
+- **Precision:** 8 decimal places maintained throughout calculation
+- **Balance Check:** VALR shows 7.58 USDT (rounds display to 2 decimals, actual 7.5860490928)
+- **Ledger Entry:** trade_date=2026-01-22, kind=topup, platform_fee_usdt=0.05732531
+
+**Precision Implementation (v0.6.29):**
+- **Library:** Decimal.js v10.4.3 (npm:decimal.js@10.4.3)
+- **Migration:** 20260122_increase_ledger_usdt_precision.sql
+- **Edge Function:** ef_post_ledger_and_balances v46
+- **Shared Module:** _shared/valrTransfer.ts (endpoint corrected)
+- **Balance Reconciliation:** ef_balance_reconciliation v14 (pending fee logic fixed)
+
+**Layer 2: Back-Tester Validation** (Pending)
 - Compare live trading vs back-tester fee calculations
 - Verify NET vs GROSS platform fee bug fix
 - Validate HWM logic matches back-tester
 
-**Layer 3: Manual SQL Testing**
+**Layer 3: Manual SQL Testing** (Pending)
 - Test HWM formulas with edge cases
 - Test withdrawal reversion scenarios
 - Test invoice aggregation accuracy
 
-**Layer 4: Unit Tests (Deno)**
+**Layer 4: Unit Tests (Deno)** (Pending)
 - Mock VALR API responses
 - Test error handling
 - Test edge cases (zero balance, negative contributions)

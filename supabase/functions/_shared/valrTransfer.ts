@@ -41,8 +41,9 @@ export async function transferToMainAccount(
   const orgId = Deno.env.get("ORG_ID");
   const valrApiKey = Deno.env.get("VALR_API_KEY");
   const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+  const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
-  if (!valrApiKey || !valrApiSecret) {
+  if (!testMode && (!valrApiKey || !valrApiSecret)) {
     return {
       success: false,
       errorMessage: "VALR API credentials not configured"
@@ -76,15 +77,33 @@ export async function transferToMainAccount(
 
   const transferId = transferLog.transfer_id;
 
+  // In test mode, mock successful transfer without calling VALR API
+  if (testMode) {
+    await sb
+      .from("valr_transfer_log")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        valr_api_response: { mock: true, message: "Test mode - transfer simulated" }
+      })
+      .eq("transfer_id", transferId);
+
+    return {
+      success: true,
+      transferId,
+      valrResponse: { mock: true, message: "Test mode - transfer simulated" }
+    };
+  }
+
   try {
-    // VALR API: POST /v1/account/subaccount/transfer
-    // https://docs.valr.com/spot-api/#tag/Account/operation/subaccountTransfer
-    const path = "/v1/account/subaccount/transfer";
+    // VALR API: Internal Transfer Subaccounts
+    // https://api.valr.com/v1/account/subaccounts/transfer (note: plural "subaccounts")
+    const path = "/v1/account/subaccounts/transfer";
     const body = {
       fromId: request.fromSubaccountId,
-      toId: request.toAccount, // 'main' for primary account
+      toId: request.toAccount, 
       currencyCode: request.currency,
-      amount: request.amount.toFixed(8) // 8 decimals for crypto, 2 for fiat
+      amount: request.amount.toString()
     };
 
     const timestamp = Date.now().toString();
@@ -107,7 +126,19 @@ export async function transferToMainAccount(
       body: JSON.stringify(body)
     });
 
-    const responseData = await valrResponse.json();
+    // Handle empty responses (204 No Content or empty body)
+    let responseData: any = {};
+    const responseText = await valrResponse.text();
+    console.log(`VALR transfer response (${valrResponse.status}):`, responseText);
+    
+    if (responseText && responseText.trim().length > 0) {
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Failed to parse VALR response as JSON:", responseText);
+        responseData = { raw_response: responseText };
+      }
+    }
 
     if (!valrResponse.ok) {
       // Transfer failed - update log

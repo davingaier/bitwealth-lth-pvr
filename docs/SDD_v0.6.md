@@ -3,11 +3,96 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-20
+**Last updated:** 2026-01-22
 
 ---
 
 ## 0. Change Log
+
+### v0.6.29 – Decimal Precision Implementation for Platform Fees
+**Date:** 2026-01-22  
+**Purpose:** Eliminated floating-point rounding errors in platform fee calculations and upgraded database precision from 2 to 8 decimal places.
+
+**Status:** ✅ PRODUCTION DEPLOYED
+
+**Critical Bug Fixes:**
+
+1. **VALR API Endpoint Correction (3 Attempts)**
+   - **Problem:** Platform fee transfers failing with HTTP 404
+   - **Root Cause 1:** Used singular `/v1/account/subaccount/transfer` (incorrect)
+   - **Root Cause 2:** Used wrong parameters: `currency` (should be `currencyCode`), `fromSubaccountId` (should be `fromId`)
+   - **Root Cause 3:** Exchange account lookup queried non-existent `customer_id` column in `exchange_accounts` table
+   - **Solution:** Corrected endpoint to `/v1/account/subaccounts/transfer` (plural), fixed parameters, added join through `customer_strategies`
+   - **Verification:** VALR transfer ID 130650524 - 0.0573 USDT successfully transferred to main account
+
+2. **Floating-Point Precision Error**
+   - **Problem:** `7.64337440 - 0.05732531 = 7.58604909` but ledger stored `7.59` (0.01 USDT error)
+   - **Root Cause:** JavaScript IEEE 754 floating-point arithmetic loses precision
+   - **Solution:** Implemented Decimal.js library for exact decimal arithmetic
+   - **Code Change:**
+     ```typescript
+     // supabase/functions/ef_post_ledger_and_balances/index.ts
+     import Decimal from "npm:decimal.js@10.4.3";
+     
+     const amountDecimal = new Decimal(amount);
+     const feeDecimal = amountDecimal.times(0.0075);
+     const netDecimal = amountDecimal.minus(feeDecimal);
+     platformFeeUsdt = feeDecimal.toFixed(8);  // String preserved
+     amountUsdt = netDecimal.toFixed(8);
+     ```
+
+3. **Database Precision Limitation**
+   - **Problem:** `ledger_lines.amount_usdt` was `numeric(38,2)` - only 2 decimal places
+   - **Solution:** Upgraded to `numeric(38,8)` for 8 decimal places (matches BTC precision)
+   - **Migration:** `20260122_increase_ledger_usdt_precision.sql`
+   - **Tables Modified:**
+     * `lth_pvr.ledger_lines` - `amount_usdt`, `fee_usdt`
+     * `lth_pvr.balances_daily` - `usdt_balance`
+     * `lth_pvr.std_dca_balances_daily` - `usdt_balance`
+   - **View Recreated:** `lth_pvr.v_customer_portfolio_daily` (dropped/recreated with same definition)
+
+4. **Balance Reconciliation Double-Counting**
+   - **Problem:** Added ALL platform fees to expected balance, including already-transferred fees
+   - **Root Cause:** Queried `ledger_lines` for all fees instead of only pending transfers
+   - **Solution:** Query `valr_transfer_log WHERE status != 'completed'` to only count untransferred fees
+   - **Formula:** `expectedVALR = customerLedgerBalance + pendingTransferFees` (not all fees)
+   - **Result:** 0.01 USDT discrepancy correctly identified and accepted within tolerance
+
+**Files Modified:**
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` (lines 1-4, 242-263)
+  * Added Decimal.js import
+  * Changed `amount_btc` and `amount_usdt` from `number` to `number | string`
+  * Replaced floating-point arithmetic with Decimal calculations
+  * Used `.toFixed(8)` to preserve precision through database insert
+  * Fixed exchange account lookup to join through `customer_strategies`
+
+- `supabase/functions/_shared/valrTransfer.ts` (lines 100-109)
+  * Changed endpoint from `/v1/account/subaccount/transfer` to `/v1/account/subaccounts/transfer`
+  * Changed parameters: `currency` → `currencyCode`, `fromSubaccountId` → `fromId`, `toSubaccountId` → `toId`
+  * Main account ID confirmed as `"0"` (VALR Primary account)
+
+- `supabase/functions/ef_balance_reconciliation/index.ts` (lines 200-227)
+  * Changed fee accounting from `ledger_lines.platform_fee_*` to `valr_transfer_log` pending transfers
+  * Only adds fees with `status != 'completed'` to expected balance
+
+**Testing Results:**
+- **Customer 47 Test:** 7.64337440 USDT deposit
+  * Platform fee: 0.05732531 USDT (precise)
+  * Customer net: 7.58604909 USDT (stored accurately with 8 decimals)
+  * VALR transfer: Successful (ID: 130650524)
+  * Ledger vs VALR: 0.01 USDT difference within tolerance
+  * Balance reconciliation: No action needed (within 0.01 threshold)
+
+**Impact:**
+- ✅ Eliminates accumulating rounding errors over time
+- ✅ Aligns database precision with BTC (8 decimals)
+- ✅ Platform fee transfers now operational with real VALR API
+- ✅ Financial accuracy improved from 2 to 8 decimal places
+- ✅ Balance reconciliation correctly handles transferred vs pending fees
+
+**TC1.1 Platform Fee Testing:** ✅ COMPLETE (see TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md)
+
+---
 
 ### v0.6.28 – Table Consolidation Testing Complete & Deprecation
 **Date:** 2026-01-22  

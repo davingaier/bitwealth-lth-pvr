@@ -1,6 +1,7 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import Decimal from "npm:decimal.js@10.4.3";
 
 // Minimal shapes we care about from v_fills_with_customer and exchange_funding_events
 type FillRow = {
@@ -233,24 +234,31 @@ Deno.serve(async (req: Request) => {
         if (!amount) continue;
 
         const isDeposit = kind === "deposit";
-        let amountBtc = 0;
-        let amountUsdt = 0;
-        let platformFeeBtc = 0;
-        let platformFeeUsdt = 0;
+        let amountBtc: number | string = 0;
+        let amountUsdt: number | string = 0;
+        let platformFeeBtc: number | string = 0;
+        let platformFeeUsdt: number | string = 0;
 
         if (asset === "BTC") {
           if (isDeposit) {
-            // BTC deposits: deduct 0.75% platform fee
-            platformFeeBtc = amount * 0.0075;
-            amountBtc = amount - platformFeeBtc;
+            // BTC deposits: deduct 0.75% platform fee (using Decimal for precision, keep as string)
+            const amountDecimal = new Decimal(amount);
+            const feeDecimal = amountDecimal.times(0.0075);
+            const netDecimal = amountDecimal.minus(feeDecimal);
+            platformFeeBtc = feeDecimal.toFixed(8); // Keep as string to preserve precision
+            amountBtc = netDecimal.toFixed(8);
           } else {
             amountBtc = -amount; // withdrawal
           }
         } else if (asset === "USDT") {
           if (isDeposit) {
-            // USDT deposits: deduct 0.75% platform fee on NET amount (after VALR 0.18% conversion fee already deducted)
-            platformFeeUsdt = amount * 0.0075;
-            amountUsdt = amount - platformFeeUsdt;
+            // USDT deposits: deduct 0.75% platform fee on NET amount (using Decimal for precision, keep as string)
+            const amountDecimal = new Decimal(amount);
+            const feeDecimal = amountDecimal.times(0.0075);
+            const netDecimal = amountDecimal.minus(feeDecimal);
+            platformFeeUsdt = feeDecimal.toFixed(8); // Keep as string to preserve precision
+            amountUsdt = netDecimal.toFixed(8);
+            console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, net=${amountUsdt}, type=${typeof amountUsdt}`);
           } else {
             amountUsdt = -amount; // withdrawal
           }
@@ -299,12 +307,33 @@ Deno.serve(async (req: Request) => {
           const feeBtc = Number(row.platform_fee_btc ?? 0);
           const feeUsdt = Number(row.platform_fee_usdt ?? 0);
 
-          // Get customer's exchange account info (subaccount ID)
+          // Get customer's exchange account info via customer_strategies join
+          const { data: customerStrat, error: stratErr } = await sb
+            .schema("public")
+            .from("customer_strategies")
+            .select("exchange_account_id")
+            .eq("customer_id", customerId)
+            .single();
+
+          if (stratErr || !customerStrat?.exchange_account_id) {
+            await logAlert(
+              sb,
+              "ef_post_ledger_and_balances",
+              "error",
+              `No customer strategy found for customer ${customerId}`,
+              { customer_id: customerId, ledger_id: ledgerId },
+              org_id,
+              customerId,
+            );
+            console.error(`No customer strategy for customer ${customerId}`);
+            continue;
+          }
+
           const { data: exchangeAcct, error: exAcctErr } = await sb
             .schema("public")
             .from("exchange_accounts")
-            .select("subaccount_id, account_id")
-            .eq("customer_id", customerId)
+            .select("subaccount_id")
+            .eq("exchange_account_id", customerStrat.exchange_account_id)
             .eq("exchange", "VALR")
             .single();
 
