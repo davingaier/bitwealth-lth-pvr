@@ -283,7 +283,10 @@ Deno.serve(async (req) => {
       const { error: linkStrategyError } = await supabase
         .schema("public")
         .from("customer_strategies")
-        .update({ exchange_account_id: exchangeAccountId })
+        .update({ 
+          exchange_account_id: exchangeAccountId,
+          effective_from: new Date().toISOString().split('T')[0] // Set effective_from to today if NULL
+        })
         .eq("customer_id", customer_id);
       
       if (linkStrategyError) {
