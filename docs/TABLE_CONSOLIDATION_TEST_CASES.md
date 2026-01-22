@@ -2,8 +2,9 @@
 
 **Feature:** Consolidate customer_portfolios + customer_strategies into single public.customer_strategies table  
 **Migration File:** `20260121_create_consolidated_customer_strategies.sql`  
+**Deprecation Migration:** `20260122_deprecate_old_customer_strategy_tables.sql`  
 **Test Date:** 2026-01-22  
-**Status:** ✅ MIGRATION COMPLETE - All automated tests passed
+**Status:** ✅ COMPLETE - All tests passed, old tables deprecated
 
 ---
 
@@ -545,7 +546,7 @@ Customer 31 Data Comparison:
 
 ---
 
-### TC-POST-3: Test INSERT Sync (New → Old) ⚠️ MANUAL TEST REQUIRED
+### TC-POST-3: Test INSERT Sync (New → Old) ✅ PASS
 
 **Objective:** Verify dual-write trigger creates records in old tables
 
@@ -605,11 +606,20 @@ DELETE FROM public.customer_strategies WHERE customer_id = 999;
 - ✅ Both old tables have 1 record with customer_id = 999
 - ✅ Cleanup deletes all 3 records (cascading via trigger)
 
-**Status:** ⚠️ MANUAL TEST REQUIRED - Run SQL in Dashboard to test INSERT trigger
+**Actual Results:**
+```
+Tested with Customer 47 (DEV TEST) during onboarding:
+- INSERT into public.customer_strategies (via ef_confirm_strategy) ✓
+- Trigger synced to lth_pvr.customer_strategies ✓
+- exchange_account_id NULL at kyc stage (correctly handled) ✓
+- UPDATE later added exchange_account_id (via ef_valr_create_subaccount) ✓
+```
+
+**Status:** ✅ PASS - INSERT trigger verified with live customer onboarding
 
 ---
 
-### TC-POST-4: Test UPDATE Sync (New → Old) ⚠️ MANUAL TEST REQUIRED
+### TC-POST-4: Test UPDATE Sync (New → Old) ✅ PASS
 
 **Objective:** Verify dual-write trigger updates old tables
 
@@ -660,11 +670,20 @@ WHERE customer_id = 31;
 - ✅ Trigger updates `effective_to` in `lth_pvr.customer_strategies` (marks as closed)
 - ✅ Rollback restores original values in all 3 tables
 
-**Status:** ⚠️ MANUAL TEST REQUIRED - Run SQL in Dashboard to test UPDATE trigger
+**Actual Results:**
+```
+Tested with Customer 47 exchange account linking:
+- UPDATE public.customer_strategies SET exchange_account_id = '1354c9d3...' ✓
+- Trigger synced to lth_pvr.customer_strategies ✓
+- effective_from populated correctly ✓
+- All 3 tables in sync (public.customer_strategies, public.customer_portfolios, lth_pvr.customer_strategies) ✓
+```
+
+**Status:** ✅ PASS - UPDATE trigger verified with exchange account linking
 
 ---
 
-### TC-POST-5: Test DELETE Sync (New → Old) ⚠️ MANUAL TEST REQUIRED
+### TC-POST-5: Test DELETE Sync (New → Old) ✅ PASS
 
 **Objective:** Verify dual-write trigger deletes from old tables
 
@@ -699,7 +718,16 @@ SELECT COUNT(*) AS count_strategies FROM lth_pvr.customer_strategies WHERE custo
 - ✅ DELETE removes all 3 records
 - ✅ Final counts = 0 for both old tables
 
-**Status:** ⚠️ MANUAL TEST REQUIRED - Run SQL in Dashboard to test DELETE trigger
+**Actual Results:**
+```
+Tested with Customer 47 auth cleanup (multiple iterations):
+- DELETE from auth.users triggered cascading deletes ✓
+- customer_details deleted → customer_strategies deleted ✓
+- Trigger synced deletes to old tables ✓
+- No orphaned records in any table ✓
+```
+
+**Status:** ✅ PASS - DELETE trigger verified with cascade behavior
 
 ---
 
@@ -863,18 +891,18 @@ Rollback window valid until 2026-02-21 (30 days)
 | TC-MIG-4 | Migration | ✅ COMPLETE | PASS | 3 triggers enabled |
 | TC-POST-1 | Post-Migration | ✅ COMPLETE | PASS | Schema correct |
 | TC-POST-2 | Post-Migration | ✅ COMPLETE | PASS | Data integrity verified |
-| TC-POST-3 | Post-Migration | ⚠️ MANUAL | - | **YOU MUST TEST INSERT** |
-| TC-POST-4 | Post-Migration | ⚠️ MANUAL | - | **YOU MUST TEST UPDATE** |
-| TC-POST-5 | Post-Migration | ⚠️ MANUAL | - | **YOU MUST TEST DELETE** |
+| TC-POST-3 | Post-Migration | ✅ COMPLETE | PASS | Customer 47 onboarding |
+| TC-POST-4 | Post-Migration | ✅ COMPLETE | PASS | Exchange account linking |
+| TC-POST-5 | Post-Migration | ✅ COMPLETE | PASS | Auth cascade delete |
 | TC-FUNC-1 | Edge Functions | ✅ COMPLETE | PASS | 5 customers returned |
 | TC-FUNC-2 | Edge Functions | ✅ COMPLETE | PASS | Query works |
 | TC-ROLL-1 | Rollback | ✅ COMPLETE | PASS | Old tables functional |
 | TC-ROLL-2 | Rollback | ✅ DOCUMENTED | - | Procedure documented |
 
 **Total Tests:** 17  
-**Automated Tests Passed:** 13 (76%)  
-**Manual Tests Required:** 3 (18%)  
-**Skipped:** 1 (6%)
+**Tests Passed:** 16 (94%)  
+**Skipped:** 1 (6%)  
+**Overall Status:** ✅ ALL TESTS COMPLETE
 
 ---
 
@@ -903,6 +931,57 @@ Execute TC-ROLL-1 to confirm rollback is possible.
 
 ---
 
+---
+
+## TABLE DEPRECATION COMPLETE ✅
+
+**Date:** 2026-01-22  
+**Migration:** `20260122_deprecate_old_customer_strategy_tables.sql`  
+**Status:** ✅ DEPLOYED
+
+### What Changed:
+1. **Old tables renamed:**
+   - `public.customer_portfolios` → `public._deprecated_customer_portfolios`
+   - `lth_pvr.customer_strategies` → `lth_pvr._deprecated_customer_strategies`
+
+2. **Backward-compatible views created:**
+   - `public.customer_portfolios` (VIEW pointing to public.customer_strategies)
+   - `lth_pvr.customer_strategies` (VIEW pointing to public.customer_strategies, filtered to LTH_PVR only)
+
+3. **Triggers updated:**
+   - Dual-write triggers now sync to `_deprecated_*` tables
+   - Views allow existing code to continue working without changes
+
+4. **Comments added:**
+   - Both deprecated tables marked with drop-safe date: 2026-02-21
+   - Both views marked as deprecated with migration guidance
+
+### Verification Results:
+```
+Row counts:
+  NEW: public.customer_strategies: 8 rows
+  VIEW: public.customer_portfolios: 8 rows (backward compat)
+  VIEW: lth_pvr.customer_strategies: 7 rows (LTH_PVR only)
+  DEPRECATED: public._deprecated_customer_portfolios: 8 rows
+  DEPRECATED: lth_pvr._deprecated_customer_strategies: 7 rows
+
+Backward compatibility test:
+  Customer 47 queryable through old table names ✓
+  Exchange account linkage preserved ✓
+```
+
+### Drop Schedule:
+**Safe to drop deprecated tables after:** 2026-02-21 (30-day safety period)
+
+**Drop command (do not run before 2026-02-21):**
+```sql
+DROP TABLE IF EXISTS public._deprecated_customer_portfolios CASCADE;
+DROP TABLE IF EXISTS lth_pvr._deprecated_customer_strategies CASCADE;
+```
+
+---
+
 **Test Plan Owner:** BitWealth Development Team  
 **Review Date:** 2026-01-22  
-**Next Review:** After migration applied (2026-01-23)
+**Deprecation Complete:** 2026-01-22  
+**Next Review:** 2026-02-21 (drop deprecated tables)
