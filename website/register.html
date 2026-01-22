@@ -205,6 +205,9 @@
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjI1MzI3OTksImV4cCI6MjAzODEwODc5OX0.xXqvdCVBslEbh5rQcfAi9Y2vxeVmGEVr0zT0BdjS5yA';
         
+        // Initialize Supabase client
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
         // Get customer_id and email from URL params
         const urlParams = new URLSearchParams(window.location.search);
         const customerId = urlParams.get('customer_id');
