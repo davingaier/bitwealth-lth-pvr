@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
         success: true,
         message: `Strategy confirmed for ${customer.first_names} ${customer.last_name}`,
         customer_id: customer_id,
-        portfolio_id: portfolio_id,
+        customer_strategy_id: customer_strategy_id,
         strategy_code: strategy_code,
         strategy_name: strategy.name,
         email: customer.email,
