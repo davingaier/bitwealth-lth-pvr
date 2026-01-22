@@ -282,9 +282,11 @@
                 formMessage.className = 'form-message error';
                 
                 if (error.message.includes('Invalid login credentials')) {
-                    formMessage.textContent = 'Invalid email or password. Please try again.';
+                    formMessage.textContent = 'Incorrect email address and/or password. Please contact support at support@bitwealth.co.za';
+                } else if (error.message.includes('Customer profile not found')) {
+                    formMessage.textContent = 'Incorrect email address and/or password. Please contact support at support@bitwealth.co.za';
                 } else {
-                    formMessage.textContent = error.message || 'Login failed. Please try again.';
+                    formMessage.textContent = 'Incorrect email address and/or password. Please contact support at support@bitwealth.co.za';
                 }
                 
                 submitBtn.disabled = false;
