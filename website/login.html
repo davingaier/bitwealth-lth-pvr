@@ -280,6 +280,7 @@
             } catch (error) {
                 console.error('Login error:', error);
                 formMessage.className = 'form-message error';
+                formMessage.style.display = 'block'; // Override inline style
                 
                 if (error.message.includes('Invalid login credentials')) {
                     formMessage.textContent = 'Incorrect email address and/or password. Please contact support at support@bitwealth.co.za';
