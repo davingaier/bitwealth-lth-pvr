@@ -264,7 +264,7 @@ Deno.serve(async (req) => {
               exchange_account_id: account.exchange_account_id,
               kind: btcChange > 0 ? "deposit" : "withdrawal",
               asset: "BTC",
-              amount: Math.abs(btcChange),
+              amount: btcChange,  // Use signed value: positive for deposits, negative for withdrawals
               ext_ref: `AUTO_RECON_${today}_BTC`,
               occurred_at: new Date().toISOString(),
               idempotency_key: `RECON_${customer.customer_id}_${today}_BTC_${Date.now()}`
@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
               exchange_account_id: account.exchange_account_id,
               kind: usdtChange > 0 ? "deposit" : "withdrawal",
               asset: "USDT",
-              amount: Math.abs(usdtChange),
+              amount: usdtChange,  // Use signed value: positive for deposits, negative for withdrawals
               ext_ref: `AUTO_RECON_${today}_USDT`,
               occurred_at: new Date().toISOString(),
               idempotency_key: `RECON_${customer.customer_id}_${today}_USDT_${Date.now()}`

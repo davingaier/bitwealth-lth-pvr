@@ -270,7 +270,7 @@ Deno.serve(async (req: Request) => {
             platformFeeBtc = feeDecimal.toFixed(8); // Keep as string to preserve precision
             amountBtc = netDecimal.toFixed(8);
           } else {
-            // Withdrawal: amount from funding event is already negative, preserve it
+            // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountBtc = amount;
           }
         } else if (asset === "USDT") {
@@ -283,7 +283,7 @@ Deno.serve(async (req: Request) => {
             amountUsdt = netDecimal.toFixed(8);
             console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, net=${amountUsdt}, type=${typeof amountUsdt}`);
           } else {
-            // Withdrawal: amount from funding event is already negative, preserve it
+            // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountUsdt = amount;
           }
         } else {

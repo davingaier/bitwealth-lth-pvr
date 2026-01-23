@@ -330,16 +330,20 @@ ORDER BY created_at DESC LIMIT 1;
 7. Check: `valr_transfer_log` shows completed transfer of 0.00013300 BTC
 
 **Step 4: Withdrawable Balance Calculation**
-1. Before threshold crossed:
-   - Customer balance: 0.00077000 BTC (customer's money)
-   - Accumulated fees: 0.00000580 BTC (BitWealth's money)
-   - VALR subaccount: 0.00077580 BTC (total)
-   - Withdrawable: 0.00077000 BTC (excludes accumulated)
-2. After threshold crossed:
-   - Customer balance: 0.01077000 BTC
-   - Accumulated fees: 0.00000000 BTC (transferred)
-   - VALR subaccount: 0.01077000 BTC
-   - Withdrawable: 0.01077000 BTC (all theirs)
+1. **Customer Portal View (Simplified):**
+   - Before threshold crossed:
+     * BTC Balance: 0.00077000 BTC (displayed balance = withdrawable amount)
+     * Internal tracking: 0.00000580 BTC accumulated (NOT shown to customer)
+   - After threshold crossed:
+     * BTC Balance: 0.01077000 BTC (all withdrawable)
+     * Internal tracking: 0.00000000 BTC accumulated (transferred)
+2. **Admin Finance Module View:**
+   - Before threshold crossed:
+     * Shows Customer 47 with 0.00000580 BTC accumulated (orange badge)
+     * Total USD value: $5.80 (at ~$100k/BTC)
+   - After threshold crossed:
+     * Customer 47 removed from accumulated fees table (transferred)
+     * Transfer count incremented by 1
 
 **Step 5: Monthly Batch Transfer**
 1. Create multiple customers with small accumulated fees
@@ -349,12 +353,16 @@ ORDER BY created_at DESC LIMIT 1;
 5. Verify: Monthly invoice generation populates platform_fees_transferred correctly
 
 **Step 6: Transaction History Display**
-1. Check customer portal transaction history
-2. Verify: Platform fee column shows correct amounts
-3. Verify: Fee status badge shows:
-   - "✓ Transferred" for fees >= minimum (green)
-   - "📦 Accumulated" for fees < minimum (blue)
-4. Verify: Info tooltip explains accumulation logic
+1. **Customer Portal:**
+   - Check transaction history table
+   - Verify: Platform fee columns show correct amounts (orange color)
+   - Verify: BTC deposit shows BTC green, USDT gray (transaction type-aware colors)
+   - Verify: No fee status badges shown (internal complexity hidden from customers)
+2. **Admin Finance Module:**
+   - Check "Accumulated Platform Fees" card
+   - Verify: Customer 47 appears with accumulated amounts
+   - Verify: Orange badge if below threshold, green ✓ if above threshold
+   - Verify: Manual "Transfer Now" button works
 
 **Expected Results:**
 - ✅ Small fees accumulate without transfer attempts
@@ -362,42 +370,60 @@ ORDER BY created_at DESC LIMIT 1;
 - ✅ Balance reconciliation accounts for accumulated fees (no discrepancies)
 - ✅ Threshold crossing triggers automatic transfer
 - ✅ Monthly job transfers all eligible accumulated fees
-- ✅ Withdrawable balance excludes accumulated fees
-- ✅ Customer portal clearly shows fee status
+- ✅ Withdrawable balance excludes accumulated fees (customers only see this)
+- ✅ Customer portal shows ONLY withdrawable amounts (no accumulated fees breakdown)
+- ✅ Admin Finance module shows accumulated fees with transfer functionality
+- ✅ Transaction history uses transaction type-aware color coding (BTC green/gray/red based on deposit/buy/sell)
 - ✅ Monthly invoices distinguish transferred vs accumulated fees
 
 **Validation Queries:**
 ```sql
--- Check accumulated fees
+-- Check accumulated fees (admin view)
 SELECT 
   customer_id,
-  btc_accumulated,
-  usdt_accumulated,
-  last_btc_transfer_success,
-  last_usdt_transfer_success
+  accumulated_btc,
+  accumulated_usdt,
+  last_accumulated_at,
+  transfer_count
 FROM lth_pvr.customer_accumulated_fees
 WHERE customer_id = 47;
 
--- Check withdrawable balance
+-- Check withdrawable balance (customer view)
 SELECT * FROM lth_pvr.get_withdrawable_balance(47);
+-- Should return: withdrawable_btc = 0.00077000 (excludes 0.00000580 accumulated)
+
+-- Check Admin Finance module RPC
+SELECT * FROM lth_pvr.list_accumulated_fees();
+-- Should show Customer 47 with accumulated amounts, names, emails, totals
 
 -- Check batch transfer results
 SELECT 
+  created_at,
   customer_id,
+  transfer_type,
   currency,
   amount,
   status,
-  created_at
-FROM lth_pvr.valr_transfer_log
-WHERE transfer_type = 'platform_fee'
+  valr_transfer_id
+FROM lth_pvr.exchange_transfers
+WHERE transfer_type = 'platform_fee_batch'
   AND status = 'completed'
 ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-**Status:** ⏳ PENDING (awaiting Phase 6 implementation)
+**Status:** 🔨 IN PROGRESS (Phase 6 Sub-Phases 6.1-6.5 complete, testing in progress)
 
-**Timeline:** 12 days (2.5 weeks)
+**Timeline:** 12 days (2.5 weeks) - **AHEAD OF SCHEDULE** (completed in ~3 hours vs 6 days planned)
+
+**Implementation Notes (2026-01-23):**
+- ✅ Sub-Phase 6.1: VALR thresholds researched (BTC: 0.0001, USDT: $1.00)
+- ✅ Sub-Phase 6.2: Database schema (customer_accumulated_fees table, 3 RPC functions)
+- ✅ Sub-Phase 6.3: Edge functions updated (ef_post_ledger_and_balances threshold checking, ef_transfer_accumulated_fees monthly job)
+- ✅ Sub-Phase 6.4: Customer portal simplified (withdrawable balances only, no complexity shown)
+- ✅ Sub-Phase 6.5: Admin Finance module with accumulated fees view and manual transfer
+- ⏳ Sub-Phase 6.6: Testing TC1.2-A (CURRENT)
+- ⏳ Sub-Phase 6.7: Documentation updates
 - Phase 1: Research & Config (2 days)
 - Phase 2: Database Schema (1 day)
 - Phase 3: Edge Functions (3 days)
