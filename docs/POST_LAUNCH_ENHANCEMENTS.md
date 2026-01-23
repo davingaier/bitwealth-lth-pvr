@@ -1742,7 +1742,72 @@ TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 sat
 
 **Timeline:** 12 days (7 sub-phases), estimated completion February 4, 2026
 
+**Future Enhancement (Phase 7):** Adaptive Threshold Learning - TBD after Phase 6 complete
+
 **Next Steps:** Begin Sub-Phase 6.1 (Research VALR minimum transfer thresholds via manual testing)
+
+---
+
+## 📋 Task 5 Phase 7: Adaptive Threshold Learning (Future Enhancement)
+
+**Status:** DEFERRED (reconsider after Phase 6 complete and operational for 1-3 months)
+
+**Purpose:** Optimize VALR minimum transfer thresholds using real-world transfer success/failure data instead of conservative estimates.
+
+**Current Conservative Thresholds:**
+- BTC: 0.0001 (10,000 satoshis) - 1,700x safety margin over TC1.2 failure (5.8 sats)
+- USDT: $1.00 - Based on TC1.1 success at $0.06 (~16x margin)
+- ZAR: R100 - Conservative estimate (untested)
+
+**Three Options to Evaluate:**
+
+**Option A: Safe Adaptive Learning (Monthly Batch Job)**
+- Test thresholds during ef_transfer_accumulated_fees execution
+- When accumulated >= threshold * 0.7, attempt transfer
+- On success: Lower threshold to successful amount
+- On failure: Keep threshold, increment failed_test_count
+- Max 3 failed attempts before 3-month backoff
+- Tracking columns in system_config:
+  * last_tested_at (TIMESTAMPTZ)
+  * last_successful_amount (NUMERIC 38,8)
+  * failed_test_count (INT)
+  * last_failure_at (TIMESTAMPTZ)
+
+**Option B: Dedicated Quarterly Testing (Safest)**
+- Create ef_test_valr_thresholds edge function
+- Run quarterly via separate pg_cron job
+- Uses dedicated test subaccount (not customer subaccounts)
+- Sends incremental test amounts:
+  * BTC: 0.00001, 0.00005, 0.0001 (binary search approach)
+  * USDT: $0.10, $0.50, $1.00
+- Updates system_config based on results
+- Zero risk to customer operations
+- Admin notification email with results
+
+**Option C: Keep Current Conservative Approach**
+- Monthly batch job handles accumulation efficiently
+- Customers wait max 1 month for small fee transfers
+- Simple, proven, low-risk
+- Only downside: Potential accumulation delays (not a complaint yet)
+
+**Decision Criteria (When to Reconsider):**
+1. Customer complaints about fee accumulation delays
+2. Competitive analysis (other platforms offer faster small transfers)
+3. VALR API documentation updates (if minimums become published)
+4. Accumulated fees data shows pattern (e.g., 80% of customers have fees $0.50-$0.90)
+
+**Risk Assessment:**
+- ⚠️ **API Rate Limiting:** Failed test attempts count toward VALR 20 req/sec limit
+- ⚠️ **Complexity:** Tracking state, backoff logic, retry limits
+- ⚠️ **Operational Risk:** Could disrupt customer operations if Option A chosen
+- ⚠️ **Unknown Behavior:** VALR minimums might vary by subaccount, time, region
+
+**Recommendation:** Start with Option C, reconsider Option B after 3 months of operational data
+
+**Estimated Effort (if pursued):**
+- Option A: 2-3 days (enhancement to monthly batch job)
+- Option B: 3-5 days (new edge function, cron job, testing infrastructure)
+- Option C: 0 days (keep current approach)
 
 ---
 

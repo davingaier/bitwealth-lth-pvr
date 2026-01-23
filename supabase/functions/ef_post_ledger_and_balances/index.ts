@@ -37,7 +37,29 @@ Deno.serve(async (req: Request) => {
       return new Response("ORG_ID missing", { status: 500 });
     }
 
-    // ----------- 0) Resolve date range -----------
+    // ----------- 0) Fetch VALR minimum transfer thresholds -----------
+    const { data: configRows, error: configErr } = await sb
+      .from("system_config")
+      .select("config_key, config_value")
+      .in("config_key", ["valr_min_transfer_btc", "valr_min_transfer_usdt"]);
+
+    if (configErr) {
+      console.error("Error fetching system_config", configErr);
+      return new Response(`Error fetching system_config: ${configErr.message}`, {
+        status: 500,
+      });
+    }
+
+    const minBtc = Number(
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_btc")?.config_value ?? "0.0001"
+    );
+    const minUsdt = Number(
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_usdt")?.config_value ?? "1.00"
+    );
+
+    console.log(`[ef_post_ledger_and_balances] VALR thresholds: BTC ${minBtc}, USDT ${minUsdt}`);
+
+    // ----------- 1) Resolve date range -----------
     let fromDate = "";
     let toDate = "";
 
@@ -356,75 +378,359 @@ Deno.serve(async (req: Request) => {
           const subaccountId = exchangeAcct.subaccount_id;
           const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
 
-          // Transfer BTC platform fee if > 0
+          // Transfer BTC platform fee (with threshold checking)
           if (feeBtc > 0) {
-            const transferResult = await transferToMainAccount(
-              sb,
-              {
-                fromSubaccountId: subaccountId,
-                toAccount: mainAccountId,
-                currency: "BTC",
-                amount: feeBtc,
-                transferType: "platform_fee",
-              },
-              customerId,
-              ledgerId,
-            );
-
-            if (!transferResult.success) {
-              await logAlert(
+            if (feeBtc >= minBtc) {
+              // Fee meets minimum - transfer immediately
+              const transferResult = await transferToMainAccount(
                 sb,
-                "ef_post_ledger_and_balances",
-                "error",
-                `BTC platform fee transfer failed: ${transferResult.errorMessage}`,
                 {
-                  customer_id: customerId,
-                  ledger_id: ledgerId,
-                  amount_btc: feeBtc,
-                  error: transferResult.errorMessage,
+                  fromSubaccountId: subaccountId,
+                  toAccount: mainAccountId,
+                  currency: "BTC",
+                  amount: feeBtc,
+                  transferType: "platform_fee",
                 },
-                org_id,
                 customerId,
+                ledgerId,
               );
-              console.error(
-                `BTC platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+
+              if (!transferResult.success) {
+                await logAlert(
+                  sb,
+                  "ef_post_ledger_and_balances",
+                  "error",
+                  `BTC platform fee transfer failed: ${transferResult.errorMessage}`,
+                  {
+                    customer_id: customerId,
+                    ledger_id: ledgerId,
+                    amount_btc: feeBtc,
+                    error: transferResult.errorMessage,
+                  },
+                  org_id,
+                  customerId,
+                );
+                console.error(
+                  `BTC platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+                );
+              }
+            } else {
+              // Fee below minimum - accumulate it
+              console.log(
+                `[ef_post_ledger_and_balances] BTC fee ${feeBtc} < ${minBtc}, accumulating for customer ${customerId}`,
               );
+
+              try {
+                // Check if customer already has accumulated fees
+                const { data: existingAccum, error: fetchErr } = await sb
+                  .from("customer_accumulated_fees")
+                  .select("accumulated_btc, accumulated_usdt, accumulated_zar")
+                  .eq("customer_id", customerId)
+                  .eq("org_id", org_id)
+                  .maybeSingle();
+
+                if (fetchErr) {
+                  throw new Error(`Failed to fetch accumulated fees: ${fetchErr.message}`);
+                }
+
+                if (existingAccum) {
+                  // Update existing record
+                  const newBtc = Number(existingAccum.accumulated_btc || 0) + feeBtc;
+                  const { error: updateErr } = await sb
+                    .from("customer_accumulated_fees")
+                    .update({
+                      accumulated_btc: newBtc,
+                      last_updated_at: new Date().toISOString(),
+                    })
+                    .eq("customer_id", customerId)
+                    .eq("org_id", org_id);
+
+                  if (updateErr) {
+                    throw new Error(`Failed to update accumulated BTC: ${updateErr.message}`);
+                  }
+
+                  console.log(
+                    `[ef_post_ledger_and_balances] Updated accumulated BTC for customer ${customerId}: ${newBtc}`,
+                  );
+
+                  // Check if accumulated total now >= minimum (batch transfer)
+                  if (newBtc >= minBtc) {
+                    console.log(
+                      `[ef_post_ledger_and_balances] Accumulated BTC ${newBtc} >= ${minBtc}, batch transferring for customer ${customerId}`,
+                    );
+
+                    const batchResult = await transferToMainAccount(
+                      sb,
+                      {
+                        fromSubaccountId: subaccountId,
+                        toAccount: mainAccountId,
+                        currency: "BTC",
+                        amount: newBtc,
+                        transferType: "platform_fee_batch",
+                      },
+                      customerId,
+                      null, // No specific ledger_id for batch transfer
+                    );
+
+                    if (batchResult.success) {
+                      // Clear accumulated BTC and increment transfer count
+                      const { error: clearErr } = await sb
+                        .from("customer_accumulated_fees")
+                        .update({
+                          accumulated_btc: 0,
+                          last_transfer_attempt_at: new Date().toISOString(),
+                          transfer_count: (existingAccum.transfer_count || 0) + 1,
+                        })
+                        .eq("customer_id", customerId)
+                        .eq("org_id", org_id);
+
+                      if (clearErr) {
+                        console.error(
+                          `Failed to clear accumulated BTC for customer ${customerId}: ${clearErr.message}`,
+                        );
+                      } else {
+                        console.log(
+                          `[ef_post_ledger_and_balances] Batch transferred ${newBtc} BTC for customer ${customerId}`,
+                        );
+                      }
+                    } else {
+                      await logAlert(
+                        sb,
+                        "ef_post_ledger_and_balances",
+                        "error",
+                        `BTC batch transfer failed: ${batchResult.errorMessage}`,
+                        {
+                          customer_id: customerId,
+                          accumulated_btc: newBtc,
+                          error: batchResult.errorMessage,
+                        },
+                        org_id,
+                        customerId,
+                      );
+                      console.error(
+                        `BTC batch transfer failed for customer ${customerId}: ${batchResult.errorMessage}`,
+                      );
+                    }
+                  }
+                } else {
+                  // Insert new record
+                  const { error: insertErr } = await sb
+                    .from("customer_accumulated_fees")
+                    .insert({
+                      customer_id: customerId,
+                      org_id: org_id,
+                      accumulated_btc: feeBtc,
+                      accumulated_usdt: 0,
+                      accumulated_zar: 0,
+                      last_updated_at: new Date().toISOString(),
+                      transfer_count: 0,
+                    });
+
+                  if (insertErr) {
+                    throw new Error(`Failed to insert accumulated BTC: ${insertErr.message}`);
+                  }
+
+                  console.log(
+                    `[ef_post_ledger_and_balances] Inserted accumulated BTC for customer ${customerId}: ${feeBtc}`,
+                  );
+                }
+              } catch (e) {
+                await logAlert(
+                  sb,
+                  "ef_post_ledger_and_balances",
+                  "error",
+                  `BTC fee accumulation error: ${e.message}`,
+                  {
+                    customer_id: customerId,
+                    ledger_id: ledgerId,
+                    amount_btc: feeBtc,
+                    error: e.message,
+                  },
+                  org_id,
+                  customerId,
+                );
+                console.error(
+                  `BTC fee accumulation error for customer ${customerId}: ${e.message}`,
+                );
+              }
             }
           }
 
-          // Transfer USDT platform fee if > 0
+          // Transfer USDT platform fee (with threshold checking)
           if (feeUsdt > 0) {
-            const transferResult = await transferToMainAccount(
-              sb,
-              {
-                fromSubaccountId: subaccountId,
-                toAccount: mainAccountId,
-                currency: "USDT",
-                amount: feeUsdt,
-                transferType: "platform_fee",
-              },
-              customerId,
-              ledgerId,
-            );
-
-            if (!transferResult.success) {
-              await logAlert(
+            if (feeUsdt >= minUsdt) {
+              // Fee meets minimum - transfer immediately
+              const transferResult = await transferToMainAccount(
                 sb,
-                "ef_post_ledger_and_balances",
-                "error",
-                `USDT platform fee transfer failed: ${transferResult.errorMessage}`,
                 {
-                  customer_id: customerId,
-                  ledger_id: ledgerId,
-                  amount_usdt: feeUsdt,
-                  error: transferResult.errorMessage,
+                  fromSubaccountId: subaccountId,
+                  toAccount: mainAccountId,
+                  currency: "USDT",
+                  amount: feeUsdt,
+                  transferType: "platform_fee",
                 },
-                org_id,
                 customerId,
+                ledgerId,
               );
-              console.error(
-                `USDT platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+
+              if (!transferResult.success) {
+                await logAlert(
+                  sb,
+                  "ef_post_ledger_and_balances",
+                  "error",
+                  `USDT platform fee transfer failed: ${transferResult.errorMessage}`,
+                  {
+                    customer_id: customerId,
+                    ledger_id: ledgerId,
+                    amount_usdt: feeUsdt,
+                    error: transferResult.errorMessage,
+                  },
+                  org_id,
+                  customerId,
+                );
+                console.error(
+                  `USDT platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
+                );
+              }
+            } else {
+              // Fee below minimum - accumulate it
+              console.log(
+                `[ef_post_ledger_and_balances] USDT fee ${feeUsdt} < ${minUsdt}, accumulating for customer ${customerId}`,
               );
+
+              try {
+                // Check if customer already has accumulated fees
+                const { data: existingAccum, error: fetchErr } = await sb
+                  .from("customer_accumulated_fees")
+                  .select("accumulated_btc, accumulated_usdt, accumulated_zar, transfer_count")
+                  .eq("customer_id", customerId)
+                  .eq("org_id", org_id)
+                  .maybeSingle();
+
+                if (fetchErr) {
+                  throw new Error(`Failed to fetch accumulated fees: ${fetchErr.message}`);
+                }
+
+                if (existingAccum) {
+                  // Update existing record
+                  const newUsdt = Number(existingAccum.accumulated_usdt || 0) + feeUsdt;
+                  const { error: updateErr } = await sb
+                    .from("customer_accumulated_fees")
+                    .update({
+                      accumulated_usdt: newUsdt,
+                      last_updated_at: new Date().toISOString(),
+                    })
+                    .eq("customer_id", customerId)
+                    .eq("org_id", org_id);
+
+                  if (updateErr) {
+                    throw new Error(`Failed to update accumulated USDT: ${updateErr.message}`);
+                  }
+
+                  console.log(
+                    `[ef_post_ledger_and_balances] Updated accumulated USDT for customer ${customerId}: ${newUsdt}`,
+                  );
+
+                  // Check if accumulated total now >= minimum (batch transfer)
+                  if (newUsdt >= minUsdt) {
+                    console.log(
+                      `[ef_post_ledger_and_balances] Accumulated USDT ${newUsdt} >= ${minUsdt}, batch transferring for customer ${customerId}`,
+                    );
+
+                    const batchResult = await transferToMainAccount(
+                      sb,
+                      {
+                        fromSubaccountId: subaccountId,
+                        toAccount: mainAccountId,
+                        currency: "USDT",
+                        amount: newUsdt,
+                        transferType: "platform_fee_batch",
+                      },
+                      customerId,
+                      null, // No specific ledger_id for batch transfer
+                    );
+
+                    if (batchResult.success) {
+                      // Clear accumulated USDT and increment transfer count
+                      const { error: clearErr } = await sb
+                        .from("customer_accumulated_fees")
+                        .update({
+                          accumulated_usdt: 0,
+                          last_transfer_attempt_at: new Date().toISOString(),
+                          transfer_count: (existingAccum.transfer_count || 0) + 1,
+                        })
+                        .eq("customer_id", customerId)
+                        .eq("org_id", org_id);
+
+                      if (clearErr) {
+                        console.error(
+                          `Failed to clear accumulated USDT for customer ${customerId}: ${clearErr.message}`,
+                        );
+                      } else {
+                        console.log(
+                          `[ef_post_ledger_and_balances] Batch transferred ${newUsdt} USDT for customer ${customerId}`,
+                        );
+                      }
+                    } else {
+                      await logAlert(
+                        sb,
+                        "ef_post_ledger_and_balances",
+                        "error",
+                        `USDT batch transfer failed: ${batchResult.errorMessage}`,
+                        {
+                          customer_id: customerId,
+                          accumulated_usdt: newUsdt,
+                          error: batchResult.errorMessage,
+                        },
+                        org_id,
+                        customerId,
+                      );
+                      console.error(
+                        `USDT batch transfer failed for customer ${customerId}: ${batchResult.errorMessage}`,
+                      );
+                    }
+                  }
+                } else {
+                  // Insert new record
+                  const { error: insertErr } = await sb
+                    .from("customer_accumulated_fees")
+                    .insert({
+                      customer_id: customerId,
+                      org_id: org_id,
+                      accumulated_btc: 0,
+                      accumulated_usdt: feeUsdt,
+                      accumulated_zar: 0,
+                      last_updated_at: new Date().toISOString(),
+                      transfer_count: 0,
+                    });
+
+                  if (insertErr) {
+                    throw new Error(`Failed to insert accumulated USDT: ${insertErr.message}`);
+                  }
+
+                  console.log(
+                    `[ef_post_ledger_and_balances] Inserted accumulated USDT for customer ${customerId}: ${feeUsdt}`,
+                  );
+                }
+              } catch (e) {
+                await logAlert(
+                  sb,
+                  "ef_post_ledger_and_balances",
+                  "error",
+                  `USDT fee accumulation error: ${e.message}`,
+                  {
+                    customer_id: customerId,
+                    ledger_id: ledgerId,
+                    amount_usdt: feeUsdt,
+                    error: e.message,
+                  },
+                  org_id,
+                  customerId,
+                );
+                console.error(
+                  `USDT fee accumulation error for customer ${customerId}: ${e.message}`,
+                );
+              }
             }
           }
         }

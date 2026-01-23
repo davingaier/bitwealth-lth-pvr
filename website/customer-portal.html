@@ -529,9 +529,27 @@
                 if (canViewDashboard) {
                     // Calculate values
                     const nav = parseFloat(portfolio.nav_usd);
-                    const btc = parseFloat(portfolio.btc_balance || 0);
-                    const usdt = parseFloat(portfolio.usdt_balance || 0);
                     const btcPrice = parseFloat(portfolio.btc_price || 0);
+                    
+                    // Get withdrawable balance (excludes accumulated fees - customer only sees what they can withdraw)
+                    let btc = parseFloat(portfolio.btc_balance || 0);
+                    let usdt = parseFloat(portfolio.usdt_balance || 0);
+                    
+                    try {
+                        const { data: withdrawable, error: wErr } = await sb
+                            .schema('lth_pvr')
+                            .rpc('get_withdrawable_balance', { p_customer_id: customerId });
+                        
+                        if (!wErr && withdrawable && withdrawable.length > 0) {
+                            const wb = withdrawable[0];
+                            // Use withdrawable amounts (excludes BitWealth's accumulated fees)
+                            btc = parseFloat(wb.withdrawable_btc || 0);
+                            usdt = parseFloat(wb.withdrawable_usdt || 0);
+                        }
+                    } catch (wbErr) {
+                        console.error('Error fetching withdrawable balance:', wbErr);
+                        // Fallback to recorded balances if RPC fails
+                    }
                     
                     // Format and update stat boxes
                     document.getElementById('navValue').textContent = `$${nav.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
