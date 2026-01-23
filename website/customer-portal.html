@@ -817,18 +817,40 @@
                     const btcAmountRaw = parseFloat(tx.amount_btc || 0);
                     const usdtAmountRaw = parseFloat(tx.amount_usdt || 0);
                     
-                    // Color code amounts based on transaction type
+                    // Color code amounts based on transaction type and actual amounts
                     let btcColor = '#64748b'; // gray default
                     let usdtColor = '#64748b'; // gray default
                     
                     if (tx.kind === 'deposit' || tx.kind === 'topup') {
-                        // USDT deposit: BTC gray, USDT green
-                        btcColor = '#64748b';
-                        usdtColor = '#10b981';
+                        // Check which asset was deposited based on amounts
+                        if (btcAmountRaw > 0 && usdtAmountRaw === 0) {
+                            // BTC deposit: BTC green, USDT gray
+                            btcColor = '#10b981';
+                            usdtColor = '#64748b';
+                        } else if (usdtAmountRaw > 0 && btcAmountRaw === 0) {
+                            // USDT deposit: BTC gray, USDT green
+                            btcColor = '#64748b';
+                            usdtColor = '#10b981';
+                        } else {
+                            // Both non-zero (shouldn't happen) - use sign-based
+                            btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                            usdtColor = usdtAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                        }
                     } else if (tx.kind === 'withdrawal') {
-                        // USDT withdrawal: BTC gray, USDT red
-                        btcColor = '#64748b';
-                        usdtColor = '#ef4444';
+                        // Check which asset was withdrawn based on amounts
+                        if (Math.abs(btcAmountRaw) > 0 && usdtAmountRaw === 0) {
+                            // BTC withdrawal: BTC red, USDT gray
+                            btcColor = '#ef4444';
+                            usdtColor = '#64748b';
+                        } else if (Math.abs(usdtAmountRaw) > 0 && btcAmountRaw === 0) {
+                            // USDT withdrawal: BTC gray, USDT red
+                            btcColor = '#64748b';
+                            usdtColor = '#ef4444';
+                        } else {
+                            // Both non-zero - use sign-based
+                            btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                            usdtColor = usdtAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                        }
                     } else if (tx.kind === 'buy') {
                         // BUY: BTC green (receiving), USDT red (spending)
                         btcColor = '#10b981';
