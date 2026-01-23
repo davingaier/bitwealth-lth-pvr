@@ -3,11 +3,109 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-22
+**Last updated:** 2026-01-23
 
 ---
 
 ## 0. Change Log
+
+### v0.6.30 – Transaction History Enhancement & Critical Bug Fixes
+**Date:** 2026-01-23  
+**Purpose:** Enhanced customer portal to display platform fees separately, fixed balance reconciliation corrupted code, and resolved withdrawal sign handling bug.
+
+**Status:** ✅ PRODUCTION DEPLOYED
+
+**Customer Portal Enhancements:**
+
+1. **Transaction History Platform Fee Display**
+   - **Feature:** Added 2 new columns to Transaction History table
+   - **UI Changes:** `website/customer-portal.html`
+     * Lines 268-276: Added "Platform Fee (BTC)" and "Platform Fee (USDT)" column headers with tooltips
+     * Lines 805-831: Added color coding logic (orange #f59e0b for fees > 0, gray #64748b for $0.00)
+     * Applied to both exchange fees AND platform fees
+   - **RPC Update:** Modified `public.list_customer_transactions` to return `platform_fee_btc` and `platform_fee_usdt`
+   - **Migration:** `20260123_update_list_customer_transactions_add_platform_fees.sql`
+   - **Result:** Full transparency - customers see both VALR exchange fees (maker/taker) and BitWealth platform fees (0.75%)
+
+**Critical Bug Fixes:**
+
+2. **Balance Reconciliation Code Corruption**
+   - **Problem:** `ef_balance_reconciliation` throwing `ReferenceError: btcChange is not defined`
+   - **Root Cause:** Lines 258-260 corrupted with partial code fragment `expectedVALR_BTC;`
+   - **Secondary Bug:** Line 276 used `recordedUSDT` instead of `expectedVALR_USDT`, ignoring pending transfer fees
+   - **Solution:** 
+     * Removed corrupted line 258
+     * Added proper `if (hasBTCDiscrepancy)` wrapper around btcChange calculation
+     * Fixed formula: `valrUSDT - expectedVALR_USDT` (was `valrUSDT - recordedUSDT`)
+   - **File:** `supabase/functions/ef_balance_reconciliation/index.ts` (lines 257-277)
+   - **Deployment:** Version 15 deployed successfully
+   - **Verification:** Manual run detected Customer 47 withdrawal correctly
+
+3. **Withdrawal Sign Handling Bug**
+   - **Problem:** Withdrawals recorded as positive amounts in ledger (+7.59 instead of -7.59)
+   - **Root Cause:** Lines 253 & 269 in `ef_post_ledger_and_balances` negated amounts with `-amount`, but `exchange_funding_events` already stores withdrawals as negative
+   - **Impact:** Balance calculation added withdrawals instead of subtracting (7.59 + 7.59 = 15.18 instead of 0)
+   - **Solution:** Changed `amountBtc = -amount` to `amountBtc = amount` (preserve sign as-is)
+   - **File:** `supabase/functions/ef_post_ledger_and_balances/index.ts` (lines 247-273)
+   - **Code Change:**
+     ```typescript
+     // Before (WRONG - double negation):
+     else {
+       amountBtc = -amount; // withdrawal
+     }
+     
+     // After (CORRECT - preserve sign):
+     else {
+       // Withdrawal: amount from funding event is already negative, preserve it
+       amountBtc = amount;
+     }
+     ```
+   - **Testing:** Customer 47 balance corrected from 15.18 to 0.00 USDT after reprocessing
+
+**System Architecture Clarification:**
+
+4. **Funding Event Processing Flow**
+   - **Source:** `lth_pvr.exchange_funding_events` table stores deposits (positive) and withdrawals (negative)
+   - **Processing:** `ef_post_ledger_and_balances` reads funding events, creates `ledger_lines` entries
+   - **Balance Calculation:** `balances_daily` accumulates ledger_lines amounts cumulatively
+   - **Detection:** Two mechanisms:
+     * Manual insertion for immediate testing
+     * Hourly `ef_balance_reconciliation` (runs at :30) auto-creates funding events for VALR balance discrepancies
+   - **Key Learning:** No automated VALR transaction history polling for active customers (only during onboarding via `ef_deposit_scan`)
+
+**Files Modified:**
+- `website/customer-portal.html` (lines 268-276, 805-831)
+  * Added platform fee columns with tooltips
+  * Added orange/gray color coding for all fees
+
+- `supabase/functions/public.list_customer_transactions.fn.sql`
+  * Added `platform_fee_btc` and `platform_fee_usdt` to RETURNS TABLE
+  * Updated SELECT to include platform fee columns from ledger_lines
+
+- `supabase/functions/ef_balance_reconciliation/index.ts` (v15)
+  * Fixed lines 257-277: Removed corrupted code, added proper if-wrapper, corrected pending fee formula
+
+- `supabase/functions/ef_post_ledger_and_balances/index.ts`
+  * Fixed lines 253 & 269: Preserve withdrawal sign instead of negating
+
+**Testing Results:**
+- **TC1.2 Setup (Customer 47):**
+  * Initial: 7.59 USDT balance (after TC1.1 deposit)
+  * Withdrawal: 7.59 USDT transferred to main account for BTC purchase
+  * BTC purchased: 0.00007685 BTC ready for deposit
+  * Balance after fix: 0.00 USDT ✅ (was showing 15.18 due to sign bug)
+  * Ledger entry: -7.59 USDT ✅ (was showing +7.59)
+
+**Impact:**
+- ✅ Transaction History now shows complete fee breakdown (exchange + platform)
+- ✅ Balance reconciliation function fully operational with correct formulas
+- ✅ Withdrawal processing now mathematically correct (preserves negative signs)
+- ✅ Customer 47 ready for TC1.2 BTC deposit platform fee testing
+- ✅ Hourly balance reconciliation will auto-detect VALR discrepancies
+
+**Next Testing:** TC1.2 BTC deposit (awaiting :30 balance reconciliation run)
+
+---
 
 ### v0.6.29 – Decimal Precision Implementation for Platform Fees
 **Date:** 2026-01-22  

@@ -205,48 +205,69 @@ WHERE customer_id = 999 AND transfer_type = 'platform_fee';
 
 **Objective:** Verify BTC deposit platform fee (0.75% of BTC) is deducted and auto-converted to USDT
 
+**Test Setup (Customer 47):**
+1. **Pre-test cleanup:** Withdraw 7.59 USDT to main account, purchase 0.00007685 BTC
+2. **Run `ef_post_ledger_and_balances`** to record USDT withdrawal (7.59 USDT)
+3. Transfer 0.00007685 BTC from main account to Customer 47's subaccount (ID: 1463930536558264320)
+
 **Test Steps:**
-1. Customer sends 0.1 BTC to development subaccount deposit address
+1. Customer 47 receives 0.00007685 BTC to development subaccount
 2. `ef_deposit_scan` detects deposit (runs every 5 minutes)
-3. Platform fee calculated: 0.1 BTC × 0.0075 = 0.00075 BTC
-4. Customer receives: 0.1 BTC - 0.00075 BTC = 0.09925 BTC
-5. Platform fee 0.00075 BTC transferred to BitWealth main account (VALR API)
-6. Auto-convert 0.00075 BTC → USDT via MARKET order
-7. BTC price at conversion = $50,000 → 0.00075 BTC = $37.50 USDT (approx)
+3. Platform fee calculated: 0.00007685 BTC × 0.0075 = 0.00000058 BTC (approx 5.8 sats)
+4. Customer receives: 0.00007685 - 0.00000058 = 0.00007627 BTC (approx)
+5. Platform fee 0.00000058 BTC transferred to BitWealth main account (VALR API)
+6. Auto-convert 0.00000058 BTC → USDT via MARKET order
+7. BTC price at conversion ≈ $100,000 → 0.00000058 BTC ≈ $0.058 USDT (approx)
 
 **Expected Results:**
-- ✅ Ledger entry: `kind` = 'deposit', `amount_btc` = 0.09925, `platform_fee_btc` = 0.00075
-- ✅ VALR transfer successful: 0.00075 BTC from subaccount to main account
-- ✅ VALR MARKET order placed: SELL 0.00075 BTC → USDT
-- ✅ Second ledger entry: `kind` = 'platform_fee_conversion', `amount_btc` = -0.00075, `amount_usdt` = +37.50
+- ✅ Withdrawal ledger entry: `kind` = 'withdrawal', `amount_usdt` = -7.59 (before BTC deposit)
+- ✅ BTC deposit ledger entry: `kind` = 'deposit', `amount_btc` = 0.00007627, `platform_fee_btc` = 0.00000058
+- ✅ VALR transfer successful: 0.00000058 BTC from subaccount to main account
+- ✅ VALR MARKET order placed: SELL 0.00000058 BTC → USDT
+- ✅ Second ledger entry: `kind` = 'platform_fee_conversion', `amount_btc` = -0.00000058, `amount_usdt` ≈ +0.058
 - ✅ Alert logged if conversion fails (VALR API error)
 
 **Validation Queries:**
 ```sql
+-- Check USDT withdrawal ledger entry
+SELECT 
+  trade_date,
+  kind,
+  amount_usdt,           -- Should be -7.59
+  note
+FROM lth_pvr.ledger_lines
+WHERE customer_id = 47 AND kind = 'withdrawal' AND amount_usdt < 0
+ORDER BY created_at DESC LIMIT 1;
+
 -- Check BTC deposit ledger entry
 SELECT 
   trade_date,
   kind,
-  amount_btc,            -- Should be 0.09925
-  platform_fee_btc,      -- Should be 0.00075
+  amount_btc,            -- Should be ~0.00007627
+  platform_fee_btc,      -- Should be ~0.00000058
   note
 FROM lth_pvr.ledger_lines
-WHERE customer_id = 999 AND kind = 'deposit' AND amount_btc > 0
+WHERE customer_id = 47 AND kind = 'deposit' AND amount_btc > 0
 ORDER BY created_at DESC LIMIT 1;
 
 -- Check auto-conversion ledger entry
 SELECT 
   trade_date,
   kind,
-  amount_btc,            -- Should be -0.00075 (sold)
-  amount_usdt,           -- Should be ~$37.50 (price-dependent)
+  amount_btc,            -- Should be -0.00000058 (sold)
+  amount_usdt,           -- Should be ~$0.058 (price-dependent)
   note
 FROM lth_pvr.ledger_lines
-WHERE customer_id = 999 AND kind = 'platform_fee_conversion'
+WHERE customer_id = 47 AND kind = 'platform_fee_conversion'
+ORDER BY created_at DESC LIMIT 1;
+
+-- Check VALR transfer log
+SELECT * FROM lth_pvr.valr_transfer_log
+WHERE customer_id = 47 AND currency = 'BTC'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
-**Status:** ⏳ PENDING (awaiting Phase 2 implementation)
+**Status:** ⏳ PENDING (awaiting ef_post_ledger_and_balances execution)
 
 ---
 

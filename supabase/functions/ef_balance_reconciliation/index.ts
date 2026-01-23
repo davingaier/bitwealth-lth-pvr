@@ -255,7 +255,9 @@ Deno.serve(async (req) => {
 
           // Create funding events for discrepancies
           const fundingEvents = [];
-expectedVALR_BTC;
+
+          if (hasBTCDiscrepancy) {
+            const btcChange = valrBTC - expectedVALR_BTC;
             fundingEvents.push({
               org_id: orgId,
               customer_id: customer.customer_id,
@@ -270,9 +272,7 @@ expectedVALR_BTC;
           }
 
           if (hasUSDTDiscrepancy) {
-            const usdtChange = valrUSDT - expectedVALR_
-          if (hasUSDTDiscrepancy) {
-            const usdtChange = valrUSDT - recordedUSDT;
+            const usdtChange = valrUSDT - expectedVALR_USDT;
             fundingEvents.push({
               org_id: orgId,
               customer_id: customer.customer_id,
