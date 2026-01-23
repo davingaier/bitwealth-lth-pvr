@@ -15,6 +15,8 @@ RETURNS TABLE (
   amount_usdt NUMERIC,
   fee_btc NUMERIC,
   fee_usdt NUMERIC,
+  platform_fee_btc NUMERIC,
+  platform_fee_usdt NUMERIC,
   note TEXT,
   created_at TIMESTAMPTZ
 )
@@ -32,6 +34,8 @@ BEGIN
     ll.amount_usdt,
     ll.fee_btc,
     ll.fee_usdt,
+    ll.platform_fee_btc,
+    ll.platform_fee_usdt,
     ll.note,
     ll.created_at
   FROM lth_pvr.ledger_lines ll
@@ -45,4 +49,4 @@ $$;
 GRANT EXECUTE ON FUNCTION public.list_customer_transactions(BIGINT, INT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_customer_transactions(BIGINT, INT) TO anon;
 
-COMMENT ON FUNCTION public.list_customer_transactions IS 'Returns customer transaction history from lth_pvr.ledger_lines. Used by customer portal.';
+COMMENT ON FUNCTION public.list_customer_transactions IS 'Returns customer transaction history with platform fees from lth_pvr.ledger_lines. Used by customer portal. Updated 2026-01-23 to include platform_fee_btc and platform_fee_usdt columns.';

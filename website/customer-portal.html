@@ -269,8 +269,10 @@
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Type</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">BTC</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">USDT</th>
-                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Fee (BTC)</th>
-                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Fee (USDT)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Fee (BTC)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Fee (USDT)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (BTC)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (USDT)</th>
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Note</th>
                                     </tr>
                                 </thead>
@@ -799,6 +801,14 @@
                     const feeBtc = parseFloat(tx.fee_btc || 0).toFixed(8);
                     const feeUsdt = parseFloat(tx.fee_usdt || 0).toFixed(2);
                     
+                    // Format platform fees
+                    const platformFeeBtc = parseFloat(tx.platform_fee_btc || 0).toFixed(8);
+                    const platformFeeUsdt = parseFloat(tx.platform_fee_usdt || 0).toFixed(2);
+                    
+                    // Color code: gray for $0.00, orange for charges
+                    const platformFeeBtcColor = parseFloat(tx.platform_fee_btc || 0) > 0 ? '#f59e0b' : '#64748b';
+                    const platformFeeUsdtColor = parseFloat(tx.platform_fee_usdt || 0) > 0 ? '#f59e0b' : '#64748b';
+                    
                     // Color code amounts
                     const btcColor = parseFloat(tx.amount_btc) >= 0 ? '#10b981' : '#ef4444';
                     const usdtColor = parseFloat(tx.amount_usdt) >= 0 ? '#10b981' : '#ef4444';
@@ -819,6 +829,8 @@
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${usdtColor}; font-weight: 500;">${usdtAmount}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: #64748b;">${feeBtc}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: #64748b;">${feeUsdt}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeBtcColor};">${platformFeeBtc}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeUsdtColor};">${platformFeeUsdt}</td>
                             <td style="padding: 12px; font-size: 13px; color: #64748b;" title="${note}">${noteDisplay}</td>
                         </tr>
                     `;

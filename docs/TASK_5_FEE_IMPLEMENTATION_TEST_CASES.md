@@ -197,7 +197,7 @@ SELECT * FROM lth_pvr.valr_transfer_log
 WHERE customer_id = 999 AND transfer_type = 'platform_fee';
 ```
 
-**Status:** ⏳ PENDING (awaiting Phase 2 implementation)
+**Status:** ✅ PASS
 
 ---
 
