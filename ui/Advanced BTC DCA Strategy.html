@@ -6268,6 +6268,75 @@
         return;
       }
 
+      // Load alerts
+      tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+      const onlyOpen = !openOnlyChk || openOnlyChk.checked;
+      const component = componentFilter ? componentFilter.value : '';
+
+      const { data, error } = await supabaseClient.rpc('list_lth_alert_events', {
+        p_only_open: onlyOpen,
+        p_limit: 100
+      });
+
+      // Filter by component on client side if specified
+      let filteredData = data;
+      if (data && component) {
+        filteredData = data.filter(row => row.component === component);
+      }
+
+      if (error) {
+        console.error('loadAlerts error', error);
+        tableBody.innerHTML =
+          '<tr><td colspan="6" class="error">Failed to load alerts: ' +
+          escapeHtml(error.message || String(error)) +
+          '</td></tr>';
+        return;
+      }
+
+      // Update badge with open alert count (unfiltered)
+      if (alertBadge && data) {
+        const openCount = data.filter(row => !row.resolved_at).length;
+        alertBadge.textContent = String(openCount);
+        if (openCount === 0) {
+          alertBadge.classList.add('zero');
+        } else {
+          alertBadge.classList.remove('zero');
+        }
+      }
+
+      if (!filteredData || filteredData.length === 0) {
+        tableBody.innerHTML =
+          '<tr><td colspan="6" class="muted">No alerts.</td></tr>';
+        return;
+      }
+
+      const rowsHtml = filteredData.map((row) => {
+        const created  = fmtDate(row.created_at);
+        const resolved = row.resolved_at ? fmtDate(row.resolved_at) : '';
+        const sevClass = severityClass(row.severity);
+        const sevLabel = escapeHtml(row.severity || '');
+        const component = escapeHtml(row.component || '');
+        const message   = escapeHtml(row.message || '');
+
+        const resolveBtn = row.resolved_at
+          ? ''
+          : '<button type="button" class="btn btn-secondary-sm js-alert-resolve">Resolve</button>';
+
+        return `
+          <tr data-alert-id="${row.alert_id}">
+            <td>${created}</td>
+            <td><span class="status-pill ${sevClass}">${sevLabel}</span></td>
+            <td>${component}</td>
+            <td>${message}</td>
+            <td>${resolved}</td>
+            <td>${resolveBtn}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tableBody.innerHTML = rowsHtml;
+    }
+
     // ===================== Accumulated Fees (Finance Module) =====================
     async function loadAccumulatedFees() {
       const loadingEl = document.getElementById('accumulatedFeesLoading');
@@ -6464,77 +6533,6 @@
     // Initial load if Finance module is active
     if (window.location.hash === '#finance-module') {
       setTimeout(() => loadAccumulatedFees(), 500);
-    }
-
-    // ===================== Alerts (Administration Module) =====================
-    
-      
-      tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
-      const onlyOpen = !openOnlyChk || openOnlyChk.checked;
-      const component = componentFilter ? componentFilter.value : '';
-
-      const { data, error } = await supabaseClient.rpc('list_lth_alert_events', {
-        p_only_open: onlyOpen,
-        p_limit: 100
-      });
-
-      // Filter by component on client side if specified
-      let filteredData = data;
-      if (data && component) {
-        filteredData = data.filter(row => row.component === component);
-      }
-
-      if (error) {
-        console.error('loadAlerts error', error);
-        tableBody.innerHTML =
-          '<tr><td colspan="6" class="error">Failed to load alerts: ' +
-          escapeHtml(error.message || String(error)) +
-          '</td></tr>';
-        return;
-      }
-
-      // Update badge with open alert count (unfiltered)
-      if (alertBadge && data) {
-        const openCount = data.filter(row => !row.resolved_at).length;
-        alertBadge.textContent = String(openCount);
-        if (openCount === 0) {
-          alertBadge.classList.add('zero');
-        } else {
-          alertBadge.classList.remove('zero');
-        }
-      }
-
-      if (!filteredData || filteredData.length === 0) {
-        tableBody.innerHTML =
-          '<tr><td colspan="6" class="muted">No alerts.</td></tr>';
-        return;
-      }
-
-      const rowsHtml = filteredData.map((row) => {
-        const created  = fmtDate(row.created_at);
-        const resolved = row.resolved_at ? fmtDate(row.resolved_at) : '';
-        const sevClass = severityClass(row.severity);
-        const sevLabel = escapeHtml(row.severity || '');
-        const component = escapeHtml(row.component || '');
-        const message   = escapeHtml(row.message || '');
-
-        const resolveBtn = row.resolved_at
-          ? ''
-          : '<button type="button" class="btn btn-secondary-sm js-alert-resolve">Resolve</button>';
-
-        return `
-          <tr data-alert-id="${row.alert_id}">
-            <td>${created}</td>
-            <td><span class="status-pill ${sevClass}">${sevLabel}</span></td>
-            <td>${component}</td>
-            <td>${message}</td>
-            <td>${resolved}</td>
-            <td>${resolveBtn}</td>
-          </tr>
-        `;
-      }).join('');
-
-      tableBody.innerHTML = rowsHtml;
     }
 
     async function handleResolveClick(ev) {
