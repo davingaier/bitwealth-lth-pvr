@@ -1394,5 +1394,382 @@ CREATE INDEX idx_customer_strategies_live ON public.customer_strategies(org_id, 
 ---
 
 **Document Status:** Active roadmap  
-**Last Updated:** January 15, 2026  
-**Next Review:** January 17, 2026 (Week 2 mid-point)
+**Last Updated:** January 23, 2026  
+**Next Review:** February 4, 2026 (Phase 6 completion)
+
+---
+
+## Task 5: Platform Fee Implementation & Enhancement (12-day plan)
+
+**Status:** ⏳ IN PROGRESS (Phase 6 - Platform Fee Accumulation System)  
+**Started:** January 14, 2026  
+**Current Sub-Phase:** 6.1 - Research & Configuration (2026-01-23)  
+**Owner:** Agent + User  
+**Priority:** CRITICAL (BLOCKING for production)  
+**Estimated Completion:** February 4, 2026
+
+**Summary:** Complete implementation of platform fee system with precision handling, comprehensive testing, SMTP migration, and accumulation system for small fees below VALR minimum transfer thresholds.
+
+---
+
+### Phase 1: Database Schema & Initial Implementation (Days 1-2) ✅ COMPLETE
+
+**Objective:** Establish database foundation for platform fee tracking with 8-decimal precision.
+
+**Tasks Completed (Jan 14):**
+- ✅ Add platform_fee_btc and platform_fee_usdt columns to ledger_lines (numeric(38,8))
+- ✅ Add platform_fee_btc and platform_fee_usdt columns to order_fills (numeric(38,8))
+- ✅ Migration: 20260114_add_platform_fee_columns.sql
+
+**Files Modified:**
+- supabase/migrations/20260114_add_platform_fee_columns.sql (NEW)
+
+---
+
+### Phase 2: Edge Function Implementation (Days 3-5) ✅ COMPLETE
+
+**Objective:** Implement platform fee calculation with decimal.js precision and VALR transfer with proper rounding.
+
+**Tasks Completed (Jan 15-17):**
+- ✅ Update ef_post_ledger_and_balances: Add decimal.js library (npm:decimal.js@10.4.3)
+- ✅ Implement percentage-based fee calculation (0.75% for BTC, 0.75% for USDT)
+- ✅ Use Decimal.js for precision arithmetic (eliminates floating-point errors)
+- ✅ Round fees to 8 decimal places (full precision)
+- ✅ Transfer fees to main BitWealth account via VALR subaccount transfer API
+- ✅ Log transfers in valr_transfer_log with UUID transfer_id
+
+**Files Modified:**
+- supabase/functions/ef_post_ledger_and_balances/index.ts (v14)
+
+**Key Implementation Details:**
+```typescript
+// Decimal.js for precision
+import Decimal from "npm:decimal.js@10.4.3";
+
+// Calculate fee with 8-decimal precision
+const feeDecimal = new Decimal(amountBtc).mul(0.0075);
+const feeBtc = parseFloat(feeDecimal.toFixed(8)); // 0.00000058 BTC
+
+// Transfer to main account
+await transferToMainAccount(sb, customerId, "BTC", feeBtc, fundingId);
+```
+
+---
+
+### Phase 3: Customer Portal UI Updates (Days 6-7) ✅ COMPLETE
+
+**Objective:** Display platform fees in customer transaction history with clear visualization.
+
+**Tasks Completed (Jan 23):**
+- ✅ Update customer-portal.html transaction history table
+- ✅ Add "Platform Fee (BTC)" column with tooltip
+- ✅ Add "Platform Fee (USDT)" column with tooltip
+- ✅ Implement color coding: Orange (#f59e0b) for > 0, Gray (#64748b) for $0.00
+- ✅ Update public.list_customer_transactions RPC to return platform fee columns
+- ✅ Migration: 20260123_update_list_customer_transactions_add_platform_fees.sql
+
+**Files Modified:**
+- website/customer-portal.html (lines 268-276, 805-831)
+- supabase/functions/public.list_customer_transactions.fn.sql
+
+**UI Specification:**
+- Column Headers: "Platform Fee (BTC)" with tooltip "Fee deducted from your deposit (0.75%)"
+- Color Coding: Orange for non-zero fees, gray for $0.00
+- Format: BTC to 8 decimals, USDT to 2 decimals
+
+---
+
+### Phase 4: Testing & Validation (Days 8-9) ⚠️ PARTIALLY COMPLETE
+
+**Objective:** Execute comprehensive test cases to validate platform fee system end-to-end.
+
+**Test Cases:**
+- ✅ TC1.1: USDT deposit with platform fee (Customer 47, 7.64337440 USDT)
+  * Expected: platform_fee_usdt = 0.05732531 USDT
+  * Actual: Calculated correctly with 8-decimal precision
+  * VALR Transfer: Success (transfer_id 8131e539-1fbd-4846-b2a4-3890c22f49f4)
+  * Status: ✅ PASS
+
+- ⚠️ TC1.2: BTC deposit with small platform fee (Customer 47, 0.00007685 BTC)
+  * Expected: platform_fee_btc = 0.00000058 BTC (5.8 satoshis)
+  * Actual: Fee calculated correctly, customer received 0.00007627 BTC
+  * VALR Transfer: ❌ FAILED - "Invalid Request" (amount below minimum threshold)
+  * Status: ⚠️ PARTIAL PASS (core functionality works, accumulation system missing)
+  * **CRITICAL DISCOVERY:** No accumulation logic for fees below VALR minimum
+
+- ⏳ TC1.2-A: Platform fee accumulation & batch transfer (PENDING - awaiting Phase 6 implementation)
+- ⏳ TC1.3: BTC sell with platform fee (PENDING)
+- ⏳ TC1.4: USDT withdrawal with platform fee (PENDING)
+- ⏳ TC1.5: Mixed transactions same day (PENDING)
+- ⏳ TC1.6: Zero-amount platform fee handling (PENDING)
+- ⏳ TC1.7: Multiple deposits same customer same day (PENDING)
+- ⏳ TC1.8: Platform fee in monthly invoice (PENDING)
+
+**Documentation:**
+- docs/TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md (Updated with TC1.2 results and TC1.2-A)
+
+---
+
+### Phase 5: SMTP Email Migration & Template Update (Days 10-11) ✅ COMPLETE
+
+**Objective:** Replace custom SMTP with Resend API and add BitWealth logo to email templates.
+
+**Tasks Completed (Jan 21-22):**
+- ✅ Replace custom SMTP with Resend API in all email edge functions
+- ✅ Add BitWealth logo (base64-encoded PNG) to all email templates
+- ✅ Update font family: Arial → Aptos (professional sans-serif)
+- ✅ Test email sending via ef_send_email edge function
+- ✅ Documentation: SMTP_MIGRATION_DEPLOYMENT_GUIDE.md, EMAIL_TEMPLATE_VERIFICATION.md
+
+**Files Modified:**
+- supabase/functions/ef_send_email/index.ts
+- supabase/functions/ef_send_kyc_reminder_emails/index.ts
+- supabase/functions/ef_alert_digest/index.ts
+- supabase/migrations/20260121_update_email_templates_with_logo.sql
+
+**Key Changes:**
+```typescript
+// Before: Custom SMTP with nodemailer
+import nodemailer from "npm:nodemailer@6.9.16";
+
+// After: Resend API (simpler, more reliable)
+import { Resend } from "npm:resend@4.0.0";
+const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+
+await resend.emails.send({
+  from: "noreply@bitwealth.com",
+  to: recipientEmail,
+  subject: "...",
+  html: emailBody
+});
+```
+
+**Email Templates Updated:**
+- welcome_email
+- deposit_received
+- withdrawal_complete
+- kyc_reminder
+- alert_digest
+
+---
+
+### Phase 6: Platform Fee Accumulation System (Days 12-23) ⏳ IN PROGRESS
+
+**Status:** ⏳ IN PROGRESS (2026-01-23 Started)  
+**Duration:** 12 days (7 sub-phases)  
+**Priority:** CRITICAL (BLOCKING for production)  
+**Estimated Completion:** February 4, 2026
+
+**Objective:** Implement comprehensive accumulation system for platform fees below VALR minimum transfer thresholds to prevent revenue leakage, fix withdrawable balance calculation, and eliminate withdrawal theft risk.
+
+**Problem Statement:**
+
+TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 satoshis) failed VALR transfer with "Invalid Request" error. Investigation uncovered NO accumulation logic exists, causing:
+
+**7 Major System Impacts:**
+1. **Revenue Leakage** - Small fees never collected (perpetual loss)
+2. **Balance Reconciliation** - Shows perpetual discrepancies (can't reconcile)
+3. **Transaction History** - Customers see fees "charged" but not transferred (confusing)
+4. **Monthly Invoices** - Can't distinguish fees collected vs accrued (accounting unclear)
+5. **Withdrawable Balance** - CRITICAL: Includes BitWealth's accumulated fees (broken calculation)
+6. **Withdrawal Requests** - CRITICAL: Customer could withdraw BitWealth's money (theft risk)
+7. **Accounting** - Revenue recognition unclear (accrual vs cash basis)
+
+**Withdrawal Theft Risk Example:**
+- Customer has 0.001 BTC (their money) + 0.00007500 BTC accumulated fees (BitWealth's money) = 0.00107500 BTC on VALR subaccount
+- Customer requests "withdraw all funds" → Steals BitWealth's accumulated fees!
+- Current system has NO logic to distinguish customer balance from accumulated fees
+
+**Implementation Sub-Phases (12 days total):**
+
+**Sub-Phase 6.1: Research & Configuration (2 days)** ⏳ IN PROGRESS (Jan 23-24)
+- [ ] Research VALR minimum transfer thresholds via manual testing:
+  * Test 0.00001 BTC transfer (1,000 satoshis)
+  * Test $1 USDT transfer
+  * Test R10 ZAR transfer
+  * Document exact error messages and success criteria
+- [ ] Document thresholds in code comments with verification date
+- [ ] Create `lth_pvr.system_config` table for runtime thresholds
+- [ ] Migration: `20260124_add_system_config_table.sql`
+
+**Estimated Thresholds (Unverified):**
+- BTC: 0.0001 BTC (10,000 satoshis) - Based on TC1.2 failure at 5.8 sats
+- USDT: $1.00 USD - TC1.2 success at $0.06 suggests below $1
+- ZAR: R 100 - Industry standard for South African platforms
+
+**Sub-Phase 6.2: Database Schema Changes (1 day)** ⏳ PENDING (Jan 25)
+- [ ] Create `lth_pvr.customer_accumulated_fees` table:
+  * customer_id, org_id, accumulated_btc, accumulated_usdt, last_updated_at
+  * Primary key: (customer_id, org_id)
+  * Indexes: customer_id, org_id
+- [ ] Enhance `lth_pvr.fee_invoices` table:
+  * Add platform_fees_transferred_btc (numeric(38,8))
+  * Add platform_fees_transferred_usdt (numeric(38,8))
+  * Add platform_fees_accumulated_btc (numeric(38,8))
+  * Add platform_fees_accumulated_usdt (numeric(38,8))
+- [ ] Create RPC: `lth_pvr.get_withdrawable_balance(customer_id)`
+  * Returns: recorded_balance - accumulated_fees
+  * Prevents withdrawal theft
+- [ ] Create RPC: `lth_pvr.accumulate_platform_fee(customer_id, currency, amount)`
+  * Upserts customer_accumulated_fees
+  * Returns: new accumulated total
+- [ ] Migration: `20260124_add_customer_accumulated_fees.sql`
+
+**Sub-Phase 6.3: Edge Function Updates (3 days)** ⏳ PENDING (Jan 26-28)
+- [ ] Update `ef_post_ledger_and_balances/index.ts`:
+  * Query system_config for minimum thresholds
+  * If fee >= minimum → Attempt transfer to main account
+  * If fee < minimum → Call accumulate_platform_fee RPC
+  * If accumulated >= minimum → Batch transfer accumulated fees
+  * If batch transfer succeeds → Clear accumulated_fees for currency
+  * If transfer fails → Log alert, keep fees accumulated
+- [ ] Create `ef_transfer_accumulated_fees/index.ts` (NEW, ~300 lines):
+  * Cron job: Monthly on 1st at 02:00 UTC (before invoicing)
+  * Query all customers with accumulated fees >= minimum
+  * Transfer accumulated fees in batches
+  * Update customer_accumulated_fees (set to 0 after success)
+  * Log successes and failures to alert_events
+- [ ] Migration: `20260124_add_transfer_accumulated_fees_cron.sql`
+  * Add pg_cron job for ef_transfer_accumulated_fees
+
+**Sub-Phase 6.4: Customer Portal Updates (2 days)** ⏳ PENDING (Jan 29-30)
+- [ ] Update `website/customer-portal.html` dashboard:
+  * Balance display breakdown:
+    - Total Balance: $X.XX (BTC + USDT)
+    - Withdrawable Balance: $Y.YY (total - accumulated fees) [with tooltip]
+    - Accumulated Fees: $Z.ZZ (pending transfer to BitWealth) [with tooltip]
+  * Color coding: Withdrawable green, Accumulated blue
+- [ ] Update transaction history fee status:
+  * Add "Fee Status" column with badges:
+    - ✓ Transferred (green) - Fee successfully transferred
+    - 📦 Accumulated (blue) - Fee pending transfer (below minimum)
+  * Join with valr_transfer_log to determine status
+- [ ] Update RPC: `public.list_customer_transactions.fn.sql`
+  * Join ledger_lines with valr_transfer_log on funding_id
+  * Return fee_status: 'transferred' | 'accumulated' | 'failed'
+- [ ] Add info box explaining accumulation logic:
+  * "Small platform fees (< minimum threshold) are accumulated on your account"
+  * "Accumulated fees are automatically transferred monthly"
+  * "Your withdrawable balance excludes accumulated fees"
+
+**Sub-Phase 6.5: Admin Portal & Reporting (1 day)** ⏳ PENDING (Jan 31)
+- [ ] Create admin dashboard view in `ui/Advanced BTC DCA Strategy.html`:
+  * "Accumulated Fees" panel showing:
+    - List of customers with accumulated fees
+    - Total accumulated by currency
+    - Last transfer attempt date
+    - Transfer button (manual trigger for ef_transfer_accumulated_fees)
+- [ ] Create RPC: `public.list_accumulated_fees()`
+  * Returns: customer details, accumulated BTC, accumulated USDT, total USD value
+  * Sorted by total USD value (highest first)
+- [ ] Update `ef_fee_monthly_close/index.ts`:
+  * Query total platform fees charged (from ledger_lines)
+  * Query total platform fees transferred (from valr_transfer_log)
+  * Calculate accumulated: charged - transferred
+  * Populate fee_invoices columns:
+    - platform_fees_transferred_btc/usdt
+    - platform_fees_accumulated_btc/usdt
+- [ ] Enhance invoice PDF/email template:
+  * Section: "Platform Fees Breakdown"
+  * Line 1: Fees Charged: $X.XX
+  * Line 2: Fees Collected: $Y.YY
+  * Line 3: Fees Accumulated: $Z.ZZ (pending transfer)
+
+**Sub-Phase 6.6: Testing (2 days)** ⏳ PENDING (Feb 1-2)
+- [ ] Test Case TC1.2-A: Platform fee accumulation & batch transfer
+  * Step 1: Deposit small BTC amounts (accumulate fees below threshold)
+  * Step 2: Verify fees accumulated in customer_accumulated_fees
+  * Step 3: Verify transaction history shows "📦 Accumulated" badges
+  * Step 4: Deposit large BTC amount (trigger batch transfer)
+  * Step 5: Verify accumulated fees transferred, status changes to "✓ Transferred"
+  * Step 6: Verify withdrawable balance excludes accumulated fees
+  * Step 7: Run monthly ef_transfer_accumulated_fees job
+  * Step 8: Verify all accumulated fees >= minimum transferred
+- [ ] Edge case testing:
+  * Mixed BTC/USDT accumulation
+  * Withdrawal request with accumulated fees (verify transfer happens first)
+  * Transfer failure handling (fees remain accumulated)
+  * Balance reconciliation with accumulated fees (zero discrepancies)
+
+**Sub-Phase 6.7: Documentation (1 day)** ⏳ PENDING (Feb 3)
+- [ ] Update SDD v0.6.31 with complete implementation details
+- [ ] Update TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md with TC1.2-A results
+- [ ] Create PLATFORM_FEE_ACCUMULATION_GUIDE.md (operational guide):
+  * How accumulation works
+  * VALR minimum thresholds
+  * Monthly batch transfer process
+  * Manual transfer procedures (admin)
+  * Troubleshooting failed transfers
+  * Accounting implications (accrual vs cash)
+- [ ] Update Admin Operations Guide:
+  * Section: "Platform Fee Reconciliation"
+  * How to check accumulated fees
+  * How to manually trigger batch transfer
+  * How to investigate transfer failures
+
+**Files to Modify:**
+- `supabase/migrations/20260124_add_system_config_table.sql` (NEW)
+- `supabase/migrations/20260124_add_customer_accumulated_fees.sql` (NEW)
+- `supabase/migrations/20260124_add_transfer_accumulated_fees_cron.sql` (NEW)
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` (threshold logic)
+- `supabase/functions/ef_transfer_accumulated_fees/index.ts` (NEW, ~300 lines)
+- `supabase/functions/ef_fee_monthly_close/index.ts` (invoice updates)
+- `supabase/functions/public.list_customer_transactions.fn.sql` (fee status)
+- `supabase/functions/public.list_accumulated_fees.fn.sql` (NEW)
+- `supabase/functions/lth_pvr.get_withdrawable_balance.fn.sql` (NEW)
+- `supabase/functions/lth_pvr.accumulate_platform_fee.fn.sql` (NEW)
+- `website/customer-portal.html` (balance display, transaction history)
+- `ui/Advanced BTC DCA Strategy.html` (admin view)
+- `docs/PLATFORM_FEE_ACCUMULATION_GUIDE.md` (NEW)
+
+**Key Design Decisions:**
+1. **Accumulation Table vs View:** Dedicated table (better performance, audit trail)
+2. **Threshold Checking:** Check BEFORE transfer attempt (avoid unnecessary API calls)
+3. **Batch Transfer Timing:** Monthly on 1st at 02:00 UTC (before invoicing)
+4. **Withdrawal Behavior:** Transfer accumulated fees BEFORE processing withdrawal request
+5. **Balance Reconciliation:** expectedVALR = recordedBalance + accumulatedFees
+6. **Revenue Recognition:** Accrual basis (recognize when charged, not when transferred)
+
+**Completion Criteria:**
+- ✅ TC1.2-A test case passed (6 steps, all validation queries pass)
+- ✅ No "Invalid Request" errors for small fees (accumulated instead)
+- ✅ Balance reconciliation shows zero discrepancies (accounts for accumulated fees)
+- ✅ Withdrawable balance accurate (excludes accumulated fees)
+- ✅ Monthly batch transfer operational (ef_transfer_accumulated_fees cron job working)
+- ✅ Customer portal displays fee status correctly (transferred vs accumulated badges)
+- ✅ Admin portal shows accumulated fees list
+- ✅ Monthly invoices show fee breakdown (transferred vs accumulated)
+
+**Timeline:** 12 days (7 sub-phases), estimated completion February 4, 2026
+
+**Next Steps:** Begin Sub-Phase 6.1 (Research VALR minimum transfer thresholds via manual testing)
+
+---
+
+## 📝 Task 5 Additional Notes
+
+**Reference Documentation:**
+- **PLATFORM_FEE_ACCUMULATION_ANALYSIS.md** - 60-page comprehensive analysis of system-wide impacts, implementation plan, database schemas, RPC functions, edge function logic, customer portal mockups, admin dashboard designs, testing strategy
+- **TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md** - Complete test case documentation with TC1.1 (PASS), TC1.2 (PARTIAL PASS), and TC1.2-A (PENDING)
+- **SDD_v0.6.md** - v0.6.31 change log with implementation phases
+
+**Critical Discovery (TC1.2 - Jan 23):**
+- Platform fee calculation works correctly with 8-decimal precision
+- VALR transfer fails for amounts below minimum threshold (5.8 satoshis confirmed too small)
+- No accumulation system exists - fees remain on customer subaccount
+- Customer could withdraw BitWealth's accumulated fees (theft risk)
+- Balance reconciliation shows perpetual discrepancies
+- Revenue leakage for small fees
+
+**Why This Is CRITICAL:**
+1. **Security Risk:** Customer can steal accumulated fees via withdrawal
+2. **Revenue Impact:** Small fees never collected (perpetual loss)
+3. **Balance Integrity:** Reconciliation broken (can't match VALR balances)
+4. **Customer Trust:** Transaction history shows fees charged but not transferred (confusing/misleading)
+
+**Production Readiness:**
+- Task 5 Phases 1-5: ✅ COMPLETE (precision, transfer, UI, SMTP)
+- Task 5 Phase 6: ⏳ IN PROGRESS (accumulation system - BLOCKING)
+- Cannot mark system as production-ready until Phase 6 complete
+
+

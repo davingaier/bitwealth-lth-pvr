@@ -9,6 +9,113 @@
 
 ## 0. Change Log
 
+### v0.6.31 – Platform Fee Accumulation System (IN PROGRESS)
+**Date:** 2026-01-23 (Started)  
+**Purpose:** Implement minimum transfer threshold checking, fee accumulation tracking, and batch transfer system for small platform fees that fall below VALR's minimum transfer amounts.
+
+**Status:** ⏳ IN PROGRESS (Phase 1: Research & Configuration)
+
+**Problem Statement:**
+
+TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 satoshis) failed VALR transfer with "Invalid Request" error. Investigation showed:
+- No minimum threshold checking before transfer attempts
+- No accumulation tracking for failed transfers
+- No automated retry or batch transfer mechanism
+- Fees remain on customer subaccount indefinitely (revenue leakage)
+- Balance reconciliation shows perpetual discrepancies
+- Withdrawable balance calculation broken (includes BitWealth's fees)
+- Customer could withdraw accumulated fees (theft risk)
+
+**System-Wide Impacts Identified:**
+1. Revenue leakage (small fees never collected)
+2. Balance reconciliation (perpetual discrepancies)
+3. Transaction history (customers see fees "charged" but not transferred)
+4. Monthly invoices (can't distinguish fees collected vs accrued)
+5. Withdrawable balance (CRITICAL: includes BitWealth's money)
+6. Withdrawal requests (customer could steal accumulated fees)
+7. Accounting (revenue recognition unclear: accrual vs cash basis)
+
+**Implementation Plan (12 days, 7 phases):**
+
+**Phase 1: Research & Configuration (2 days)**
+- [ ] Research VALR minimum transfer thresholds (test 0.00001 BTC, $1 USDT, R10 ZAR)
+- [ ] Document exact minimums in code comments
+- [ ] Create `lth_pvr.system_config` table with threshold values
+- [ ] Migration: `20260124_add_system_config_table.sql`
+
+**Phase 2: Database Schema Changes (1 day)**
+- [ ] Create `lth_pvr.customer_accumulated_fees` table
+- [ ] Enhance `lth_pvr.fee_invoices` with `platform_fees_transferred` and `platform_fees_accumulated` columns
+- [ ] Create RPC: `lth_pvr.get_withdrawable_balance(customer_id)` - Returns balance excluding accumulated fees
+- [ ] Create RPC: `lth_pvr.accumulate_platform_fee(customer_id, currency, amount)` - Upsert accumulated fees
+- [ ] Migration: `20260124_add_customer_accumulated_fees.sql`
+
+**Phase 3: Edge Function Updates (3 days)**
+- [ ] Update `ef_post_ledger_and_balances` with threshold checking logic
+- [ ] Create `ef_transfer_accumulated_fees` (monthly cron job)
+- [ ] Add pg_cron job: Run monthly on 1st at 02:00 UTC
+- [ ] Migration: `20260124_add_transfer_accumulated_fees_cron.sql`
+
+**Phase 4: Customer Portal Updates (2 days)**
+- [ ] Update dashboard balance display with breakdown
+- [ ] Update transaction history with fee status badges
+- [ ] Update RPC: `public.list_customer_transactions` - Join with `valr_transfer_log`
+- [ ] Add info box explaining accumulation logic
+
+**Phase 5: Admin Portal & Reporting (1 day)**
+- [ ] Create admin dashboard view: List customers with accumulated fees
+- [ ] Create RPC: `public.list_accumulated_fees()`
+- [ ] Update `ef_fee_monthly_close` to populate new invoice columns
+- [ ] Enhance invoice PDF/email to show fee breakdown
+
+**Phase 6: Testing (2 days)**
+- [ ] Test Case TC1.2-A: Platform fee accumulation & batch transfer
+
+**Phase 7: Documentation (1 day)**
+- [ ] Update SDD v0.6.31 with complete implementation details
+- [ ] Update TASK_5_FEE_IMPLEMENTATION_TEST_CASES.md with TC1.2-A results
+- [ ] Create PLATFORM_FEE_ACCUMULATION_GUIDE.md (operational guide)
+
+**Files to Modify:**
+- `supabase/migrations/20260124_add_system_config_table.sql` (NEW)
+- `supabase/migrations/20260124_add_customer_accumulated_fees.sql` (NEW)
+- `supabase/migrations/20260124_add_transfer_accumulated_fees_cron.sql` (NEW)
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` (threshold logic)
+- `supabase/functions/ef_transfer_accumulated_fees/index.ts` (NEW, ~300 lines)
+- `supabase/functions/ef_fee_monthly_close/index.ts` (invoice updates)
+- `supabase/functions/public.list_customer_transactions.fn.sql` (fee status)
+- `supabase/functions/public.list_accumulated_fees.fn.sql` (NEW)
+- `supabase/functions/lth_pvr.get_withdrawable_balance.fn.sql` (NEW)
+- `supabase/functions/lth_pvr.accumulate_platform_fee.fn.sql` (NEW)
+- `website/customer-portal.html` (balance display, transaction history)
+- `ui/Advanced BTC DCA Strategy.html` (admin view)
+
+**VALR Minimum Transfer Thresholds (Research Findings):**
+- BTC: 0.0001 BTC (10,000 satoshis) [ESTIMATED - needs verification]
+- USDT: $1.00 USD [ESTIMATED - TC1.2 success at $0.06 suggests below $1]
+- ZAR: R 100 [ESTIMATED - needs verification]
+
+**Key Design Decisions:**
+1. **Accumulation Table vs View:** Dedicated table (better performance)
+2. **Threshold Checking:** Check BEFORE transfer attempt (avoid unnecessary API calls)
+3. **Batch Transfer Timing:** Monthly on 1st at 02:00 UTC (before invoicing)
+4. **Withdrawal Behavior:** Transfer accumulated fees BEFORE processing withdrawal
+5. **Balance Reconciliation:** expectedVALR = recordedBalance + accumulatedFees
+6. **Revenue Recognition:** Accrual basis (recognize when charged, not transferred)
+
+**Timeline:** 12 days (estimated completion: 2026-02-04)
+
+**Completion Criteria:**
+- ✅ TC1.2-A test case passed
+- ✅ No "Invalid Request" errors for small fees
+- ✅ Balance reconciliation zero discrepancies
+- ✅ Withdrawable balance accurate
+- ✅ Monthly batch transfer operational
+
+**Next Steps:** Begin Phase 1 (Research VALR minimum thresholds)
+
+---
+
 ### v0.6.30 – Transaction History Enhancement & Critical Bug Fixes
 **Date:** 2026-01-23  
 **Purpose:** Enhanced customer portal to display platform fees separately, fixed balance reconciliation corrupted code, and resolved withdrawal sign handling bug.

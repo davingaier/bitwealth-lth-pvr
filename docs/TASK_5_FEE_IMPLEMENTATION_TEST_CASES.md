@@ -267,7 +267,144 @@ WHERE customer_id = 47 AND currency = 'BTC'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
-**Status:** ⏳ PENDING (awaiting ef_post_ledger_and_balances execution)
+**ACTUAL TEST RESULTS (2026-01-23):**
+
+**BTC Deposit Test:**
+- ✅ **Withdrawal recorded:** -7.59 USDT (correct negative sign after v0.6.30 bug fix)
+- ✅ **BTC deposit detected:** 0.00007685 BTC via ef_balance_reconciliation at 09:30 UTC
+- ✅ **Platform fee calculated:** 0.00000058 BTC (0.75% of 0.00007685, precise)
+- ✅ **Customer received:** 0.00007627 BTC (0.00007685 - 0.00000058)
+- ✅ **Balance accurate:** 0.00007627 BTC, 0.00 USDT, NAV $6.83
+- ⚠️ **VALR transfer FAILED:** "Invalid Request" - 5.8 satoshis below VALR minimum threshold
+
+**Critical Discovery:**
+- **Problem:** Small platform fees (< 0.0001 BTC / ~10,000 sats) cannot be transferred
+- **Impact:** Fees accumulate on customer subaccount indefinitely
+- **Root Cause:** No minimum threshold checking, no accumulation tracking, no batch transfer mechanism
+- **Blocking Issues:**
+  1. Revenue leakage (small fees never collected)
+  2. Balance reconciliation shows perpetual discrepancies
+  3. Withdrawable balance calculation broken (includes BitWealth's fees)
+  4. Customer can withdraw accumulated fees (theft risk)
+  5. Monthly invoices can't distinguish collected vs accrued fees
+
+**TC1.2 STATUS: ⚠️ PARTIAL PASS** - Core functionality works, but accumulation system missing (BLOCKING for production)
+
+**Next Steps:** Implement platform fee accumulation system (TC1.2-A) before marking TC1.2 complete
+
+---
+
+### TC1.2-A: Platform Fee Accumulation & Batch Transfer (Extension of TC1.2) ⏳
+
+**Objective:** Verify platform fees below VALR minimum threshold accumulate and transfer when threshold reached
+
+**Prerequisites:**
+- VALR minimum transfer thresholds researched and documented
+- System configuration table created with thresholds
+- customer_accumulated_fees table created
+- ef_post_ledger_and_balances updated with threshold logic
+- ef_transfer_accumulated_fees monthly job created
+
+**Test Steps:**
+
+**Step 1: Small Deposit (Below Minimum)**
+1. Customer 47 has 0.00000058 BTC accumulated from TC1.2 (failed transfer)
+2. Verify: No transfer attempted, fee accumulated
+3. Check: `customer_accumulated_fees.btc_accumulated = 0.00000058`
+4. Check: Balance reconciliation accounts for accumulated fee (no discrepancy)
+
+**Step 2: Multiple Small Deposits (Building Accumulation)**
+1. Make 9 more deposits of 0.00007685 BTC each
+2. Each generates 0.00000058 BTC platform fee (5.8 sats)
+3. Total accumulated: 0.00000580 BTC (58 sats)
+4. Verify: Still below threshold (0.0001 BTC), all fees accumulated
+5. Check: `customer_accumulated_fees.btc_accumulated = 0.00000580`
+
+**Step 3: Large Deposit (Crosses Threshold)**
+1. Deposit: 0.01 BTC
+2. Platform fee: 0.000075 BTC (75 sats)
+3. Total accumulated: 0.00000580 + 0.000075 = 0.00013300 BTC
+4. Expected: >= 0.0001 BTC threshold → **TRANSFER TRIGGERED**
+5. Verify: VALR transfer successful, accumulated fees cleared
+6. Check: `customer_accumulated_fees.btc_accumulated = 0`
+7. Check: `valr_transfer_log` shows completed transfer of 0.00013300 BTC
+
+**Step 4: Withdrawable Balance Calculation**
+1. Before threshold crossed:
+   - Customer balance: 0.00077000 BTC (customer's money)
+   - Accumulated fees: 0.00000580 BTC (BitWealth's money)
+   - VALR subaccount: 0.00077580 BTC (total)
+   - Withdrawable: 0.00077000 BTC (excludes accumulated)
+2. After threshold crossed:
+   - Customer balance: 0.01077000 BTC
+   - Accumulated fees: 0.00000000 BTC (transferred)
+   - VALR subaccount: 0.01077000 BTC
+   - Withdrawable: 0.01077000 BTC (all theirs)
+
+**Step 5: Monthly Batch Transfer**
+1. Create multiple customers with small accumulated fees
+2. Run `ef_transfer_accumulated_fees` manually
+3. Verify: All customers with accumulated fees >= minimum transferred
+4. Check: Alert log shows "Transferred accumulated fees for X customers"
+5. Verify: Monthly invoice generation populates platform_fees_transferred correctly
+
+**Step 6: Transaction History Display**
+1. Check customer portal transaction history
+2. Verify: Platform fee column shows correct amounts
+3. Verify: Fee status badge shows:
+   - "✓ Transferred" for fees >= minimum (green)
+   - "📦 Accumulated" for fees < minimum (blue)
+4. Verify: Info tooltip explains accumulation logic
+
+**Expected Results:**
+- ✅ Small fees accumulate without transfer attempts
+- ✅ No "Invalid Request" errors for small amounts
+- ✅ Balance reconciliation accounts for accumulated fees (no discrepancies)
+- ✅ Threshold crossing triggers automatic transfer
+- ✅ Monthly job transfers all eligible accumulated fees
+- ✅ Withdrawable balance excludes accumulated fees
+- ✅ Customer portal clearly shows fee status
+- ✅ Monthly invoices distinguish transferred vs accumulated fees
+
+**Validation Queries:**
+```sql
+-- Check accumulated fees
+SELECT 
+  customer_id,
+  btc_accumulated,
+  usdt_accumulated,
+  last_btc_transfer_success,
+  last_usdt_transfer_success
+FROM lth_pvr.customer_accumulated_fees
+WHERE customer_id = 47;
+
+-- Check withdrawable balance
+SELECT * FROM lth_pvr.get_withdrawable_balance(47);
+
+-- Check batch transfer results
+SELECT 
+  customer_id,
+  currency,
+  amount,
+  status,
+  created_at
+FROM lth_pvr.valr_transfer_log
+WHERE transfer_type = 'platform_fee'
+  AND status = 'completed'
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+**Status:** ⏳ PENDING (awaiting Phase 6 implementation)
+
+**Timeline:** 12 days (2.5 weeks)
+- Phase 1: Research & Config (2 days)
+- Phase 2: Database Schema (1 day)
+- Phase 3: Edge Functions (3 days)
+- Phase 4: Customer Portal (2 days)
+- Phase 5: Admin Portal (1 day)
+- Phase 6: Testing (2 days)
+- Phase 7: Documentation (1 day)
 
 ---
 
