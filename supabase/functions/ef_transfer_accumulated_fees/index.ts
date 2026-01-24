@@ -187,6 +187,43 @@ Deno.serve(async () => {
           console.log(`[ef_transfer_accumulated_fees] BTC transfer successful for customer ${customerId}`);
           btcSuccess = true;
           totalBtcTransferred += accumBtc;
+
+          // Trigger auto-conversion to USDT
+          console.log(`[ef_transfer_accumulated_fees] Triggering BTC→USDT conversion for ${accumBtc} BTC`);
+          try {
+            const conversionResponse = await fetch(
+              `${Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL")}/functions/v1/ef_convert_platform_fee_btc`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                },
+                body: JSON.stringify({
+                  btc_amount: accumBtc,
+                  customer_id: customerId,
+                  transfer_id: btcResult.transferId,
+                }),
+              },
+            );
+
+            if (conversionResponse.ok) {
+              const conversionResult = await conversionResponse.json();
+              console.log(
+                `[ef_transfer_accumulated_fees] BTC→USDT conversion successful: ${conversionResult.btc_sold} BTC → $${conversionResult.usdt_received} USDT`,
+              );
+            } else {
+              const errorText = await conversionResponse.text();
+              console.error(
+                `[ef_transfer_accumulated_fees] BTC→USDT conversion failed: ${errorText}`,
+              );
+            }
+          } catch (convError) {
+            console.error(
+              `[ef_transfer_accumulated_fees] Error triggering BTC conversion:`,
+              convError,
+            );
+          }
         } else {
           await logAlert(
             sb,

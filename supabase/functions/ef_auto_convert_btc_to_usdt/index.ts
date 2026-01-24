@@ -644,8 +644,327 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Action 3: Automatic conversion without approval (TC1.7 optimized workflow)
+    if (action === "auto_convert") {
+      const customerId = body.customer_id;
+      const performanceFee = Number(body.performance_fee || 0);
+      const usdtAvailable = Number(body.usdt_available || 0);
+      const tradeDate = body.trade_date;
+      const feeType = body.fee_type || "performance_fee";
+
+      if (!customerId || !performanceFee || !tradeDate) {
+        return new Response(
+          JSON.stringify({ error: "Missing customer_id, performance_fee, or trade_date" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`🚀 TC1.7 Auto-conversion for customer ${customerId}`);
+      console.log(`   Fee due: $${performanceFee.toFixed(2)}, USDT available: $${usdtAvailable.toFixed(2)}`);
+
+      // Get exchange account
+      const { data: exchangeAcct, error: exAcctError } = await supabase
+        .schema("public")
+        .from("exchange_accounts")
+        .select("subaccount_id")
+        .eq("customer_id", customerId)
+        .eq("exchange", "VALR")
+        .single();
+
+      if (exAcctError || !exchangeAcct) {
+        return new Response(
+          JSON.stringify({ error: "No exchange account found" }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const subaccountId = exchangeAcct.subaccount_id;
+
+      try {
+        const results = {
+          customer_id: customerId,
+          fee_due: performanceFee,
+          usdt_available: usdtAvailable,
+          steps: [],
+        };
+
+        // STEP 1: Use available USDT first (if any)
+        if (usdtAvailable > 0) {
+          const partialPayment = Math.min(usdtAvailable, performanceFee);
+          
+          console.log(`   Step 1: Transferring available USDT: $${partialPayment.toFixed(2)}`);
+          
+          const { data: ledger1, error: ledger1Error } = await supabase
+            .from("ledger_lines")
+            .insert({
+              org_id: orgId,
+              customer_id: customerId,
+              trade_date: tradeDate,
+              kind: "performance_fee",
+              amount_usdt: -partialPayment,
+              performance_fee_usdt: partialPayment,
+              note: `Performance fee payment (available USDT) - ${tradeDate}`,
+            })
+            .select()
+            .single();
+
+          if (ledger1Error) {
+            throw new Error(`Failed to create partial fee ledger entry: ${ledger1Error.message}`);
+          }
+
+          results.steps.push({
+            step: 1,
+            description: "Transfer available USDT",
+            usdt_transferred: partialPayment,
+            ledger_id: ledger1.ledger_id,
+          });
+        }
+
+        // Calculate shortfall
+        const shortfall = Math.max(0, performanceFee - usdtAvailable);
+        
+        // STEP 2: Convert BTC for shortfall (if any)
+        if (shortfall > 0) {
+          console.log(`   Step 2: Converting BTC for shortfall: $${shortfall.toFixed(2)}`);
+          
+          // Get current BTC price
+          const btcPrice = await getBTCPrice(subaccountId);
+          console.log(`   BTC price: $${btcPrice.toFixed(2)}`);
+          
+          // Calculate BTC needed with 2% slippage buffer
+          const btcNeededExact = shortfall / btcPrice;
+          const btcNeeded = btcNeededExact * 1.02; // 2% buffer
+          
+          console.log(`   BTC needed: ${btcNeeded.toFixed(8)} (${btcNeededExact.toFixed(8)} + 2% buffer)`);
+          
+          // Get best ask price for LIMIT order
+          const bestAsk = await getBestAskPrice(subaccountId);
+          const limitPrice = bestAsk * 0.9999; // Slightly below best ask
+          
+          console.log(`   Placing LIMIT SELL: ${btcNeeded.toFixed(8)} BTC @ $${limitPrice.toFixed(2)}`);
+          
+          // Generate unique customer order ID
+          const customerOrderId = `perf_fee_${customerId}_${Date.now()}`;
+          
+          // Place LIMIT order
+          const orderResult = await placeLimitOrder(
+            subaccountId,
+            "SELL",
+            "BTCUSDT",
+            btcNeeded,
+            limitPrice,
+            customerOrderId
+          );
+          
+          console.log(`   Order placed: ${orderResult.id}`);
+          
+          // Monitor order for 5 minutes (polling every 10 seconds)
+          let orderFilled = false;
+          let usdtReceived = 0;
+          let actualBtcSold = 0;
+          const maxAttempts = 30; // 5 minutes / 10 seconds
+          
+          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+            
+            console.log(`   Polling attempt ${attempt}/${maxAttempts}...`);
+            
+            const orderStatus = await getOrderStatus(customerOrderId, subaccountId);
+            
+            if (orderStatus.orderStatusType === "Filled") {
+              orderFilled = true;
+              usdtReceived = Number(orderStatus.total);
+              actualBtcSold = Number(orderStatus.originalQuantity);
+              console.log(`   ✓ Order filled: ${actualBtcSold.toFixed(8)} BTC → $${usdtReceived.toFixed(2)} USDT`);
+              break;
+            }
+            
+            if (orderStatus.orderStatusType === "Cancelled" || orderStatus.orderStatusType === "Failed") {
+              throw new Error(`Order ${orderStatus.orderStatusType.toLowerCase()}`);
+            }
+            
+            // Check if we're close to timeout - if so, cancel and place MARKET order
+            if (attempt === maxAttempts) {
+              console.log(`   ⏱️ Timeout reached, cancelling LIMIT order and placing MARKET order`);
+              
+              await cancelOrder(orderResult.id, subaccountId);
+              
+              const marketOrderId = `perf_fee_mkt_${customerId}_${Date.now()}`;
+              const marketResult = await placeMarketOrder(
+                subaccountId,
+                "SELL",
+                "BTCUSDT",
+                btcNeeded,
+                marketOrderId
+              );
+              
+              console.log(`   Market order placed: ${marketResult.id}`);
+              
+              // Wait for market order to fill (should be immediate)
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              
+              const marketStatus = await getOrderStatus(marketOrderId, subaccountId);
+              
+              if (marketStatus.orderStatusType === "Filled") {
+                usdtReceived = Number(marketStatus.total);
+                actualBtcSold = Number(marketStatus.originalQuantity);
+                console.log(`   ✓ Market order filled: ${actualBtcSold.toFixed(8)} BTC → $${usdtReceived.toFixed(2)} USDT`);
+                orderFilled = true;
+              } else {
+                throw new Error(`Market order not filled: ${marketStatus.orderStatusType}`);
+              }
+            }
+          }
+          
+          if (!orderFilled) {
+            throw new Error("Order monitoring timed out");
+          }
+          
+          // STEP 2A: Create SELL ledger entry
+          const { data: ledger2, error: ledger2Error } = await supabase
+            .from("ledger_lines")
+            .insert({
+              org_id: orgId,
+              customer_id: customerId,
+              trade_date: tradeDate,
+              kind: "sell",
+              amount_btc: -actualBtcSold,
+              amount_usdt: usdtReceived,
+              note: `BTC conversion for performance fee shortfall - ${tradeDate}`,
+            })
+            .select()
+            .single();
+
+          if (ledger2Error) {
+            throw new Error(`Failed to create SELL ledger entry: ${ledger2Error.message}`);
+          }
+
+          results.steps.push({
+            step: 2,
+            description: "Sell BTC for shortfall",
+            btc_sold: actualBtcSold,
+            usdt_received: usdtReceived,
+            ledger_id: ledger2.ledger_id,
+          });
+          
+          // STEP 3: Transfer remaining fee from sale proceeds
+          console.log(`   Step 3: Transferring remaining fee: $${shortfall.toFixed(2)}`);
+          
+          const { data: ledger3, error: ledger3Error } = await supabase
+            .from("ledger_lines")
+            .insert({
+              org_id: orgId,
+              customer_id: customerId,
+              trade_date: tradeDate,
+              kind: "performance_fee",
+              amount_usdt: -shortfall,
+              performance_fee_usdt: shortfall,
+              note: `Performance fee payment (from BTC conversion) - ${tradeDate}`,
+            })
+            .select()
+            .single();
+
+          if (ledger3Error) {
+            throw new Error(`Failed to create final fee ledger entry: ${ledger3Error.message}`);
+          }
+
+          results.steps.push({
+            step: 3,
+            description: "Complete fee payment from sale proceeds",
+            usdt_transferred: shortfall,
+            usdt_excess: usdtReceived - shortfall,
+            ledger_id: ledger3.ledger_id,
+          });
+        }
+
+        // STEP 4: Update HWM in customer_state_daily
+        console.log(`   Step 4: Updating HWM after fee collection`);
+        
+        // Get current state
+        const { data: currentState, error: stateError } = await supabase
+          .from("customer_state_daily")
+          .select("*")
+          .eq("customer_id", customerId)
+          .order("date", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (stateError) {
+          throw new Error(`Failed to fetch customer state: ${stateError.message}`);
+        }
+
+        // Get latest balance (after fee deduction)
+        const { data: latestBalance, error: balanceError } = await supabase
+          .from("balances_daily")
+          .select("nav_usd")
+          .eq("customer_id", customerId)
+          .eq("date", tradeDate)
+          .single();
+
+        if (balanceError) {
+          throw new Error(`Failed to fetch balance: ${balanceError.message}`);
+        }
+
+        const newHWM = latestBalance.nav_usd;
+        
+        const { error: updateStateError } = await supabase
+          .from("customer_state_daily")
+          .update({
+            high_water_mark_usd: newHWM,
+            last_perf_fee_month: tradeDate,
+          })
+          .eq("state_id", currentState.state_id);
+
+        if (updateStateError) {
+          throw new Error(`Failed to update HWM: ${updateStateError.message}`);
+        }
+
+        results.steps.push({
+          step: 4,
+          description: "Update HWM",
+          new_hwm: newHWM,
+        });
+
+        console.log(`✓ TC1.7 auto-conversion completed successfully`);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            ...results,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+
+      } catch (conversionError) {
+        console.error("Auto-conversion error:", conversionError);
+
+        await logAlert(
+          supabase,
+          "ef_auto_convert_btc_to_usdt",
+          "error",
+          `Auto-conversion failed for customer ${customerId}: ${conversionError.message}`,
+          {
+            customer_id: customerId,
+            performance_fee: performanceFee,
+            usdt_available: usdtAvailable,
+            error: conversionError.message,
+          },
+          orgId,
+          customerId
+        );
+
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            error: conversionError.message,
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     return new Response(
-      JSON.stringify({ error: "Invalid action (use 'create_request' or 'execute_conversion')" }),
+      JSON.stringify({ error: "Invalid action (use 'create_request', 'execute_conversion', or 'auto_convert')" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
 

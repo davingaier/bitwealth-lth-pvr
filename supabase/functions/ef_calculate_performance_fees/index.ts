@@ -247,23 +247,57 @@ Deno.serve(async (req) => {
 
         // Check if sufficient USDT balance for fee
         if (balance.usdt_balance < performanceFee) {
-          await logAlert(
-            supabase,
-            "ef_calculate_performance_fees",
-            "warn",
-            `Insufficient USDT for performance fee: customer ${customerId} has $${balance.usdt_balance.toFixed(2)} but needs $${performanceFee.toFixed(2)}`,
-            {
-              customer_id: customerId,
-              nav_usd: balance.nav_usd,
-              usdt_balance: balance.usdt_balance,
-              performance_fee: performanceFee,
-            },
-            orgId,
-            customerId
-          );
-          console.log(`Insufficient USDT for customer ${customerId}, skipping fee (will retry next month)`);
-          results.skipped++;
-          continue;
+          console.log(`Insufficient USDT for customer ${customerId}: has $${balance.usdt_balance.toFixed(2)}, needs $${performanceFee.toFixed(2)}`);
+          console.log(`Triggering automatic BTC conversion for shortfall: $${(performanceFee - balance.usdt_balance).toFixed(2)}`);
+          
+          // Trigger automatic BTC conversion (TC1.7 optimized workflow)
+          try {
+            const convertResponse = await fetch(`${supabaseUrl}/functions/v1/ef_auto_convert_btc_to_usdt`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${supabaseKey}`,
+              },
+              body: JSON.stringify({
+                action: "auto_convert",
+                customer_id: customerId,
+                performance_fee: performanceFee,
+                usdt_available: balance.usdt_balance,
+                trade_date: lastDayStr,
+                fee_type: "performance_fee",
+              }),
+            });
+
+            if (!convertResponse.ok) {
+              const errorText = await convertResponse.text();
+              throw new Error(`Auto-conversion failed: ${errorText}`);
+            }
+
+            const convertResult = await convertResponse.json();
+            console.log(`Auto-conversion completed for customer ${customerId}:`, convertResult);
+            
+            // Fee has been handled by auto-convert function (including ledger entries and HWM update)
+            results.processed++;
+            continue;
+            
+          } catch (convertError) {
+            await logAlert(
+              supabase,
+              "ef_calculate_performance_fees",
+              "error",
+              `Failed to auto-convert BTC for customer ${customerId}: ${convertError.message}`,
+              {
+                customer_id: customerId,
+                performance_fee: performanceFee,
+                usdt_available: balance.usdt_balance,
+                error: convertError.message,
+              },
+              orgId,
+              customerId
+            );
+            results.failed++;
+            continue;
+          }
         }
 
         // Create ledger entry for performance fee

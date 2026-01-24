@@ -413,6 +413,72 @@ Deno.serve(async (req: Request) => {
                 console.error(
                   `BTC platform fee transfer failed for customer ${customerId}: ${transferResult.errorMessage}`,
                 );
+              } else {
+                // Transfer successful - trigger auto-conversion to USDT
+                console.log(
+                  `[ef_post_ledger_and_balances] BTC fee ${feeBtc} transferred successfully, triggering conversion to USDT`,
+                );
+
+                try {
+                  const conversionResponse = await fetch(
+                    `${Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL")}/functions/v1/ef_convert_platform_fee_btc`,
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                      },
+                      body: JSON.stringify({
+                        btc_amount: feeBtc,
+                        customer_id: customerId,
+                        transfer_id: transferResult.transferId,
+                      }),
+                    },
+                  );
+
+                  if (conversionResponse.ok) {
+                    const conversionResult = await conversionResponse.json();
+                    console.log(
+                      `[ef_post_ledger_and_balances] BTC→USDT conversion successful: ${conversionResult.btc_sold} BTC → $${conversionResult.usdt_received} USDT`,
+                    );
+                  } else {
+                    const errorText = await conversionResponse.text();
+                    console.error(
+                      `[ef_post_ledger_and_balances] BTC→USDT conversion failed: ${errorText}`,
+                    );
+                    await logAlert(
+                      sb,
+                      "ef_post_ledger_and_balances",
+                      "warn",
+                      `BTC platform fee conversion failed (fee transferred but not converted)`,
+                      {
+                        customer_id: customerId,
+                        btc_amount: feeBtc,
+                        error: errorText,
+                      },
+                      org_id,
+                      customerId,
+                    );
+                  }
+                } catch (convError) {
+                  console.error(
+                    `[ef_post_ledger_and_balances] Error triggering BTC conversion:`,
+                    convError,
+                  );
+                  await logAlert(
+                    sb,
+                    "ef_post_ledger_and_balances",
+                    "warn",
+                    `BTC platform fee conversion error: ${convError.message}`,
+                    {
+                      customer_id: customerId,
+                      btc_amount: feeBtc,
+                      error: convError.message,
+                    },
+                    org_id,
+                    customerId,
+                  );
+                }
               }
             } else {
               // Fee below minimum - accumulate it
@@ -491,6 +557,42 @@ Deno.serve(async (req: Request) => {
                       } else {
                         console.log(
                           `[ef_post_ledger_and_balances] Batch transferred ${newBtc} BTC for customer ${customerId}`,
+                        );
+                      }
+
+                      // Trigger auto-conversion to USDT after successful batch transfer
+                      try {
+                        const conversionResponse = await fetch(
+                          `${Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL")}/functions/v1/ef_convert_platform_fee_btc`,
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                            },
+                            body: JSON.stringify({
+                              btc_amount: newBtc,
+                              customer_id: customerId,
+                              transfer_id: batchResult.transferId,
+                            }),
+                          },
+                        );
+
+                        if (conversionResponse.ok) {
+                          const conversionResult = await conversionResponse.json();
+                          console.log(
+                            `[ef_post_ledger_and_balances] Batch BTC→USDT conversion successful: ${conversionResult.btc_sold} BTC → $${conversionResult.usdt_received} USDT`,
+                          );
+                        } else {
+                          const errorText = await conversionResponse.text();
+                          console.error(
+                            `[ef_post_ledger_and_balances] Batch BTC→USDT conversion failed: ${errorText}`,
+                          );
+                        }
+                      } catch (convError) {
+                        console.error(
+                          `[ef_post_ledger_and_balances] Error triggering batch BTC conversion:`,
+                          convError,
                         );
                       }
                     } else {
