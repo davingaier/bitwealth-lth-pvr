@@ -895,6 +895,192 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ----------- FINAL: Check for accumulated fees ready for batch transfer -----------
+    console.log("[ef_post_ledger_and_balances] === BATCH TRANSFER CHECK START ===");
+    
+    // Log to alerts for debugging
+    await logAlert(
+      sb,
+      "ef_post_ledger_and_balances",
+      "info",
+      `Batch transfer check: thresholds BTC=${minBtc}, USDT=${minUsdt}`,
+      { org_id, minBtc, minUsdt },
+      org_id,
+      null,
+    );
+    
+    const { data: customersWithFees, error: feeQueryErr } = await sb
+      .from("customer_accumulated_fees")
+      .select("customer_id, accumulated_btc, accumulated_usdt, transfer_count")
+      .eq("org_id", org_id)
+      .or(`accumulated_btc.gte.${minBtc},accumulated_usdt.gte.${minUsdt}`);
+
+    if (feeQueryErr) {
+      console.error("[ef_post_ledger_and_balances] Error querying accumulated fees:", feeQueryErr);
+      await logAlert(
+        sb,
+        "ef_post_ledger_and_balances",
+        "error",
+        `Batch transfer query error: ${feeQueryErr.message}`,
+        { error: feeQueryErr },
+        org_id,
+        null,
+      );
+    }
+    
+    await logAlert(
+      sb,
+      "ef_post_ledger_and_balances",
+      "info",
+      `Batch transfer: found ${customersWithFees?.length || 0} customers`,
+      { count: customersWithFees?.length || 0 },
+      org_id,
+      null,
+    );
+
+    if (customersWithFees && customersWithFees.length > 0) {
+      console.log(`Found ${customersWithFees.length} customer(s) with fees ready for transfer`);
+
+      for (const customer of customersWithFees) {
+        const customerId = customer.customer_id;
+        
+        await logAlert(
+          sb,
+          "ef_post_ledger_and_balances",
+          "info",
+          `Processing batch transfer for customer ${customerId}`,
+          { customer_id: customerId, accumulated_btc: customer.accumulated_btc },
+          org_id,
+          customerId,
+        );
+
+        // Get exchange account via customer_strategies
+        const { data: customerStrat, error: stratErr } = await sb
+          .schema("lth_pvr")
+          .from("customer_strategies")
+          .select("exchange_account_id")
+          .eq("customer_id", customerId)
+          .eq("live_enabled", true)
+          .maybeSingle();
+
+        if (stratErr || !customerStrat) {
+          console.warn(`No customer strategy found for customer ${customerId}`);
+          await logAlert(
+            sb,
+            "ef_post_ledger_and_balances",
+            "warn",
+            `No customer strategy found for customer ${customerId}`,
+            { customer_id: customerId, error: stratErr },
+            org_id,
+            customerId,
+          );
+          continue;
+        }
+
+        const { data: exchangeAcct, error: exAcctErr } = await sb
+          .schema("public")
+          .from("exchange_accounts")
+          .select("subaccount_id")
+          .eq("exchange_account_id", customerStrat.exchange_account_id)
+          .eq("exchange", "VALR")
+          .single();
+
+        if (exAcctErr || !exchangeAcct) {
+          console.warn(`No exchange account found for customer ${customerId}`);
+          continue;
+        }
+
+        const subaccountId = exchangeAcct.subaccount_id;
+        const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
+
+        // Batch transfer BTC if threshold met
+        if (customer.accumulated_btc >= minBtc) {
+          console.log(
+            `[BATCH] Transferring ${customer.accumulated_btc} BTC for customer ${customerId}`,
+          );
+
+          const batchResult = await transferToMainAccount(
+            sb,
+            {
+              fromSubaccountId: subaccountId,
+              toAccount: mainAccountId,
+              currency: "BTC",
+              amount: customer.accumulated_btc,
+              transferType: "platform_fee_batch",
+            },
+            customerId,
+            null,
+          );
+
+          if (batchResult.success) {
+            await sb
+              .from("customer_accumulated_fees")
+              .update({
+                accumulated_btc: 0,
+                last_transfer_attempt_at: new Date().toISOString(),
+                transfer_count: (customer.transfer_count || 0) + 1,
+              })
+              .eq("customer_id", customerId)
+              .eq("org_id", org_id);
+            console.log(`[BATCH] BTC transfer successful for customer ${customerId}`);
+          } else {
+            await logAlert(
+              sb,
+              "ef_post_ledger_and_balances",
+              "error",
+              `Batch BTC transfer failed: ${batchResult.errorMessage}`,
+              { customer_id: customerId, accumulated_btc: customer.accumulated_btc },
+              org_id,
+              customerId,
+            );
+          }
+        }
+
+        // Batch transfer USDT if threshold met
+        if (customer.accumulated_usdt >= minUsdt) {
+          console.log(
+            `[BATCH] Transferring ${customer.accumulated_usdt} USDT for customer ${customerId}`,
+          );
+
+          const batchResult = await transferToMainAccount(
+            sb,
+            {
+              fromSubaccountId: subaccountId,
+              toAccount: mainAccountId,
+              currency: "USDT",
+              amount: customer.accumulated_usdt,
+              transferType: "platform_fee_batch",
+            },
+            customerId,
+            null,
+          );
+
+          if (batchResult.success) {
+            await sb
+              .from("customer_accumulated_fees")
+              .update({
+                accumulated_usdt: 0,
+                last_transfer_attempt_at: new Date().toISOString(),
+                transfer_count: (customer.transfer_count || 0) + 1,
+              })
+              .eq("customer_id", customerId)
+              .eq("org_id", org_id);
+            console.log(`[BATCH] USDT transfer successful for customer ${customerId}`);
+          } else {
+            await logAlert(
+              sb,
+              "ef_post_ledger_and_balances",
+              "error",
+              `Batch USDT transfer failed: ${batchResult.errorMessage}`,
+              { customer_id: customerId, accumulated_usdt: customer.accumulated_usdt },
+              org_id,
+              customerId,
+            );
+          }
+        }
+      }
+    }
+
     const payload = {
       status: "ok",
       org_id,

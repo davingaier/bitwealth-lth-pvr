@@ -6461,6 +6461,23 @@
         throw new Error(error.message || 'Failed to load accumulated fees');
       }
 
+      // Fetch thresholds from system_config
+      const { data: configData, error: configError } = await supabaseClient
+        .schema('lth_pvr')
+        .from('system_config')
+        .select('config_key, config_value')
+        .in('config_key', ['valr_min_transfer_btc', 'valr_min_transfer_usdt']);
+
+      let minBtc = 0.0001;  // Default fallback
+      let minUsdt = 1.00;   // Default fallback
+
+      if (!configError && configData) {
+        const btcConfig = configData.find(c => c.config_key === 'valr_min_transfer_btc');
+        const usdtConfig = configData.find(c => c.config_key === 'valr_min_transfer_usdt');
+        if (btcConfig) minBtc = parseFloat(btcConfig.config_value);
+        if (usdtConfig) minUsdt = parseFloat(usdtConfig.config_value);
+      }
+
       loadingEl.style.display = 'none';
 
       if (!data || data.length === 0) {
@@ -6506,8 +6523,8 @@
           : '-';
 
         // Color code based on threshold proximity
-        const btcColor = btc >= 0.0001 ? '#10b981' : '#f59e0b';
-        const usdtColor = usdt >= 1.00 ? '#10b981' : '#f59e0b';
+        const btcColor = btc >= minBtc ? '#10b981' : '#f59e0b';
+        const usdtColor = usdt >= minUsdt ? '#10b981' : '#f59e0b';
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -6516,11 +6533,11 @@
             <td style="padding: 12px; color: #3b82f6;">${escapeHtml(fee.email || '-')}</td>
             <td style="padding: 12px; text-align: right; font-family: monospace; color: ${btcColor}; font-weight: 500;">
               ${btc.toFixed(8)}
-              ${btc >= 0.0001 ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
+              ${btc >= minBtc ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
             </td>
             <td style="padding: 12px; text-align: right; font-family: monospace; color: ${usdtColor}; font-weight: 500;">
               $${usdt.toFixed(2)}
-              ${usdt >= 1.00 ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
+              ${usdt >= minUsdt ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
             </td>
             <td style="padding: 12px; text-align: right; font-family: monospace; font-weight: 600; color: #10b981;">
               $${usd.toFixed(2)}
@@ -6539,6 +6556,22 @@
       document.getElementById('totalAccumulatedBtc').textContent = totalBtc.toFixed(8);
       document.getElementById('totalAccumulatedUsdt').textContent = `$${totalUsdt.toFixed(2)}`;
       document.getElementById('totalAccumulatedUsd').textContent = `$${totalUsd.toFixed(2)}`;
+
+      // Disable "Transfer Now" button if no fees accumulated
+      const transferBtn = document.getElementById('transferAccumulatedFeesNow');
+      if (transferBtn) {
+        if (!data || data.length === 0) {
+          transferBtn.disabled = true;
+          transferBtn.style.opacity = '0.5';
+          transferBtn.style.cursor = 'not-allowed';
+          transferBtn.title = 'No accumulated fees to transfer';
+        } else {
+          transferBtn.disabled = false;
+          transferBtn.style.opacity = '1';
+          transferBtn.style.cursor = 'pointer';
+          transferBtn.title = 'Trigger immediate batch transfer';
+        }
+      }
 
       tableContainer.style.display = 'block';
 

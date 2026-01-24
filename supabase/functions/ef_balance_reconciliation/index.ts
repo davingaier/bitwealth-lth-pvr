@@ -199,31 +199,20 @@ Deno.serve(async (req) => {
 
         console.log(`Recorded: BTC=${recordedBTC}, USDT=${recordedUSDT}`);
 
-        // Get platform fees that haven't been transferred yet (status != 'completed')
-        // Only untransferred fees should still be in the subaccount
-        const { data: pendingTransfers } = await supabase.schema("lth_pvr")
-          .from("valr_transfer_log")
-          .select("amount, currency, status")
+        // Get accumulated platform fees that are sitting on the subaccount
+        // These fees haven't reached the transfer threshold yet
+        const { data: accumFees } = await supabase.schema("lth_pvr")
+          .from("customer_accumulated_fees")
+          .select("accumulated_btc, accumulated_usdt")
           .eq("customer_id", customer.customer_id)
-          .neq("status", "completed")
-          .gte("created_at", today);
+          .single();
 
-        let pendingFeeBTC = 0;
-        let pendingFeeUSDT = 0;
+        const pendingFeeBTC = parseFloat(accumFees?.accumulated_btc || "0");
+        const pendingFeeUSDT = parseFloat(accumFees?.accumulated_usdt || "0");
 
-        if (pendingTransfers) {
-          for (const transfer of pendingTransfers) {
-            if (transfer.currency === "BTC") {
-              pendingFeeBTC += parseFloat(transfer.amount || "0");
-            } else if (transfer.currency === "USDT") {
-              pendingFeeUSDT += parseFloat(transfer.amount || "0");
-            }
-          }
-        }
+        console.log(`Accumulated fees: BTC=${pendingFeeBTC}, USDT=${pendingFeeUSDT}`);
 
-        console.log(`Pending (untransferred) fees: BTC=${pendingFeeBTC}, USDT=${pendingFeeUSDT}`);
-
-        // Expected VALR balance = customer ledger balance + pending fees (not yet transferred)
+        // Expected VALR balance = customer ledger balance + accumulated fees (on subaccount)
         const expectedVALR_BTC = recordedBTC + pendingFeeBTC;
         const expectedVALR_USDT = recordedUSDT + pendingFeeUSDT;
 
