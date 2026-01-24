@@ -6619,13 +6619,14 @@
       }
 
       // Call ef_transfer_accumulated_fees edge function
+      // Note: Uses anon key because function deployed with --no-verify-jwt (internal admin function)
       const response = await fetch(
         `${supabaseClient.supabaseUrl}/functions/v1/ef_transfer_accumulated_fees`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
           },
           body: JSON.stringify({})
         }
