@@ -21,6 +21,7 @@ declare
   v_decisions_done boolean;
   v_intents_done   boolean;
   v_orders_done    boolean;
+  v_orders_polling boolean;
   v_ledger_done    boolean;
   
   v_can_resume     boolean;
@@ -62,18 +63,29 @@ begin
   )
   into v_intents_done;
   
+  -- Check if any orders were submitted (even if they failed)
   select exists (
     select 1
     from lth_pvr.exchange_orders
-    where created_at::date = v_trade_date
+    where submitted_at::date = v_trade_date
       and org_id = v_org_id
   )
   into v_orders_done;
   
+  -- Check if any orders were successfully submitted and need polling (exclude errors)
+  select exists (
+    select 1
+    from lth_pvr.exchange_orders
+    where submitted_at::date = v_trade_date
+      and org_id = v_org_id
+      and status != 'error'
+  )
+  into v_orders_polling;
+  
   select exists (
     select 1
     from lth_pvr.ledger_lines
-    where line_date = v_trade_date
+    where trade_date = v_trade_date
       and org_id = v_org_id
       and kind in ('buy', 'sell')  -- Only count actual trading activity, not fees/deposits/withdrawals
   )
@@ -109,7 +121,7 @@ begin
       'decisions', v_decisions_done,
       'intents', v_intents_done,
       'orders', v_orders_done,
-      'poll_orders', v_orders_done,
+      'poll_orders', v_orders_polling,
       'ledger', v_ledger_done
     )
   );
