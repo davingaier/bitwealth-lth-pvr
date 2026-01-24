@@ -412,7 +412,7 @@ ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-**Status:** 🔨 IN PROGRESS (Phase 6 Sub-Phases 6.1-6.5 complete, testing in progress)
+**Status:** ⚠️ PARTIAL PASS (Sub-Phases 6.1-6.6 Steps 1-3 complete, Steps 4-6 pending more fee accumulation)
 
 **Timeline:** 12 days (2.5 weeks) - **AHEAD OF SCHEDULE** (completed in ~3 hours vs 6 days planned)
 

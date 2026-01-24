@@ -6480,6 +6480,22 @@
 
       loadingEl.style.display = 'none';
 
+      // Disable "Transfer Now" button if no fees accumulated
+      const transferBtn = document.getElementById('transferAccumulatedFeesNow');
+      if (transferBtn) {
+        if (!data || data.length === 0) {
+          transferBtn.disabled = true;
+          transferBtn.style.opacity = '0.5';
+          transferBtn.style.cursor = 'not-allowed';
+          transferBtn.title = 'No accumulated fees to transfer';
+        } else {
+          transferBtn.disabled = false;
+          transferBtn.style.opacity = '1';
+          transferBtn.style.cursor = 'pointer';
+          transferBtn.title = 'Trigger immediate batch transfer';
+        }
+      }
+
       if (!data || data.length === 0) {
         noFeesEl.style.display = 'block';
         return;
@@ -6556,22 +6572,6 @@
       document.getElementById('totalAccumulatedBtc').textContent = totalBtc.toFixed(8);
       document.getElementById('totalAccumulatedUsdt').textContent = `$${totalUsdt.toFixed(2)}`;
       document.getElementById('totalAccumulatedUsd').textContent = `$${totalUsd.toFixed(2)}`;
-
-      // Disable "Transfer Now" button if no fees accumulated
-      const transferBtn = document.getElementById('transferAccumulatedFeesNow');
-      if (transferBtn) {
-        if (!data || data.length === 0) {
-          transferBtn.disabled = true;
-          transferBtn.style.opacity = '0.5';
-          transferBtn.style.cursor = 'not-allowed';
-          transferBtn.title = 'No accumulated fees to transfer';
-        } else {
-          transferBtn.disabled = false;
-          transferBtn.style.opacity = '1';
-          transferBtn.style.cursor = 'pointer';
-          transferBtn.title = 'Trigger immediate batch transfer';
-        }
-      }
 
       tableContainer.style.display = 'block';
 

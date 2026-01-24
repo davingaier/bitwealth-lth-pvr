@@ -411,6 +411,57 @@ Files to Delete:
 
 ---
 
+### Priority 6: Admin Invoices UI
+**Status:** PLANNED  
+**Effort:** 4-6 hours  
+**Value:** MEDIUM (operational visibility for fee tracking)
+
+**Objective:** Add Invoices section to Admin Finance module for viewing and managing monthly fee invoices.
+
+**Current State:**
+- Fee invoices generated monthly via `ef_fee_monthly_close` (runs 1st of month at 00:10 UTC)
+- Data stored in `lth_pvr.fee_invoices` table
+- No UI to view/manage invoices (admin must use SQL editor)
+
+**Planned Features:**
+1. **Invoices Table (Admin Finance Module)**
+   - Columns: Invoice Month, Customer ID, Customer Name, Platform Fees, Performance Fees, Total, Status, Due Date, Actions
+   - Filter by: Month, Status (unpaid/paid/overdue/waived), Customer
+   - Sort by: Invoice Month (desc), Total Fees, Due Date
+   - Color coding: Red for overdue, yellow for due soon, green for paid
+
+2. **Invoice Actions**
+   - View Details: Popup showing fee breakdown (transferred vs accumulated)
+   - Mark as Paid: Update status + record payment date + payment reference
+   - Download PDF: Generate invoice PDF (future enhancement)
+   - Send Reminder: Email customer about unpaid invoice (future enhancement)
+
+3. **Summary Metrics**
+   - Total Unpaid Invoices: Count + USD amount
+   - Overdue Invoices: Count + USD amount
+   - Current Month Revenue: Paid invoices this month
+   - YTD Revenue: All paid invoices year-to-date
+
+**Implementation Plan:**
+- **Phase 1 (2 hours):** HTML table in Finance module, RPC function `list_fee_invoices()`
+- **Phase 2 (1 hour):** Filter dropdowns, search by customer
+- **Phase 3 (1 hour):** Mark as Paid popup with payment reference input
+- **Phase 4 (1 hour):** Summary metrics cards
+- **Phase 5 (30 min):** Testing and documentation
+
+**Files to Modify:**
+- `ui/Advanced BTC DCA Strategy.html` (Finance module, lines 2200+)
+- `supabase/functions/public.list_fee_invoices.fn.sql` (new RPC)
+- `supabase/functions/public.update_invoice_status.fn.sql` (new RPC)
+
+**Dependencies:**
+- Fee system fully operational (✅ Complete - Task 5 Phases 1-4)
+- Monthly invoice generation working (⚠️ Schema fix needed)
+
+**Recommended Timeline:** Week 5 (Jan 31 - Feb 7)
+
+---
+
 ### Task 5: Real Customer Fees with HWM Logic (v0.6.23-v0.6.27)
 **Status:** ✅ PHASES 1-4 COMPLETE (2026-01-21)  
 **Effort:** 16 hours (actual, Phases 1-4)  

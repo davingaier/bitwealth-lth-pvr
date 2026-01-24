@@ -142,8 +142,8 @@ serve(async (req) => {
 
     const totalFeesUsd = totalFeesUsdt + (totalFeesBtc * (closingBalance?.btc_price || 0));
 
-    // Calculate ROI and CAGR (requires inception date from customer_portfolios)
-    const inceptionDate = portfolio.created_at ? new Date(portfolio.created_at) : startDate;
+    // Calculate ROI and CAGR (requires inception date from customer_strategies)
+    const inceptionDate = strategy.created_at ? new Date(strategy.created_at) : startDate;
     const daysSinceInception = (new Date(endDateStr).getTime() - inceptionDate.getTime()) / (1000 * 60 * 60 * 24);
     const yearsSinceInception = daysSinceInception / 365.25;
     
@@ -428,9 +428,9 @@ serve(async (req) => {
 
     doc.setFontSize(10);
     doc.setFont(undefined, "normal");
-    doc.text(`Strategy: ${portfolio.strategy_code}`, 20, yPosition);
+    doc.text(`Strategy: ${strategy.strategy_code || 'LTH_PVR'}`, 20, yPosition);
     yPosition += 6;
-    doc.text(`Status: ${portfolio.status.toUpperCase()}`, 20, yPosition);
+    doc.text(`Status: ${strategy.live_enabled ? 'ACTIVE' : 'INACTIVE'}`, 20, yPosition);
     yPosition += 6;
     doc.text(`Exchange: VALR`, 20, yPosition);
     yPosition += 10;

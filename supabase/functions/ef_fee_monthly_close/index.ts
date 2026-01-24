@@ -40,12 +40,13 @@ Deno.serve(async (req) => {
 
     console.log(`Aggregating fees for ${lastMonthStr} (${lastMonthStart} to ${lastMonthEnd})`);
 
-    // Check if already processed this month
+    // Check if already processed this month (invoice_month is DATE, use first day of month)
+    const invoiceMonthDate = `${lastMonthStr}-01`;
     const { data: existingInvoices, error: existingError } = await supabase
       .from("fee_invoices")
       .select("invoice_id")
       .eq("org_id", orgId)
-      .eq("invoice_month", lastMonthStr);
+      .eq("invoice_month", invoiceMonthDate);
 
     if (existingError) {
       throw existingError;
@@ -181,14 +182,23 @@ Deno.serve(async (req) => {
     const dueDate = new Date(now.getFullYear(), now.getMonth(), 15).toISOString().split('T')[0]; // 15th of current month
 
     for (const [_, agg] of feesByCustomer) {
+      // Convert invoice_month to first day of month (DATE format)
+      const invoiceMonthDate = `${lastMonthStr}-01`;
+      
+      // Calculate total platform fees in USD
+      const platformFeesUsd = agg.platform_fees_usdt + (agg.platform_fees_btc * btcPrice);
+      
       invoicesToInsert.push({
         org_id: orgId,
         customer_id: agg.customer_id,
-        invoice_month: lastMonthStr,
-        platform_fees_btc: agg.platform_fees_btc,
-        platform_fees_usdt: agg.platform_fees_usdt,
-        performance_fees_usdt: agg.performance_fees_usdt,
-        total_fees_usd: agg.total_fees_usd,
+        invoice_month: invoiceMonthDate,  // YYYY-MM-DD format for DATE column
+        platform_fees_due: platformFeesUsd,  // Total platform fees in USD
+        performance_fees_due: agg.performance_fees_usdt,  // Performance fees in USD
+        // Store breakdown in new columns (from 20260124 migration)
+        platform_fees_transferred_btc: agg.platform_fees_btc,
+        platform_fees_transferred_usdt: agg.platform_fees_usdt,
+        platform_fees_accumulated_btc: 0,  // TODO: Pull from customer_accumulated_fees
+        platform_fees_accumulated_usdt: 0,
         due_date: dueDate,
         status: "unpaid",
       });
