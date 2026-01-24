@@ -75,6 +75,7 @@ begin
     from lth_pvr.ledger_lines
     where line_date = v_trade_date
       and org_id = v_org_id
+      and kind in ('buy', 'sell')  -- Only count actual trading activity, not fees/deposits/withdrawals
   )
   into v_ledger_done;
   
@@ -104,14 +105,16 @@ begin
     'can_resume', v_can_resume,
     'resume_reason', v_resume_reason,
     'steps', jsonb_build_object(
-      'decisions_generated', v_decisions_done,
-      'intents_created', v_intents_done,
-      'orders_executed', v_orders_done,
-      'ledger_posted', v_ledger_done
+      'ci_bands', v_ci_exists,
+      'decisions', v_decisions_done,
+      'intents', v_intents_done,
+      'orders', v_orders_done,
+      'poll_orders', v_orders_done,
+      'ledger', v_ledger_done
     )
   );
 end;
 $$;
 
 comment on function lth_pvr.get_pipeline_status is 
-  'Returns pipeline execution status for a trade date, including CI bands availability and trade window validity.';
+  'Returns pipeline execution status for a trade date, including CI bands availability and trade window validity. ledger_posted only returns true when buy/sell ledger entries exist (excludes fee-related entries).';

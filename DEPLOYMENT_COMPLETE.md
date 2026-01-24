@@ -109,6 +109,7 @@
 - ✅ CI bands must exist for signal_date
 - ✅ Trade window must not be expired (current_date <= signal_date + 1)
 - ✅ Logs all actions to alert_events table
+- ✅ Ledger Posted only marked complete when buy/sell entries exist (not fee-related entries)
 
 #### `lth_pvr.ensure_ci_bands_today_with_resume(auto_resume)`
 **Status:** ✅ DEPLOYED (not yet integrated into cron)

@@ -632,7 +632,7 @@ TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 sat
    - **New Edge Function:** `ef_auto_convert_btc_to_usdt`
    - **New Email Template:** `fee_conversion_approval`
 
-7. **Invoice System with Payment Tracking**
+7. **Invoice System with Payment Tracking (FUTURE REQUIREMENT - NOT YET IMPLEMENTED)**
    - **New Table:** `lth_pvr.fee_invoices`
    - **Columns:**
      * platform_fees_due, platform_fees_paid
@@ -653,7 +653,7 @@ TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 sat
 **New Tables:**
 1. `public.customer_strategies` - Consolidates customer_portfolios + lth_pvr.customer_strategies
 2. `lth_pvr.strategy_fee_defaults` - Default fee rates per strategy (10% perf, 0.75% platform)
-3. `lth_pvr.fee_invoices` - Monthly invoices with payment tracking (due, paid, outstanding)
+3. `lth_pvr.fee_invoices` - FUTURE: Monthly invoices with payment tracking (due, paid, outstanding)
 4. `lth_pvr.withdrawal_fee_snapshots` - Pre-withdrawal HWM state for reversion
 5. `lth_pvr.fee_conversion_approvals` - BTC→USDT conversion approval workflow
 6. `lth_pvr.customer_accumulated_fees` - Tracks platform fees below VALR minimum transfer threshold (v0.6.31)
@@ -672,11 +672,11 @@ TC1.2 testing revealed critical gap: BTC platform fee of 0.00000058 BTC (5.8 sat
 **Edge Functions:**
 
 **New:**
-1. `ef_calculate_performance_fees` - Monthly HWM-based fee calculation
-2. `ef_calculate_interim_performance_fee` - Mid-month withdrawal fee calculation
-3. `ef_auto_convert_btc_to_usdt` - BTC→USDT conversion with approval workflow
-4. `ef_record_fee_payment` - Update invoice payment status
-5. `ef_revert_withdrawal_fees` - Revert HWM if withdrawal cancelled/failed
+1. `ef_calculate_performance_fees` - Monthly HWM-based performance fee calculation
+2. `ef_calculate_interim_performance_fee` - FUTURE: Mid-month withdrawal fee calculation
+3. `ef_auto_convert_btc_to_usdt` - FUTURE: BTC→USDT conversion with approval workflow
+4. `ef_record_fee_payment` - FUTURE: Update invoice payment status
+5. `ef_revert_withdrawal_fees` - FUTURE: Revert HWM if withdrawal cancelled/failed
 6. `ef_transfer_accumulated_fees` - Monthly batch transfer of accumulated platform fees (v0.6.31)
 7. `ef_generate_statement` - Generate monthly PDF statement (v0.6.22, fixed v0.6.32)
 
@@ -1545,12 +1545,12 @@ supabase functions deploy ef_deposit_scan --project-ref wqnmxpooabmedvtackji --n
    - **Call-to-Action:** "Try Our Interactive Back-Tester" button linking to LTH PVR product page
 
 2. **Product Catalog Architecture**
-   - **Current:** LTH PVR (Medium-Risk Bitcoin-Altcoin Pairing Growth Strategy)
-   - **Future Pipeline:**
+   - **Current:** LTH PVR (Low-Risk Automated Arbitrage Strategy)
+   - **Future Pipeline:****
      - Wealth Multiplier Strategies (including non-crypto assets)
      - Bitcoin Lending Retirement Annuity
      - Low-risk Bitcoin Income Generating Strategy
-     - High-risk Altcoin Investment Strategies
+     - High-risk BTC Relative Valuation Strategies
    - **Design Pattern:** Product cards on landing page, each linking to dedicated product page
 
 3. **LTH PVR Product Page** (website/lth-pvr.html)

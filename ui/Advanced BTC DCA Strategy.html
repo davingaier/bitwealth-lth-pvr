@@ -7961,10 +7961,10 @@ This will:
         // Update step icons
         updateStepIcon('ci_bands', data.steps?.ci_bands);
         updateStepIcon('decisions', data.steps?.decisions);
-        updateStepIcon('intents', data.steps?.order_intents);
-        updateStepIcon('orders', data.steps?.execute_orders);
+        updateStepIcon('intents', data.steps?.intents);
+        updateStepIcon('orders', data.steps?.orders);
         updateStepIcon('poll_orders', data.steps?.poll_orders);
-        updateStepIcon('ledger', data.steps?.ledger_posted);
+        updateStepIcon('ledger', data.steps?.ledger);
 
         // Update resume button and message
         resumeBtn.disabled = !data.can_resume;

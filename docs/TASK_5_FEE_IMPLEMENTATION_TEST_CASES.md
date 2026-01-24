@@ -299,7 +299,7 @@ ORDER BY created_at DESC LIMIT 1;
 **Objective:** Verify platform fees below VALR minimum threshold accumulate and transfer when threshold reached
 
 **Prerequisites:**
-- VALR minimum transfer thresholds researched and documented
+- VALR minimum transfer thresholds researched and documented (BTC: 0.00001, USDT: $0.06)
 - System configuration table created with thresholds
 - customer_accumulated_fees table created
 - ef_post_ledger_and_balances updated with threshold logic
@@ -350,7 +350,6 @@ ORDER BY created_at DESC LIMIT 1;
 2. Run `ef_transfer_accumulated_fees` manually
 3. Verify: All customers with accumulated fees >= minimum transferred
 4. Check: Alert log shows "Transferred accumulated fees for X customers"
-5. Verify: Monthly invoice generation populates platform_fees_transferred correctly
 
 **Step 6: Transaction History Display**
 1. **Customer Portal:**
@@ -374,7 +373,6 @@ ORDER BY created_at DESC LIMIT 1;
 - ✅ Customer portal shows ONLY withdrawable amounts (no accumulated fees breakdown)
 - ✅ Admin Finance module shows accumulated fees with transfer functionality
 - ✅ Transaction history uses transaction type-aware color coding (BTC green/gray/red based on deposit/buy/sell)
-- ✅ Monthly invoices distinguish transferred vs accumulated fees
 
 **Validation Queries:**
 ```sql
