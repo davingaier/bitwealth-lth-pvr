@@ -52,10 +52,10 @@ Deno.serve(async () => {
     }
 
     const minBtc = Number(
-      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_btc")?.config_value ?? "0.0001"
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_btc")?.config_value ?? "0.000001"
     );
     const minUsdt = Number(
-      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_usdt")?.config_value ?? "1.00"
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_usdt")?.config_value ?? "0.06"
     );
 
     console.log(`[ef_transfer_accumulated_fees] VALR thresholds: BTC ${minBtc}, USDT ${minUsdt}`);
@@ -177,7 +177,7 @@ Deno.serve(async () => {
             toAccount: mainAccountId,
             currency: "BTC",
             amount: accumBtc,
-            transferType: "platform_fee_batch_monthly",
+            transferType: "platform_fee",
           },
           customerId,
           null, // No specific ledger_id for monthly batch
@@ -258,7 +258,7 @@ Deno.serve(async () => {
             toAccount: mainAccountId,
             currency: "USDT",
             amount: accumUsdt,
-            transferType: "platform_fee_batch_monthly",
+            transferType: "platform_fee",
           },
           customerId,
           null, // No specific ledger_id for monthly batch

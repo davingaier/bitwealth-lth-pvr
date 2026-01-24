@@ -414,18 +414,20 @@ ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-**Status:** ⚠️ PARTIAL PASS (Sub-Phases 6.1-6.6 Steps 1-4 complete, Steps 5-6 pending more fee accumulation)
+**Status:** ✅ **PASS** - All steps complete (2026-01-24)
 
 **Timeline:** 12 days (2.5 weeks) - **AHEAD OF SCHEDULE** (completed in ~3 hours vs 6 days planned)
 
-**Implementation Notes (2026-01-23):**
-- ✅ Sub-Phase 6.1: VALR thresholds researched (BTC: 0.0001, USDT: $1.00)
+**Implementation Notes (2026-01-23 to 2026-01-24):**
+- ✅ Sub-Phase 6.1: VALR thresholds researched (BTC: **0.000001** = 1,000 sats, USDT: **$0.06**)
 - ✅ Sub-Phase 6.2: Database schema (customer_accumulated_fees table, 3 RPC functions)
 - ✅ Sub-Phase 6.3: Edge functions updated (ef_post_ledger_and_balances threshold checking, ef_transfer_accumulated_fees monthly job)
 - ✅ Sub-Phase 6.4: Customer portal simplified (withdrawable balances only, no complexity shown)
 - ✅ Sub-Phase 6.5: Admin Finance module with accumulated fees view and manual transfer
-- ⏳ Sub-Phase 6.6: Testing TC1.2-A (CURRENT)
-- ⏳ Sub-Phase 6.7: Documentation updates
+- ✅ Sub-Phase 6.6: Testing TC1.2-A Steps 5-6 (2026-01-24)
+  * **Step 5:** Batch transfer tested with Customer 47 (0.00006 BTC transferred successfully)
+  * **Step 6:** Both RPC functions validated (`get_withdrawable_balance`, `list_accumulated_fees`)
+- ✅ Sub-Phase 6.7: Documentation updates
 - Phase 1: Research & Config (2 days)
 - Phase 2: Database Schema (1 day)
 - Phase 3: Edge Functions (3 days)
