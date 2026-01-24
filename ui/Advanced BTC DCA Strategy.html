@@ -2326,7 +2326,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
           <div>
             <h3>Accumulated Platform Fees</h3>
-            <p class="small muted">Platform fees below VALR minimum thresholds (BTC: 0.0001, USDT: $1.00) that are awaiting batch transfer.</p>
+            <p class="small muted" id="accumulatedFeesDescription">Platform fees below VALR minimum thresholds that are awaiting batch transfer.</p>
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
             <button id="refreshAccumulatedFees" type="button" onclick="loadAccumulatedFees()">Refresh</button>
@@ -2384,7 +2384,7 @@
             <strong>💡 Info:</strong>
             <ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;">
               <li>Monthly batch transfer runs automatically on the 1st of each month at 02:00 UTC</li>
-              <li>Fees are transferred when accumulated total ≥ minimum threshold (BTC: 0.0001, USDT: $1.00)</li>
+              <li id="accumulatedFeesThresholdInfo">Fees are transferred when accumulated total ≥ minimum threshold</li>
               <li>Use "Transfer Now" button to manually trigger immediate batch transfer</li>
             </ul>
           </div>
@@ -6476,6 +6476,16 @@
         const usdtConfig = configData.find(c => c.config_key === 'valr_min_transfer_usdt');
         if (btcConfig) minBtc = parseFloat(btcConfig.config_value);
         if (usdtConfig) minUsdt = parseFloat(usdtConfig.config_value);
+      }
+
+      // Update dynamic labels with fetched thresholds
+      const descriptionEl = document.getElementById('accumulatedFeesDescription');
+      if (descriptionEl) {
+        descriptionEl.textContent = `Platform fees below VALR minimum thresholds (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)}) that are awaiting batch transfer.`;
+      }
+      const thresholdInfoEl = document.getElementById('accumulatedFeesThresholdInfo');
+      if (thresholdInfoEl) {
+        thresholdInfoEl.textContent = `Fees are transferred when accumulated total ≥ minimum threshold (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)})`;
       }
 
       loadingEl.style.display = 'none';
