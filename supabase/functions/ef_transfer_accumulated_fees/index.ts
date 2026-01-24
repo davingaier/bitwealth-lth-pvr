@@ -51,11 +51,14 @@ Deno.serve(async () => {
       });
     }
 
+    // VALR minimum order sizes for BTC→USDT conversion (not just transfer)
+    // BTC: 0.00001 BTC (10,000 sats, ~$0.96)
+    // USDT: $0.52
     const minBtc = Number(
-      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_btc")?.config_value ?? "0.000001"
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_btc")?.config_value ?? "0.00001"
     );
     const minUsdt = Number(
-      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_usdt")?.config_value ?? "0.06"
+      (configRows ?? []).find((r: any) => r.config_key === "valr_min_transfer_usdt")?.config_value ?? "0.52"
     );
 
     console.log(`[ef_transfer_accumulated_fees] VALR thresholds: BTC ${minBtc}, USDT ${minUsdt}`);

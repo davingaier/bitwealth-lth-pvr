@@ -6468,8 +6468,8 @@
         .select('config_key, config_value')
         .in('config_key', ['valr_min_transfer_btc', 'valr_min_transfer_usdt']);
 
-      let minBtc = 0.0001;  // Default fallback
-      let minUsdt = 1.00;   // Default fallback
+      let minBtc = 0.00001;  // VALR minimum order size for BTC→USDT conversion
+      let minUsdt = 0.52;    // VALR minimum order size for USDT
 
       if (!configError && configData) {
         const btcConfig = configData.find(c => c.config_key === 'valr_min_transfer_btc');
@@ -6481,28 +6481,35 @@
       // Update dynamic labels with fetched thresholds
       const descriptionEl = document.getElementById('accumulatedFeesDescription');
       if (descriptionEl) {
-        descriptionEl.textContent = `Platform fees below VALR minimum thresholds (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)}) that are awaiting batch transfer.`;
+        descriptionEl.textContent = `Platform fees below VALR minimum order size (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')} = ${(minBtc * 100000000).toFixed(0)} sats, USDT: $${minUsdt.toFixed(2)}) that are awaiting batch transfer.`;
       }
       const thresholdInfoEl = document.getElementById('accumulatedFeesThresholdInfo');
       if (thresholdInfoEl) {
-        thresholdInfoEl.textContent = `Fees are transferred when accumulated total ≥ minimum threshold (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)})`;
+        thresholdInfoEl.textContent = `Fees are transferred when accumulated total ≥ minimum order size (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)})`;
       }
 
       loadingEl.style.display = 'none';
 
-      // Disable "Transfer Now" button if no fees accumulated
+      // Disable "Transfer Now" button if no fees meet minimum thresholds
       const transferBtn = document.getElementById('transferAccumulatedFeesNow');
       if (transferBtn) {
-        if (!data || data.length === 0) {
+        // Check if ANY customer has fees >= minimum threshold
+        const hasEligibleFees = data && data.some(customer => {
+          const btc = parseFloat(customer.accumulated_btc) || 0;
+          const usdt = parseFloat(customer.accumulated_usdt) || 0;
+          return btc >= minBtc || usdt >= minUsdt;
+        });
+
+        if (!hasEligibleFees) {
           transferBtn.disabled = true;
           transferBtn.style.opacity = '0.5';
           transferBtn.style.cursor = 'not-allowed';
-          transferBtn.title = 'No accumulated fees to transfer';
+          transferBtn.title = `No fees meet minimum thresholds (BTC ≥ ${minBtc.toFixed(8)}, USDT ≥ $${minUsdt.toFixed(2)})`;
         } else {
           transferBtn.disabled = false;
           transferBtn.style.opacity = '1';
           transferBtn.style.cursor = 'pointer';
-          transferBtn.title = 'Trigger immediate batch transfer';
+          transferBtn.title = 'Trigger immediate batch transfer of eligible fees';
         }
       }
 
