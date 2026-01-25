@@ -2321,11 +2321,73 @@
     <div id="finance-module" class="module">
       <h2>Finance</h2>
       
+      <!-- Main Account Accumulation Card -->
+      <div class="card" style="max-width: 1400px; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div>
+            <h3>Main Account Accumulation</h3>
+            <p class="small muted">BTC transferred to main account but below VALR conversion threshold (0.00001 BTC / $0.52 USDT).</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button id="refreshMainAccountAccumulation" type="button" onclick="loadMainAccountAccumulation()">Refresh</button>
+            <button id="convertMainAccountBtcNow" type="button" onclick="convertMainAccountBtcManually()" style="background: #3b82f6; font-weight: 600; display: none;">Convert Now</button>
+          </div>
+        </div>
+
+        <div id="mainAccountAccumulationLoading" style="text-align: center; padding: 2rem; color: #64748b;">
+          <div style="display: inline-block; width: 20px; height: 20px; border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+          <p style="margin-top: 0.5rem;">Loading main account accumulation...</p>
+        </div>
+
+        <div id="mainAccountAccumulationError" style="display: none; padding: 1rem; background: #fee2e2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">
+          <strong>Error loading main account accumulation</strong>
+          <p id="mainAccountAccumulationErrorMessage" style="margin: 0.5rem 0 0 0; font-size: 14px;"></p>
+        </div>
+
+        <div id="noMainAccountAccumulation" style="display: none; text-align: center; padding: 2rem; color: #64748b;">
+          <div style="font-size: 48px; margin-bottom: 1rem;">✅</div>
+          <p style="font-size: 16px; font-weight: 600; margin-bottom: 0.5rem;">No Accumulated BTC</p>
+          <p style="font-size: 14px; margin: 0;">Main account has no BTC awaiting conversion.</p>
+        </div>
+
+        <div id="mainAccountAccumulationContent" style="display: none;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div style="padding: 1.5rem; background: linear-gradient(135deg, #f7931a 0%, #ff6b35 100%); border-radius: 8px; color: white;">
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; opacity: 0.9; margin-bottom: 0.5rem;">Accumulated BTC</div>
+              <div id="mainAccountBtcAmount" style="font-size: 24px; font-weight: 700; margin-bottom: 0.25rem;">0.00000000 BTC</div>
+              <div id="mainAccountBtcSats" style="font-size: 14px; opacity: 0.9;">0 sats</div>
+            </div>
+            <div style="padding: 1.5rem; background: linear-gradient(135deg, #26a17b 0%, #16a085 100%); border-radius: 8px; color: white;">
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; opacity: 0.9; margin-bottom: 0.5rem;">Accumulated USDT</div>
+              <div id="mainAccountUsdtAmount" style="font-size: 24px; font-weight: 700; margin-bottom: 0.25rem;">$0.00</div>
+              <div id="mainAccountUsdtNote" style="font-size: 14px; opacity: 0.9;">Direct transfers</div>
+            </div>
+            <div style="padding: 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
+              <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; opacity: 0.9; margin-bottom: 0.5rem;">Conversion Status</div>
+              <div id="mainAccountConversionStatus" style="font-size: 16px; font-weight: 600; margin-bottom: 0.5rem;">
+                <span id="mainAccountBtcStatusBadge"></span>
+                <span id="mainAccountUsdtStatusBadge"></span>
+              </div>
+              <div id="mainAccountConversionCount" style="font-size: 14px; opacity: 0.9;">0 conversions</div>
+            </div>
+          </div>
+          
+          <div style="padding: 1rem; background: #f8fafc; border-radius: 6px; border-left: 4px solid #3b82f6;">
+            <div style="display: flex; align-items: start; gap: 0.75rem;">
+              <div style="font-size: 20px; margin-top: 2px;">ℹ️</div>
+              <div style="font-size: 14px; color: #475569;">
+                <strong style="color: #1e293b;">Dual-Threshold System:</strong> Platform fees are transferred from customer subaccounts when they reach the <strong>transfer threshold</strong> (0.000001 BTC / $0.06), but only converted to USDT when they reach the <strong>conversion threshold</strong> (0.00001 BTC / $0.52). BTC below the conversion threshold accumulates here until more transfers bring it above the minimum for VALR market orders.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- Accumulated Platform Fees Card -->
       <div class="card" style="max-width: 1400px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
           <div>
-            <h3>Accumulated Platform Fees</h3>
+            <h3>Accumulated Platform Fees (Customer Subaccounts)</h3>
             <p class="small muted" id="accumulatedFeesDescription">Platform fees below VALR minimum thresholds that are awaiting batch transfer.</p>
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -2581,6 +2643,9 @@
     if (hasSupabase) {
       const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
       const PUBLISHABLE_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+      
+      // Expose globally for edge function calls
+      window.SUPABASE_ANON_KEY = PUBLISHABLE_KEY;
 
       try {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
@@ -6461,31 +6526,43 @@
         throw new Error(error.message || 'Failed to load accumulated fees');
       }
 
-      // Fetch thresholds from system_config
+      // Fetch thresholds from system_config (both transfer and conversion)
       const { data: configData, error: configError } = await supabaseClient
         .schema('lth_pvr')
         .from('system_config')
         .select('config_key, config_value')
-        .in('config_key', ['valr_min_transfer_btc', 'valr_min_transfer_usdt']);
+        .in('config_key', [
+          'valr_min_transfer_btc',
+          'valr_min_transfer_usdt',
+          'valr_min_conversion_btc',
+          'valr_min_conversion_usdt'
+        ]);
 
-      let minBtc = 0.00001;  // VALR minimum order size for BTC→USDT conversion
-      let minUsdt = 0.52;    // VALR minimum order size for USDT
+      let minTransferBtc = 0.000001;
+      let minTransferUsdt = 0.06;
+      let minConversionBtc = 0.00001;
+      let minConversionUsdt = 0.52;
 
       if (!configError && configData) {
-        const btcConfig = configData.find(c => c.config_key === 'valr_min_transfer_btc');
-        const usdtConfig = configData.find(c => c.config_key === 'valr_min_transfer_usdt');
-        if (btcConfig) minBtc = parseFloat(btcConfig.config_value);
-        if (usdtConfig) minUsdt = parseFloat(usdtConfig.config_value);
+        const transferBtcConfig = configData.find(c => c.config_key === 'valr_min_transfer_btc');
+        const transferUsdtConfig = configData.find(c => c.config_key === 'valr_min_transfer_usdt');
+        const conversionBtcConfig = configData.find(c => c.config_key === 'valr_min_conversion_btc');
+        const conversionUsdtConfig = configData.find(c => c.config_key === 'valr_min_conversion_usdt');
+        
+        if (transferBtcConfig) minTransferBtc = parseFloat(transferBtcConfig.config_value);
+        if (transferUsdtConfig) minTransferUsdt = parseFloat(transferUsdtConfig.config_value);
+        if (conversionBtcConfig) minConversionBtc = parseFloat(conversionBtcConfig.config_value);
+        if (conversionUsdtConfig) minConversionUsdt = parseFloat(conversionUsdtConfig.config_value);
       }
 
       // Update dynamic labels with fetched thresholds
       const descriptionEl = document.getElementById('accumulatedFeesDescription');
       if (descriptionEl) {
-        descriptionEl.textContent = `Platform fees below VALR minimum order size (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')} = ${(minBtc * 100000000).toFixed(0)} sats, USDT: $${minUsdt.toFixed(2)}) that are awaiting batch transfer.`;
+        descriptionEl.textContent = `Platform fees below VALR transfer threshold (BTC: ${minTransferBtc.toFixed(8).replace(/\.?0+$/, '')} = ${(minTransferBtc * 100000000).toFixed(0)} sats, USDT: $${minTransferUsdt.toFixed(2)}) awaiting batch transfer.`;
       }
       const thresholdInfoEl = document.getElementById('accumulatedFeesThresholdInfo');
       if (thresholdInfoEl) {
-        thresholdInfoEl.textContent = `Fees are transferred when accumulated total ≥ minimum order size (BTC: ${minBtc.toFixed(8).replace(/\.?0+$/, '')}, USDT: $${minUsdt.toFixed(2)})`;
+        thresholdInfoEl.textContent = `Fees are transferred at ${minTransferBtc.toFixed(8)} BTC / $${minTransferUsdt.toFixed(2)} USDT, converted at ${minConversionBtc.toFixed(8)} BTC / $${minConversionUsdt.toFixed(2)} USDT`;
       }
 
       loadingEl.style.display = 'none';
@@ -6493,18 +6570,18 @@
       // Disable "Transfer Now" button if no fees meet minimum thresholds
       const transferBtn = document.getElementById('transferAccumulatedFeesNow');
       if (transferBtn) {
-        // Check if ANY customer has fees >= minimum threshold
+        // Check if ANY customer has fees >= minimum transfer threshold
         const hasEligibleFees = data && data.some(customer => {
           const btc = parseFloat(customer.accumulated_btc) || 0;
           const usdt = parseFloat(customer.accumulated_usdt) || 0;
-          return btc >= minBtc || usdt >= minUsdt;
+          return btc >= minTransferBtc || usdt >= minTransferUsdt;
         });
 
         if (!hasEligibleFees) {
           transferBtn.disabled = true;
           transferBtn.style.opacity = '0.5';
           transferBtn.style.cursor = 'not-allowed';
-          transferBtn.title = `No fees meet minimum thresholds (BTC ≥ ${minBtc.toFixed(8)}, USDT ≥ $${minUsdt.toFixed(2)})`;
+          transferBtn.title = `No fees meet minimum transfer thresholds (BTC ≥ ${minTransferBtc.toFixed(8)}, USDT ≥ $${minTransferUsdt.toFixed(2)})`;
         } else {
           transferBtn.disabled = false;
           transferBtn.style.opacity = '1';
@@ -6555,9 +6632,32 @@
             })
           : '-';
 
-        // Color code based on threshold proximity
-        const btcColor = btc >= minBtc ? '#10b981' : '#f59e0b';
-        const usdtColor = usdt >= minUsdt ? '#10b981' : '#f59e0b';
+        // Dual badge system: Transferable (green) vs Convertible (blue)
+        const btcTransferable = btc >= minTransferBtc;
+        const btcConvertible = btc >= minConversionBtc;
+        const usdtTransferable = usdt >= minTransferUsdt;
+        const usdtConvertible = usdt >= minConversionUsdt;
+
+        let btcBadge = '';
+        if (btcConvertible) {
+          btcBadge = '<span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Ready for conversion to USDT">✨ CONVERTIBLE</span>';
+        } else if (btcTransferable) {
+          btcBadge = '<span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Ready for transfer to main account">✓ TRANSFERABLE</span>';
+        } else if (btc > 0) {
+          btcBadge = '<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Accumulating">⏳</span>';
+        }
+
+        let usdtBadge = '';
+        if (usdtConvertible) {
+          usdtBadge = '<span style="background: #3b82f6; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Ready for conversion">✨ CONVERTIBLE</span>';
+        } else if (usdtTransferable) {
+          usdtBadge = '<span style="background: #10b981; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Ready for transfer">✓ TRANSFERABLE</span>';
+        } else if (usdt > 0) {
+          usdtBadge = '<span style="background: #f59e0b; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 4px;" title="Accumulating">⏳</span>';
+        }
+
+        const btcColor = btcConvertible ? '#3b82f6' : (btcTransferable ? '#10b981' : '#64748b');
+        const usdtColor = usdtConvertible ? '#3b82f6' : (usdtTransferable ? '#10b981' : '#64748b');
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -6565,12 +6665,10 @@
             <td style="padding: 12px;">${escapeHtml(fee.customer_name || '-')}</td>
             <td style="padding: 12px; color: #3b82f6;">${escapeHtml(fee.email || '-')}</td>
             <td style="padding: 12px; text-align: right; font-family: monospace; color: ${btcColor}; font-weight: 500;">
-              ${btc.toFixed(8)}
-              ${btc >= minBtc ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
+              ${btc.toFixed(8)}${btcBadge}
             </td>
             <td style="padding: 12px; text-align: right; font-family: monospace; color: ${usdtColor}; font-weight: 500;">
-              $${usdt.toFixed(2)}
-              ${usdt >= minUsdt ? '<span style="color: #10b981; margin-left: 4px;" title="Ready for transfer">✓</span>' : ''}
+              $${usdt.toFixed(2)}${usdtBadge}
             </td>
             <td style="padding: 12px; text-align: right; font-family: monospace; font-weight: 600; color: #10b981;">
               $${usd.toFixed(2)}
@@ -6672,13 +6770,227 @@
   // Auto-load accumulated fees when Finance module is shown
   window.addEventListener('hashchange', () => {
     if (window.location.hash === '#finance-module') {
-      setTimeout(() => loadAccumulatedFees(), 500);
+      setTimeout(() => {
+        loadAccumulatedFees();
+        loadMainAccountAccumulation();
+      }, 500);
     }
   });
 
   // Initial load if Finance module is active
   if (window.location.hash === '#finance-module') {
-    setTimeout(() => loadAccumulatedFees(), 500);
+    setTimeout(() => {
+      loadAccumulatedFees();
+      loadMainAccountAccumulation();
+    }, 500);
+  }
+
+  // ===================== Main Account Accumulation (Finance Module) =====================
+  async function loadMainAccountAccumulation() {
+    const loadingEl = document.getElementById('mainAccountAccumulationLoading');
+    const errorEl = document.getElementById('mainAccountAccumulationError');
+    const errorMessageEl = document.getElementById('mainAccountAccumulationErrorMessage');
+    const noAccumEl = document.getElementById('noMainAccountAccumulation');
+    const contentEl = document.getElementById('mainAccountAccumulationContent');
+    const convertBtn = document.getElementById('convertMainAccountBtcNow');
+
+    if (!loadingEl || !errorEl || !contentEl) {
+      console.error('Main account accumulation elements not found');
+      return;
+    }
+
+    // Show loading, hide others
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    noAccumEl.style.display = 'none';
+    contentEl.style.display = 'none';
+    if (convertBtn) convertBtn.style.display = 'none';
+
+    try {
+      // Check authentication
+      if (!supabaseClient) {
+        throw new Error('Supabase client not initialized');
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Please sign in via Administration tab to view main account accumulation');
+      }
+
+      // Call get_main_account_accumulation RPC
+      const { data, error } = await supabaseClient.rpc('get_main_account_accumulation');
+
+      if (error) {
+        throw new Error(error.message || 'Failed to load main account accumulation');
+      }
+
+      loadingEl.style.display = 'none';
+
+      if (!data || data.length === 0) {
+        noAccumEl.style.display = 'block';
+        return;
+      }
+
+      const accum = data[0];
+      const btc = parseFloat(accum.accumulated_btc || 0);
+      const usdt = parseFloat(accum.accumulated_usdt || 0);
+      const sats = Math.round(btc * 100000000);
+
+      // Show/hide convert button based on convertible status
+      if (convertBtn && accum.btc_convertible) {
+        convertBtn.style.display = 'inline-block';
+      }
+
+      // If no accumulation, show "no accumulation" message
+      if (btc === 0 && usdt === 0) {
+        noAccumEl.style.display = 'block';
+        return;
+      }
+
+      // Update BTC amount
+      const btcAmountEl = document.getElementById('mainAccountBtcAmount');
+      const btcSatsEl = document.getElementById('mainAccountBtcSats');
+      if (btcAmountEl) btcAmountEl.textContent = `${btc.toFixed(8)} BTC`;
+      if (btcSatsEl) btcSatsEl.textContent = `${sats.toLocaleString()} sats`;
+
+      // Update USDT amount
+      const usdtAmountEl = document.getElementById('mainAccountUsdtAmount');
+      if (usdtAmountEl) usdtAmountEl.textContent = `$${usdt.toFixed(2)}`;
+
+      // Update conversion status badges
+      const statusEl = document.getElementById('mainAccountConversionStatus');
+      const btcBadgeEl = document.getElementById('mainAccountBtcStatusBadge');
+      const usdtBadgeEl = document.getElementById('mainAccountUsdtStatusBadge');
+
+      if (btcBadgeEl) {
+        if (accum.btc_convertible) {
+          btcBadgeEl.innerHTML = '<span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">✨ BTC CONVERTIBLE</span>';
+        } else if (accum.btc_transferable) {
+          btcBadgeEl.innerHTML = '<span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">✓ BTC TRANSFERABLE</span>';
+        } else if (btc > 0) {
+          btcBadgeEl.innerHTML = '<span style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 4px;">⏳ BTC ACCUMULATING</span>';
+        } else {
+          btcBadgeEl.innerHTML = '';
+        }
+      }
+
+      if (usdtBadgeEl) {
+        if (accum.usdt_convertible) {
+          usdtBadgeEl.innerHTML = '<span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">✨ USDT CONVERTIBLE</span>';
+        } else if (accum.usdt_transferable) {
+          usdtBadgeEl.innerHTML = '<span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">✓ USDT TRANSFERABLE</span>';
+        } else if (usdt > 0) {
+          usdtBadgeEl.innerHTML = '<span style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">⏳ USDT ACCUMULATING</span>';
+        } else {
+          usdtBadgeEl.innerHTML = '';
+        }
+      }
+
+      // Update conversion count
+      const convCountEl = document.getElementById('mainAccountConversionCount');
+      if (convCountEl) {
+        const count = accum.conversion_count || 0;
+        convCountEl.textContent = `${count} conversion${count === 1 ? '' : 's'}`;
+      }
+
+      // Show content
+      contentEl.style.display = 'block';
+
+    } catch (err) {
+      console.error('Error loading main account accumulation:', err);
+      loadingEl.style.display = 'none';
+      errorEl.style.display = 'block';
+      if (errorMessageEl) {
+        errorMessageEl.textContent = err.message || 'Unknown error occurred';
+      }
+    }
+  }
+
+  async function convertMainAccountBtcManually() {
+    const btn = document.getElementById('convertMainAccountBtcNow');
+    if (!btn) return;
+
+    // Confirm action
+    if (!confirm('This will convert all accumulated BTC in the main account to USDT via VALR market order. Continue?')) {
+      return;
+    }
+
+    // Disable button
+    btn.disabled = true;
+    btn.textContent = 'Converting...';
+    btn.style.opacity = '0.6';
+
+    try {
+      // Check authentication
+      if (!supabaseClient) {
+        throw new Error('Supabase client not initialized');
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
+
+      // Get current accumulation
+      const { data: accumData, error: accumError } = await supabaseClient.rpc('get_main_account_accumulation');
+      
+      if (accumError) {
+        throw new Error(`Failed to get accumulation: ${accumError.message}`);
+      }
+
+      if (!accumData || accumData.length === 0) {
+        throw new Error('No accumulation data found');
+      }
+
+      const btcAmount = parseFloat(accumData[0].accumulated_btc || 0);
+      
+      if (btcAmount <= 0) {
+        throw new Error('No BTC to convert');
+      }
+
+      // Call ef_convert_platform_fee_btc edge function
+      const response = await fetch(
+        `${supabaseClient.supabaseUrl}/functions/v1/ef_convert_platform_fee_btc`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            btc_amount: btcAmount,
+            is_main_account: true
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Conversion failed: ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      // Show success message
+      alert(
+        `BTC conversion successful!\n\n` +
+        `₿ BTC Sold: ${result.btc_sold.toFixed(8)}\n` +
+        `💵 USDT Received: $${result.usdt_received.toFixed(2)}\n` +
+        `📊 Rate: $${result.btc_usd_rate.toFixed(2)}/BTC`
+      );
+
+      // Reload main account accumulation
+      await loadMainAccountAccumulation();
+
+    } catch (err) {
+      console.error('Error converting main account BTC:', err);
+      alert(`Error: ${err.message || 'Failed to convert BTC'}`);
+    } finally {
+      // Re-enable button
+      btn.disabled = false;
+      btn.textContent = 'Convert Now';
+      btn.style.opacity = '1';
+    }
   }
 
   /* ========== Customer Onboarding Pipeline Module (Milestone 2) ========== */

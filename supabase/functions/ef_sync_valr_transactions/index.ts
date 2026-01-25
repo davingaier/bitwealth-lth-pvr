@@ -1,0 +1,493 @@
+// Edge Function: ef_sync_valr_transactions
+// Purpose: Sync VALR transaction history to detect deposits/withdrawals with ACTUAL amounts
+// Replaces: ef_balance_reconciliation (which used cumulative balance differences - inaccurate)
+// Flow: Query VALR transaction history → Create funding events → Trigger ledger posting
+// Schedule: Every 30 minutes via pg_cron
+// Deployed with: --no-verify-jwt (called by pg_cron)
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
+const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const orgId = Deno.env.get("ORG_ID");
+const valrApiKey = Deno.env.get("VALR_API_KEY");
+const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+
+if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
+  throw new Error("Missing required environment variables");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  db: { schema: "lth_pvr" }
+});
+
+// VALR API: Sign request with HMAC SHA-512
+async function signVALR(
+  timestamp: string,
+  method: string,
+  path: string,
+  body: string = "",
+  subaccountId: string = ""
+): Promise<string> {
+  const payload = timestamp + method.toUpperCase() + path + body + subaccountId;
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(valrApiSecret);
+  const messageData = encoder.encode(payload);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Query VALR transaction history for subaccount
+// Returns: deposits, withdrawals, fees, etc. with actual amounts and timestamps
+async function getTransactionHistory(subaccountId: string, skip = 0, limit = 200) {
+  const timestamp = Date.now().toString();
+  const method = "GET";
+  const path = `/v1/account/transactionhistory?skip=${skip}&limit=${limit}`;
+  const signature = await signVALR(timestamp, method, path, "", subaccountId);
+
+  const response = await fetch(`https://api.valr.com${path}`, {
+    method: "GET",
+    headers: {
+      "X-VALR-API-KEY": valrApiKey,
+      "X-VALR-SIGNATURE": signature,
+      "X-VALR-TIMESTAMP": timestamp,
+      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`VALR API error: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+Deno.serve(async (req) => {
+  // CORS headers
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+      },
+    });
+  }
+
+  const results = {
+    scanned: 0,
+    synced: 0,
+    new_transactions: 0,
+    errors: 0,
+    details: [] as any[],
+  };
+
+  try {
+    console.log("Starting VALR transaction sync...");
+    console.log("Org ID:", orgId);
+
+    // Get all active customers with exchange accounts
+    const { data: customers, error: customerError } = await supabase.schema("public")
+      .from("customer_details")
+      .select("customer_id, first_names, last_name, email")
+      .eq("org_id", orgId)
+      .eq("registration_status", "active");
+
+    if (customerError) {
+      console.error("Error loading customers:", customerError);
+      throw new Error(`Customer query failed: ${customerError.message}`);
+    }
+    
+    console.log(`Found ${customers?.length || 0} active customers`);
+
+    if (!customers || customers.length === 0) {
+      return new Response(
+        JSON.stringify({ message: "No active customers to sync", results }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
+    const customerIds = customers.map(c => c.customer_id);
+
+    // Get customer strategies and exchange accounts
+    const { data: strategies, error: strategyError } = await supabase.schema("public")
+      .from("customer_strategies")
+      .select("customer_id, customer_strategy_id, exchange_account_id")
+      .in("customer_id", customerIds)
+      .not("exchange_account_id", "is", null);
+
+    if (strategyError) {
+      throw new Error(`Strategy query failed: ${strategyError.message}`);
+    }
+
+    const exchangeAccountIds = (strategies || []).map(s => s.exchange_account_id);
+    const { data: accounts, error: accountError } = await supabase.schema("public")
+      .from("exchange_accounts")
+      .select("exchange_account_id, subaccount_id, label")
+      .eq("exchange", "VALR")
+      .in("exchange_account_id", exchangeAccountIds)
+      .not("subaccount_id", "is", null);
+
+    if (accountError) {
+      throw new Error(`Account query failed: ${accountError.message}`);
+    }
+
+    console.log(`Found ${accounts?.length || 0} VALR accounts to sync`);
+
+    // Get the last sync timestamp (look for most recent VALR_TX we've already processed)
+    // Default to 24 hours ago if this is the first run
+    const { data: lastSync } = await supabase
+      .from("exchange_funding_events")
+      .select("occurred_at")
+      .like("idempotency_key", "VALR_TX_%")
+      .order("occurred_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const sinceDatetime = lastSync?.occurred_at 
+      ? new Date(lastSync.occurred_at) 
+      : new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+    console.log(`Syncing transactions since: ${sinceDatetime.toISOString()}`);
+
+    // Process each account
+    for (const account of accounts || []) {
+      try {
+        results.scanned++;
+
+        // Find customer for this account
+        const strategy = strategies?.find(s => s.exchange_account_id === account.exchange_account_id);
+        if (!strategy) continue;
+
+        const customer = customers.find(c => c.customer_id === strategy.customer_id);
+        if (!customer) continue;
+
+        console.log(`Syncing ${customer.first_names} ${customer.last_name} (${account.label})`);
+
+        // Query VALR transaction history
+        const transactionsResponse = await getTransactionHistory(account.subaccount_id);
+        
+        // VALR API might return { transactions: [...] } or just [...]
+        const transactions = Array.isArray(transactionsResponse) 
+          ? transactionsResponse 
+          : transactionsResponse.transactions || [];
+
+        if (!transactions || transactions.length === 0) {
+          console.log(`  No transactions found`);
+          continue;
+        }
+
+        console.log(`  Found ${transactions.length} transactions`);
+
+        // DEBUG: Log all transaction types we see (for understanding VALR's transaction taxonomy)
+        const transactionTypeCounts = new Map<string, number>();
+        const uniqueTransactionTypes = new Set<string>();
+        for (const tx of transactions) {
+          const txType = tx.transactionType?.type || "UNKNOWN";
+          const txDesc = tx.transactionType?.description || "";
+          const txKey = `${txType} (${txDesc})`;
+          transactionTypeCounts.set(txKey, (transactionTypeCounts.get(txKey) || 0) + 1);
+          
+          // Log first occurrence of each transaction type with full details
+          if (!uniqueTransactionTypes.has(txType)) {
+            uniqueTransactionTypes.add(txType);
+            console.log(`\n  📋 New Transaction Type: ${txType}`);
+            console.log(`    Description: ${txDesc}`);
+            console.log(`    Sample: debit=${tx.debitCurrency}/${tx.debitValue}, credit=${tx.creditCurrency}/${tx.creditValue}`);
+            console.log(`    Additional: ${JSON.stringify(tx.additionalInfo || {})}`);
+          }
+        }
+        console.log(`\n  Transaction type summary:`, Object.fromEntries(transactionTypeCounts));
+
+        // Filter for funding-related transactions (deposits, withdrawals, conversions)
+        // AND only include transactions after sinceDatetime
+        // Transaction types handled:
+        // - INTERNAL_TRANSFER: Main ↔ subaccount transfers (deposits/withdrawals)
+        // - LIMIT_BUY/MARKET_BUY: ZAR → crypto conversions (deposits - charge platform fee)
+        // - LIMIT_SELL/MARKET_SELL: Crypto → ZAR conversions (withdrawals - no fee)
+        // - BLOCKCHAIN_RECEIVE: External crypto deposits (charge platform fee)
+        // - BLOCKCHAIN_SEND: External crypto withdrawals (no fee)
+        // - FIAT_DEPOSIT: ZAR deposits (skip - just fiat, no crypto)
+        // - FIAT_WITHDRAWAL: ZAR withdrawals (skip - just fiat, no crypto)
+        
+        const fundingTransactions = transactions.filter((tx: any) => {
+          const txTimestamp = new Date(tx.eventAt);
+          const txType = tx.transactionType?.type;
+          
+          // Must be after last sync
+          if (txTimestamp <= sinceDatetime) return false;
+          
+          // Include these transaction types:
+          return [
+            "INTERNAL_TRANSFER",    // Main ↔ subaccount
+            "LIMIT_BUY",           // ZAR → crypto conversion (deposit)
+            "MARKET_BUY",          // ZAR → crypto conversion (deposit)
+            "LIMIT_SELL",          // Crypto → ZAR conversion (withdrawal)
+            "MARKET_SELL",         // Crypto → ZAR conversion (withdrawal)
+            "BLOCKCHAIN_RECEIVE",  // External crypto deposit
+            "BLOCKCHAIN_SEND"      // External crypto withdrawal
+          ].includes(txType);
+        });
+
+        console.log(`  Filtered to ${fundingTransactions.length} funding transactions since ${sinceDatetime.toISOString()}`);
+
+        // DEBUG: For Davin's personal subaccount, log ALL transaction details to understand taxonomy
+        if (account.subaccount_id === "1419286489401798656") {
+          console.log(`\n=== DEBUG: Davin's subaccount - ALL transactions ===`);
+          for (const tx of transactions) {
+            console.log(`Transaction ${tx.id}:`);
+            console.log(`  Type: ${tx.transactionType?.type} (${tx.transactionType?.description})`);
+            console.log(`  Timestamp: ${tx.eventAt}`);
+            console.log(`  Credit: ${tx.creditValue} ${tx.creditCurrency}`);
+            console.log(`  Debit: ${tx.debitValue} ${tx.debitCurrency}`);
+            console.log(`  Additional Info: ${tx.additionalInfo || 'none'}`);
+            console.log(`---`);
+          }
+          console.log(`=== END DEBUG ===\n`);
+        }
+
+        let newTransactions = 0;
+
+        for (const tx of fundingTransactions) {
+          try {
+            const transactionId = tx.id;
+            const timestamp = tx.eventAt;
+            const txType = tx.transactionType?.type;
+
+            if (!transactionId || !timestamp) {
+              console.warn(`  Skipping incomplete transaction:`, tx);
+              continue;
+            }
+
+            // Parse transaction amounts and currencies
+            const creditValue = parseFloat(tx.creditValue || 0);
+            const creditCurrency = tx.creditCurrency;
+            const debitValue = parseFloat(tx.debitValue || 0);
+            const debitCurrency = tx.debitCurrency;
+
+            // Classify transaction and determine currency/amount
+            let currency, amount, isDeposit;
+            
+            if (txType === "INTERNAL_TRANSFER") {
+              // Main ↔ subaccount transfer
+              if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+                // Incoming transfer = deposit
+                currency = creditCurrency;
+                amount = creditValue;
+                isDeposit = true;
+              } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
+                // Outgoing transfer = withdrawal
+                currency = debitCurrency;
+                amount = debitValue;
+                isDeposit = false;
+              } else {
+                console.warn(`  Skipping INTERNAL_TRANSFER with no BTC/USDT:`, tx);
+                continue;
+              }
+            }
+            else if (txType === "LIMIT_BUY" || txType === "MARKET_BUY") {
+              // ZAR → crypto conversion (customer adding capital)
+              if (debitCurrency === "ZAR" && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+                // Received crypto by spending ZAR = DEPOSIT (charge platform fee)
+                currency = creditCurrency;
+                amount = creditValue;
+                isDeposit = true;
+              } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
+                         (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+                // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)
+                console.log(`  Skipping BTC↔USDT trade (already tracked): ${transactionId}`);
+                continue;
+              } else {
+                console.warn(`  Skipping unexpected BUY transaction:`, tx);
+                continue;
+              }
+            }
+            else if (txType === "LIMIT_SELL" || txType === "MARKET_SELL") {
+              // Crypto → ZAR conversion (withdrawal prep)
+              if ((debitCurrency === "BTC" || debitCurrency === "USDT") && creditCurrency === "ZAR") {
+                // Sold crypto for ZAR = WITHDRAWAL (no platform fee, just track)
+                currency = debitCurrency;
+                amount = debitValue;
+                isDeposit = false;
+              } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
+                         (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+                // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)
+                console.log(`  Skipping BTC↔USDT trade (already tracked): ${transactionId}`);
+                continue;
+              } else {
+                console.warn(`  Skipping unexpected SELL transaction:`, tx);
+                continue;
+              }
+            }
+            else if (txType === "BLOCKCHAIN_RECEIVE") {
+              // External crypto deposit from customer's wallet
+              if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+                currency = creditCurrency;
+                amount = creditValue;
+                isDeposit = true; // Charge platform fee
+              } else {
+                console.warn(`  Skipping BLOCKCHAIN_RECEIVE with no BTC/USDT:`, tx);
+                continue;
+              }
+            }
+            else if (txType === "BLOCKCHAIN_SEND") {
+              // External crypto withdrawal to customer's wallet
+              if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
+                currency = debitCurrency;
+                amount = debitValue;
+                isDeposit = false; // No platform fee, just track
+              } else {
+                console.warn(`  Skipping BLOCKCHAIN_SEND with no BTC/USDT:`, tx);
+                continue;
+              }
+            }
+            else {
+              console.warn(`  Skipping unknown transaction type: ${txType}`);
+              continue;
+            }
+
+            // Check if we've already processed this transaction
+            const idempotencyKey = `VALR_TX_${transactionId}`;
+            const { data: existing } = await supabase
+              .from("exchange_funding_events")
+              .select("funding_id")
+              .eq("idempotency_key", idempotencyKey)
+              .single();
+
+            if (existing) {
+              // Already processed
+              continue;
+            }
+
+            // Determine kind (deposit or withdrawal) and ensure amount has correct sign
+            // VALR API: creditAmount = positive (deposit), debitAmount = positive (withdrawal)
+            const kind = isDeposit ? "deposit" : "withdrawal";
+            const signedAmount = isDeposit ? Math.abs(amount) : -Math.abs(amount);
+
+            // Create funding event
+            const { error: insertError } = await supabase
+              .from("exchange_funding_events")
+              .insert({
+                org_id: orgId,
+                customer_id: customer.customer_id,
+                exchange_account_id: account.exchange_account_id,
+                kind: kind,
+                asset: currency,
+                amount: signedAmount,
+                ext_ref: transactionId,
+                occurred_at: new Date(timestamp).toISOString(),
+                idempotency_key: idempotencyKey,
+              });
+
+            if (insertError) {
+              console.error(`  Error creating funding event for tx ${transactionId}:`, insertError);
+              results.errors++;
+            } else {
+              console.log(`  ✅ Created funding event: ${kind} ${amount} ${currency}`);
+              newTransactions++;
+            }
+
+          } catch (txError) {
+            console.error(`  Error processing transaction:`, txError);
+            results.errors++;
+          }
+        }
+
+        results.synced++;
+        results.new_transactions += newTransactions;
+
+        results.details.push({
+          customer_id: customer.customer_id,
+          customer_name: `${customer.first_names} ${customer.last_name}`,
+          transactions_found: transactions.length,
+          funding_transactions: fundingTransactions.length,
+          new_transactions: newTransactions,
+        });
+
+      } catch (error) {
+        console.error(`Error processing account ${account.label}:`, error);
+        results.errors++;
+        results.details.push({
+          account_id: account.exchange_account_id,
+          account_label: account.label,
+          error: String(error),
+        });
+      }
+    }
+
+    console.log("VALR transaction sync complete:", results);
+
+    // If any new transactions were synced, trigger ledger posting
+    if (results.new_transactions > 0) {
+      console.log(`Triggering ef_post_ledger_and_balances to process ${results.new_transactions} new transaction(s)...`);
+      try {
+        const ledgerResponse = await fetch(`${supabaseUrl}/functions/v1/ef_post_ledger_and_balances`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (ledgerResponse.ok) {
+          const ledgerResult = await ledgerResponse.json();
+          console.log("Ledger posting completed:", ledgerResult);
+        } else {
+          console.error("Ledger posting failed:", await ledgerResponse.text());
+        }
+      } catch (ledgerError) {
+        console.error("Error triggering ledger posting:", ledgerError);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "VALR transaction sync complete",
+        results
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+
+  } catch (error) {
+    console.error("Fatal error in VALR transaction sync:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        results
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+});

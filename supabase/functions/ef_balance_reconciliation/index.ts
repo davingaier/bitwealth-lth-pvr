@@ -256,7 +256,9 @@ Deno.serve(async (req) => {
               amount: btcChange,  // Use signed value: positive for deposits, negative for withdrawals
               ext_ref: `AUTO_RECON_${today}_BTC`,
               occurred_at: new Date().toISOString(),
-              idempotency_key: `RECON_${customer.customer_id}_${today}_BTC_${Date.now()}`
+              // FIX: Use deterministic idempotency key (customer + date + asset only, no timestamp)
+              // This prevents duplicate funding events if reconciliation runs multiple times
+              idempotency_key: `RECON_${customer.customer_id}_${today}_BTC`
             });
           }
 
@@ -271,7 +273,9 @@ Deno.serve(async (req) => {
               amount: usdtChange,  // Use signed value: positive for deposits, negative for withdrawals
               ext_ref: `AUTO_RECON_${today}_USDT`,
               occurred_at: new Date().toISOString(),
-              idempotency_key: `RECON_${customer.customer_id}_${today}_USDT_${Date.now()}`
+              // FIX: Use deterministic idempotency key (customer + date + asset only, no timestamp)
+              // This prevents duplicate funding events if reconciliation runs multiple times
+              idempotency_key: `RECON_${customer.customer_id}_${today}_USDT`
             });
           }
 

@@ -243,6 +243,29 @@ Deno.serve(async (req: Request) => {
         (existingFundingLedger ?? []).map((x: any) => x.note),
       );
 
+      // Query platform fee rates for all customers with funding events
+      const customerIds = Array.from(new Set((funding as FundingRow[]).map(f => f.customer_id)));
+      const { data: customerStrategies, error: stratErr } = await sb
+        .schema("public")
+        .from("customer_strategies")
+        .select("customer_id, platform_fee_rate")
+        .in("customer_id", customerIds);
+
+      if (stratErr) {
+        console.error("Error fetching customer strategies", stratErr);
+        return new Response(
+          `Error fetching customer strategies: ${stratErr.message}`,
+          { status: 500 },
+        );
+      }
+
+      // Create lookup map for platform fee rates (default to 0.75% if not found)
+      const feeRateMap = new Map<number, number>();
+      for (const strat of customerStrategies ?? []) {
+        const rate = parseFloat(strat.platform_fee_rate ?? "0.0075");
+        feeRateMap.set(strat.customer_id, rate);
+      }
+
       const toInsertFunding: any[] = [];
 
       for (const f of funding as FundingRow[]) {
@@ -263,9 +286,10 @@ Deno.serve(async (req: Request) => {
 
         if (asset === "BTC") {
           if (isDeposit) {
-            // BTC deposits: deduct 0.75% platform fee (using Decimal for precision, keep as string)
+            // BTC deposits: deduct platform fee (using Decimal for precision, keep as string)
+            const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
             const amountDecimal = new Decimal(amount);
-            const feeDecimal = amountDecimal.times(0.0075);
+            const feeDecimal = amountDecimal.times(platformFeeRate);
             const netDecimal = amountDecimal.minus(feeDecimal);
             platformFeeBtc = feeDecimal.toFixed(8); // Keep as string to preserve precision
             amountBtc = netDecimal.toFixed(8);
@@ -275,9 +299,10 @@ Deno.serve(async (req: Request) => {
           }
         } else if (asset === "USDT") {
           if (isDeposit) {
-            // USDT deposits: deduct 0.75% platform fee on NET amount (using Decimal for precision, keep as string)
+            // USDT deposits: deduct platform fee on NET amount (using Decimal for precision, keep as string)
+            const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
             const amountDecimal = new Decimal(amount);
-            const feeDecimal = amountDecimal.times(0.0075);
+            const feeDecimal = amountDecimal.times(platformFeeRate);
             const netDecimal = amountDecimal.minus(feeDecimal);
             platformFeeUsdt = feeDecimal.toFixed(8); // Keep as string to preserve precision
             amountUsdt = netDecimal.toFixed(8);
