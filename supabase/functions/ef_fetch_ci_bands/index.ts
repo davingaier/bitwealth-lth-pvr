@@ -83,10 +83,11 @@ Deno.serve(async (req: Request) => {
   // Today's CI bands data changes throughout the day and is only finalized at day's close.
   // Trading decisions made today are based on yesterday's CI bands.
   
-  // Calculate yesterday's date (signal_date)
-  const yesterday = new Date();
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  // Calculate yesterday's date (signal_date) - MUST use UTC to avoid timezone issues
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
+  const yesterdayStr = new Date(yesterdayUTC).toISOString().slice(0, 10);
   
   // If neither start nor end provided, default to fetching yesterday's data only
   // (unless explicitly overridden with days parameter)
@@ -170,7 +171,20 @@ Deno.serve(async (req: Request) => {
     data.at(-1)?.date,
   );
 
-  if (!Array.isArray(data) || data.length === 0) {
+  // CRITICAL: Filter data to exclude today's date
+  // API sometimes returns multiple days including today, which changes throughout the day
+  // We only want finalized data from dates < today
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const filteredData = data.filter((row: any) => {
+    const rowDate = typeof row?.date === 'string' ? row.date : '';
+    return rowDate && rowDate < todayStr;
+  });
+  
+  if (filteredData.length < data.length) {
+    console.warn(`Filtered out ${data.length - filteredData.length} rows with today's or future dates`);
+  }
+
+  if (!Array.isArray(filteredData) || filteredData.length === 0) {
     await logAlert(
       "warn",
       "CI API returned no data in ef_fetch_ci_bands",
@@ -222,10 +236,16 @@ Deno.serve(async (req: Request) => {
 
   // --- row normalizer ---
   const toRec = (r: any) => {
+    // Use UTC-safe yesterday calculation for fallback
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
+    const fallbackDate = new Date(yesterdayUTC).toISOString().slice(0, 10);
+    
     const dstr =
       (typeof r?.date === "string" && r.date)
         ? r.date
-        : new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+        : fallbackDate;
 
     const val = (...aliasesOrRegex: any[]) =>
       pickNum(
@@ -258,7 +278,7 @@ Deno.serve(async (req: Request) => {
     };
   };
 
-  const records = data.map(toRec);
+  const records = filteredData.map(toRec);
 
   const up = await sb
     .schema("lth_pvr")
@@ -272,9 +292,11 @@ Deno.serve(async (req: Request) => {
   // CI bands are always for dates < today, so "yesterday" is the
   // latest date we expect to exist.
   try {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 1); // yesterday in UTC
-    const expectedDate = d.toISOString().slice(0, 10);
+    // Calculate yesterday's date using UTC-safe approach
+    const now = new Date();
+    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
+    const expectedDate = new Date(yesterdayUTC).toISOString().slice(0, 10);
 
     const chk = await sb.schema("lth_pvr").from("ci_bands_daily")
       .select("date")
@@ -298,8 +320,14 @@ Deno.serve(async (req: Request) => {
           3,
         );
         const data2 = Array.isArray(json2?.data) ? json2.data : [];
-        if (data2.length) {
-          const rec2 = data2.map(toRec);
+        // Filter to exclude today's date from self-heal refetch too
+        const todayStr2 = new Date().toISOString().slice(0, 10);
+        const filteredData2 = data2.filter((row: any) => {
+          const rowDate = typeof row?.date === 'string' ? row.date : '';
+          return rowDate && rowDate < todayStr2;
+        });
+        if (filteredData2.length) {
+          const rec2 = filteredData2.map(toRec);
           await sb.schema("lth_pvr").from("ci_bands_daily").upsert(rec2, {
             onConflict: "org_id,date,mode",
           });
