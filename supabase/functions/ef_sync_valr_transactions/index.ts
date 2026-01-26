@@ -285,19 +285,21 @@ Deno.serve(async (req) => {
             let currency, amount, isDeposit;
             
             if (txType === "INTERNAL_TRANSFER") {
-              // Main ↔ subaccount transfer
+              // INTERNAL_TRANSFER can be bidirectional:
+              // - INTO subaccount (creditValue > 0) = customer deposit (e.g., test deposits from main account)
+              // - OUT OF subaccount (debitValue > 0) = skip (platform fee transfers, already tracked via ef_post_ledger_and_balances)
               if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
-                // Incoming transfer = deposit
+                // Money coming INTO subaccount = DEPOSIT
                 currency = creditCurrency;
                 amount = creditValue;
                 isDeposit = true;
+                console.log(`  INTERNAL_TRANSFER IN (deposit): ${amount} ${currency}`);
               } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
-                // Outgoing transfer = withdrawal
-                currency = debitCurrency;
-                amount = debitValue;
-                isDeposit = false;
+                // Money going OUT of subaccount = skip (fee transfer to main account)
+                console.log(`  Skipping INTERNAL_TRANSFER OUT (fee transfer): ${transactionId}`);
+                continue;
               } else {
-                console.warn(`  Skipping INTERNAL_TRANSFER with no BTC/USDT:`, tx);
+                console.warn(`  Skipping unexpected INTERNAL_TRANSFER:`, tx);
                 continue;
               }
             }
