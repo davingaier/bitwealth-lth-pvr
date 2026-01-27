@@ -8474,6 +8474,7 @@ This will:
         zarRefreshMessage.style.color = '#6c757d';
 
         const { data, error } = await supabaseClient
+          .schema('lth_pvr')
           .from('v_pending_zar_conversions')
           .select('*')
           .order('occurred_at', { ascending: true });
