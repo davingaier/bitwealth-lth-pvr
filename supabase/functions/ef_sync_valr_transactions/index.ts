@@ -236,10 +236,12 @@ Deno.serve(async (req) => {
           // Include these transaction types:
           return [
             "INTERNAL_TRANSFER",    // Main ↔ subaccount
-            "LIMIT_BUY",           // ZAR → crypto conversion (deposit)
-            "MARKET_BUY",          // ZAR → crypto conversion (deposit)
-            "LIMIT_SELL",          // Crypto → ZAR conversion (withdrawal)
-            "MARKET_SELL",         // Crypto → ZAR conversion (withdrawal)
+            "SIMPLE_BUY",          // ZAR deposit (before conversion)
+            "LIMIT_BUY",           // ZAR → crypto conversion
+            "MARKET_BUY",          // ZAR → crypto conversion
+            "LIMIT_SELL",          // Crypto → ZAR conversion
+            "MARKET_SELL",         // Crypto → ZAR conversion
+            "SIMPLE_SELL",         // ZAR withdrawal (to bank)
             "BLOCKCHAIN_RECEIVE",  // External crypto deposit
             "BLOCKCHAIN_SEND"      // External crypto withdrawal
           ].includes(txType);
@@ -282,9 +284,40 @@ Deno.serve(async (req) => {
             const debitCurrency = tx.debitCurrency;
 
             // Classify transaction and determine currency/amount
-            let currency, amount, isDeposit;
+            let currency, amount, isDeposit, fundingKind, metadata = {};
             
-            if (txType === "INTERNAL_TRANSFER") {
+            // ================================================================
+            // ZAR DEPOSIT - SIMPLE_BUY with creditCurrency="ZAR"
+            // ================================================================
+            if (txType === "SIMPLE_BUY" && creditCurrency === "ZAR") {
+              // ZAR deposited into subaccount (before conversion to USDT)
+              currency = "ZAR";
+              amount = creditValue;
+              isDeposit = true;
+              fundingKind = "zar_deposit";
+              console.log(`  💰 ZAR DEPOSIT: R${amount} (awaiting conversion to USDT)`);
+              
+              // Log alert for admin notification
+              await logAlert(
+                supabase,
+                "ef_sync_valr_transactions",
+                "info",
+                `ZAR deposit detected: R${amount.toFixed(2)} from ${customerName}`,
+                {
+                  customer_id: customerId,
+                  customer_name: customerName,
+                  zar_amount: amount,
+                  transaction_id: transactionId,
+                  occurred_at: transactedAt,
+                },
+                orgId,
+                customerId
+              );
+            }
+            // ================================================================
+            // INTERNAL_TRANSFER - Main ↔ Subaccount
+            // ================================================================
+            else if (txType === "INTERNAL_TRANSFER") {
               // INTERNAL_TRANSFER can be bidirectional:
               // - INTO subaccount (creditValue > 0) = customer deposit (e.g., test deposits from main account)
               // - OUT OF subaccount (debitValue > 0) = skip (platform fee transfers, already tracked via ef_post_ledger_and_balances)
@@ -293,6 +326,7 @@ Deno.serve(async (req) => {
                 currency = creditCurrency;
                 amount = creditValue;
                 isDeposit = true;
+                fundingKind = "deposit";
                 console.log(`  INTERNAL_TRANSFER IN (deposit): ${amount} ${currency}`);
               } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
                 // Money going OUT of subaccount = skip (fee transfer to main account)
@@ -303,6 +337,9 @@ Deno.serve(async (req) => {
                 continue;
               }
             }
+            // ================================================================
+            // ZAR→USDT CONVERSION - LIMIT_BUY/MARKET_BUY with debitCurrency="ZAR"
+            // ================================================================
             else if (txType === "LIMIT_BUY" || txType === "MARKET_BUY") {
               // ZAR → crypto conversion (customer adding capital)
               if (debitCurrency === "ZAR" && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
@@ -310,6 +347,36 @@ Deno.serve(async (req) => {
                 currency = creditCurrency;
                 amount = creditValue;
                 isDeposit = true;
+                fundingKind = "deposit";
+                
+                // Look up matching ZAR deposit from today to link
+                const startOfDay = new Date(transactedAt);
+                startOfDay.setHours(0, 0, 0, 0);
+                
+                const { data: zarDeposit } = await supabase
+                  .from("exchange_funding_events")
+                  .select("funding_id, amount")
+                  .eq("customer_id", customerId)
+                  .eq("kind", "zar_deposit")
+                  .gte("occurred_at", startOfDay.toISOString())
+                  .order("occurred_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                
+                // Store conversion metadata
+                metadata = {
+                  zar_amount: debitValue,
+                  conversion_rate: debitValue / creditValue,
+                  conversion_fee_zar: parseFloat(tx.feeValue || 0),
+                  conversion_fee_asset: tx.feeCurrency || "",
+                };
+                
+                if (zarDeposit) {
+                  metadata.zar_deposit_id = zarDeposit.funding_id;
+                  console.log(`  🔄 ZAR→${currency} CONVERSION: R${debitValue} → ${amount} ${currency} (linked to zar_deposit ${zarDeposit.funding_id})`);
+                } else {
+                  console.log(`  🔄 ZAR→${currency} CONVERSION: R${debitValue} → ${amount} ${currency} (no zar_deposit found to link)`);
+                }
               } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
                          (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)
@@ -320,13 +387,45 @@ Deno.serve(async (req) => {
                 continue;
               }
             }
+            // ================================================================
+            // USDT→ZAR CONVERSION - LIMIT_SELL/MARKET_SELL with debitCurrency="USDT", creditCurrency="ZAR"
+            // ================================================================
             else if (txType === "LIMIT_SELL" || txType === "MARKET_SELL") {
-              // Crypto → ZAR conversion (withdrawal prep)
               if ((debitCurrency === "BTC" || debitCurrency === "USDT") && creditCurrency === "ZAR") {
-                // Sold crypto for ZAR = WITHDRAWAL (no platform fee, just track)
-                currency = debitCurrency;
-                amount = debitValue;
-                isDeposit = false;
+                // Sold crypto for ZAR = Create ZAR balance (for future bank withdrawal)
+                currency = "ZAR";
+                amount = creditValue;
+                isDeposit = true;  // ZAR coming INTO subaccount
+                fundingKind = "zar_balance";
+                
+                // Store conversion metadata
+                metadata = {
+                  usdt_amount: debitValue,
+                  crypto_asset: debitCurrency,
+                  conversion_rate: creditValue / debitValue,
+                  conversion_fee_value: parseFloat(tx.feeValue || 0),
+                  conversion_fee_asset: tx.feeCurrency || "",
+                };
+                
+                console.log(`  🔄 ${debitCurrency}→ZAR CONVERSION: ${debitValue} ${debitCurrency} → R${amount} (ready for withdrawal)`);
+                
+                // Log alert for admin notification (withdrawal preparation)
+                await logAlert(
+                  supabase,
+                  "ef_sync_valr_transactions",
+                  "info",
+                  `${debitCurrency}→ZAR conversion: ${customerName} converted ${debitValue} ${debitCurrency} to R${amount.toFixed(2)}`,
+                  {
+                    customer_id: customerId,
+                    customer_name: customerName,
+                    usdt_amount: debitValue,
+                    zar_amount: amount,
+                    transaction_id: transactionId,
+                    occurred_at: transactedAt,
+                  },
+                  orgId,
+                  customerId
+                );
               } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
                          (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)
@@ -337,6 +436,37 @@ Deno.serve(async (req) => {
                 continue;
               }
             }
+            // ================================================================
+            // ZAR WITHDRAWAL - SIMPLE_SELL with debitCurrency="ZAR"
+            // ================================================================
+            else if (txType === "SIMPLE_SELL" && debitCurrency === "ZAR") {
+              // ZAR withdrawn from subaccount to bank account
+              currency = "ZAR";
+              amount = debitValue;
+              isDeposit = false;
+              fundingKind = "zar_withdrawal";
+              console.log(`  💸 ZAR WITHDRAWAL: R${amount} (to bank account)`);
+              
+              // Log alert for admin notification
+              await logAlert(
+                supabase,
+                "ef_sync_valr_transactions",
+                "info",
+                `ZAR withdrawal: R${amount.toFixed(2)} sent to ${customerName}'s bank account`,
+                {
+                  customer_id: customerId,
+                  customer_name: customerName,
+                  zar_amount: amount,
+                  transaction_id: transactionId,
+                  occurred_at: transactedAt,
+                },
+                orgId,
+                customerId
+              );
+            }
+            // ================================================================
+            // BLOCKCHAIN_RECEIVE - External crypto deposits
+            // ================================================================
             else if (txType === "BLOCKCHAIN_RECEIVE") {
               // External crypto deposit from customer's wallet
               if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
@@ -379,7 +509,10 @@ Deno.serve(async (req) => {
 
             // Determine kind (deposit or withdrawal) and ensure amount has correct sign
             // VALR API: creditAmount = positive (deposit), debitAmount = positive (withdrawal)
-            const kind = isDeposit ? "deposit" : "withdrawal";
+            // Use explicit fundingKind if set (zar_deposit, zar_balance, zar_withdrawal), otherwise infer
+            if (!fundingKind) {
+              fundingKind = isDeposit ? "deposit" : "withdrawal";
+            }
             const signedAmount = isDeposit ? Math.abs(amount) : -Math.abs(amount);
 
             // Create funding event
@@ -389,19 +522,20 @@ Deno.serve(async (req) => {
                 org_id: orgId,
                 customer_id: customer.customer_id,
                 exchange_account_id: account.exchange_account_id,
-                kind: kind,
+                kind: fundingKind,
                 asset: currency,
                 amount: signedAmount,
                 ext_ref: transactionId,
                 occurred_at: new Date(timestamp).toISOString(),
                 idempotency_key: idempotencyKey,
+                metadata: Object.keys(metadata).length > 0 ? metadata : {},
               });
 
             if (insertError) {
               console.error(`  Error creating funding event for tx ${transactionId}:`, insertError);
               results.errors++;
             } else {
-              console.log(`  ✅ Created funding event: ${kind} ${amount} ${currency}`);
+              console.log(`  ✅ Created funding event: ${fundingKind} ${amount} ${currency}`);
               newTransactions++;
             }
 

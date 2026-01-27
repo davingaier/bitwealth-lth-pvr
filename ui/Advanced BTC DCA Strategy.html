@@ -2581,6 +2581,23 @@
         </div>
       </div>
 
+      <!-- Pending ZAR Conversions Panel -->
+      <div class="card" id="pendingZarCard">
+        <h3>⏳ Pending ZAR Conversions</h3>
+        <p class="small-muted">ZAR deposits awaiting manual conversion to USDT on VALR.</p>
+        
+        <div id="zarConversionsContainer" style="margin-bottom:1rem;">
+          <div id="zarConversionsList" style="display:grid;gap:.75rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+        
+        <div style="display:flex;gap:.75rem;align-items:center;">
+          <button id="zarRefreshBtn" type="button" class="btn btn-secondary-sm">Refresh</button>
+          <span id="zarRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
+        </div>
+      </div>
+
       <!-- Alerts card -->
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
@@ -8430,6 +8447,167 @@ This will:
         }
       });
     });
+  })();
+
+  // --- Pending ZAR Conversions (Administration module) ---
+  (() => {
+    const zarListEl = document.getElementById('zarConversionsList');
+    const zarRefreshBtn = document.getElementById('zarRefreshBtn');
+    const zarRefreshMessage = document.getElementById('zarRefreshMessage');
+
+    if (!zarListEl || !zarRefreshBtn) return;
+
+    async function loadPendingZarConversions() {
+      if (!supabaseClient) {
+        zarListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
+        return;
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        zarListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Please sign in to view pending conversions.</div>';
+        return;
+      }
+
+      try {
+        zarRefreshMessage.textContent = 'Loading...';
+        zarRefreshMessage.style.color = '#6c757d';
+
+        const { data, error } = await supabaseClient
+          .from('v_pending_zar_conversions')
+          .select('*')
+          .order('occurred_at', { ascending: true });
+
+        if (error) {
+          console.error('Error loading pending ZAR conversions:', error);
+          zarListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Error: ${error.message}</div>`;
+          zarRefreshMessage.textContent = 'Error loading conversions';
+          zarRefreshMessage.style.color = '#dc3545';
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          zarListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">✅ No pending conversions</div>';
+          zarRefreshMessage.textContent = 'All conversions complete';
+          zarRefreshMessage.style.color = '#28a745';
+          return;
+        }
+
+        // Render pending conversions
+        zarListEl.innerHTML = data.map(conv => {
+          const hoursAgo = Math.floor(conv.hours_pending);
+          const timeColor = hoursAgo > 24 ? '#dc3545' : hoursAgo > 4 ? '#ffc107' : '#28a745';
+          
+          return `
+            <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:500;margin-bottom:.25rem;">
+                  ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}
+                  <span style="color:#6c757d;font-weight:normal;margin-left:.5rem;">
+                    R${Number(conv.zar_amount).toFixed(2)}
+                  </span>
+                </div>
+                <div style="font-size:.8rem;color:#6c757d;">
+                  <span style="color:${timeColor};font-weight:500;">${hoursAgo}h ago</span>
+                  · ${new Date(conv.occurred_at).toLocaleString()}
+                  · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
+                </div>
+              </div>
+              <div style="display:flex;gap:.5rem;flex-shrink:0;">
+                <a href="https://valr.com/my/trade?pair=USDTZAR" target="_blank"
+                   class="btn btn-secondary-sm"
+                   style="white-space:nowrap;text-decoration:none;">
+                  Convert on VALR
+                </a>
+                <button onclick="markZarConverted('${conv.id}')"
+                        class="btn btn-secondary-sm"
+                        style="white-space:nowrap;">
+                  Mark Done
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        zarRefreshMessage.textContent = `${data.length} pending conversion${data.length === 1 ? '' : 's'}`;
+        zarRefreshMessage.style.color = '#6c757d';
+
+      } catch (err) {
+        console.error('Error in loadPendingZarConversions:', err);
+        zarListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Unexpected error</div>`;
+        zarRefreshMessage.textContent = 'Error';
+        zarRefreshMessage.style.color = '#dc3545';
+      }
+    }
+
+    // Mark conversion as done (triggers sync to capture conversion transaction)
+    window.markZarConverted = async function(conversionId) {
+      if (!confirm('Have you completed the ZAR→USDT conversion on VALR?')) return;
+
+      try {
+        zarRefreshMessage.textContent = 'Syncing transactions...';
+        zarRefreshMessage.style.color = '#6c757d';
+
+        // Trigger transaction sync to capture the conversion
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const syncResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_sync_valr_transactions`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({})
+        });
+
+        if (!syncResponse.ok) {
+          throw new Error(`Sync failed: ${syncResponse.statusText}`);
+        }
+
+        const syncResult = await syncResponse.json();
+        console.log('Transaction sync result:', syncResult);
+
+        zarRefreshMessage.textContent = 'Synced! Refreshing...';
+        zarRefreshMessage.style.color = '#28a745';
+
+        // Wait a moment for database triggers to process
+        setTimeout(() => {
+          loadPendingZarConversions();
+        }, 2000);
+
+      } catch (err) {
+        console.error('Error marking conversion as done:', err);
+        zarRefreshMessage.textContent = `Error: ${err.message}`;
+        zarRefreshMessage.style.color = '#dc3545';
+      }
+    };
+
+    // Refresh button
+    zarRefreshBtn.addEventListener('click', loadPendingZarConversions);
+
+    // Expose for external calls
+    window.loadPendingZarConversions = loadPendingZarConversions;
+
+    // Load on authentication
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPendingZarConversions();
+          }
+        });
+      }
+    });
+
+    // Auto-refresh every 5 minutes
+    setInterval(() => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPendingZarConversions();
+          }
+        });
+      }
+    }, 5 * 60 * 1000);
   })();
 
   </script>
