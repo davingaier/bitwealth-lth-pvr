@@ -571,7 +571,7 @@ Deno.serve(async (req: Request) => {
                         toAccount: mainAccountId,
                         currency: "BTC",
                         amount: newBtc,
-                        transferType: "platform_fee_batch",
+                        transferType: "fee_batch",
                       },
                       customerId,
                       null, // No specific ledger_id for batch transfer
@@ -594,6 +594,17 @@ Deno.serve(async (req: Request) => {
                           `Failed to clear accumulated BTC for customer ${customerId}: ${clearErr.message}`,
                         );
                       } else {
+                        // Create ledger entry for batch transfer out
+                        await sb.from("ledger_lines").insert({
+                          org_id,
+                          customer_id: customerId,
+                          trade_date: yyyymmdd(new Date()),
+                          kind: "transfer",
+                          amount_btc: -newBtc,
+                          amount_usdt: 0,
+                          note: `Fee batch transfer: ${batchResult.transferId}`,
+                        });
+                        
                         console.log(
                           `[ef_post_ledger_and_balances] Batch transferred ${newBtc} BTC for customer ${customerId}`,
                         );
@@ -785,7 +796,7 @@ Deno.serve(async (req: Request) => {
                         toAccount: mainAccountId,
                         currency: "USDT",
                         amount: newUsdt,
-                        transferType: "platform_fee_batch",
+                        transferType: "fee_batch",
                       },
                       customerId,
                       null, // No specific ledger_id for batch transfer
@@ -808,6 +819,17 @@ Deno.serve(async (req: Request) => {
                           `Failed to clear accumulated USDT for customer ${customerId}: ${clearErr.message}`,
                         );
                       } else {
+                        // Create ledger entry for batch transfer out
+                        await sb.from("ledger_lines").insert({
+                          org_id,
+                          customer_id: customerId,
+                          trade_date: yyyymmdd(new Date()),
+                          kind: "transfer",
+                          amount_btc: 0,
+                          amount_usdt: -newUsdt,
+                          note: `Fee batch transfer: ${batchResult.transferId}`,
+                        });
+                      
                         console.log(
                           `[ef_post_ledger_and_balances] Batch transferred ${newUsdt} USDT for customer ${customerId}`,
                         );
@@ -1147,7 +1169,7 @@ Deno.serve(async (req: Request) => {
               toAccount: mainAccountId,
               currency: "BTC",
               amount: customer.accumulated_btc,
-              transferType: "platform_fee_batch",
+              transferType: "fee_batch",
             },
             customerId,
             null,
@@ -1164,6 +1186,28 @@ Deno.serve(async (req: Request) => {
               .eq("customer_id", customerId)
               .eq("org_id", org_id);
             console.log(`[BATCH] BTC transfer successful for customer ${customerId}`);
+            
+            // Create ledger entry for batch transfer out
+            await sb.from("ledger_lines").insert({
+              org_id,
+              customer_id: customerId,
+              trade_date: yyyymmdd(new Date()),
+              kind: "transfer",
+              amount_btc: -customer.accumulated_btc,
+              amount_usdt: 0,
+              note: `Fee batch transfer: ${batchResult.transferId}`,
+            });
+            
+            // Create ledger entry for batch transfer out
+            await sb.from("ledger_lines").insert({
+              org_id,
+              customer_id: customerId,
+              trade_date: yyyymmdd(new Date()),
+              kind: "transfer",
+              amount_btc: -customer.accumulated_btc,
+              amount_usdt: 0,
+              note: `Fee batch transfer: ${batchResult.transferId}`,
+            });
           } else {
             await logAlert(
               sb,
@@ -1190,7 +1234,7 @@ Deno.serve(async (req: Request) => {
               toAccount: mainAccountId,
               currency: "USDT",
               amount: customer.accumulated_usdt,
-              transferType: "platform_fee_batch",
+              transferType: "fee_batch",
             },
             customerId,
             null,
@@ -1207,6 +1251,17 @@ Deno.serve(async (req: Request) => {
               .eq("customer_id", customerId)
               .eq("org_id", org_id);
             console.log(`[BATCH] USDT transfer successful for customer ${customerId}`);
+            
+            // Create ledger entry for batch transfer out
+            await sb.from("ledger_lines").insert({
+              org_id,
+              customer_id: customerId,
+              trade_date: yyyymmdd(new Date()),
+              kind: "transfer",
+              amount_btc: 0,
+              amount_usdt: -customer.accumulated_usdt,
+              note: `Fee batch transfer: ${batchResult.transferId}`,
+            });
           } else {
             await logAlert(
               sb,
@@ -1242,3 +1297,4 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
+
