@@ -163,6 +163,7 @@ Deno.serve(async (_req: Request)=>{
     let newStatus = o.status ?? "submitted";
     if (valrStatus === "Cancelled") newStatus = "cancelled";
     else if (valrStatus === "Filled") newStatus = "filled";
+    else if (valrStatus === "Failed") newStatus = "failed";
     else newStatus = "submitted";
 
     // Prepare merged raw payload
@@ -344,6 +345,59 @@ Deno.serve(async (_req: Request)=>{
         console.log(`ef_poll_orders: order ${o.exchange_order_id} complete (${newStatus}), stopped polling`);
       }
     }
+    
+    // ------------------------------------------------------------------
+    // 4. Create fill record if order is filled (run regardless of status change)
+    // ------------------------------------------------------------------
+    if (newStatus === "filled" && last.totalExecutedQuantity && Number(last.totalExecutedQuantity) > 0) {
+      // Check if fill record already exists (idempotent)
+      const { data: existingFills } = await supabase
+        .from("order_fills")
+        .select("fill_id")
+        .eq("exchange_order_id", o.exchange_order_id);
+      
+      if (!existingFills || existingFills.length === 0) {
+        // Extract fill details from VALR summary
+        const fillQty = Number(last.totalExecutedQuantity);
+        const fillPrice = Number(last.averagePrice || last.price || o.price);
+        const feeQty = Number(last.totalFee || 0);
+        const feeCurrency = last.feeCurrency || (side === "BUY" ? "BTC" : "USDT");
+        
+        // Use order creation time as trade timestamp (VALR doesn't provide exact fill time in summary)
+        const tradeTs = last.orderCreatedAt || last.orderUpdatedAt || new Date().toISOString();
+        
+        const { error: fillErr } = await supabase.from("order_fills").insert({
+          org_id: o.org_id,
+          exchange_order_id: o.exchange_order_id,
+          trade_ts: tradeTs,
+          price: fillPrice,
+          qty: fillQty,
+          fee_asset: feeCurrency,
+          fee_qty: feeQty,
+          raw: last,
+        });
+        
+        if (fillErr) {
+          console.error(`ef_poll_orders: failed to insert fill for order ${o.exchange_order_id}`, fillErr);
+          await logAlert(
+            supabase,
+            "ef_poll_orders",
+            "error",
+            `Failed to create fill record for filled order`,
+            {
+              intent_id: o.intent_id,
+              exchange_order_id: o.exchange_order_id,
+              ext_order_id: o.ext_order_id,
+              error: fillErr.message
+            },
+            org_id
+          );
+        } else {
+          console.log(`ef_poll_orders: created fill record for order ${o.exchange_order_id} (qty=${fillQty}, price=${fillPrice})`);
+        }
+      }
+    }
+    
     processed++;
   }
 

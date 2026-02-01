@@ -1,5 +1,5 @@
 import { getServiceClient } from "./client.ts";
-import { placeLimitOrder, getOrderBook } from "./valrClient.ts";
+import { placeLimitOrder, placeMarketOrder, getOrderBook } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 
 Deno.serve(async ()=>{
@@ -95,111 +95,169 @@ Deno.serve(async ()=>{
         errorCount++;
         continue;
       }
-      // --- PLACE LIMIT ORDER on VALR ---
+      // --- DETERMINE ORDER TYPE & EXECUTE ---
       const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";
       const pair = "BTCUSDT"; // VALR pair code (vs "BTC/USDT" internal) 
       const qtyStr = String(i.amount);
+      const isMarketOrder = i.limit_price === null || i.limit_price === undefined;
       
-      // Fetch current order book to get best bid/ask
-      let orderBookPrice: string;
-      try {
-        const orderBook = await getOrderBook(pair);
-        
-        if (side === "BUY") {
-          // For BUY orders, match the best bid (top of buy side)
-          if (!orderBook.Bids || orderBook.Bids.length === 0) {
-            throw new Error("No bids available in order book");
-          }
-          orderBookPrice = orderBook.Bids[0].price;
-          console.log(`BUY order: using best bid price ${orderBookPrice} (intent had ${i.limit_price})`);
-        } else {
-          // For SELL orders, match the best ask (top of sell side)
-          if (!orderBook.Asks || orderBook.Asks.length === 0) {
-            throw new Error("No asks available in order book");
-          }
-          orderBookPrice = orderBook.Asks[0].price;
-          console.log(`SELL order: using best ask price ${orderBookPrice} (intent had ${i.limit_price})`);
-        }
-      } catch (obErr) {
-        const obErrMsg = obErr instanceof Error ? obErr.message : String(obErr);
-        console.error("Failed to fetch order book, falling back to intent price:", obErrMsg);
-        await logAlert(
-          sb,
-          "ef_execute_orders",
-          "warn",
-          `Order book fetch failed, using intent price: ${obErrMsg}`,
-          {
-            customer_id: i.customer_id,
-            intent_id: i.intent_id,
-            side,
-            pair,
-            error: obErrMsg
-          },
-          org_id,
-          i.customer_id
-        );
-        // Fallback to intent price (rounded to avoid tick size issues)
-        orderBookPrice = String(Math.round(Number(i.limit_price)));
-      }
-      
-      const priceStr = orderBookPrice;
+      let orderBookPrice: string | null = null;
       let valrResp;
-      try {
-        valrResp = await placeLimitOrder({
-          side,
-          pair,
-          price: priceStr,
-          quantity: qtyStr,
-          customerOrderId: i.intent_id,
-          timeInForce: "GTC",
-          postOnly: false
-        }, subaccountId);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.error("VALR place order failed", e);
-        
-        // Check if it's a rate limit error
-        const isRateLimit = errMsg.toLowerCase().includes("rate limit") || errMsg.includes("429");
-        const severity = isRateLimit ? "warn" : "error";
-        
-        await logAlert(
-          sb,
-          "ef_execute_orders",
-          severity,
-          `VALR order placement failed: ${errMsg}`,
-          {
-            customer_id: i.customer_id,
+      
+      if (isMarketOrder) {
+        // --- MARKET ORDER PATH ---
+        console.log(`Placing MARKET ${side} order: ${qtyStr} BTC (intent ${i.intent_id})`);
+        try {
+          valrResp = await placeMarketOrder(
+            pair,
+            side,
+            qtyStr,
+            i.intent_id,
+            subaccountId
+          );
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error("VALR MARKET order failed", e);
+          
+          await logAlert(
+            sb,
+            "ef_execute_orders",
+            "error",
+            `VALR MARKET order failed: ${errMsg}`,
+            {
+              customer_id: i.customer_id,
+              intent_id: i.intent_id,
+              side,
+              pair,
+              quantity: qtyStr,
+              error: errMsg
+            },
+            org_id,
+            i.customer_id
+          );
+          
+          await sb.from("exchange_orders").insert({
+            org_id,
+            exchange_account_id,
             intent_id: i.intent_id,
+            pair: "BTC/USDT",
+            side,
+            price: 0,
+            qty: i.amount,
+            status: "error",
+            raw: {
+              error: errMsg,
+              order_type: "MARKET"
+            }
+          });
+          await sb.from("order_intents").update({
+            status: "error",
+            reason: `MARKET order failed: ${errMsg}`
+          }).eq("intent_id", i.intent_id);
+          errorCount++;
+          continue;
+        }
+      } else {
+        // --- LIMIT ORDER PATH ---
+        // Fetch current order book to get best bid/ask
+        try {
+          const orderBook = await getOrderBook(pair);
+          
+          if (side === "BUY") {
+            // BUY: Use lowest ASK (best price to buy at - what sellers are asking)
+            if (!orderBook.Asks || orderBook.Asks.length === 0) {
+              throw new Error("No asks available in order book");
+            }
+            orderBookPrice = orderBook.Asks[0].price;
+            console.log(`BUY LIMIT order: using best ask price ${orderBookPrice}`);
+          } else {
+            // SELL: Use highest BID (best price to sell at - what buyers are willing to pay)
+            if (!orderBook.Bids || orderBook.Bids.length === 0) {
+              throw new Error("No bids available in order book");
+            }
+            orderBookPrice = orderBook.Bids[0].price;
+            console.log(`SELL LIMIT order: using best bid price ${orderBookPrice}`);
+          }
+        } catch (obErr) {
+          const obErrMsg = obErr instanceof Error ? obErr.message : String(obErr);
+          console.error("Failed to fetch order book, falling back to intent price:", obErrMsg);
+          await logAlert(
+            sb,
+            "ef_execute_orders",
+            "warn",
+            `Order book fetch failed, using intent price: ${obErrMsg}`,
+            {
+              customer_id: i.customer_id,
+              intent_id: i.intent_id,
+              side,
+              pair,
+              error: obErrMsg
+            },
+            org_id,
+            i.customer_id
+          );
+          orderBookPrice = String(Math.round(Number(i.limit_price)));
+        }
+        
+        try {
+          valrResp = await placeLimitOrder({
             side,
             pair,
-            price: priceStr,
+            price: orderBookPrice,
             quantity: qtyStr,
-            error: errMsg,
-            rate_limited: isRateLimit
-          },
-          org_id,
-          i.customer_id
-        );
-        
-        await sb.from("exchange_orders").insert({
-          org_id,
-          exchange_account_id,
-          intent_id: i.intent_id,
-          pair: "BTC/USDT",
-          side,
-          price: Number(priceStr), // Use actual order book price, not intent price
-          qty: i.amount,
-          status: "error",
-          raw: {
-            error: errMsg
-          }
-        });
-        await sb.from("order_intents").update({
-          status: "error"
-        }).eq("intent_id", i.intent_id);
-        errorCount++;
-        continue;
+            customerOrderId: i.intent_id,
+            timeInForce: "GTC",
+            postOnly: false
+          }, subaccountId);
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error("VALR LIMIT order failed", e);
+          
+          const isRateLimit = errMsg.toLowerCase().includes("rate limit") || errMsg.includes("429");
+          const severity = isRateLimit ? "warn" : "error";
+          
+          await logAlert(
+            sb,
+            "ef_execute_orders",
+            severity,
+            `VALR LIMIT order failed: ${errMsg}`,
+            {
+              customer_id: i.customer_id,
+              intent_id: i.intent_id,
+              side,
+              pair,
+              price: orderBookPrice,
+              quantity: qtyStr,
+              error: errMsg,
+              rate_limited: isRateLimit
+            },
+            org_id,
+            i.customer_id
+          );
+          
+          await sb.from("exchange_orders").insert({
+            org_id,
+            exchange_account_id,
+            intent_id: i.intent_id,
+            pair: "BTC/USDT",
+            side,
+            price: Number(orderBookPrice),
+            qty: i.amount,
+            status: "error",
+            raw: {
+              error: errMsg,
+              order_type: "LIMIT"
+            }
+          });
+          await sb.from("order_intents").update({
+            status: "error"
+          }).eq("intent_id", i.intent_id);
+          errorCount++;
+          continue;
+        }
       }
+      
+      // --- RECORD ORDER IN DATABASE ---
       const extId = valrResp?.orderId ?? valrResp?.id;
       const eo = await sb.from("exchange_orders").insert({
         org_id,
@@ -208,13 +266,14 @@ Deno.serve(async ()=>{
         ext_order_id: extId,
         pair: "BTC/USDT",
         side,
-        price: Number(priceStr), // Use actual order book price, not intent price
+        price: isMarketOrder ? 0 : Number(orderBookPrice),
         qty: i.amount,
         status: "submitted",
         raw: {
           valr: valrResp,
           subaccountId,
-          order_book_price: priceStr,
+          order_type: isMarketOrder ? "MARKET" : "LIMIT",
+          order_book_price: orderBookPrice,
           intent_price: i.limit_price
         }
       });

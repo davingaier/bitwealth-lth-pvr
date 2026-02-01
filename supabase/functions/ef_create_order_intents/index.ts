@@ -14,7 +14,7 @@ Deno.serve(async ()=>{
   let decs = null;
   let decErr = null;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const result = await sb.from("decisions_daily").select("*").eq("org_id", org_id).eq("trade_date", todayStr).in("action", [
+    const result = await sb.schema("lth_pvr").from("decisions_daily").select("*").eq("org_id", org_id).eq("trade_date", todayStr).in("action", [
       "BUY",
       "SELL"
     ]);
@@ -138,8 +138,8 @@ Deno.serve(async ()=>{
           p_asset: "USDT"
         });
       } else {
-        // SELL % of BTC
-        qtyBase = +(Number(bal.btc_balance) * Number(d.amount_pct)).toFixed(8);
+        // SELL % of BTC (amount_pct is stored as 0-100, so divide by 100)
+        qtyBase = +(Number(bal.btc_balance) * Number(d.amount_pct) / 100).toFixed(8);
         if (qtyBase <= 0) {
           await logAlert(
             sb,
@@ -159,15 +159,44 @@ Deno.serve(async ()=>{
           continue;
         }
       }
-      // 4) write intent
+      // 4) Get exchange account for this customer
+      const { data: exchAcct, error: exchErr } = await sb
+        .from("exchange_accounts")
+        .select("exchange_account_id")
+        .eq("org_id", org_id)
+        .limit(1)
+        .single();
+      
+      if (exchErr || !exchAcct) {
+        await logAlert(
+          sb,
+          "ef_create_order_intents",
+          "error",
+          `No exchange account found for org`,
+          {
+            customer_id: d.customer_id,
+            trade_date: d.trade_date,
+            error: exchErr?.message
+          },
+          org_id,
+          d.customer_id
+        );
+        continue;
+      }
+      
+      // 5) write intent with ALL required fields
       const idKey = crypto.randomUUID(); // can switch to hash(org,cust,date,side) if you prefer
       const ins = await sb.from("order_intents").upsert({
         org_id,
         customer_id: d.customer_id,
         trade_date: d.trade_date,
+        pair: "BTC/USDT",
         side,
         amount: qtyBase,
         limit_price: Number(d.price_usd),
+        base_asset: "BTC",
+        quote_asset: "USDT",
+        exchange_account_id: exchAcct.exchange_account_id,
         idempotency_key: idKey,
         reason: d.rule,
         note: d.note
