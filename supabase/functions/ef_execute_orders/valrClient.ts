@@ -85,6 +85,24 @@ async function valrPrivateRequest(
 
 // ---------------- Public helpers ----------------
 
+// 0) Get order book (market data - no auth required)
+export async function getOrderBook(pair: string): Promise<{
+  Asks: Array<{ price: string; quantity: string }>;
+  Bids: Array<{ price: string; quantity: string }>;
+}> {
+  const normalised = normalisePair(pair);
+  const res = await fetch(`${VALR_API_URL}/v1/marketdata/${normalised}/orderbook`);
+  
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `VALR GET /v1/marketdata/${normalised}/orderbook failed: ${res.status} ${res.statusText} – ${text}`,
+    );
+  }
+  
+  return await res.json();
+}
+
 // 1) Place LIMIT order (used by ef_execute_orders)
 export async function placeLimitOrder(
   payload: {

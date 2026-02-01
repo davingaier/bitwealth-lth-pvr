@@ -1,5 +1,5 @@
 import { getServiceClient } from "./client.ts";
-import { placeLimitOrder } from "./valrClient.ts";
+import { placeLimitOrder, getOrderBook } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 
 Deno.serve(async ()=>{
@@ -98,8 +98,51 @@ Deno.serve(async ()=>{
       // --- PLACE LIMIT ORDER on VALR ---
       const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";
       const pair = "BTCUSDT"; // VALR pair code (vs "BTC/USDT" internal) 
-      const priceStr = String(i.limit_price);
       const qtyStr = String(i.amount);
+      
+      // Fetch current order book to get best bid/ask
+      let orderBookPrice: string;
+      try {
+        const orderBook = await getOrderBook(pair);
+        
+        if (side === "BUY") {
+          // For BUY orders, match the best bid (top of buy side)
+          if (!orderBook.Bids || orderBook.Bids.length === 0) {
+            throw new Error("No bids available in order book");
+          }
+          orderBookPrice = orderBook.Bids[0].price;
+          console.log(`BUY order: using best bid price ${orderBookPrice} (intent had ${i.limit_price})`);
+        } else {
+          // For SELL orders, match the best ask (top of sell side)
+          if (!orderBook.Asks || orderBook.Asks.length === 0) {
+            throw new Error("No asks available in order book");
+          }
+          orderBookPrice = orderBook.Asks[0].price;
+          console.log(`SELL order: using best ask price ${orderBookPrice} (intent had ${i.limit_price})`);
+        }
+      } catch (obErr) {
+        const obErrMsg = obErr instanceof Error ? obErr.message : String(obErr);
+        console.error("Failed to fetch order book, falling back to intent price:", obErrMsg);
+        await logAlert(
+          sb,
+          "ef_execute_orders",
+          "warn",
+          `Order book fetch failed, using intent price: ${obErrMsg}`,
+          {
+            customer_id: i.customer_id,
+            intent_id: i.intent_id,
+            side,
+            pair,
+            error: obErrMsg
+          },
+          org_id,
+          i.customer_id
+        );
+        // Fallback to intent price (rounded to avoid tick size issues)
+        orderBookPrice = String(Math.round(Number(i.limit_price)));
+      }
+      
+      const priceStr = orderBookPrice;
       let valrResp;
       try {
         valrResp = await placeLimitOrder({
@@ -144,7 +187,7 @@ Deno.serve(async ()=>{
           intent_id: i.intent_id,
           pair: "BTC/USDT",
           side,
-          price: i.limit_price,
+          price: Number(priceStr), // Use actual order book price, not intent price
           qty: i.amount,
           status: "error",
           raw: {
@@ -165,12 +208,14 @@ Deno.serve(async ()=>{
         ext_order_id: extId,
         pair: "BTC/USDT",
         side,
-        price: i.limit_price,
+        price: Number(priceStr), // Use actual order book price, not intent price
         qty: i.amount,
         status: "submitted",
         raw: {
           valr: valrResp,
-          subaccountId
+          subaccountId,
+          order_book_price: priceStr,
+          intent_price: i.limit_price
         }
       });
       if (eo.error) {

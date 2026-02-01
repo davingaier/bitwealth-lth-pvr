@@ -143,11 +143,9 @@ Deno.serve(async (req: Request) => {
     const monitoredOrders = new Set(order_ids);
     let updateCount = 0;
 
-    // Set timeout to close WebSocket after 5 minutes (fallback polling takes over)
-    const timeoutId = setTimeout(() => {
-      console.log("ef_valr_ws_monitor: Timeout reached, closing WebSocket");
-      ws.close();
-    }, 5 * 60 * 1000);
+    // No timeout - WebSocket stays open until all orders complete
+    // Polling (ef_poll_orders) provides MARKET fallback logic
+    console.log("ef_valr_ws_monitor: WebSocket established, monitoring until all orders complete");
 
     ws.onopen = () => {
       console.log("ef_valr_ws_monitor: WebSocket connected");
@@ -209,23 +207,41 @@ Deno.serve(async (req: Request) => {
 
         // Process fills if present
         if (msg.data.fills && msg.data.fills.length > 0) {
-          for (const fill of msg.data.fills) {
-            const { error: fillErr } = await supabase
-              .from("order_fills")
-              .upsert({
-                exchange_order_id: customerOrderId ?? valrOrderId,
-                filled_qty: fill.quantity,
-                filled_price: fill.price,
-                fee_amount: fill.feeAmount ?? "0",
-                fee_asset: fill.feeCurrency ?? "USDT",
-                filled_at: new Date(fill.tradedAt).toISOString(),
-                raw: fill,
-              }, {
-                onConflict: "exchange_order_id,filled_at",
-              });
+          // Get exchange_order_id from database to link fills
+          const { data: orderData } = await supabase
+            .from("exchange_orders")
+            .select("exchange_order_id")
+            .or(`ext_order_id.eq.${valrOrderId},intent_id.eq.${customerOrderId}`)
+            .single();
 
-            if (fillErr) {
-              console.error("ef_valr_ws_monitor: Failed to insert fill", fillErr);
+          if (orderData) {
+            for (const fill of msg.data.fills) {
+              const { error: fillErr } = await supabase
+                .from("order_fills")
+                .insert({
+                  org_id,
+                  exchange_order_id: orderData.exchange_order_id,
+                  trade_ts: new Date(fill.tradedAt).toISOString(),
+                  price: fill.price,
+                  qty: fill.quantity,
+                  fee_asset: fill.feeCurrency ?? "BTC",
+                  fee_qty: fill.feeAmount ?? "0",
+                  raw: fill,
+                });
+
+              if (fillErr) {
+                console.error("ef_valr_ws_monitor: Failed to insert fill", fillErr);
+                await logAlert(
+                  supabase,
+                  "ef_valr_ws_monitor",
+                  "warn",
+                  `Failed to insert fill for order ${customerOrderId ?? valrOrderId}`,
+                  { error: fillErr.message, order_id: valrOrderId },
+                  org_id,
+                );
+              } else {
+                console.log(`ef_valr_ws_monitor: Inserted fill for order ${customerOrderId ?? valrOrderId}`);
+              }
             }
           }
         }
@@ -244,7 +260,6 @@ Deno.serve(async (req: Request) => {
           // If no more orders to monitor, close connection
           if (monitoredOrders.size === 0) {
             console.log("ef_valr_ws_monitor: All orders complete, closing WebSocket");
-            clearTimeout(timeoutId);
             ws.close();
           }
         }
@@ -255,7 +270,6 @@ Deno.serve(async (req: Request) => {
 
     ws.onerror = async (error) => {
       console.error("ef_valr_ws_monitor: WebSocket error", error);
-      clearTimeout(timeoutId);
       
       // Log alert for WebSocket connection error
       await logAlert(
@@ -275,7 +289,6 @@ Deno.serve(async (req: Request) => {
 
     ws.onclose = async (event) => {
       console.log(`ef_valr_ws_monitor: WebSocket closed (code: ${event.code}), processed ${updateCount} updates`);
-      clearTimeout(timeoutId);
       
       // Log alert if closed prematurely without processing any updates
       if (updateCount === 0 && monitoredOrders.size > 0) {

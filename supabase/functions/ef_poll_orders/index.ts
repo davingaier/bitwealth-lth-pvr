@@ -20,12 +20,22 @@ const org_id = Deno.env.get("ORG_ID");
 // --- Fallback config ---
 const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
+const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
 
 // Cache subaccount lookups per exchange_account_id so we don't hit the DB
 // repeatedly for the same account within a single run.
 const subaccountCache = new Map<string, string | null>();
 
 Deno.serve(async (_req: Request)=>{
+  console.log("ef_poll_orders: Starting continuous polling (10s intervals until all orders complete)");
+  
+  let pollCount = 0;
+  let totalProcessed = 0;
+  
+  // Poll continuously until no orders remain
+  while (true) {
+    pollCount++;
+    console.log(`ef_poll_orders: Poll #${pollCount}`);
   // --- ENHANCED: Support for targeted polling and WebSocket fallback ---
   // Query parameters can specify specific order_ids for targeted polling
   const url = new URL(_req.url);
@@ -343,9 +353,30 @@ Deno.serve(async (_req: Request)=>{
     processed++;
   }
 
-  return new Response(JSON.stringify({
-    processed
-  }), {
-    status: 200
-  });
+  totalProcessed += processed;
+
+  // Check if any orders still need polling
+  const { data: remainingOrders } = await supabase
+    .from("exchange_orders")
+    .select("exchange_order_id")
+    .eq("status", "submitted");
+
+  if (!remainingOrders || remainingOrders.length === 0) {
+    console.log(`ef_poll_orders: All orders complete after ${pollCount} polls, exiting`);
+    return new Response(JSON.stringify({
+      success: true,
+      total_polls: pollCount,
+      total_processed: totalProcessed,
+      message: "All orders complete"
+    }), {
+      status: 200
+    });
+  }
+
+  // Wait 10 seconds before next poll
+  console.log(`ef_poll_orders: ${remainingOrders.length} orders still open, waiting 10 seconds...`);
+  await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  
+  // Continue loop
+  }
 });
