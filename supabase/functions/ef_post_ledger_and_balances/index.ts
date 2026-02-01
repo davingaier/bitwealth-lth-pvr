@@ -300,27 +300,25 @@ Deno.serve(async (req: Request) => {
 
         if (asset === "BTC") {
           if (isDeposit) {
-            // BTC deposits: deduct platform fee (using Decimal for precision, keep as string)
+            // BTC deposits: record GROSS amount (what VALR credited), calculate platform fee separately
             const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
             const amountDecimal = new Decimal(amount);
             const feeDecimal = amountDecimal.times(platformFeeRate);
-            const netDecimal = amountDecimal.minus(feeDecimal);
             platformFeeBtc = feeDecimal.toFixed(8); // Keep as string to preserve precision
-            amountBtc = netDecimal.toFixed(8);
+            amountBtc = amountDecimal.toFixed(8); // Record GROSS amount from VALR
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountBtc = amount;
           }
         } else if (asset === "USDT") {
           if (isDeposit) {
-            // USDT deposits: deduct platform fee on NET amount (using Decimal for precision, keep as string)
+            // USDT deposits: record GROSS amount (what VALR credited), calculate platform fee separately
             const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
             const amountDecimal = new Decimal(amount);
             const feeDecimal = amountDecimal.times(platformFeeRate);
-            const netDecimal = amountDecimal.minus(feeDecimal);
             platformFeeUsdt = feeDecimal.toFixed(8); // Keep as string to preserve precision
-            amountUsdt = netDecimal.toFixed(8);
-            console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, net=${amountUsdt}, type=${typeof amountUsdt}`);
+            amountUsdt = amountDecimal.toFixed(8); // Record GROSS amount from VALR
+            console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, gross=${amountUsdt}, type=${typeof amountUsdt}`);
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountUsdt = amount;
