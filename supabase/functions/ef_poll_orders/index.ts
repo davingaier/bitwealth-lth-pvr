@@ -27,23 +27,15 @@ const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
 const subaccountCache = new Map<string, string | null>();
 
 Deno.serve(async (_req: Request)=>{
-  console.log("ef_poll_orders: Starting continuous polling (10s intervals until all orders complete)");
+  console.log("ef_poll_orders: Starting single-pass polling");
   
-  let pollCount = 0;
-  let totalProcessed = 0;
-  
-  // Poll continuously until no orders remain
-  while (true) {
-    pollCount++;
-    console.log(`ef_poll_orders: Poll #${pollCount}`);
-  // --- ENHANCED: Support for targeted polling and WebSocket fallback ---
+  // --- Support for targeted polling ---
   // Query parameters can specify specific order_ids for targeted polling
   const url = new URL(_req.url);
   const targetOrderIdsParam = url.searchParams.get("order_ids");
   const targetOrderIds = targetOrderIdsParam ? targetOrderIdsParam.split(",") : null;
 
   // 1) Load open exchange_orders requiring polling
-  // If WebSocket monitoring is active, we only poll orders that haven't been updated recently
   let query = supabase
     .from("exchange_orders")
     .select(
@@ -72,11 +64,7 @@ Deno.serve(async (_req: Request)=>{
     query = query.in("intent_id", targetOrderIds);
     console.log(`ef_poll_orders: Targeted polling for ${targetOrderIds.length} specific orders`);
   } else {
-    // Safety net: only poll orders that haven't been polled in last 2 minutes
-    // or never polled, to avoid redundant API calls with WebSocket
-    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    query = query.or(`last_polled_at.is.null,last_polled_at.lt.${twoMinutesAgo}`);
-    console.log("ef_poll_orders: Safety net polling for stale orders");
+    console.log("ef_poll_orders: Polling all submitted orders");
   }
 
   const { data: orders, error } = await query;
@@ -89,13 +77,19 @@ Deno.serve(async (_req: Request)=>{
       status: 500
     });
   }
+  
   if (!orders || orders.length === 0) {
+    console.log("ef_poll_orders: No orders to poll");
     return new Response(JSON.stringify({
-      processed: 0
+      success: true,
+      processed: 0,
+      message: "No orders requiring polling"
     }), {
       status: 200
     });
   }
+
+  console.log(`ef_poll_orders: Found ${orders.length} orders to poll`);
 
   let processed = 0;
   for (const o of (orders ?? [])){
@@ -353,30 +347,13 @@ Deno.serve(async (_req: Request)=>{
     processed++;
   }
 
-  totalProcessed += processed;
+  console.log(`ef_poll_orders: Completed polling ${processed} orders`);
 
-  // Check if any orders still need polling
-  const { data: remainingOrders } = await supabase
-    .from("exchange_orders")
-    .select("exchange_order_id")
-    .eq("status", "submitted");
-
-  if (!remainingOrders || remainingOrders.length === 0) {
-    console.log(`ef_poll_orders: All orders complete after ${pollCount} polls, exiting`);
-    return new Response(JSON.stringify({
-      success: true,
-      total_polls: pollCount,
-      total_processed: totalProcessed,
-      message: "All orders complete"
-    }), {
-      status: 200
-    });
-  }
-
-  // Wait 10 seconds before next poll
-  console.log(`ef_poll_orders: ${remainingOrders.length} orders still open, waiting 10 seconds...`);
-  await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  
-  // Continue loop
-  }
+  return new Response(JSON.stringify({
+    success: true,
+    processed: processed,
+    message: `Polled ${processed} orders`
+  }), {
+    status: 200
+  });
 });

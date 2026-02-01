@@ -35,7 +35,10 @@ Since cron jobs run on fixed schedules, we'll manually invoke these edge functio
 | `ef_resume_pipeline` | 05:05 daily + every 30 min | ✅ YES (Orchestrator) |
 
 ### Test Strategy
-- **Polling-Only Architecture:** ef_poll_orders runs every 10 seconds until all orders complete
+- **New Architecture (V2):** 3-function system with separate polling and fallback
+  - `ef_poll_orders` (v62): Single-pass status checks, runs every 1 minute
+  - `ef_market_fallback` (v1): Independent age/price checks, runs every 1 minute
+  - Both functions complete in <30 seconds (no timeout risk)
 - **Manual Actions:** VALR deposits/conversions + SQL inserts + Edge function invocations
 - **Minimal Amounts:** Use smallest possible BTC/USDT to stay under 60 USDT budget
 - **Fee Focus:** Test platform fee accumulation, transfer thresholds, and performance fee calculation
@@ -445,18 +448,14 @@ SELECT net.http_post(
   body := jsonb_build_object()
 ) AS request_id;
 
--- STEP 6: Start polling (10s intervals, runs until orders complete)
-SELECT net.http_post(
-  url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_poll_orders',
-  headers := jsonb_build_object(
-    'Content-Type', 'application/json',
-    'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-  ),
-  body := jsonb_build_object()
-) AS request_id;
+-- STEP 6: Monitor order status
+-- NEW ARCHITECTURE: Two separate cron jobs run every 1 minute:
+--   - ef_poll_orders: Updates order status from VALR API
+--   - ef_market_fallback: Checks for orders aged > 5 minutes
+-- NO MANUAL POLLING NEEDED - cron jobs handle everything automatically
 
--- WAIT 5+ MINUTES - Monitor logs for:
--- \"Poll #30\" and \"exceeded 5 min – converting to market\"
+-- WAIT 5+ MINUTES - Market fallback will trigger at ~T+5:00
+-- Monitor logs for: "LIMIT order converted to MARKET after X minutes"
 
 -- STEP 7: Verify fallback occurred (check after 5+ minutes)
 -- Check original LIMIT order (should be status='cancelled')
@@ -492,16 +491,19 @@ ORDER BY created_at DESC;
 
 **EXPECTED RESULTS:**
 - ✅ LIMIT order placed at $70,000 (no fill for 5 minutes)
-- ✅ Poll #30 (at ~5m0s): Detects age ≥ 5 minutes
-- ✅ LIMIT order cancelled on VALR
-- ✅ MARKET order placed for remaining quantity
-- ✅ MARKET order fills within seconds at current market price
-- ✅ Alert logged: \"exceeded 5-minute timeout, converting to MARKET\"
+- ✅ T+0:00 to T+4:00: ef_poll_orders updates status every minute (no fill)
+- ✅ T+5:00: ef_market_fallback detects age ≥ 5 minutes
+- ✅ LIMIT order cancelled on VALR (status → 'cancelled_for_market')
+- ✅ New order intent created with limit_price=NULL (MARKET)
+- ✅ ef_execute_orders triggered automatically
+- ✅ MARKET order fills within seconds at current market price (~$78,666)
+- ✅ Alert logged: component='ef_market_fallback', severity='info'
 - ✅ Ledger entry created from MARKET fill
 
 **PASS CRITERIA:**
-- LIMIT order cancelled after ~5 minutes (30 polls × 10s)
+- LIMIT order cancelled after 5-6 minutes (automatic)
 - MARKET order fills immediately at current market (~$78,666)
+- Alert logged with conversion details (original order ID, age, new intent ID)
 - Only ONE fill record created (deduplication works)
 - Cost: ~$1.05 USDT
 
@@ -551,7 +553,7 @@ INSERT INTO lth_pvr.order_intents (
   'pending'
 );
 
--- STEP 4: Execute order and start polling
+-- STEP 4: Execute order (cron jobs will monitor automatically)
 SELECT net.http_post(
   url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_execute_orders',
   headers := jsonb_build_object(
@@ -561,18 +563,13 @@ SELECT net.http_post(
   body := jsonb_build_object()
 ) AS request_id;
 
-SELECT net.http_post(
-  url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_poll_orders',
-  headers := jsonb_build_object(
-    'Content-Type', 'application/json',
-    'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-  ),
-  body := jsonb_build_object()
-) AS request_id;
+-- NO MANUAL POLLING NEEDED - cron jobs handle monitoring:
+--   - ef_poll_orders (every 1 min): Updates order status
+--   - ef_market_fallback (every 1 min): Checks price moves
 
 -- MONITOR: Watch for price move
--- Fallback triggers if market moves to $78,274 (below LIMIT)
--- or $78,862 (0.50% above LIMIT)
+-- Fallback triggers if market moves ≥0.25% from LIMIT price
+-- Current implementation: Time-based fallback only (price-based feature future enhancement)
 
 -- STEP 5: Verify price move fallback (when it triggers)
 SELECT component, message, 
@@ -624,7 +621,7 @@ INSERT INTO lth_pvr.order_intents (
   'pending'
 );
 
--- STEP 2: Execute order and start polling
+-- STEP 2: Execute order (cron jobs monitor automatically)
 SELECT net.http_post(
   url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_execute_orders',
   headers := jsonb_build_object(
@@ -634,16 +631,9 @@ SELECT net.http_post(
   body := jsonb_build_object()
 ) AS request_id;
 
-SELECT net.http_post(
-  url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_poll_orders',
-  headers := jsonb_build_object(
-    'Content-Type', 'application/json',
-    'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-  ),
-  body := jsonb_build_object()
-) AS request_id;
+-- NO MANUAL POLLING NEEDED - ef_poll_orders cron job runs every 1 minute
 
--- STEP 3: Verify fill record created (polling detects within 10 seconds)
+-- STEP 3: Verify fill record created (polling detects within 1 minute)
 SELECT 
   f.fill_id,
   f.trade_ts,
@@ -677,13 +667,13 @@ ORDER BY created_at DESC;
 
 **EXPECTED RESULTS:**
 - ✅ Order fills within 1-2 seconds (LIMIT at market price)
-- ✅ Polling detects fill at 10-second mark
+- ✅ Polling detects fill within 1 minute (next cron execution)
 - ✅ Fill record created in order_fills
 - ✅ Ledger entry created correctly
 - ✅ No duplicate records
 
 **PASS CRITERIA:**
-- Polling detects fill within 10 seconds
+- Polling detects fill within 1 minute (cron schedule)
 - Fill record created correctly
 - Ledger entry matches fill data
 - Cost: ~$1.05 USDT
@@ -989,8 +979,11 @@ $response | ConvertTo-Json -Depth 10 | Write-Host
 # Resume pipeline
 .\invoke-edge-function.ps1 -FunctionName "ef_resume_pipeline"
 
-# Poll orders
+# Poll orders (single-pass status check)
 .\invoke-edge-function.ps1 -FunctionName "ef_poll_orders"
+
+# Market fallback (check for stale LIMIT orders)
+.\invoke-edge-function.ps1 -FunctionName "ef_market_fallback"
 
 # Calculate performance fees
 .\invoke-edge-function.ps1 -FunctionName "ef_calculate_performance_fees"
@@ -1010,10 +1003,11 @@ $response | ConvertTo-Json -Depth 10 | Write-Host
 ### Issue: Order stays in "submitted" status
 **Solution:**
 1. Check VALR order book - order may be too far from market price
-2. Run `ef_poll_orders` manually (10s polling intervals)
-3. Wait ~5 minutes for automatic MARKET order fallback (30 polls × 10s)
-4. Check `lth_pvr.exchange_orders.raw` JSONB for VALR response
-5. Check `lth_pvr.alert_events` for polling errors
+2. Verify cron jobs running: `SELECT * FROM cron.job WHERE jobname LIKE '%1min%';`
+3. Wait 5-6 minutes for automatic MARKET fallback (ef_market_fallback runs every 1 min)
+4. Check `lth_pvr.alert_events` for fallback conversion: `WHERE component = 'ef_market_fallback'`
+5. Check `lth_pvr.exchange_orders.raw` JSONB for VALR response
+6. Manually trigger fallback: `ef_market_fallback` edge function
 
 ### Issue: Platform fee not accumulating
 **Solution:**
@@ -1058,9 +1052,11 @@ $response | ConvertTo-Json -Depth 10 | Write-Host
 - ✅ **Step 6:** Ledger posting and balance calculation
 
 ### MARKET Fallback System Verified
-- ✅ **Time-based fallback:** LIMIT cancelled after 5 minutes → MARKET order placed
-- ✅ **Price-based fallback:** LIMIT cancelled when market moves ≥0.25% → MARKET order placed
-- ✅ **Continuous monitoring:** Polling runs every 10 seconds until all orders complete (no time limit)
+- ✅ **Time-based fallback:** LIMIT cancelled after 5-6 minutes → MARKET order placed
+- ✅ **Separate function architecture:** ef_market_fallback runs independently every 1 minute
+- ✅ **No timeout risk:** Both functions complete in <30 seconds (well under 150s Supabase limit)
+- ✅ **Automatic execution:** New MARKET intent triggers ef_execute_orders via HTTP POST
+- ✅ **Alert logging:** All conversions logged to lth_pvr.alert_events with full context
 
 ### Fee System Verified
 - ✅ Platform fee 0.75% on USDT deposits
