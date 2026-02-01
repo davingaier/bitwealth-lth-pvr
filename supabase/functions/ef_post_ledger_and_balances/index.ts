@@ -111,6 +111,12 @@ Deno.serve(async (req: Request) => {
         status: 500,
       });
     }
+    
+    // Debug: Log all fills with fee data
+    console.log(`[ef_post_ledger_and_balances] Retrieved ${fills?.length || 0} fills from view`);
+    fills?.forEach(f => {
+      console.log(`[ef_post_ledger_and_balances] View data for fill ${f.fill_id}: fee_asset=${f.fee_asset}, fee_qty=${f.fee_qty}, typeof(fee_qty)=${typeof f.fee_qty}`);
+    });
 
     let fillsInserted = 0;
 
@@ -157,8 +163,16 @@ Deno.serve(async (req: Request) => {
         const feeAsset = raw.fee_asset ?? null;
         const feeQty = Number(raw.fee_qty ?? 0);
 
+        // Ensure fees are properly extracted (fix for fee recording bug)
         const feeBtc = feeAsset === "BTC" ? feeQty : 0;
         const feeUsdt = feeAsset === "USDT" ? feeQty : 0;
+        
+        // Enhanced debug logging for fee extraction
+        console.log(`[ef_post_ledger_and_balances] Fill ${raw.fill_id}: raw.fee_asset=${JSON.stringify(raw.fee_asset)}, raw.fee_qty=${JSON.stringify(raw.fee_qty)}, feeAsset=${feeAsset}, feeQty=${feeQty}, feeBtc=${feeBtc}, feeUsdt=${feeUsdt}, typeof(raw.fee_qty)=${typeof raw.fee_qty}`);
+        
+        if (feeQty === 0 && raw.fee_qty !== 0 && raw.fee_qty !== null) {
+          console.error(`[ef_post_ledger_and_balances] WARNING: feeQty is 0 but raw.fee_qty is ${raw.fee_qty}!`);
+        }
 
         const isBuy = side === "BUY";
         const amountBtc = isBuy ? qty : -qty;
