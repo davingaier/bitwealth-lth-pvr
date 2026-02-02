@@ -8005,11 +8005,11 @@ This will:
         // Get latest fee configs using RPC (to access lth_pvr schema)
         const customerIds = customers.map(c => c.customer_id);
         
-        // Use RPC to get fee configs from lth_pvr schema
+        // Use RPC to get fee configs from customer_strategies
         let feeConfigs = null;
         try {
           const { data, error: feeError } = await supabaseClient
-            .rpc('get_customer_fee_rates', { customer_ids: customerIds });
+            .rpc('get_customer_fee_rates', { p_customer_ids: customerIds });
           
           if (feeError) {
             console.warn('Could not load fee configs:', feeError);
@@ -8017,7 +8017,7 @@ This will:
             feeConfigs = data;
           }
         } catch (err) {
-          console.warn('RPC function get_customer_fee_rates not found or failed, using default 10% for all customers');
+          console.warn('RPC function get_customer_fee_rates not found or failed, using defaults');
         }
 
         // Map latest fee rates per customer (both performance and platform)
