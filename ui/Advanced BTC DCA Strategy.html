@@ -819,12 +819,13 @@
                 <th style="min-width:80px;">ID</th>
                 <th style="min-width:150px;">Name</th>
                 <th style="min-width:200px;">Email</th>
-                <th style="min-width:100px;">Fee Rate</th>
-                <th style="min-width:100px;"></th>
+                <th style="min-width:120px;">Performance Fee</th>
+                <th style="min-width:120px;">Platform Fee</th>
+                <th style="min-width:180px;"></th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="5" class="muted">Loading customers...</td></tr>
+              <tr><td colspan="6" class="muted">Loading customers...</td></tr>
             </tbody>
           </table>
         </div>
@@ -7979,17 +7980,17 @@ This will:
 
     async function loadCustomerFees() {
       if (!supabaseClient) {
-        tableBody.innerHTML = '<tr><td colspan="5">Loading Supabase client…</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6">Loading Supabase client…</td></tr>';
         return;
       }
 
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session?.user) {
-        tableBody.innerHTML = '<tr><td colspan="5" class="muted">Please sign in via Administration tab to manage fees.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Please sign in via Administration tab to manage fees.</td></tr>';
         return;
       }
 
-      tableBody.innerHTML = '<tr><td colspan="5">Loading customers...</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="6">Loading customers...</td></tr>';
 
       try {
         // Get all customers with registration_status = setup or active
@@ -8019,43 +8020,55 @@ This will:
           console.warn('RPC function get_customer_fee_rates not found or failed, using default 10% for all customers');
         }
 
-        // Map latest fee rate per customer
+        // Map latest fee rates per customer (both performance and platform)
         const feeMap = new Map();
         (feeConfigs || []).forEach(fc => {
-          feeMap.set(fc.customer_id, fc.fee_rate);
+          feeMap.set(fc.customer_id, {
+            performance_fee_rate: fc.performance_fee_rate ?? 0.10,
+            platform_fee_rate: fc.platform_fee_rate ?? 0.0075
+          });
         });
 
-        allCustomers = customers.map(c => ({
-          customer_id: c.customer_id,
-          name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
-          email: c.email || '—',
-          status: c.registration_status,
-          fee_rate: feeMap.get(c.customer_id) ?? 0.10 // Default 10%
-        }));
+        allCustomers = customers.map(c => {
+          const fees = feeMap.get(c.customer_id) || { performance_fee_rate: 0.10, platform_fee_rate: 0.0075 };
+          return {
+            customer_id: c.customer_id,
+            name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
+            email: c.email || '—',
+            status: c.registration_status,
+            performance_fee_rate: fees.performance_fee_rate,
+            platform_fee_rate: fees.platform_fee_rate
+          };
+        });
 
         renderCustomers(allCustomers);
       } catch (err) {
         console.error('loadCustomerFees error:', err);
-        tableBody.innerHTML = `<tr><td colspan="5" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="6" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
     function renderCustomers(customers) {
       if (!customers || customers.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="5" class="muted">No customers found.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No customers found.</td></tr>';
         return;
       }
 
       const rowsHtml = customers.map(c => {
-        const feePercent = (c.fee_rate * 100).toFixed(2);
+        const perfPercent = (c.performance_fee_rate * 100).toFixed(2);
+        const platPercent = (c.platform_fee_rate * 100).toFixed(3);
         return `
           <tr data-customer-id="${c.customer_id}">
             <td>${escapeHtml(c.customer_id)}</td>
             <td>${escapeHtml(c.name)}</td>
             <td>${escapeHtml(c.email)}</td>
-            <td class="fee-rate-cell">
-              <span class="fee-display">${feePercent}%</span>
-              <input type="number" class="fee-input" value="${feePercent}" min="0" max="100" step="0.01" style="display:none;width:80px;padding:4px;">
+            <td class="performance-fee-cell">
+              <span class="fee-display">${perfPercent}%</span>
+              <input type="number" class="fee-input" value="${perfPercent}" min="0" max="100" step="0.01" style="display:none;width:80px;padding:4px;">
+            </td>
+            <td class="platform-fee-cell">
+              <span class="fee-display">${platPercent}%</span>
+              <input type="number" class="fee-input" value="${platPercent}" min="0" max="10" step="0.001" style="display:none;width:80px;padding:4px;">
             </td>
             <td>
               <button type="button" class="btn btn-secondary-sm js-edit-fee">Edit</button>
@@ -8093,18 +8106,23 @@ This will:
       const customerId = tr.getAttribute('data-customer-id');
       if (!customerId) return;
 
-      const feeCell = tr.querySelector('.fee-rate-cell');
-      const feeDisplay = feeCell.querySelector('.fee-display');
-      const feeInput = feeCell.querySelector('.fee-input');
+      const perfCell = tr.querySelector('.performance-fee-cell');
+      const platCell = tr.querySelector('.platform-fee-cell');
+      const perfDisplay = perfCell.querySelector('.fee-display');
+      const perfInput = perfCell.querySelector('.fee-input');
+      const platDisplay = platCell.querySelector('.fee-display');
+      const platInput = platCell.querySelector('.fee-input');
       const editBtn = tr.querySelector('.js-edit-fee');
       const saveBtn = tr.querySelector('.js-save-fee');
       const cancelBtn = tr.querySelector('.js-cancel-fee');
 
       // Edit button clicked
       if (target.classList.contains('js-edit-fee')) {
-        feeDisplay.style.display = 'none';
-        feeInput.style.display = 'inline-block';
-        feeInput.focus();
+        perfDisplay.style.display = 'none';
+        perfInput.style.display = 'inline-block';
+        platDisplay.style.display = 'none';
+        platInput.style.display = 'inline-block';
+        perfInput.focus();
         editBtn.style.display = 'none';
         saveBtn.style.display = 'inline-block';
         cancelBtn.style.display = 'inline-block';
@@ -8113,10 +8131,14 @@ This will:
 
       // Cancel button clicked
       if (target.classList.contains('js-cancel-fee')) {
-        const originalValue = feeDisplay.textContent.replace('%', '');
-        feeInput.value = originalValue;
-        feeDisplay.style.display = 'inline-block';
-        feeInput.style.display = 'none';
+        const origPerf = perfDisplay.textContent.replace('%', '');
+        const origPlat = platDisplay.textContent.replace('%', '');
+        perfInput.value = origPerf;
+        platInput.value = origPlat;
+        perfDisplay.style.display = 'inline-block';
+        perfInput.style.display = 'none';
+        platDisplay.style.display = 'inline-block';
+        platInput.style.display = 'none';
         editBtn.style.display = 'inline-block';
         saveBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
@@ -8125,44 +8147,61 @@ This will:
 
       // Save button clicked
       if (target.classList.contains('js-save-fee')) {
-        const newFeePercent = parseFloat(feeInput.value);
+        const newPerfPercent = parseFloat(perfInput.value);
+        const newPlatPercent = parseFloat(platInput.value);
         
-        if (isNaN(newFeePercent) || newFeePercent < 0 || newFeePercent > 100) {
-          showMessage('Fee rate must be between 0% and 100%', 'error');
+        if (isNaN(newPerfPercent) || newPerfPercent < 0 || newPerfPercent > 100) {
+          showMessage('Performance fee rate must be between 0% and 100%', 'error');
+          return;
+        }
+        
+        if (isNaN(newPlatPercent) || newPlatPercent < 0 || newPlatPercent > 10) {
+          showMessage('Platform fee rate must be between 0% and 10%', 'error');
           return;
         }
 
-        const newFeeRate = newFeePercent / 100;
+        const newPerfRate = newPerfPercent / 100;
+        const newPlatRate = newPlatPercent / 100;
 
         saveBtn.setAttribute('disabled', 'true');
         saveBtn.textContent = 'Saving…';
 
         try {
-          const { data, error } = await supabaseClient.rpc('update_customer_fee_rate', {
+          const { data, error } = await supabaseClient.rpc('update_customer_fee_rates', {
             p_customer_id: parseInt(customerId),
-            p_new_fee_rate: newFeeRate
+            p_performance_fee_rate: newPerfRate,
+            p_platform_fee_rate: newPlatRate
           });
 
           if (error) throw error;
 
           // Update UI
-          feeDisplay.textContent = `${newFeePercent.toFixed(2)}%`;
-          feeDisplay.style.display = 'inline-block';
-          feeInput.style.display = 'none';
+          perfDisplay.textContent = `${newPerfPercent.toFixed(2)}%`;
+          platDisplay.textContent = `${newPlatPercent.toFixed(3)}%`;
+          perfDisplay.style.display = 'inline-block';
+          perfInput.style.display = 'none';
+          platDisplay.style.display = 'inline-block';
+          platInput.style.display = 'none';
           editBtn.style.display = 'inline-block';
           saveBtn.style.display = 'none';
           cancelBtn.style.display = 'none';
 
           // Update in-memory data
           const customer = allCustomers.find(c => c.customer_id == customerId);
-          if (customer) customer.fee_rate = newFeeRate;
+          if (customer) {
+            customer.performance_fee_rate = newPerfRate;
+            customer.platform_fee_rate = newPlatRate;
+          }
 
-          const prevPercent = (data.previous_fee_rate * 100).toFixed(2);
-          const newPercent = (data.new_fee_rate * 100).toFixed(2);
-          showMessage(`Fee updated successfully for customer ${customerId}. Previous: ${prevPercent}%, New: ${newPercent}%`, 'success');
+          showMessage(
+            `Fees updated successfully for customer ${customerId}.\n` +
+            `Performance: ${(data.previous_performance_fee_rate * 100).toFixed(2)}% → ${(data.new_performance_fee_rate * 100).toFixed(2)}%\n` +
+            `Platform: ${(data.previous_platform_fee_rate * 100).toFixed(3)}% → ${(data.new_platform_fee_rate * 100).toFixed(3)}%`,
+            'success'
+          );
         } catch (err) {
           console.error('update fee error:', err);
-          showMessage(`Failed to update fee: ${err.message}`, 'error');
+          showMessage(`Failed to update fees: ${err.message}`, 'error');
         } finally {
           saveBtn.removeAttribute('disabled');
           saveBtn.textContent = 'Save';
