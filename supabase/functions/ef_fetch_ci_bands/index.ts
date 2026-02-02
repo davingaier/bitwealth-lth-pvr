@@ -258,7 +258,7 @@ Deno.serve(async (req: Request) => {
       org_id,
       date: dstr,
       mode,
-      btc_price: val("btc_price", "price", "close", /price.*usd/i),
+      btc_price: val("lth_price", "btc_price", "price", "close", /^(btc_)?price$/i),
       price_at_mean: val(
         "price_at_pvr_mean",
         "lth_realized_price",
