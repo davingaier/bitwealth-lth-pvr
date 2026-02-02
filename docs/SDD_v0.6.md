@@ -3,11 +3,119 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-01-27
+**Last updated:** 2026-02-02
 
 ---
 
 ## 0. Change Log
+
+### v0.6.38 – CRITICAL: Ledger Reconciliation & Fee Management Consolidation
+**Date:** 2026-02-01 to 2026-02-02  
+**Purpose:** Fix critical accounting bugs, achieve perfect VALR reconciliation, consolidate fee management to single source of truth.
+
+**Status:** ✅ COMPLETE - All fixes deployed and verified
+
+#### Critical Accounting Fixes (Feb 1, 2026)
+
+**Problem 1: Fill Records Not Created**
+- **Root Cause:** WebSocket monitor deleted, ef_poll_orders wasn't creating fills
+- **Solution:** Updated `ef_poll_orders` v66 to create fill records from VALR API
+- **Impact:** TC-PIPE-02 SELL test now creates fills correctly
+
+**Problem 2: Fees Recorded as 0.00 (Rounding Bug)**
+- **Root Cause:** `fn_round_financial()` trigger rounded `fee_usdt` to 2dp
+- **Example:** 0.00108352 USDT fee → 0.00 after rounding (lost precision)
+- **Solution:** Migration `20260201_fix_fee_usdt_rounding.sql` - changed to 8dp
+- **Impact:** All cryptocurrency fees now preserved at 8dp precision
+
+**Problem 3: Performance Fees Not Accumulated**
+- **Root Cause:** Only platform fees accumulated, not performance fees
+- **Solution:** Updated `ef_post_ledger_and_balances` v62-63 to accumulate both fee types
+- **Result:** 4.65 USDT performance fee transferred successfully
+
+**Problem 4: Batch Transfers Missing Ledger Entries**
+- **Root Cause:** Transfers succeeded on VALR but no ledger debit entries created
+- **Impact:** Portal balance didn't reflect money that left subaccount
+- **Solution:** Added INSERT statements in `ef_post_ledger_and_balances` v64-65
+- **Backfilled:** 53 historical missing entries (50 BTC + 3 USDT totaling 4.82 USDT + 0.00007282 BTC)
+
+**Problem 5: Deposits Recorded as NET Instead of GROSS**
+- **Root Cause:** Code subtracted platform fee before recording deposit amount
+- **Example BTC:** VALR credited 0.00007265712 BTC, ledger showed 0.00007211 (after 0.75% fee)
+- **Example USDT:** VALR credited 7.6433744028 USDT, ledger showed 7.58604909 (after 0.75% fee)
+- **Solution:** Changed `ef_post_ledger_and_balances` v66 to record GROSS in `amount_btc`/`amount_usdt`, fee in `platform_fee_btc`/`platform_fee_usdt`
+- **Impact:** Applies to BOTH BTC and USDT deposits
+
+**Problem 6: Amount Precision Too Low (2dp)**
+- **Root Cause:** `fn_round_financial()` rounded `amount_usdt` and `usdt_balance` to 2dp
+- **Impact:** VALR uses 8dp precision (e.g., 7.6433744028) but ledger rounded to 7.64
+- **Solution:** Migration `fix_amount_usdt_rounding.sql` - changed to 8dp
+- **Rationale:** VALR API uses 8dp for ALL cryptocurrency amounts (not just BTC)
+
+**Problem 7: Duplicate Performance Fee Entries**
+- **Root Cause:** Performance fee recorded as both `performance_fee` ledger entry AND transfer entry
+- **Impact:** 4.65 USDT debited twice (total 9.30 USDT error)
+- **Solution:** Deleted duplicate transfer entry, kept original performance_fee entry
+
+**Problem 8: ChartInspect CI Bands Wrong BTC Price**
+- **Root Cause:** ChartInspect API changed response field from `btc_price` to `lth_price`
+- **Impact:** Fallback regex matched wrong field, showing 78713.00 instead of 76959.73 (2.3% error)
+- **Solution:** Updated `ef_fetch_ci_bands` field priority to check `lth_price` first
+- **Changed Regex:** From `/price.*usd/i` (too broad) to `/^(btc_)?price$/i` (exact match)
+
+**Final Result:** Perfect ledger reconciliation achieved - 5.21 USDT matching VALR exactly ✅
+
+#### Fee Management Consolidation (Feb 2, 2026)
+
+**Problem:** Fee rates stored in TWO places causing data inconsistency risk
+- `public.customer_strategies` - Has `performance_fee_rate` and `platform_fee_rate`
+- `lth_pvr.fee_configs` - Has only `fee_rate` (performance fee)
+
+**Solution:** Consolidated to single source of truth in `public.customer_strategies`
+
+**Migration 1: `20260202_consolidate_fee_management_v2.sql`**
+- Backfilled existing `fee_configs.fee_rate` → `customer_strategies.performance_fee_rate`
+- Set defaults: 10% performance fee, 0.75% platform fee
+- Created new RPC: `update_customer_fee_rates(customer_id, performance_fee_rate, platform_fee_rate)`
+- Created new RPC: `get_customer_fee_rates(customer_ids[])` - returns BOTH fee types
+- Updated old `update_customer_fee_rate()` to redirect for backward compatibility
+
+**Migration 2: `20260202_drop_fee_configs_table_v2.sql`**
+- Safety check: Verified `customer_strategies` has fee data before dropping
+- Dropped obsolete `lth_pvr.fee_configs` table
+
+**Admin UI Updates:**
+- Fee Management table now displays TWO columns: "Performance Fee" and "Platform Fee"
+- Both fees editable in-place (Edit/Save/Cancel buttons)
+- Validation: Performance (0-100%), Platform (0-10%)
+- Uses `update_customer_fee_rates()` RPC to save both fees simultaneously
+
+**Historical Deposit Fixes:**
+- Fixed 8 deposit records for customers 12, 31, 44, 45 from NET to GROSS
+- 8 deposits with zero fees left unchanged (were recorded before fee capability)
+
+#### Edge Function Versions
+- `ef_poll_orders`: v66 (creates fills, handles "Failed" status)
+- `ef_post_ledger_and_balances`: v66 (GROSS deposits, 8dp precision, batch transfer ledger entries)
+- `ef_fetch_ci_bands`: Updated field mapping to prioritize `lth_price`
+- `ef_create_order_intents`: v41 (fixed SELL amount calculation)
+- `ef_execute_orders`: v54 (uses order book prices)
+
+#### Database Schema Changes
+- `ledger_lines`: `fee_usdt` (2dp → 8dp), `amount_usdt` (2dp → 8dp), `usdt_balance` (2dp → 8dp)
+- `fn_round_financial()`: Updated to preserve 8dp for all crypto amounts
+- Deposit recording: Changed from NET to GROSS amounts
+- Platform fees: Recorded separately in `platform_fee_btc`/`platform_fee_usdt` columns
+- Fee management: Single source of truth in `public.customer_strategies`
+
+#### Precision Standards
+- **BTC amounts:** 8 decimal places (satoshi precision)
+- **USDT amounts:** 8 decimal places (matching VALR API)
+- **Fee amounts:** 8 decimal places (both BTC and USDT)
+- **USD display values:** 2 decimal places (`nav_usd` for portal display)
+- **Rationale:** VALR API uses 8dp for all cryptocurrency amounts
+
+---
 
 ### v0.6.37 – FEATURE: Complete ZAR Transaction Support & Customer Transaction History
 **Date:** 2026-01-27  
