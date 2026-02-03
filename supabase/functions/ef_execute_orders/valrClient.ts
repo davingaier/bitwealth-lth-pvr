@@ -171,13 +171,10 @@ export async function placeMarketOrder(
     pair: p,
     side: sideLower,
     customerOrderId,
+    // For MARKET orders, always use baseAmount (BTC quantity)
+    // VALR will use market price to determine quote amount
+    baseAmount: amount,
   };
-
-  if (sideLower === "buy") {
-    body["quoteAmount"] = amount;
-  } else {
-    body["baseAmount"] = amount;
-  }
 
   return await valrPrivateRequest("POST", "/v1/orders/market", body, subaccountId);
 }

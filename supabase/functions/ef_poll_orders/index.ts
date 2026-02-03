@@ -163,7 +163,7 @@ Deno.serve(async (_req: Request)=>{
     let newStatus = o.status ?? "submitted";
     if (valrStatus === "Cancelled") newStatus = "cancelled";
     else if (valrStatus === "Filled") newStatus = "filled";
-    else if (valrStatus === "Failed") newStatus = "failed";
+    else if (valrStatus === "Failed") newStatus = "rejected";
     else newStatus = "submitted";
 
     // Prepare merged raw payload
@@ -178,6 +178,30 @@ Deno.serve(async (_req: Request)=>{
       },
       valrLast: last
     };
+
+    // Generate alert if order was rejected by VALR
+    if (newStatus === "rejected" && o.status !== "rejected") {
+      const failedReason = last.failedReason || "Unknown reason";
+      await logAlert(
+        supabase,
+        "ef_poll_orders",
+        "error",
+        `Order rejected by VALR: ${failedReason}`,
+        {
+          intent_id: o.intent_id,
+          exchange_order_id: o.exchange_order_id,
+          ext_order_id: o.ext_order_id,
+          pair: o.pair,
+          side: o.side,
+          qty: o.qty,
+          price: o.price,
+          failed_reason: failedReason,
+          valr_status: valrStatus
+        },
+        org_id
+      );
+      console.log(`ef_poll_orders: order ${o.exchange_order_id} rejected by VALR - ${failedReason}`);
+    }
 
     // ------------------------------------------------------------------
     // 2. Fallback logic: if still submitted AND not already a fallback
@@ -339,6 +363,16 @@ Deno.serve(async (_req: Request)=>{
       if (updateError) {
         console.error(`ef_poll_orders: failed to update exchange_order_id=${o.exchange_order_id}`, updateError);
         continue;
+      }
+      
+      // Update intent status when order is rejected
+      if (newStatus === "rejected") {
+        const { error: intentError } = await supabase.from("order_intents").update({
+          status: "error"
+        }).eq("intent_id", o.intent_id);
+        if (intentError) {
+          console.error(`ef_poll_orders: failed to update intent ${o.intent_id} to error`, intentError);
+        }
       }
       
       if (!requiresMorePolling) {

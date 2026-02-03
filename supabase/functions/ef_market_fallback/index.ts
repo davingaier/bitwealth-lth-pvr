@@ -2,14 +2,16 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
 
 // VALR signature helper (inline to avoid import issues)
+// IMPORTANT: Must include subaccountId in signature payload per VALR spec
 async function signVALR(
   timestamp: string,
   method: string,
   path: string,
   body: string,
   secret: string,
+  subaccountId?: string,
 ): Promise<string> {
-  const payload = timestamp + method.toUpperCase() + path + body;
+  const payload = timestamp + method.toUpperCase() + path + body + (subaccountId ?? "");
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const messageData = encoder.encode(payload);
@@ -106,7 +108,31 @@ Deno.serve(async (_req: Request) => {
     );
 
     try {
-      // 2) Get subaccount for this order
+      // 2) Get ORIGINAL INTENT DATA (customer_id, base_asset, quote_asset, exchange_account_id)
+      const { data: origIntent, error: origIntentErr } = await supabase
+        .from("order_intents")
+        .select("customer_id, base_asset, quote_asset, exchange_account_id")
+        .eq("intent_id", order.intent_id)
+        .limit(1)
+        .single();
+
+      if (origIntentErr || !origIntent) {
+        console.error(
+          `ef_market_fallback: No original intent for intent_id=${order.intent_id}`,
+        );
+        await logAlert(
+          supabase,
+          "ef_market_fallback",
+          "error",
+          "Missing original intent for market fallback",
+          { exchange_order_id: order.exchange_order_id, intent_id: order.intent_id },
+          order.org_id,
+          null,
+        );
+        continue;
+      }
+
+      // 3) Get subaccount for this order
       const { data: exAcc, error: exErr } = await supabase
         .schema("public")
         .from("exchange_accounts")
@@ -132,10 +158,12 @@ Deno.serve(async (_req: Request) => {
       }
 
       // 3) Cancel the LIMIT order on VALR
+      // VALR cancel endpoint: /v1/orders/order (uses orderId in body, not path)
+      const normalizedPair = order.pair.replace("/", "").toUpperCase();
       const cancelPath = `/v1/orders/order`;
       const cancelBody = JSON.stringify({
         orderId: order.ext_order_id,
-        pair: order.pair.replace("/", ""),
+        pair: normalizedPair,
       });
 
       const cancelTimestamp = Date.now().toString();
@@ -145,6 +173,7 @@ Deno.serve(async (_req: Request) => {
         cancelPath,
         cancelBody,
         VALR_API_SECRET,
+        exAcc.subaccount_id, // Include subaccount in signature
       );
 
       const cancelResponse = await fetch(`https://api.valr.com${cancelPath}`, {
@@ -164,6 +193,20 @@ Deno.serve(async (_req: Request) => {
         console.error(
           `ef_market_fallback: Failed to cancel order ${order.ext_order_id}: ${cancelError}`,
         );
+        await logAlert(
+          supabase,
+          "ef_market_fallback",
+          "error",
+          `VALR cancel failed: ${cancelError}`,
+          {
+            exchange_order_id: order.exchange_order_id,
+            ext_order_id: order.ext_order_id,
+            http_status: cancelResponse.status,
+            error: cancelError,
+          },
+          order.org_id,
+          origIntent.customer_id,
+        );
         // Continue anyway - order might already be filled/cancelled
       } else {
         console.log(`ef_market_fallback: Cancelled LIMIT order ${order.ext_order_id}`);
@@ -178,16 +221,19 @@ Deno.serve(async (_req: Request) => {
         })
         .eq("exchange_order_id", order.exchange_order_id);
 
-      // 5) Create new MARKET order intent
+      // 5) Create new MARKET order intent with ALL required fields from original intent
       const { data: newIntent, error: intentError } = await supabase
         .from("order_intents")
         .insert({
           org_id: order.org_id,
-          customer_id: null, // Will be looked up from original intent
+          customer_id: origIntent.customer_id,
           trade_date: new Date().toISOString().split("T")[0],
           pair: order.pair,
           side: order.side,
           amount: order.qty,
+          base_asset: origIntent.base_asset,
+          quote_asset: origIntent.quote_asset,
+          exchange_account_id: origIntent.exchange_account_id,
           limit_price: null, // NULL = MARKET order
           status: "pending",
           reason: "market_fallback",

@@ -138,8 +138,8 @@ Deno.serve(async ()=>{
           p_asset: "USDT"
         });
       } else {
-        // SELL % of BTC (amount_pct is stored as 0-100, so divide by 100)
-        qtyBase = +(Number(bal.btc_balance) * Number(d.amount_pct) / 100).toFixed(8);
+        // SELL % of BTC (amount_pct is stored as decimal 0.0-1.0, not 0-100)
+        qtyBase = +(Number(bal.btc_balance) * Number(d.amount_pct)).toFixed(8);
         if (qtyBase <= 0) {
           await logAlert(
             sb,

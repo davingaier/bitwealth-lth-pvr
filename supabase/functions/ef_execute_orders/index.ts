@@ -106,6 +106,8 @@ Deno.serve(async ()=>{
       
       if (isMarketOrder) {
         // --- MARKET ORDER PATH ---
+        // VALR MARKET orders accept baseAmount (BTC) for both BUY and SELL
+        // VALR automatically uses market price to determine quote amount
         console.log(`Placing MARKET ${side} order: ${qtyStr} BTC (intent ${i.intent_id})`);
         try {
           valrResp = await placeMarketOrder(
