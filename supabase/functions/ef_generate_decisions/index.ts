@@ -55,6 +55,10 @@ Deno.serve(async (_req: any)=>{
       roc5 = pxT5 > 0 ? pxT / pxT5 - 1 : 0;
     }
     const px = Number(ci.btc_price ?? 0);
+    
+    // CRITICAL: Log actual CI bands data to track price source
+    console.info(`ef_generate_decisions CI BANDS: date=${signalStr} btc_price=${ci.btc_price} px=${px} ci_obj=`, JSON.stringify(ci));
+    
     // If we start mid-pause and there's no prior state, we need today's pause flag.
     const pauseNow = await computeBearPauseAt(sb, org_id, signalStr);
     // Active customers for this org (public.customer_strategies)
@@ -214,6 +218,44 @@ Deno.serve(async (_req: any)=>{
       }
     }
     console.info(`ef_generate_decisions done: wrote=${wrote} in ${Date.now() - started}ms`);
+    
+    // VALIDATION: Check if written decisions match CI bands price (sanity check)
+    try {
+      const { data: writtenDecisions, error: vErr } = await sb
+        .from("decisions_daily")
+        .select("customer_id, price_usd")
+        .eq("org_id", org_id)
+        .eq("trade_date", tradeStr)
+        .limit(1);
+      
+      if (!vErr && writtenDecisions && writtenDecisions.length > 0) {
+        const decisionPrice = Number(writtenDecisions[0].price_usd);
+        const ciBandsPrice = px;
+        const pctDiff = ciBandsPrice > 0 ? Math.abs((decisionPrice / ciBandsPrice - 1) * 100) : 0;
+        
+        console.info(`ef_generate_decisions VALIDATION: decision_price=${decisionPrice} ci_bands_price=${ciBandsPrice} diff=${pctDiff.toFixed(2)}%`);
+        
+        if (pctDiff > 2.0) {
+          await logAlert(
+            sb,
+            "ef_generate_decisions",
+            "error",
+            `Price discrepancy detected: decision price ${decisionPrice} differs from CI bands price ${ciBandsPrice} by ${pctDiff.toFixed(2)}%`,
+            {
+              decision_price: decisionPrice,
+              ci_bands_price: ciBandsPrice,
+              signal_date: signalStr,
+              trade_date: tradeStr,
+              pct_diff: pctDiff
+            },
+            org_id
+          );
+        }
+      }
+    } catch (valErr) {
+      console.error("Price validation failed:", valErr);
+    }
+    
     return new Response("ok");
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
