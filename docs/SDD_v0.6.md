@@ -9,6 +9,10 @@
 
 ## 0. Change Log
 
+### v0.6.41 – TC-FALLBACK-02/03: Price-Based MARKET Fallback & VALR Market Data Integration
+**Date:** 2026-02-04  
+**Summary:** Fixed critical VALR order book endpoint 403 error causing price-based fallback failures. Switched from `/v1/marketdata/{pair}/orderbook` (restricted) → `/v1/public/{pair}/trades` (stale prices) → `/v1/public/{pair}/marketsummary` (real-time BID/ASK). Validated immediate MARKET fill detection across 6 orders (0.8 min avg, zero duplicates). All three MARKET fallback scenarios now production-ready: time-based (≥5 min), price-based (≥0.25% move), immediate fills (<1 min polling). **Edge Functions:** ef_market_fallback v14 (market summary endpoint). **Test Cases:** TC-FALLBACK-02 ✅ PASS, TC-FALLBACK-03 ✅ PASS.
+
 ### v0.6.40 – CRITICAL: Fix Duplicate Intent Creation & Minimum Order Size
 **Date:** 2026-02-04  
 **Purpose:** Fix catastrophic bug causing 13 duplicate SELL intents every 30 minutes, add minimum order size validation for SELL orders.
@@ -117,6 +121,246 @@ WHERE jobid = 28 AND jobname = 'lth_pvr_resume_pipeline_guard';
 1. Manually update cron job 28 schedule via Supabase dashboard (SQL permissions denied via API)
 2. Monitor 2026-02-05 for proper single-intent behavior
 3. Consider adding carry bucket for SELL orders below minimum (currently just skipped)
+
+---
+
+### v0.6.41 – TC-FALLBACK-02/03: Price-Based MARKET Fallback & VALR Market Data Integration
+**Date:** 2026-02-04  
+**Purpose:** Fix critical VALR market data integration bug causing price-based fallback failures, validate immediate MARKET fill detection.
+
+**Status:** ✅ COMPLETE - Price-based fallback fully operational, all test cases passed
+
+#### Problem Discovery: Price-Based Fallback Not Triggering
+
+**Test Scenario (TC-FALLBACK-02):** Place SELL LIMIT order below market with expectation that price-based fallback triggers when market BID drops ≥0.25% below limit price.
+
+**Observed Behavior:**
+- Order placed at 14:26:38 UTC with limit price $75,311
+- Market BID observed at $75,157 (0.20% below limit - within tolerance)
+- Market BID remained below $75,311 for >10 seconds
+- Expected: Price-based fallback should trigger at 0.25% threshold
+- Actual: Order aged out after 5 minutes via time-based fallback (not price-based)
+
+**Initial Diagnosis:**
+- Time-based fallback (5 minutes) working correctly ✅
+- Price-based fallback (0.25% move) not working 🔥
+
+#### Root Cause: VALR Order Book Endpoint 403 Error
+
+**Bug:** `ef_market_fallback` used VALR order book endpoint `/v1/marketdata/BTCUSDT/orderbook` which returned **403 Forbidden**.
+
+**Impact:**
+- `getOrderBookPrice()` function silently returned `null`
+- Price-based checks completely skipped (no BID/ASK data available)
+- Only time-based fallback (age ≥5 minutes) functional
+
+**Evidence:**
+```typescript
+// v12 code - Order book endpoint
+async function getOrderBookPrice(pair: string): Promise<{ bestBid: string; bestAsk: string } | null> {
+  const response = await fetch(`https://api.valr.com/v1/marketdata/${normalizedPair}/orderbook`);
+  if (!response.ok) {
+    console.error(`Failed to fetch order book: ${response.status}`);
+    return null;  // ❌ Silent failure - price checks skipped
+  }
+  // ...never reached due to 403 error
+}
+```
+
+**Why 403 Error?**
+- VALR order book endpoint requires authentication OR has strict rate limits
+- Public endpoint expected but actually restricted
+- Silent failure pattern prevented early detection
+
+#### Solution Evolution: Three Endpoint Attempts
+
+**Attempt 1: Public Trades Endpoint (v13) - Partial Fix**
+- **Endpoint:** `/v1/public/BTCUSDT/trades`
+- **Data Available:** Last traded price only (`lastTradedPrice`)
+- **Limitation:** Trade price updates only when trades execute
+- **Example Problem:**
+  ```json
+  {
+    "lastTradedPrice": "75325",  // Last trade 2 minutes ago
+    // BUT current order book:
+    // BID: 75157, ASK: 75265 (actual market prices)
+  }
+  ```
+- **Result:** Improved reliability but not real-time enough for 0.25% thresholds
+
+**Attempt 2: Market Summary Endpoint (v14) - Complete Fix ✅**
+- **Endpoint:** `/v1/public/BTCUSDT/marketsummary`
+- **Data Available:** Real-time BID/ASK prices + last traded price
+- **Response Structure:**
+  ```json
+  {
+    "bidPrice": "75157",        // ✅ Real-time best bid
+    "askPrice": "75265",        // ✅ Real-time best ask
+    "lastTradedPrice": "75325"  // Reference only
+  }
+  ```
+- **Advantages:**
+  - No authentication required (public endpoint)
+  - Updates independently of trade execution
+  - Reflects actual order book prices in real-time
+  - No 403 errors
+- **Result:** Price-based fallback now functional
+
+#### Implementation: ef_market_fallback v14
+
+**Updated getOrderBookPrice() Function:**
+```typescript
+async function getOrderBookPrice(pair: string): Promise<{ bestBid: string; bestAsk: string } | null> {
+  try {
+    const normalizedPair = pair.replace("/", "").toUpperCase(); // BTC/USDT → BTCUSDT
+    const response = await fetch(`https://api.valr.com/v1/public/${normalizedPair}/marketsummary`);
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch market summary for ${pair}: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.bidPrice || !data.askPrice) {
+      console.error(`Market summary missing bid/ask for ${pair}`);
+      return null;
+    }
+    
+    console.log(`${pair} BID: ${data.bidPrice}, ASK: ${data.askPrice} (last trade: ${data.lastTradedPrice || 'N/A'})`);
+    
+    return {
+      bestBid: data.bidPrice,
+      bestAsk: data.askPrice,
+    };
+  } catch (e) {
+    console.error(`Error fetching market summary for ${pair}:`, e);
+    return null;
+  }
+}
+```
+
+**Price-Based Fallback Logic (Unchanged):**
+```typescript
+// Calculate price movement percentage
+if (order.side.toUpperCase() === "BUY") {
+  // BUY orders: trigger if ASK moves ≥0.25% ABOVE limit price
+  marketPrice = Number(orderBookPrices.bestAsk);
+  priceMovePct = (marketPrice - orderPrice) / orderPrice;
+  if (priceMovePct >= PRICE_MOVE_THRESHOLD) {
+    triggerFallback = true;
+    fallbackReason = `Market ASK moved ${(priceMovePct * 100).toFixed(2)}% above order price`;
+  }
+} else {
+  // SELL orders: trigger if BID moves ≥0.25% BELOW limit price
+  marketPrice = Number(orderBookPrices.bestBid);
+  priceMovePct = (orderPrice - marketPrice) / orderPrice;
+  if (priceMovePct >= PRICE_MOVE_THRESHOLD) {
+    triggerFallback = true;
+    fallbackReason = `Market BID moved ${(priceMovePct * 100).toFixed(2)}% below order price`;
+  }
+}
+```
+
+#### Test Validation Results
+
+**TC-FALLBACK-02: Price-Based Fallback (0.25% Movement)**
+
+**Test Order (Post-Fix):**
+- **Placed:** 2026-02-04 14:42 UTC
+- **Order:** SELL 0.00004612 BTC at $75,700 (limit price)
+- **Market Conditions:**
+  - VALR BID: $74,490
+  - Price move: ($75,700 - $74,490) / $75,700 = **1.60% below limit**
+  - Trigger threshold: 0.25% (exceeded by 6.4x)
+- **Result:** ✅ **Immediate cancellation** → MARKET order placed at $74,610
+- **Fill:** 0.00004612 BTC × $74,610 = $3.44 USDT (customer received)
+- **Detection Time:** <10 seconds (price-based trigger, not 5-minute timeout)
+
+**Outcome:** ✅ PASS - Price-based fallback working correctly with market summary endpoint
+
+**TC-FALLBACK-03: Immediate MARKET Fill Detection**
+
+**Purpose:** Verify polling system detects fills within 1 minute without creating duplicates.
+
+**Test Data:** 6 MARKET orders placed on 2026-02-04 (all filled immediately)
+
+| Order Time | Fill Detected | Detection Delay | Minutes |
+|------------|---------------|-----------------|---------|
+| 14:57:22   | 14:58:01      | 39 seconds      | 0.66    |
+| 14:47:12   | 14:48:01      | 49 seconds      | 0.83    |
+| 14:31:41   | 14:32:00      | 19 seconds      | 0.32    |
+| 14:18:02   | 14:19:01      | 59 seconds      | 0.98    |
+| 13:54:02   | 13:55:01      | 59 seconds      | 0.98    |
+| 13:39:02   | 13:40:01      | 59 seconds      | 0.98    |
+
+**Statistics:**
+- **Average Detection Time:** ~0.8 minutes (well within 1-minute cron cycle)
+- **Duplicate Fill Records:** 0 (zero duplicates found)
+- **Ledger-to-Fill Matching:** 100% accuracy (all ledger entries correctly reference fill_id)
+
+**Validation Queries:**
+```sql
+-- Check for duplicates (GROUP BY order + trade timestamp + amount)
+SELECT exchange_order_id, COUNT(*) 
+FROM lth_pvr.order_fills 
+WHERE customer_id = 47 AND DATE(created_at) = CURRENT_DATE
+GROUP BY exchange_order_id, fill_timestamp, price, quantity_filled
+HAVING COUNT(*) > 1;
+-- Result: 0 rows (no duplicates)
+
+-- Check ledger-to-fill references
+SELECT 
+  l.ref_fill_id,
+  f.fill_id,
+  CASE WHEN l.ref_fill_id = f.fill_id THEN '✅ Match' ELSE '❌ Mismatch' END
+FROM lth_pvr.ledger_lines l
+LEFT JOIN lth_pvr.order_fills f ON l.ref_fill_id = f.fill_id
+WHERE l.customer_id = 47 AND DATE(l.trade_date) = CURRENT_DATE;
+-- Result: All rows show '✅ Match' (100% accuracy)
+```
+
+**Outcome:** ✅ PASS - Polling system reliably detects fills within 1 minute, idempotency working correctly
+
+#### Production Deployment
+
+**Edge Function Versions:**
+- **ef_market_fallback:** v14 - FINAL (market summary endpoint)
+- **ef_poll_orders:** v68 (1-minute status polling)
+- **ef_execute_orders:** v56 (unchanged - order execution)
+
+**Cron Jobs (10-Second Polling):**
+- 6 offset jobs: `lth_market_fallback_00s` through `lth_market_fallback_50s`
+- Schedule: `*/1 3-16 * * *` (every minute 03:00-16:59 UTC)
+- Execution pattern: :00, :10, :20, :30, :40, :50 seconds within each minute
+- Rate limit safety: 6 calls/minute << 30 calls/minute VALR API limit
+
+**VALR API Endpoint Usage:**
+```
+✅ PRODUCTION: /v1/public/{pair}/marketsummary
+   - Real-time BID/ASK prices
+   - No authentication required
+   - Reliable public endpoint
+
+❌ DEPRECATED: /v1/marketdata/{pair}/orderbook
+   - Returns 403 Forbidden
+   - Authentication required or rate limited
+   - Not suitable for polling
+```
+
+#### All MARKET Fallback Scenarios Validated
+
+| Test Case | Trigger Condition | Status | Deployment Date |
+|-----------|-------------------|--------|-----------------|
+| TC-FALLBACK-01 | Order age ≥ 5 minutes | ✅ PASS | 2026-02-03 |
+| TC-FALLBACK-02 | Price move ≥ 0.25% | ✅ PASS | 2026-02-04 |
+| TC-FALLBACK-03 | Immediate fill detection | ✅ PASS | 2026-02-04 |
+
+**System Status:** Production-ready - All three MARKET fallback mechanisms operational ✅
+
+**Files Changed:**
+- `supabase/functions/ef_market_fallback/index.ts` - Market summary endpoint integration
+- `docs/LTH_PVR_PRODUCTION_TEST_PLAN_2026-02-01.md` - Test case results updated
 
 ---
 
