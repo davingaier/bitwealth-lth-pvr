@@ -8,7 +8,7 @@ Deno.serve(async ()=>{
     status: 500
   });
   const todayStr = new Date().toISOString().slice(0, 10);
-  const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "0.52"); // VALR placeholder
+  const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "1.00"); // VALR minimum order size
   
   // Wait for decisions to exist (retry up to 4 times with 1-second delays = 4 seconds max)
   let decs = null;
@@ -158,6 +158,30 @@ Deno.serve(async ()=>{
           skipCount++;
           continue;
         }
+        
+        // Check if SELL amount meets minimum quote threshold
+        const price = Number(d.price_usd);
+        notional = +(qtyBase * price).toFixed(2);
+        if (notional < minQuote) {
+          await logAlert(
+            sb,
+            "ef_create_order_intents",
+            "info",
+            `SELL order below minimum quote (${notional.toFixed(2)} < ${minQuote}), skipped`,
+            {
+              customer_id: d.customer_id,
+              trade_date: d.trade_date,
+              btc_qty: qtyBase,
+              notional,
+              min_quote: minQuote,
+              action: "skipped_below_minimum"
+            },
+            org_id,
+            d.customer_id
+          );
+          skipCount++;
+          continue;
+        }
       }
       // 4) Get exchange account for this customer
       const { data: exchAcct, error: exchErr } = await sb
@@ -185,7 +209,11 @@ Deno.serve(async ()=>{
       }
       
       // 5) write intent with ALL required fields
-      const idKey = crypto.randomUUID(); // can switch to hash(org,cust,date,side) if you prefer
+      // Use deterministic idempotency key to prevent duplicate intents
+      const idKeyParts = [org_id, d.customer_id.toString(), d.trade_date, side].join('|');
+      const idKeyHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(idKeyParts));
+      const idKey = Array.from(new Uint8Array(idKeyHash)).map(b => b.toString(16).padStart(2, '0')).join('');
+      
       const ins = await sb.from("order_intents").upsert({
         org_id,
         customer_id: d.customer_id,
