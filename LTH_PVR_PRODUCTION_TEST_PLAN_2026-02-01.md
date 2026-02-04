@@ -394,39 +394,6 @@ WHERE customer_id = 47;
 ### TC-FALLBACK-01: 5-Minute Timeout MARKET Fallback (Time-Based) ✅ PASS
 **Objective:** Verify LIMIT order cancelled and converted to MARKET after 5 minutes
 
-**TEST RESULT (2026-02-03):**
-✅ **PASSED** - Fallback logic works correctly after bug fixes
-
-**BUGS FIXED:**
-1. ✅ ef_market_fallback wasn't copying customer_id from original intent (constraint violation)
-2. ✅ MARKET order BUY amount calculation attempted order book call (403 Forbidden)
-3. ✅ Duplicate MARKET intents created because original order status not updated before creating new intent
-4. ✅ Added 'cancelled_for_market' and 'manual_cancel' to exchange_orders status constraint
-5. ✅ Created lth_pvr.mark_order_manual_cancel() function for manual cancellations
-
-**ACTUAL RESULTS:**
-- Original LIMIT order: Placed at $70,000 (15:35:12), far below market
-- Fallback triggered: After 5 minutes (15:40)
-- Order status updated: 'submitted' → 'cancelled_for_market' (BEFORE creating MARKET intent)
-- MARKET order: Placed at 15:45:49, filled immediately
-  - Qty: 0.000013 BTC
-  - Price: 77,465 USDT/BTC (market price)
-  - Cost: 1.007045 USDT
-  - Fee: 0.000000013 BTC
-- Balance: BTC 0.00012896, USDT 5.11, NAV $15.26
-
-**MANUAL CANCEL USAGE:**
-If user manually cancels order on VALR:
-```sql
-SELECT * FROM lth_pvr.mark_order_manual_cancel(
-  '019c2424-b725-7f08-828e-8a922dd5a8f6',  -- VALR order ID
-  'User cancelled via VALR UI'              -- Optional note
-);
-```
-
-### TC-FALLBACK-01: 5-Minute Timeout MARKET Fallback (Time-Based) 🔥
-**Objective:** Verify LIMIT order cancelled and converted to MARKET after 5 minutes
-
 **Prerequisites:**
 - TC-PIPE-02 passed (balance available)
 - ef_poll_orders ready for manual invocation
@@ -541,6 +508,36 @@ ORDER BY created_at DESC;
 - Cost: ~$1.05 USDT
 
 ---
+
+**TEST RESULT (2026-02-03):**
+✅ **PASSED** - Fallback logic works correctly after bug fixes
+
+**BUGS FIXED:**
+1. ✅ ef_market_fallback wasn't copying customer_id from original intent (constraint violation)
+2. ✅ MARKET order BUY amount calculation attempted order book call (403 Forbidden)
+3. ✅ Duplicate MARKET intents created because original order status not updated before creating new intent
+4. ✅ Added 'cancelled_for_market' and 'manual_cancel' to exchange_orders status constraint
+5. ✅ Created lth_pvr.mark_order_manual_cancel() function for manual cancellations
+
+**ACTUAL RESULTS:**
+- Original LIMIT order: Placed at $70,000 (15:35:12), far below market
+- Fallback triggered: After 5 minutes (15:40)
+- Order status updated: 'submitted' → 'cancelled_for_market' (BEFORE creating MARKET intent)
+- MARKET order: Placed at 15:45:49, filled immediately
+  - Qty: 0.000013 BTC
+  - Price: 77,465 USDT/BTC (market price)
+  - Cost: 1.007045 USDT
+  - Fee: 0.000000013 BTC
+- Balance: BTC 0.00012896, USDT 5.11, NAV $15.26
+
+**MANUAL CANCEL USAGE:**
+If user manually cancels order on VALR:
+```sql
+SELECT * FROM lth_pvr.mark_order_manual_cancel(
+  '019c2424-b725-7f08-828e-8a922dd5a8f6',  -- VALR order ID
+  'User cancelled via VALR UI'              -- Optional note
+);
+```
 
 ### TC-FALLBACK-02: 0.25% Price Move MARKET Fallback (Price-Based) 🔥
 **Objective:** Verify LIMIT order cancelled when market moves ≥ 0.25% from LIMIT price
