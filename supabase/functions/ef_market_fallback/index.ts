@@ -41,9 +41,38 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 
 // Fallback triggers:
 // 1. Order age > 5 minutes
-// 2. Price moved > 0.25% from order price
+// 2. Market price moved > 0.25% away from order price (making fill less likely)
 const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
+
+// Helper to fetch order book best bid/ask from VALR market summary (no auth required)
+async function getOrderBookPrice(pair: string): Promise<{ bestBid: string; bestAsk: string } | null> {
+  try {
+    const normalizedPair = pair.replace("/", "").toUpperCase();
+    
+    // Use market summary endpoint to get current BID/ASK prices (no auth needed)
+    const response = await fetch(`https://api.valr.com/v1/public/${normalizedPair}/marketsummary`);
+    if (!response.ok) {
+      console.error(`Failed to fetch market summary for ${pair}: ${response.status}`);
+      return null;
+    }
+    const data = await response.json();
+    if (!data.bidPrice || !data.askPrice) {
+      console.error(`Market summary missing bid/ask for ${pair}`);
+      return null;
+    }
+    
+    console.log(`${pair} BID: ${data.bidPrice}, ASK: ${data.askPrice} (last trade: ${data.lastTradedPrice || 'N/A'})`);
+    
+    return {
+      bestBid: data.bidPrice,
+      bestAsk: data.askPrice,
+    };
+  } catch (e) {
+    console.error(`Error fetching market summary for ${pair}:`, e);
+    return null;
+  }
+}
 
 Deno.serve(async (_req: Request) => {
   console.log("ef_market_fallback: Checking for stale LIMIT orders");
@@ -98,14 +127,52 @@ Deno.serve(async (_req: Request) => {
     const ageMs = now - new Date(order.submitted_at).getTime();
     const ageMinutes = Math.floor(ageMs / 60000);
 
-    // Check if order is old enough for fallback
-    if (ageMs < MAX_AGE_MS) {
-      continue; // Not old enough yet
+    // Fetch current order book prices for price-based fallback check
+    let triggerFallback = false;
+    let fallbackReason = "";
+    
+    // Check 1: Age-based fallback (>5 minutes)
+    if (ageMs >= MAX_AGE_MS) {
+      triggerFallback = true;
+      fallbackReason = `Order aged ${ageMinutes} minutes (>5min threshold)`;
+    }
+    
+    // Check 2: Price-based fallback (market moved unfavorably)
+    if (!triggerFallback) {
+      const orderBookPrices = await getOrderBookPrice(order.pair);
+      if (orderBookPrices) {
+        const orderPrice = Number(order.price);
+        let marketPrice: number;
+        let priceMovePct: number;
+        
+        if (order.side.toUpperCase() === "BUY") {
+          // BUY order: Check if market ASK moved UP (away from our LIMIT buy price)
+          marketPrice = Number(orderBookPrices.bestAsk);
+          priceMovePct = (marketPrice - orderPrice) / orderPrice;
+          
+          if (priceMovePct >= PRICE_MOVE_THRESHOLD) {
+            triggerFallback = true;
+            fallbackReason = `Market ASK moved ${(priceMovePct * 100).toFixed(2)}% above order price (${orderPrice} → ${marketPrice})`;
+          }
+        } else {
+          // SELL order: Check if market BID moved DOWN (away from our LIMIT sell price)
+          marketPrice = Number(orderBookPrices.bestBid);
+          priceMovePct = (orderPrice - marketPrice) / orderPrice;
+          
+          if (priceMovePct >= PRICE_MOVE_THRESHOLD) {
+            triggerFallback = true;
+            fallbackReason = `Market BID moved ${(priceMovePct * 100).toFixed(2)}% below order price (${orderPrice} → ${marketPrice})`;
+          }
+        }
+      }
     }
 
-    console.log(
-      `ef_market_fallback: Order ${order.exchange_order_id} is ${ageMinutes} min old, triggering MARKET fallback`,
-    );
+    // Skip if no fallback trigger
+    if (!triggerFallback) {
+      continue;
+    }
+
+    console.log(`ef_market_fallback: ${fallbackReason}, triggering MARKET fallback for order ${order.exchange_order_id}`);
 
     try {
       // 2) Get ORIGINAL INTENT DATA (customer_id, base_asset, quote_asset, exchange_account_id)
