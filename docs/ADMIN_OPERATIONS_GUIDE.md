@@ -221,27 +221,66 @@ ORDER BY created_at;
 
 ---
 
-#### Milestone 4: VALR Subaccount Creation ✅ Automated
+#### Milestone 4: VALR Subaccount & Wallet Setup ⚠️ Requires Admin Action
 
 **Trigger:** Admin approves KYC (M3)  
-**System Actions:**
+
+**System Actions (Automated):**
 1. Calls `ef_valr_create_subaccount` edge function
 2. Creates VALR subaccount via API (uses main account credentials)
 3. Stores subaccount_id in `exchange_accounts` table
-4. Generates unique deposit reference code (e.g., "BWDEP7K2M9")
-5. Updates status to `subaccount_created`
-6. Sends "Deposit Instructions" email to customer with:
-   - VALR deposit reference code
-   - Deposit amount (e.g., 100 USDT minimum)
-   - Instructions for depositing via EFT or crypto
+4. Updates status to `subaccount_created`
 
-**Admin Action:** None (fully automated)
+**Admin Actions Required (Manual):**
+
+**Step 1: Create Crypto Wallets in VALR Portal**
+1. **Log into VALR Portal:** https://www.valr.com/
+2. **Navigate to Subaccounts:**
+   - Click "Subaccounts" in main menu
+   - Locate customer's subaccount (label: "FirstName LastName - LTH PVR")
+   - Click to open subaccount dashboard
+
+3. **Create BTC Wallet:**
+   - Click "Wallets" → "Create Wallet"
+   - Select "Bitcoin (BTC)"
+   - System generates deposit address (starts with `bc1`, `1`, or `3`)
+   - **Copy the deposit address** (will look like: `bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh`)
+
+4. **Create USDT Wallet:**
+   - Click "Create Wallet" → Select "Tether (USDT-TRC20)"
+   - **IMPORTANT:** Select **TRON (TRC20)** network for lowest fees
+   - System generates TRON deposit address (starts with `T`)
+   - **Copy the deposit address** (will look like: `TYaSrzezRzezRzezRzezRzezRzezRzez12`)
+   - ⚠️ **Do NOT use Ethereum (ERC20)** - much higher fees
+
+**Step 2: Enter All Deposit References in Admin UI**
+1. Open BitWealth Admin Portal → Customer Maintenance → VALR Setup (M4) tab
+2. Locate customer in setup table
+3. Click **"Enter All References"** button
+4. Modal form will appear with 3 required fields:
+   - **ZAR Deposit Reference:** Generate unique code (e.g., `BWDEP7K2M9`)
+   - **BTC Wallet Address:** Paste address from VALR portal (from Step 1.3)
+   - **USDT Wallet Address:** Paste TRON address from VALR portal (from Step 1.4)
+5. **Verify addresses are correct** - incorrect addresses = permanent loss of funds
+6. Click **"Save All & Send Email"**
+
+**Step 3: System Sends Deposit Email (Automated)**
+- Customer receives email with **all three deposit options:**
+  - ZAR bank transfer (Standard Bank, with unique reference)
+  - BTC wallet address (with "BTC only" warning)
+  - USDT wallet address (with TRON network emphasis)
+- Status changes to `deposit` (Milestone 5)
+- Customer can choose any deposit method
 
 **Monitoring:**
 ```sql
--- Check customers waiting for deposit
+-- Check customers waiting for wallet setup
 SELECT cd.customer_id, cd.first_name, cd.last_name, cd.email,
-       ea.deposit_ref, ea.created_at as subaccount_created_at,
+       ea.subaccount_id,
+       ea.deposit_ref,
+       ea.btc_wallet_address,
+       ea.usdt_wallet_address,
+       ea.created_at as subaccount_created_at,
        EXTRACT(EPOCH FROM (NOW() - ea.created_at))/3600 as hours_waiting
 FROM customer_details cd
 JOIN customer_portfolios cp ON cd.customer_id = cp.customer_id
@@ -254,6 +293,13 @@ ORDER BY ea.created_at;
 - If subaccount creation fails, check VALR API credentials in edge function logs
 - Verify VALR_API_KEY and VALR_API_SECRET environment variables set
 - Check alert events for `ef_valr_create_subaccount` errors
+- **VALR wallet addresses are NOT created via API** - must be done manually in VALR portal
+- If customer reports "wallet address not working", verify:
+  - BTC address starts with `bc1`, `1`, or `3`
+  - USDT address starts with `T` and is 34 characters
+  - Customer selected TRON network (not Ethereum) for USDT deposits
+
+**SLA:** Complete M4 within 2 hours of KYC approval (including manual wallet creation)
 
 ---
 

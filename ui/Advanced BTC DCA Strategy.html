@@ -7536,6 +7536,9 @@ This will:
       tableBody.innerHTML = filtered.map(customer => {
         const hasSubaccount = !!customer.subaccount_id;
         const hasDepositRef = !!customer.deposit_ref;
+        const hasBtcWallet = !!customer.btc_wallet_address;
+        const hasUsdtWallet = !!customer.usdt_wallet_address;
+        const hasAllReferences = hasDepositRef && hasBtcWallet && hasUsdtWallet;
 
         let actionButtons = '';
         
@@ -7551,20 +7554,14 @@ This will:
               🔄 Retry Manually
             </button>
           `;
-        } else if (!hasDepositRef) {
-          // Show deposit ref input + save button
+        } else if (!hasAllReferences) {
+          // Show wallet address inputs + save button
           actionButtons = `
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <input type="text" 
-                     id="depositRef_${customer.customer_id}" 
-                     placeholder="Enter ref from VALR"
-                     style="padding: 0.4rem; font-size: 0.85em; border: 1px solid #cbd5e0; border-radius: 4px; width: 120px;">
-              <button class="btn btn-primary-sm" 
-                      onclick="window.saveDepositRef(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
-                      style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
-                💾 Save
-              </button>
-            </div>
+            <button class="btn btn-primary-sm" 
+                    onclick="window.showWalletAddressModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}', '${customer.deposit_ref || ''}', '${customer.btc_wallet_address || ''}', '${customer.usdt_wallet_address || ''}')"
+                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+              💳 ${hasDepositRef ? 'Add Wallet Addresses' : 'Enter All References'}
+            </button>
           `;
         } else {
           // Show "Resend Email" button
@@ -7586,7 +7583,10 @@ This will:
               ${hasSubaccount ? customer.subaccount_id : '<span style="color: #999;">Not created</span>'}
             </td>
             <td style="font-family: monospace; font-size: 0.85em;">
-              ${hasDepositRef ? customer.deposit_ref : '<span style="color: #999;">Pending</span>'}
+              <div>${hasDepositRef ? customer.deposit_ref : '<span style="color: #999;">Pending</span>'}</div>
+              <div style="font-size: 0.75em; color: #666; margin-top: 0.2rem;">
+                ${hasBtcWallet ? '✓ BTC' : '⚠ BTC'} | ${hasUsdtWallet ? '✓ USDT' : '⚠ USDT'}
+              </div>
             </td>
             <td>${actionButtons}</td>
           </tr>
@@ -7634,22 +7634,98 @@ This will:
       }
     };
 
-    // Global function: Save deposit reference
-    window.saveDepositRef = async function(customerId, firstName, lastName) {
-      const input = document.getElementById(`depositRef_${customerId}`);
-      const depositRef = input?.value?.trim();
+    // Global function: Show wallet address modal
+    window.showWalletAddressModal = function(customerId, firstName, lastName, currentDepositRef, currentBtc, currentUsdt) {
+      const modalHtml = `
+        <div id="walletModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+          <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;">
+            <h3 style="margin: 0 0 20px 0; color: #1e3a8a;">💳 Enter Deposit References for ${firstName} ${lastName}</h3>
+            
+            <div style="background: #dbeafe; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+              <strong style="color: #1e40af;">Step 1: Create Wallets in VALR Portal</strong>
+              <ol style="font-size: 0.9em; color: #1e3a8a; margin: 10px 0 0 0; padding-left: 20px;">
+                <li>Log into VALR: <a href="https://www.valr.com/" target="_blank" style="color: #3b82f6;">valr.com</a></li>
+                <li>Navigate to: <strong>Subaccounts → [Customer Name] → Wallets</strong></li>
+                <li>Create <strong>BTC wallet</strong> → Copy deposit address</li>
+                <li>Create <strong>USDT wallet</strong> (select TRON network) → Copy deposit address</li>
+              </ol>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 5px;">ZAR Deposit Reference:</label>
+              <input type="text" id="modal_deposit_ref" value="${currentDepositRef}" 
+                     placeholder="BWDEP7K2M9" maxlength="20"
+                     style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 0.95em;">
+              <small style="color: #6b7280;">Unique reference for ZAR bank transfers</small>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 5px;">BTC Wallet Address:</label>
+              <input type="text" id="modal_btc_wallet" value="${currentBtc}" 
+                     placeholder="bc1q..." pattern="^(bc1|1|3)[a-zA-HJ-NP-Z0-9]{25,62}$"
+                     style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: monospace; font-size: 0.85em;">
+              <small style="color: #6b7280;">Bitcoin deposit address from VALR portal</small>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+              <label style="display: block; font-weight: 600; margin-bottom: 5px;">USDT Wallet Address (TRON Network):</label>
+              <input type="text" id="modal_usdt_wallet" value="${currentUsdt}" 
+                     placeholder="T..." pattern="^T[a-zA-Z0-9]{33}$"
+                     style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: monospace; font-size: 0.85em;">
+              <small style="color: #6b7280;">USDT-TRC20 address from VALR portal (TRON network for low fees)</small>
+            </div>
+            
+            <div style="background: #fee2e2; padding: 12px; border-radius: 4px; margin-bottom: 20px; border-left: 4px solid #ef4444;">
+              <strong style="color: #991b1b;">⚠️ Important:</strong> Verify addresses are correct. Incorrect addresses may result in permanent loss of funds.
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button onclick="document.getElementById('walletModal').remove()" 
+                      style="padding: 10px 20px; border: 1px solid #cbd5e0; background: white; border-radius: 4px; cursor: pointer;">
+                Cancel
+              </button>
+              <button onclick="window.saveWalletAddresses(${customerId}, '${firstName}', '${lastName}')" 
+                      style="padding: 10px 20px; border: none; background: #10b981; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                💾 Save All & Send Email
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    };
 
-      if (!depositRef) {
-        alert('Please enter a deposit reference');
+    // Global function: Save wallet addresses
+    window.saveWalletAddresses = async function(customerId, firstName, lastName) {
+      const depositRef = document.getElementById('modal_deposit_ref')?.value?.trim();
+      const btcWallet = document.getElementById('modal_btc_wallet')?.value?.trim();
+      const usdtWallet = document.getElementById('modal_usdt_wallet')?.value?.trim();
+
+      if (!depositRef || !btcWallet || !usdtWallet) {
+        alert('Please enter all three deposit references (ZAR ref, BTC wallet, USDT wallet)');
+        return;
+      }
+
+      // Basic validation
+      if (btcWallet && !btcWallet.match(/^(bc1|1|3)[a-zA-HJ-NP-Z0-9]{25,62}$/)) {
+        alert('Invalid BTC wallet address format. Should start with bc1, 1, or 3.');
+        return;
+      }
+
+      if (usdtWallet && !usdtWallet.match(/^T[a-zA-Z0-9]{33}$/)) {
+        alert('Invalid USDT-TRC20 wallet address format. Should start with T and be 34 characters.');
         return;
       }
 
       const confirmed = confirm(
-        `Save deposit reference "${depositRef}" for ${firstName} ${lastName}?\n\n` +
+        `Save deposit references for ${firstName} ${lastName}?\n\n` +
+        `ZAR Ref: ${depositRef}\n` +
+        `BTC Wallet: ${btcWallet.substring(0, 10)}...${btcWallet.substring(btcWallet.length - 6)}\n` +
+        `USDT Wallet: ${usdtWallet.substring(0, 10)}...${usdtWallet.substring(usdtWallet.length - 6)}\n\n` +
         `This will:\n` +
-        `• Update exchange_accounts.deposit_ref\n` +
+        `• Update exchange_accounts with all references\n` +
         `• Change status to 'deposit'\n` +
-        `• Send deposit instructions email to customer`
+        `• Send deposit instructions email with ALL THREE options`
       );
 
       if (!confirmed) return;
@@ -7662,10 +7738,18 @@ This will:
           return;
         }
 
-        // Update exchange_accounts
+        // Update exchange_accounts with all wallet addresses
         const { error: updateError } = await supabaseClient
           .from('exchange_accounts')
-          .update({ deposit_ref: depositRef })
+          .update({ 
+            deposit_ref: depositRef,
+            btc_wallet_address: btcWallet,
+            btc_wallet_created_at: new Date().toISOString(),
+            usdt_wallet_address: usdtWallet,
+            usdt_deposit_network: 'TRON',
+            usdt_wallet_created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
           .eq('exchange_account_id', customer.exchange_account_id);
 
         if (updateError) throw updateError;
@@ -7678,7 +7762,7 @@ This will:
 
         if (statusError) throw statusError;
 
-        // Send deposit instructions email
+        // Send deposit instructions email with all three options
         const websiteUrl = SUPABASE_URL.replace('supabase.co', 'supabase.co');
         const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
           method: 'POST',
@@ -7692,6 +7776,8 @@ This will:
             data: {
               first_name: firstName,
               deposit_ref: depositRef,
+              btc_wallet_address: btcWallet,
+              usdt_wallet_address: usdtWallet,
               website_url: websiteUrl
             }
           })
@@ -7700,13 +7786,16 @@ This will:
         const emailSent = emailResponse.ok;
 
         showMessage(
-          `✓ Deposit ref saved. Customer moved to Milestone 5. Email ${emailSent ? 'sent' : 'queued'}.`,
+          `✓ All deposit references saved. Customer moved to Milestone 5. Email ${emailSent ? 'sent' : 'queued'}.`,
           'success'
         );
         
+        // Close modal
+        document.getElementById('walletModal')?.remove();
+        
         await loadSetupCustomers();
       } catch (err) {
-        console.error('Error saving deposit ref:', err);
+        console.error('Error saving wallet addresses:', err);
         showMessage(`Failed to save: ${err.message}`, 'error');
       }
     };
@@ -7733,6 +7822,8 @@ This will:
             data: {
               first_name: customer.first_names,
               deposit_ref: customer.deposit_ref,
+              btc_wallet_address: customer.btc_wallet_address || 'Not yet configured',
+              usdt_wallet_address: customer.usdt_wallet_address || 'Not yet configured',
               website_url: websiteUrl
             }
           })
