@@ -7491,7 +7491,7 @@ This will:
         if (exchangeAccountIds.length > 0) {
           const { data: accountData, error: accountError } = await supabaseClient
             .from('exchange_accounts')
-            .select('exchange_account_id, subaccount_id, deposit_ref')
+            .select('exchange_account_id, subaccount_id, deposit_ref, btc_wallet_address, usdt_wallet_address')
             .in('exchange_account_id', exchangeAccountIds);
           
           if (accountError) console.error('Error loading exchange accounts:', accountError);
@@ -7511,6 +7511,8 @@ This will:
             registration_status: customer.registration_status,
             subaccount_id: account?.subaccount_id || null,
             deposit_ref: account?.deposit_ref || null,
+            btc_wallet_address: account?.btc_wallet_address || null,
+            usdt_wallet_address: account?.usdt_wallet_address || null,
             exchange_account_id: account?.exchange_account_id || null
           };
         });

@@ -330,6 +330,8 @@ WHERE exchange_account_id = [TEST_ID];
 ---
 
 ### Test Case TC-CW-03: BTC Direct Deposit
+**Status:** ✅ PASS
+
 **Steps:**
 1. Complete TC-CW-01
 2. Send small BTC amount to wallet address (e.g., 0.0001 BTC)
@@ -342,11 +344,13 @@ WHERE exchange_account_id = [TEST_ID];
 - ✅ `exchange_funding_events` record: kind='deposit', asset='BTC'
 - ✅ `ef_balance_reconciliation` creates ledger entry
 - ✅ If ≥ minimum, customer status → 'active'
-- ✅ Customer receives "Deposit Received" email
+- ✅ Customer receives "Welcome - Your Account is Active!" email
 
 ---
 
 ### Test Case TC-CW-04: USDT Direct Deposit (TRON)
+**Status:** ✅ PASS
+
 **Steps:**
 1. Complete TC-CW-01
 2. Send USDT via TRON network to wallet address (e.g., 100 USDT)

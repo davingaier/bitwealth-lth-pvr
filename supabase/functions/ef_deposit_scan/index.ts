@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
             console.error(`Error sending admin email to ${adminEmail}:`, emailError);
           }
 
-          // Send customer deposit confirmation email with amount and asset details
+          // Send customer welcome email with deposit confirmation
           try {
             const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
             
@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
                 "Authorization": req.headers.get("authorization") || "",
               },
               body: JSON.stringify({
-                template_key: "funds_deposited_notification",
+                template_key: "registration_complete_welcome",
                 to_email: customer.email,
                 data: {
                   first_name: customer.first_names,
