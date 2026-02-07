@@ -367,6 +367,8 @@ WHERE exchange_account_id = [TEST_ID];
 ---
 
 ### Test Case TC-CW-05: Resend Email Function
+**Status:** ✅ PASS
+
 **Steps:**
 1. Complete TC-CW-01
 2. Click "Resend Email" button in M4 table
@@ -380,6 +382,8 @@ WHERE exchange_account_id = [TEST_ID];
 ---
 
 ### Test Case TC-CW-06: Partial Setup Handling
+**Status:** ✅ PASS
+
 **Steps:**
 1. Create customer, subaccount created
 2. Admin enters only deposit_ref and BTC (not USDT)
@@ -393,6 +397,8 @@ WHERE exchange_account_id = [TEST_ID];
 ---
 
 ### Test Case TC-CW-07: Invalid Address Format
+**Status:** ✅ PASS
+
 **Steps:**
 1. Enter invalid BTC address (e.g., "invalid123")
 2. Attempt to save

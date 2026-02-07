@@ -3,11 +3,218 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-04
+**Last updated:** 2026-02-07
 
 ---
 
 ## 0. Change Log
+
+### v0.6.42 – FEATURE: Crypto Wallet Deposit Support (BTC + USDT) - COMPLETE
+**Date:** 2026-02-07  
+**Purpose:** Enable customers to deposit BTC and USDT directly to VALR subaccounts, extending beyond ZAR bank transfers. Fix table consolidation bugs from customer_portfolios → customer_strategies migration.
+
+**Status:** ✅ COMPLETE - All tests passed, production-ready
+
+#### Feature Overview
+Added support for customers to deposit Bitcoin (BTC) and Tether USDT (TRC20/TRON network) directly to their VALR subaccounts. Due to VALR API limitations (wallet addresses cannot be created programmatically), implemented hybrid approach: automated subaccount creation + manual wallet setup + automated email dispatch.
+
+#### Database Schema Changes
+**Migration:** `20260207_add_crypto_wallet_columns.sql`
+- Added 5 columns to `public.exchange_accounts`:
+  - `btc_wallet_address` TEXT - Bitcoin deposit address from VALR
+  - `btc_wallet_created_at` TIMESTAMPTZ - Audit timestamp
+  - `usdt_wallet_address` TEXT - USDT deposit address (TRON/TRC20)
+  - `usdt_deposit_network` TEXT DEFAULT 'TRON' - Network identifier
+  - `usdt_wallet_created_at` TIMESTAMPTZ - Audit timestamp
+
+**Migration:** `20260207_update_deposit_email_template.sql`
+- Updated `deposit_instructions` email template with 3 deposit options:
+  1. ZAR Bank Transfer (existing) - Standard Bank with deposit_ref
+  2. BTC Wallet - Monospace address display, yellow warning box ("BTC only")
+  3. USDT Wallet (TRON) - Monospace address, green network emphasis, fee comparison ($1 vs $20+ Ethereum)
+- Added deposit method guide section (processing time, fees, recommendations)
+- Template variables: `{{btc_wallet_address}}`, `{{usdt_wallet_address}}`
+
+**Migration:** `20260207_update_welcome_email_template.sql`
+- Updated `registration_complete_welcome` template with deposit confirmation box
+- Displays: `{{amount}} {{asset}}` deposited on `{{deposit_date}}`
+- Formatted date example: "February 7, 2026"
+
+#### Admin UI Enhancements
+**File:** `ui/Advanced BTC DCA Strategy.html`
+
+**VALR Setup (M4) Table Updates:**
+- **Deposit Ref Column:** Now shows deposit_ref + wallet status indicators
+  - Format: `BWDEP7K2M9` (first line) + `✓ BTC | ✓ USDT` (second line)
+  - Warning indicators: `⚠ BTC | ⚠ USDT` when not configured
+- **Action Button Logic:**
+  1. No subaccount: "⏳ Auto-creating..." + "🔄 Retry Manually"
+  2. Subaccount exists, missing references: "💳 Add Wallet Addresses"
+  3. All references saved: "📧 Resend Email"
+
+**New Modal: Wallet Address Entry**
+- Function: `window.showWalletAddressModal(customerId, firstName, lastName, currentDepositRef, currentBtc, currentUsdt)`
+- 3 input fields with validation:
+  - ZAR Deposit Reference (20 chars max)
+  - BTC Wallet Address (regex: `^(bc1|1|3)[a-zA-HJ-NP-Z0-9]{25,62}$`)
+  - USDT Wallet Address (regex: `^T[a-zA-Z0-9]{33}$`)
+- Step-by-step VALR portal instructions
+- Network selection emphasis (TRON for USDT)
+- "Cancel" and "💾 Save All & Send Email" buttons
+
+**Save Function:** `window.saveWalletAddresses()`
+- Updates `exchange_accounts` with all 3 references + timestamps
+- Updates customer status to 'deposit'
+- Calls `ef_send_email` with template_key='deposit_instructions'
+- Closes modal and refreshes table
+
+**Resend Email Function:** `window.resendDepositEmail()`
+- Includes wallet addresses in email data
+- Handles partial setup gracefully ("Not yet configured" if missing)
+
+#### Edge Function Updates
+
+**ef_deposit_scan (v3):**
+- Changed customer welcome email from `funds_deposited_notification` → `registration_complete_welcome`
+- Added deposit amount detection (primary asset = largest balance)
+- Formatted deposit date: `new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(depositDate)`
+- Email data includes: `{{amount}}`, `{{asset}}`, `{{deposit_date}}`
+
+**ef_valr_create_subaccount (v2):**
+- Fixed table consolidation bug: Changed from `customer_portfolios` → `customer_strategies`
+- Updated variable names: portfolio → strategy
+- Fixed foreign key updates to use `customer_strategy_id`
+
+**ef_confirm_strategy:**
+- Already using `customer_strategies` table correctly (no changes needed)
+
+#### Table Consolidation Bug Fixes
+
+**Problem:** User previously consolidated `customer_portfolios` → `customer_strategies`, causing cascading bugs in edge functions and Admin UI.
+
+**Fix 1: Sync Trigger Columns**
+- **Migration:** `fix_customer_strategies_sync_triggers.sql`
+- Removed non-existent columns from `sync_customer_strategies_insert` trigger:
+  - `paper_enabled` (doesn't exist)
+  - `capital_target_usd` (doesn't exist)
+  - `updated_at` (doesn't exist)
+
+**Fix 2: Deprecated Infrastructure Cleanup**
+- **Migration:** `remove_deprecated_customer_strategies_sync.sql`
+- Dropped 3 sync triggers: `sync_customer_strategies_insert`, `sync_customer_strategies_update`, `sync_customer_strategies_delete`
+- Dropped 3 sync functions: trigger functions for above
+- Dropped 2 deprecated tables: `customer_strategies_old`, `customer_portfolios_old`
+- Dropped 2 dependent views: `v_customer_strategies_comparison`, `v_customer_portfolios_comparison`
+
+**Fix 3: Backwards Compatibility View**
+- **Migration:** `remove_customer_portfolios_view.sql`
+- Removed `public.customer_portfolios` view (no longer needed)
+
+**Fix 4: Admin UI Query Updates**
+- Changed queries from `v_customer_portfolios_expanded` → `customer_strategies` directly
+- Updated foreign key relationships: `customer_portfolios_id` → `customer_strategy_id`
+- Changed primary identifier: `portfolio_id` → `customer_strategy_id` (handles NULL portfolio_id)
+- Fixed auto-select logic in customer/portfolio selectors
+
+**Fix 5: Cross-Section Function Access**
+- Made `loadSetupCustomers()` globally accessible via `window.loadSetupCustomers`
+- Enables KYC section to refresh M4 table after subaccount creation
+
+**Fix 6: 409 Conflict Handling**
+- Added success handling for "subaccount already exists" in `ef_valr_create_subaccount`
+- Displays success message instead of error: "VALR subaccount already exists for this customer"
+- Auto-refreshes customer list to show existing subaccount
+
+**Fix 7: Wallet Address Data Loading**
+- **Bug:** Modal not pre-populating existing wallet addresses despite being in database
+- **Root Cause:** `loadSetupCustomers()` SELECT query missing `btc_wallet_address`, `usdt_wallet_address` columns
+- **Solution:** Added columns to SELECT statement and customer data object
+- **Result:** "Add Wallet Addresses" modal now shows existing values for editing
+
+#### New Admin Workflow (Milestone 4)
+
+**Previous:** Admin enters deposit_ref → sends email (ZAR only)
+
+**New:**
+1. Admin approves KYC → System creates VALR subaccount (automated)
+2. Admin creates BTC wallet in VALR portal (manual)
+3. Admin creates USDT wallet (TRON) in VALR portal (manual)
+4. Admin enters ALL THREE references in modal (1 operation):
+   - ZAR deposit_ref
+   - BTC wallet address
+   - USDT wallet address (TRON)
+5. Admin clicks "Save All & Send Email"
+6. System sends email with all 3 deposit options (automated)
+
+**SLA Update:** 2 hours including manual wallet creation
+
+#### Deposit Detection
+
+**Current Status:** `ef_deposit_scan` detects balance changes (works for all deposit types)
+
+**Future Enhancement:** Query VALR transaction history API to differentiate:
+- `CRYPTO_DEPOSIT` (direct BTC/USDT deposit)
+- `SIMPLE_BUY` (ZAR conversion to USDT)
+- `FIAT_DEPOSIT` (ZAR bank transfer)
+
+#### Test Cases - All Passed
+
+| Test Case | Description | Status |
+|-----------|-------------|--------|
+| TC-CW-01 | Wallet Address Entry | ✅ PASS |
+| TC-CW-02 | Email Template Display | ✅ PASS |
+| TC-CW-03 | BTC Direct Deposit | ✅ PASS |
+| TC-CW-04 | USDT Direct Deposit (TRON) | ✅ PASS |
+| TC-CW-05 | Resend Email Function | ✅ PASS |
+| TC-CW-06 | Partial Setup Handling | ✅ PASS |
+| TC-CW-07 | Invalid Address Format | ✅ PASS |
+
+**Test Customer:** Customer 48
+- BTC deposit: 0.00007265 BTC detected and processed
+- USDT deposit: 7.64 USDT detected and processed
+- Email templates rendering correctly with deposit amounts
+- All wallet addresses pre-populating in modal correctly
+
+#### Known Limitations
+
+1. **VALR API Limitation:** Wallet addresses cannot be created programmatically
+   - Mitigation: Clear step-by-step instructions in modal + documentation
+
+2. **Deposit Detection:** Balance-based (cannot distinguish transaction types in logs)
+   - Mitigation: Future enhancement to query VALR transaction history API
+
+3. **Network Selection:** USDT supports multiple networks (ERC20, TRC20, BEP20)
+   - Mitigation: Strong warnings in email, default='TRON', green emphasis box
+
+4. **Address Validation:** Regex only (not on-chain verification)
+   - Mitigation: Admin must copy-paste from VALR (not manually type)
+
+#### Edge Function Versions
+- `ef_deposit_scan`: v3 (welcome email with deposit amount)
+- `ef_valr_create_subaccount`: v2 (customer_strategies table)
+- `ef_confirm_strategy`: Unchanged (already correct)
+- `ef_send_email`: Unchanged (template system handles new variables)
+
+#### Documentation Updates
+- `ADMIN_OPERATIONS_GUIDE.md` - Updated Milestone 4 workflow
+- `CRYPTO_WALLET_DEPOSIT_IMPLEMENTATION.md` - Complete feature documentation
+- `SDD_v0.6.md` - This change log entry
+
+#### Future Enhancements
+1. **Priority 1:** Deposit type tracking via VALR transaction history API
+2. **Priority 2:** Multi-network USDT support (TRON vs Ethereum selector)
+3. **Priority 3:** Wallet status dashboard with deposit metrics
+4. **Priority 4:** Customer portal enhancement with QR codes and real-time status
+
+**Files Changed:**
+- `supabase/migrations/20260207_add_crypto_wallet_columns.sql` - Database schema
+- `supabase/migrations/20260207_update_deposit_email_template.sql` - Email template
+- `supabase/migrations/20260207_update_welcome_email_template.sql` - Welcome email
+- `supabase/functions/ef_deposit_scan/index.ts` - Deposit amount in email
+- `supabase/functions/ef_valr_create_subaccount/index.ts` - Table consolidation fix
+- `ui/Advanced BTC DCA Strategy.html` - Modal, table updates, data loading fixes
+
+---
 
 ### v0.6.41 – TC-FALLBACK-02/03: Price-Based MARKET Fallback & VALR Market Data Integration
 **Date:** 2026-02-04  
