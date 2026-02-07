@@ -95,19 +95,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get customer's portfolio to determine strategy
-    const { data: portfolio, error: portfolioError } = await supabase
-      .from("customer_portfolios")
-      .select("portfolio_id, strategy_code, exchange_account_id")
+    // Get customer's strategy to determine strategy_code
+    const { data: strategy, error: strategyError } = await supabase
+      .from("customer_strategies")
+      .select("customer_strategy_id, portfolio_id, strategy_code, exchange_account_id")
       .eq("customer_id", customer_id)
       .single();
 
-    if (portfolioError || !portfolio) {
-      console.error("Portfolio query error:", portfolioError);
+    if (strategyError || !strategy) {
+      console.error("Strategy query error:", strategyError);
       return new Response(
         JSON.stringify({ 
           error: "Customer portfolio not found. Cannot determine strategy.",
-          details: portfolioError?.message 
+          details: strategyError?.message 
         }),
         { status: 404, headers: corsHeaders }
       );
@@ -115,11 +115,11 @@ Deno.serve(async (req) => {
 
     // Check if customer already has an exchange account linked
     let existingAccount = null;
-    if (portfolio.exchange_account_id) {
+    if (strategy.exchange_account_id) {
       const { data: acct, error: acctError } = await supabase
         .from("exchange_accounts")
         .select("exchange_account_id, subaccount_id, exchange")
-        .eq("exchange_account_id", portfolio.exchange_account_id)
+        .eq("exchange_account_id", strategy.exchange_account_id)
         .maybeSingle();
       
       if (!acctError && acct) {
@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
 
     // Create VALR subaccount label
     // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars)
-    const strategyName = portfolio.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
+    const strategyName = strategy.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
     const label = `${customer.first_names} ${customer.last_name} ${strategyName}`;
 
     let subaccountId: string;
@@ -259,21 +259,21 @@ Deno.serve(async (req) => {
 
       exchangeAccountId = insertData.exchange_account_id;
       
-      // Link the new exchange account to the customer's portfolio (old table)
+      // Link the new exchange account to the customer's strategy (consolidated table)
       const { error: linkError } = await supabase
-        .from("customer_portfolios")
+        .from("customer_strategies")
         .update({ exchange_account_id: exchangeAccountId })
-        .eq("portfolio_id", portfolio.portfolio_id);
+        .eq("customer_strategy_id", strategy.customer_strategy_id);
       
       if (linkError) {
-        console.error("Error linking exchange account to portfolio:", linkError);
+        console.error("Error linking exchange account to customer strategy:", linkError);
         // Don't fail the whole operation, but log the error
         await logAlert(
           supabase,
           "ef_valr_create_subaccount",
           "warn",
-          `Failed to link exchange account to portfolio: ${linkError.message}`,
-          { customer_id, portfolio_id: portfolio.portfolio_id, exchange_account_id: exchangeAccountId },
+          `Failed to link exchange account to customer strategy: ${linkError.message}`,
+          { customer_id, customer_strategy_id: strategy.customer_strategy_id, exchange_account_id: exchangeAccountId },
           customer.org_id,
           customer_id
         );

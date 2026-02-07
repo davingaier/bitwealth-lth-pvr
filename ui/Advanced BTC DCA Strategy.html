@@ -7383,20 +7383,30 @@ This will:
           
           if (response.ok && result.success) {
             showMessage(`✓ VALR subaccount created successfully for ${firstName} ${lastName}. Customer moved to Milestone 4.`, 'success');
-            // Refresh the VALR setup table to show the new subaccount
-            await loadSetupCustomers();
+            // Refresh both KYC table and VALR setup table
+            await loadPendingKyc();
+            if (typeof window.loadSetupCustomers === 'function') {
+              await window.loadSetupCustomers();
+            }
+          } else if (response.status === 409) {
+            // Subaccount already exists - this is OK, customer can proceed
+            showMessage(`✓ ID verified for ${firstName} ${lastName}. VALR subaccount already exists (Customer moved to Milestone 4).`, 'success');
+            await loadPendingKyc();
+            if (typeof window.loadSetupCustomers === 'function') {
+              await window.loadSetupCustomers();
+            }
           } else {
             // Log error but don't block - admin can manually create later
             console.error('VALR subaccount creation failed:', result);
-            showMessage(`⚠️ ID verified but subaccount creation failed: ${result.error || result.message || 'Unknown error'}. You can create it manually.`, 'warning');
-            // Refresh to show retry button
-            await loadSetupCustomers();
+            showMessage(`⚠️ ID verified but subaccount creation failed: ${result.error || result.message || 'Unknown error'}. You can create it manually in VALR Account Setup.`, 'warning');
+            // Refresh to remove from KYC list (moved to 'setup' status)
+            await loadPendingKyc();
           }
         } catch (valrError) {
           console.error('VALR subaccount creation error:', valrError);
-          showMessage(`⚠️ ID verified but subaccount creation failed: ${valrError.message}. You can create it manually.`, 'warning');
-          // Refresh to show retry button
-          await loadSetupCustomers();
+          showMessage(`⚠️ ID verified but subaccount creation failed: ${valrError.message}. You can create it manually in VALR Account Setup.`, 'warning');
+          // Refresh to remove from KYC list (moved to 'setup' status)
+          await loadPendingKyc();
         }
 
         await loadPendingKyc();
@@ -7446,7 +7456,8 @@ This will:
     }
 
     // Load customers in setup status
-    async function loadSetupCustomers() {
+    // Make globally accessible so KYC verification can trigger refresh
+    window.loadSetupCustomers = async function() {
       try {
         // Get customers with status='setup' or 'deposit'
         const { data: customers, error: customerError } = await supabaseClient
