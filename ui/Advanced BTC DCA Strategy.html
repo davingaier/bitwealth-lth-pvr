@@ -4016,14 +4016,17 @@
           const dataCode = code || '';
 
           // IMPORTANT: embed the strategy code on the option itself
-          return `<option value="${p.portfolio_id}" data-strategy-code="${dataCode}">${text}</option>`;
+          // Use customer_strategy_id as primary ID (portfolio_id may be NULL)
+          const strategyId = p.customer_strategy_id || p.portfolio_id;
+          return `<option value="${strategyId}" data-strategy-code="${dataCode}">${text}</option>`;
         }).join('');
 
         portSel.disabled=false;
 
         // auto select first portfolio (OK for non-transactions modules)
-        portSel.value = ports[0].portfolio_id;
-        currentPortfolioId = ports[0].portfolio_id;
+        const firstStrategyId = ports[0].customer_strategy_id || ports[0].portfolio_id;
+        portSel.value = firstStrategyId;
+        currentPortfolioId = firstStrategyId;
         currentStrategyCode = ports[0].strategy_code ? String(ports[0].strategy_code).toUpperCase() : null;
         window.currentStrategyCode = currentStrategyCode;
         updateStrategyVisibility();
@@ -4111,41 +4114,28 @@
         // keep disabled unless you truly have multiple orgs
         orgSel.disabled = !(orgs.length > 1);
 
-        // portfolios (prefer public.v_customer_portfolios_expanded for correct strategy display names)
+        // portfolios (use consolidated customer_strategies table)
         const orgId = activeOrgId || null;
 
         let portfolios = [];
         let portErr = null;
 
-        // 1) Try the expanded view first (includes strategy names, etc.)
+        // Query customer_strategies table directly (customer_portfolios view removed)
         try{
           let q = supabaseClient
-            .from('v_customer_portfolios_expanded')
-            .select('*');
-
-          if (orgId) q = q.eq('org_id', orgId);
-
-          const { data, error } = await q;
-          if (error) throw error;
-          portfolios = Array.isArray(data) ? data : [];
-        }catch(eView){
-          // 2) Fallback to the base table if the view is missing / blocked by RLS
-          try{
-            let q = supabaseClient
-              .schema('public')
-              .from('customer_strategies')
-              .select('portfolio_id, org_id, customer_id, strategy_code, label, exchange, exchange_account_id, exchange_subaccount');
+            .schema('public')
+            .from('customer_strategies')
+            .select('customer_strategy_id, org_id, customer_id, strategy_code, label, exchange_account_id, exchange_subaccount, status, created_at, closed_at, portfolio_id');
 
             if (orgId) q = q.eq('org_id', orgId);
 
             const { data, error } = await q.order('label', { ascending: true });
             if (error) throw error;
             portfolios = Array.isArray(data) ? data : [];
-          }catch(eTable){
-            portErr = eTable;
-            portfolios = [];
-            console.warn('Failed to load portfolios (view + table).', { eView, eTable });
-          }
+        }catch(err){
+          portErr = err;
+          portfolios = [];
+          console.warn('Failed to load portfolios from customer_strategies table.', err);
         }
 
         // normalize + client-side sort (keeps it robust if the view has different column names)
@@ -4185,9 +4175,12 @@
               return;
             }
 
-            const found = (allPortfoliosCache || []).find(p=>String(p.portfolio_id)===String(v));
+            const found = (allPortfoliosCache || []).find(p=>{
+              const strategyId = p.customer_strategy_id || p.portfolio_id;
+              return String(strategyId)===String(v);
+            });
             if(found){
-              currentPortfolioId  = found.portfolio_id;
+              currentPortfolioId  = found.customer_strategy_id || found.portfolio_id;
               currentStrategyCode = found.strategy_code ? String(found.strategy_code).toUpperCase() : null;
               window.currentStrategyCode = currentStrategyCode;
 
@@ -7901,7 +7894,8 @@ This will:
             last_name,
             email,
             registration_status,
-            customer_portfolios (
+            customer_strategies (
+              customer_strategy_id,
               portfolio_id,
               strategy_code,
               status,
@@ -7939,7 +7933,7 @@ This will:
       }
 
       const rows = filtered.map(customer => {
-        const portfolio = customer.customer_portfolios?.[0];
+        const portfolio = customer.customer_strategies?.[0];
         const strategy = portfolio?.strategy_code || 'N/A';
         const activated = portfolio?.created_at 
           ? new Date(portfolio.created_at).toLocaleDateString()
@@ -7979,12 +7973,12 @@ This will:
       try {
         // Get customer's portfolio ID
         const customer = allActiveCustomers.find(c => c.customer_id === customerId);
-        if (!customer || !customer.customer_portfolios?.[0]) {
+        if (!customer || !customer.customer_strategies?.[0]) {
           showMessage('Customer or portfolio not found', 'error');
           return;
         }
 
-        const portfolioId = customer.customer_portfolios[0].portfolio_id;
+        const portfolioId = customer.customer_strategies[0].portfolio_id || customer.customer_strategies[0].customer_strategy_id;
 
         // Update customer status
         const { error: customerError } = await supabaseClient
