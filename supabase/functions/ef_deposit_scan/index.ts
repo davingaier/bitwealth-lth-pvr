@@ -231,9 +231,23 @@ Deno.serve(async (req) => {
             console.error(`Error sending admin email to ${adminEmail}:`, emailError);
           }
 
-          // Send customer welcome email
+          // Send customer deposit confirmation email with amount and asset details
           try {
             const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
+            
+            // Find the primary deposit asset and amount (largest balance)
+            const primaryBalance = balances
+              .filter((b: any) => parseFloat(b.available || "0") > 0)
+              .sort((a: any, b: any) => parseFloat(b.available) - parseFloat(a.available))[0];
+            
+            const depositAsset = primaryBalance?.currency || "USDT";
+            const depositAmount = primaryBalance?.available || "0";
+            const depositDate = new Date().toLocaleDateString("en-ZA", { 
+              year: "numeric", 
+              month: "long", 
+              day: "numeric" 
+            });
+            
             await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
               method: "POST",
               headers: {
@@ -241,10 +255,13 @@ Deno.serve(async (req) => {
                 "Authorization": req.headers.get("authorization") || "",
               },
               body: JSON.stringify({
-                template_key: "registration_complete_welcome",
+                template_key: "funds_deposited_notification",
                 to_email: customer.email,
                 data: {
                   first_name: customer.first_names,
+                  amount: depositAmount,
+                  asset: depositAsset,
+                  deposit_date: depositDate,
                   portal_url: `${websiteUrl}/customer-portal.html`,
                   website_url: websiteUrl,
                 },

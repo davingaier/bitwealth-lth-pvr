@@ -280,6 +280,8 @@ const deposits = txHistory.filter(tx => tx.transactionType === 'DEPOSIT');
 ## Testing Plan
 
 ### Test Case TC-CW-01: Wallet Address Entry
+**Status:** ✅ PASS
+
 **Steps:**
 1. Create test customer through M1-M3 (KYC approved)
 2. Verify subaccount auto-created
@@ -310,6 +312,8 @@ WHERE exchange_account_id = [TEST_ID];
 ---
 
 ### Test Case TC-CW-02: Email Template Display
+**Status:** ✅ PASS
+
 **Steps:**
 1. Complete TC-CW-01
 2. Check customer's email inbox
