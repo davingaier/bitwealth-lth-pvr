@@ -833,8 +833,8 @@
                             usdtColor = '#10b981';
                         } else {
                             // Both non-zero (shouldn't happen) - use sign-based
-                            btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
-                            usdtColor = usdtAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                            btcColor = btcAmountRaw > 0 ? '#10b981' : (btcAmountRaw < 0 ? '#ef4444' : '#64748b');
+                            usdtColor = usdtAmountRaw > 0 ? '#10b981' : (usdtAmountRaw < 0 ? '#ef4444' : '#64748b');
                         }
                     } else if (tx.kind === 'withdrawal') {
                         // Check which asset was withdrawn based on amounts
@@ -848,8 +848,8 @@
                             usdtColor = '#ef4444';
                         } else {
                             // Both non-zero - use sign-based
-                            btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
-                            usdtColor = usdtAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                            btcColor = btcAmountRaw > 0 ? '#10b981' : (btcAmountRaw < 0 ? '#ef4444' : '#64748b');
+                            usdtColor = usdtAmountRaw > 0 ? '#10b981' : (usdtAmountRaw < 0 ? '#ef4444' : '#64748b');
                         }
                     } else if (tx.kind === 'buy') {
                         // BUY: BTC green (receiving), USDT red (spending)
@@ -861,8 +861,8 @@
                         usdtColor = '#10b981';
                     } else {
                         // Fallback for other types: use sign-based coloring
-                        btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
-                        usdtColor = usdtAmountRaw >= 0 ? '#10b981' : '#ef4444';
+                        btcColor = btcAmountRaw > 0 ? '#10b981' : (btcAmountRaw < 0 ? '#ef4444' : '#64748b');
+                        usdtColor = usdtAmountRaw > 0 ? '#10b981' : (usdtAmountRaw < 0 ? '#ef4444' : '#64748b');
                     }
                     
                     // Format amounts

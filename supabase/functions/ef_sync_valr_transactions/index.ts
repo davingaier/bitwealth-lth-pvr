@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     // Get all active customers with exchange accounts
     const { data: customers, error: customerError } = await supabase.schema("public")
       .from("customer_details")
-      .select("customer_id, first_names, last_name, email")
+      .select("customer_id, first_names, last_name, email, customer_status")
       .eq("org_id", orgId)
       .eq("registration_status", "active");
 
@@ -539,7 +539,7 @@ Deno.serve(async (req) => {
               newTransactions++;
 
               // Send email notification for deposits (only for ACTIVE customers, not first deposit)
-              if (isDeposit && customer.status === "ACTIVE" && customer.email) {
+              if (isDeposit && customer.customer_status === "Active" && customer.email) {
                 try {
                   const depositDate = new Date(timestamp).toLocaleDateString("en-ZA", { 
                     year: "numeric", 

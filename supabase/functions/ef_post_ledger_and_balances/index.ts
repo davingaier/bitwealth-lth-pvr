@@ -708,22 +708,72 @@ Deno.serve(async (req: Request) => {
 
           // Transfer USDT platform fee (with threshold checking)
           if (feeUsdt > 0) {
-            if (feeUsdt >= minUsdt) {
-              // Fee meets minimum - transfer immediately
+            // First, check for any accumulated fees
+            let totalUsdtToTransfer = feeUsdt;
+            let accumulatedAmount = 0;
+            
+            try {
+              const { data: existingAccum, error: fetchErr } = await sb
+                .from("customer_accumulated_fees")
+                .select("accumulated_usdt")
+                .eq("customer_id", customerId)
+                .eq("org_id", org_id)
+                .maybeSingle();
+
+              if (!fetchErr && existingAccum) {
+                accumulatedAmount = Number(existingAccum.accumulated_usdt || 0);
+                totalUsdtToTransfer = feeUsdt + accumulatedAmount;
+                console.log(
+                  `[ef_post_ledger_and_balances] Customer ${customerId} has accumulated USDT ${accumulatedAmount}, total to transfer: ${totalUsdtToTransfer}`,
+                );
+              }
+            } catch (e) {
+              console.error(`Error checking accumulated USDT for customer ${customerId}:`, e);
+            }
+            
+            if (totalUsdtToTransfer >= minUsdt) {
+              // Total meets minimum - transfer immediately
               const transferResult = await transferToMainAccount(
                 sb,
                 {
                   fromSubaccountId: subaccountId,
                   toAccount: mainAccountId,
                   currency: "USDT",
-                  amount: feeUsdt,
-                  transferType: "platform_fee",
+                  amount: totalUsdtToTransfer,
+                  transferType: accumulatedAmount > 0 ? "fee_batch" : "platform_fee",
                 },
                 customerId,
                 ledgerId,
               );
 
-              if (!transferResult.success) {
+              if (transferResult.success) {
+                // Create ledger entry for transfer out
+                await sb.from("ledger_lines").insert({
+                  org_id,
+                  customer_id: customerId,
+                  trade_date: yyyymmdd(new Date()),
+                  kind: "transfer",
+                  amount_btc: 0,
+                  amount_usdt: -totalUsdtToTransfer,
+                  note: `Platform fee transfer: ${transferResult.transferId}`,
+                });
+                
+                // Clear accumulated fees if any were included
+                if (accumulatedAmount > 0) {
+                  await sb
+                    .from("customer_accumulated_fees")
+                    .update({
+                      accumulated_usdt: 0,
+                      last_transfer_attempt_at: new Date().toISOString(),
+                    })
+                    .eq("customer_id", customerId)
+                    .eq("org_id", org_id);
+                }
+                
+                console.log(
+                  `[ef_post_ledger_and_balances] Transferred ${totalUsdtToTransfer} USDT for customer ${customerId} (current: ${feeUsdt}, accumulated: ${accumulatedAmount})`,
+                );
+              } else {
                 await logAlert(
                   sb,
                   "ef_post_ledger_and_balances",
@@ -732,7 +782,9 @@ Deno.serve(async (req: Request) => {
                   {
                     customer_id: customerId,
                     ledger_id: ledgerId,
-                    amount_usdt: feeUsdt,
+                    amount_usdt: totalUsdtToTransfer,
+                    current_fee: feeUsdt,
+                    accumulated: accumulatedAmount,
                     error: transferResult.errorMessage,
                   },
                   org_id,
