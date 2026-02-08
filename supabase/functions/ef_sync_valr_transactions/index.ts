@@ -6,6 +6,7 @@
 // Deployed with: --no-verify-jwt (called by pg_cron)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { logAlert } from "../_shared/alerting.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -251,15 +252,17 @@ Deno.serve(async (req) => {
 
         // DEBUG: For Davin's personal subaccount, log ALL transaction details to understand taxonomy
         if (account.subaccount_id === "1419286489401798656") {
-          console.log(`\n=== DEBUG: Davin's subaccount - ALL transactions ===`);
+          console.log(`\n=== DEBUG: Davin's subaccount - ALL ${transactions.length} transactions ===`);
+          console.log(`Last sync time: ${sinceDatetime.toISOString()}`);
           for (const tx of transactions) {
-            console.log(`Transaction ${tx.id}:`);
+            const txTime = new Date(tx.eventAt);
+            const isAfterSync = txTime > sinceDatetime;
+            console.log(`\nTransaction ${tx.id}:`);
             console.log(`  Type: ${tx.transactionType?.type} (${tx.transactionType?.description})`);
-            console.log(`  Timestamp: ${tx.eventAt}`);
+            console.log(`  Timestamp: ${tx.eventAt} | After sync: ${isAfterSync}`);
             console.log(`  Credit: ${tx.creditValue} ${tx.creditCurrency}`);
             console.log(`  Debit: ${tx.debitValue} ${tx.debitCurrency}`);
-            console.log(`  Additional Info: ${tx.additionalInfo || 'none'}`);
-            console.log(`---`);
+            console.log(`  Additional Info: ${JSON.stringify(tx.additionalInfo || {})}`);
           }
           console.log(`=== END DEBUG ===\n`);
         }
@@ -276,6 +279,11 @@ Deno.serve(async (req) => {
               console.warn(`  Skipping incomplete transaction:`, tx);
               continue;
             }
+
+            // Convenience variables for cleaner code
+            const customerId = customer.customer_id;
+            const customerName = `${customer.first_names} ${customer.last_name}`;
+            const transactedAt = new Date(timestamp);
 
             // Parse transaction amounts and currencies
             const creditValue = parseFloat(tx.creditValue || 0);
@@ -320,18 +328,64 @@ Deno.serve(async (req) => {
             else if (txType === "INTERNAL_TRANSFER") {
               // INTERNAL_TRANSFER can be bidirectional:
               // - INTO subaccount (creditValue > 0) = customer deposit (e.g., test deposits from main account)
-              // - OUT OF subaccount (debitValue > 0) = skip (platform fee transfers, already tracked via ef_post_ledger_and_balances)
+              // - OUT OF subaccount (debitValue > 0) = could be either:
+              //   a) Automated platform fee transfer (tracked in valr_transfer_log)
+              //   b) Manual customer withdrawal (should record as withdrawal)
               if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // Money coming INTO subaccount = DEPOSIT
                 currency = creditCurrency;
                 amount = creditValue;
                 isDeposit = true;
                 fundingKind = "deposit";
-                console.log(`  INTERNAL_TRANSFER IN (deposit): ${amount} ${currency}`);
+                console.log(`  💰 INTERNAL_TRANSFER IN (deposit): ${amount} ${currency}`);
               } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
-                // Money going OUT of subaccount = skip (fee transfer to main account)
-                console.log(`  Skipping INTERNAL_TRANSFER OUT (fee transfer): ${transactionId}`);
-                continue;
+                // Money going OUT of subaccount - check if it's automated or manual
+                // Query valr_transfer_log to see if this is an automated platform fee transfer
+                const { data: transferLog, error: transferLogError } = await supabase
+                  .from("valr_transfer_log")
+                  .select("transfer_id")
+                  .eq("customer_id", customerId)
+                  .eq("currency", debitCurrency)
+                  .eq("amount", debitValue.toFixed(8))
+                  .gte("created_at", new Date(transactedAt.getTime() - 60000).toISOString()) // Within 1 minute
+                  .lte("created_at", new Date(transactedAt.getTime() + 60000).toISOString())
+                  .maybeSingle();
+                
+                if (transferLogError) {
+                  console.error(`  Error querying valr_transfer_log:`, transferLogError);
+                  throw transferLogError;
+                }
+                
+                if (transferLog) {
+                  // This is an automated platform fee transfer - skip (already tracked)
+                  console.log(`  ⏭️  Skipping INTERNAL_TRANSFER OUT (automated fee transfer ${transferLog.transfer_id}): ${transactionId}`);
+                  continue;
+                } else {
+                  // This is a manual customer withdrawal - record it
+                  currency = debitCurrency;
+                  amount = debitValue;
+                  isDeposit = false; // No platform fee on withdrawals
+                  fundingKind = "withdrawal";
+                  console.log(`  💸 INTERNAL_TRANSFER OUT (customer withdrawal): ${amount} ${currency}`);
+                  
+                  // Log alert for admin notification
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "info",
+                    `${currency} withdrawal: ${customerName} withdrew ${amount} ${currency}`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      amount: amount,
+                      currency: currency,
+                      transaction_id: transactionId,
+                      occurred_at: transactedAt,
+                    },
+                    orgId,
+                    customerId
+                  );
+                }
               } else {
                 console.warn(`  Skipping unexpected INTERNAL_TRANSFER:`, tx);
                 continue;
@@ -496,14 +550,20 @@ Deno.serve(async (req) => {
 
             // Check if we've already processed this transaction
             const idempotencyKey = `VALR_TX_${transactionId}`;
-            const { data: existing } = await supabase
+            const { data: existing, error: idempError } = await supabase
               .from("exchange_funding_events")
               .select("funding_id")
               .eq("idempotency_key", idempotencyKey)
-              .single();
+              .maybeSingle();
+
+            if (idempError) {
+              console.error(`  Error checking idempotency for tx ${transactionId}:`, idempError);
+              throw idempError;
+            }
 
             if (existing) {
               // Already processed
+              console.log(`  ⏭️  Skipping already processed tx: ${transactionId}`);
               continue;
             }
 

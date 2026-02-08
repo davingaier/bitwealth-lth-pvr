@@ -9,6 +9,215 @@
 
 ## 0. Change Log
 
+### v0.6.44 – BUG FIX: Customer Withdrawals Not Detected
+**Date:** 2026-02-08 (Evening)  
+**Purpose:** Fix critical bug preventing customer withdrawals from being detected and recorded.
+
+**Status:** ✅ COMPLETE - Bug fixed and deployed
+
+#### Problem Discovery
+
+Customer 48 manually transferred 10.8425 USDT from subaccount to main account (withdrawal). Transaction appeared in VALR UI but was not detected by `ef_sync_valr_transactions`, causing:
+- No withdrawal record in `exchange_funding_events`
+- No ledger entry created
+- Balance not updated
+- No admin alert triggered
+
+#### Root Cause Analysis
+
+**Bug #1: Missing logAlert Import (PRIMARY CAUSE)**
+- **Location:** `ef_sync_valr_transactions/index.ts` line 9
+- **Issue:** Added withdrawal detection logic that calls `logAlert()` but forgot import
+- **Error:** `ReferenceError: logAlert is not defined at object.handler`
+- **Impact:** Entire transaction processing block threw exception, rolled back all inserts
+- **Evidence:** Edge function logs showed "Error processing transaction: ReferenceError: logAlert is not defined"
+
+**Bug #2: Undefined Variables in INTERNAL_TRANSFER Logic**
+- **Location:** `ef_sync_valr_transactions/index.ts` lines ~350-370
+- **Issue:** Used `customerId`, `customerName`, `transactedAt` before defining them
+- **Impact:** Would have caused ReferenceError even if logAlert was imported
+- **Fix:** Moved variable definitions to top of transaction processing loop
+
+**Bug #3: Incorrect Idempotency Check**
+- **Location:** `ef_sync_valr_transactions/index.ts` line ~545
+- **Issue:** Used `.single()` instead of `.maybeSingle()` for idempotency check
+- **Impact:** Would throw error if no existing record found (expected case)
+- **Fix:** Changed to `.maybeSingle()` with proper error handling
+
+#### Technical Details
+
+**INTERNAL_TRANSFER Classification Logic:**
+```typescript
+// Withdrawal detection logic added in v0.6.44
+else if (txType === "INTERNAL_TRANSFER") {
+  if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+    // Money IN = deposit (test deposits from main account)
+    fundingKind = "deposit";
+  } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
+    // Money OUT = check if automated or manual
+    
+    // Query valr_transfer_log to distinguish:
+    // - Automated: Platform fee transfers (already tracked in ledger)
+    // - Manual: Customer withdrawals (need to record)
+    const { data: transferLog } = await supabase
+      .from("valr_transfer_log")
+      .select("transfer_id")
+      .eq("customer_id", customerId)
+      .eq("currency", debitCurrency)
+      .eq("amount", debitValue.toFixed(8))
+      .gte("created_at", new Date(transactedAt.getTime() - 60000).toISOString())
+      .lte("created_at", new Date(transactedAt.getTime() + 60000).toISOString())
+      .maybeSingle();
+    
+    if (transferLog) {
+      // Skip: automated fee transfer
+      continue;
+    } else {
+      // Record: customer withdrawal
+      fundingKind = "withdrawal";
+      amount = debitValue;
+      isDeposit = false;
+      
+      // Log alert for admin notification ❌ CRASHED HERE (logAlert not imported)
+      await logAlert(supabase, "ef_sync_valr_transactions", "info", 
+        `${currency} withdrawal: ${customerName} withdrew ${amount} ${currency}`, 
+        { customer_id, transaction_id, occurred_at }, org_id, customer_id);
+    }
+  }
+}
+```
+
+#### Code Changes
+
+**ef_sync_valr_transactions/index.ts:**
+
+Lines 1-10 - Added missing import:
+```typescript
+// BEFORE (v0.6.43)
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
+
+// AFTER (v0.6.44)
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { logAlert } from "../_shared/alerting.ts";  // ✅ ADDED
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
+```
+
+Lines 270-290 - Added convenience variables:
+```typescript
+// BEFORE (v0.6.43)
+for (const tx of fundingTransactions) {
+  const transactionId = tx.id;
+  const timestamp = tx.eventAt;
+  const txType = tx.transactionType?.type;
+  
+  const creditValue = parseFloat(tx.creditValue || 0);
+  const debitValue = parseFloat(tx.debitValue || 0);
+
+// AFTER (v0.6.44)
+for (const tx of fundingTransactions) {
+  const transactionId = tx.id;
+  const timestamp = tx.eventAt;
+  const txType = tx.transactionType?.type;
+  
+  // ✅ ADDED: Define variables used in INTERNAL_TRANSFER logic
+  const customerId = customer.customer_id;
+  const customerName = `${customer.first_names} ${customer.last_name}`;
+  const transactedAt = new Date(timestamp);
+  
+  const creditValue = parseFloat(tx.creditValue || 0);
+  const debitValue = parseFloat(tx.debitValue || 0);
+```
+
+Lines 540-560 - Fixed idempotency check:
+```typescript
+// BEFORE (v0.6.43)
+const { data: existing } = await supabase
+  .from("exchange_funding_events")
+  .select("funding_id")
+  .eq("idempotency_key", idempotencyKey)
+  .single();  // ❌ Throws error if not found
+
+if (existing) continue;
+
+// AFTER (v0.6.44)
+const { data: existing, error: idempError } = await supabase
+  .from("exchange_funding_events")
+  .select("funding_id")
+  .eq("idempotency_key", idempotencyKey)
+  .maybeSingle();  // ✅ Returns null if not found
+
+if (idempError) {
+  console.error(`Error checking idempotency:`, idempError);
+  throw idempError;
+}
+if (existing) {
+  console.log(`⏭️  Skipping already processed tx: ${transactionId}`);
+  continue;
+}
+```
+
+#### Test Results (Customer 48)
+
+**Before Fix:**
+- Sync result: `scanned: 7, synced: 7, new_transactions: 0, errors: 2` ❌
+- 0 withdrawal records created
+- Edge function logs: "ReferenceError: logAlert is not defined"
+
+**After Fix:**
+- Sync result: `scanned: 7, synced: 7, new_transactions: 2, errors: 0` ✅
+- 2 withdrawal records created:
+  1. 10.8425 USDT at 17:45:03 UTC (manual withdrawal - main test)
+  2. 0.075 USDT at 17:00:05 UTC (manual withdrawal - earlier test)
+- Alert events logged successfully
+
+**Database Verification:**
+```sql
+SELECT occurred_at, kind, asset, amount, ext_ref
+FROM lth_pvr.exchange_funding_events
+WHERE customer_id = 48 AND occurred_at >= '2026-02-08'
+ORDER BY occurred_at DESC;
+
+-- Results:
+-- 17:45:03 | withdrawal | USDT | -10.84250000 | 019c3e5b-681b-7028-b3e3-a37647f6b028 ✅
+-- 17:00:05 | withdrawal | USDT | -0.07500000  | 019c3e32-3c14-709e-88ab-3b6d109cc09e ✅
+-- 16:56:21 | deposit    | USDT |  10.00000000 | 019c3e2e-d2ef-70d5-911e-cac5c8f880d5 ✅
+```
+
+#### Production Checklist
+
+✅ Bug #1: logAlert import added  
+✅ Bug #2: Variable definitions fixed  
+✅ Bug #3: Idempotency check corrected  
+✅ Customer 48 withdrawals detected and recorded  
+✅ Alert events created  
+✅ Edge function logs clean (0 errors)  
+✅ ef_sync_valr_transactions v4 deployed
+
+#### Deployment Commands
+
+```powershell
+supabase functions deploy ef_sync_valr_transactions --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+#### Key Learnings
+
+1. **Always import dependencies:** Adding alert calls requires importing alerting module
+2. **Define variables before use:** JavaScript won't catch undefined variable references until runtime
+3. **Use maybeSingle() for optional queries:** `.single()` throws error if no results, `.maybeSingle()` returns null
+4. **Test with actual data:** Mock data wouldn't have caught the INTERNAL_TRANSFER logic branch
+5. **Check edge function logs:** Error messages in Supabase dashboard show exact line numbers and stack traces
+
+#### Related Issues
+
+- v0.6.43: Platform fee transfers now skip correctly (matched via valr_transfer_log)
+- Customer withdrawals previously went undetected (system design gap before v0.6.44)
+- Manual transfers from subaccount to main account are now properly tracked
+
+---
+
 ### v0.6.43 – CRITICAL: Platform Fee Transfer & Balance Calculation Bug Fixes
 **Date:** 2026-02-08  
 **Purpose:** Fix critical bugs in platform fee accumulation, transfer logic, balance calculation, and deposit notification emails.
