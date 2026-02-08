@@ -3,11 +3,95 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-08 (v0.6.45)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.45 – Email Branding Updates & Subsequent Deposit Notifications
+**Date:** 2026-02-08 (Late Evening)  
+**Purpose:** Update email template branding and add automated deposit notifications for subsequent deposits.
+
+**Status:** ✅ COMPLETE - Deployed
+
+#### Changes Implemented
+
+**1. Email Template Branding Updates**
+- **Subtitle Text:** Changed "Advanced Bitcoin DCA Strategy" → "LTH PVR Bitcoin DCA Strategy" across 9 email templates
+  - Templates updated: account_setup_complete, funds_deposited_notification, kyc_request, kyc_verified_notification, monthly_statement, prospect_confirmation, support_request_confirmation, withdrawal_approved, withdrawal_completed
+  
+- **Dark Mode Support:** Added CSS media queries to all active email templates (18 total)
+  - Light mode: White header (#ffffff) with dark blue border (#032C48), dark blue text
+  - Dark mode: Dark blue header (#032C48) with white border, white text
+  - Uses `@media (prefers-color-scheme: dark)` for automatic adaptation
+  
+- **Template Structure:** Standardized to use table-based layout with minimal inline styles
+  - Avoids CSS class conflicts between email clients
+  - Maximum email client compatibility
+
+**2. New Email Template: subsequent_deposit_notification**
+- **Purpose:** Notify customers of ZAR/BTC/USDT deposits AFTER their first deposit (first deposit uses `registration_complete_welcome`)
+- **Trigger:** Automated by `ef_sync_valr_transactions` when deposits detected
+- **Conditions:** Only sent to customers with `status = 'ACTIVE'`
+- **Template Key:** `subsequent_deposit_notification`
+- **Subject:** "Deposit Received - {{amount}} {{asset}} Credited to Your Account"
+- **Content:**
+  - Deposit amount, asset, and date displayed in highlighted box
+  - "What happens next?" section explaining strategy automation
+  - Link to Customer Portal
+  - Professional styling with logo and LTH PVR branding
+
+**3. ef_sync_valr_transactions Enhancement**
+- **Location:** `supabase/functions/ef_sync_valr_transactions/index.ts`
+- **New Logic:** After creating funding event for deposit, check if customer is ACTIVE
+  ```typescript
+  // Send email notification for deposits (only for ACTIVE customers, not first deposit)
+  if (isDeposit && customer.status === "ACTIVE" && customer.email) {
+    await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+      method: "POST",
+      body: JSON.stringify({
+        template_key: "subsequent_deposit_notification",
+        to_email: customer.email,
+        data: {
+          first_name: customer.first_names,
+          amount: Math.abs(amount).toFixed(8),
+          asset: currency,
+          deposit_date: depositDate,
+          portal_url: "https://bitwealth.co.za/customer-portal.html",
+          website_url: "https://bitwealth.co.za"
+        }
+      })
+    });
+  }
+  ```
+- **Error Handling:** Graceful degradation - deposit processing continues even if email fails
+
+#### Files Modified
+
+**Email Templates (SQL):**
+- Updated 9 templates with subtitle text change via SQL REPLACE
+- Updated all active templates with dark mode CSS media queries
+- Created new `subsequent_deposit_notification` template (18 total templates now)
+
+**Edge Functions:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts` - Added email notification logic
+- Deployed with `--no-verify-jwt`
+
+#### Testing
+
+- Test emails sent to davin.gaier@bitwealth.co.za
+- Verified in both light and dark mode email clients
+- Confirmed header styling: white background with blue border in light mode
+- Confirmed subtitle text visibility: dark blue in light mode, white in dark mode
+- Template structure validated: 91KB HTML (includes 88KB logo base64)
+
+#### Related Documentation
+
+- EMAIL_HEADER_FIX_COMPLETE.md - Dark mode implementation details
+- Email templates: 18 total active templates
+
+---
 
 ### v0.6.44 – BUG FIX: Customer Withdrawals Not Detected
 **Date:** 2026-02-08 (Evening)  
@@ -4426,6 +4510,7 @@ Customer Manual Transfer → VALR Balance Changes → Hourly Reconciliation Scan
    - ✅ `deposit_instructions` (created 2025-12-30)
    - ✅ `funds_deposited_admin_notification` (created 2025-12-30)
    - ✅ `registration_complete_welcome` (created 2025-12-30)
+   - ✅ `subsequent_deposit_notification` (created 2026-02-08 - automated subsequent deposit alerts)
 
 5. **UI Components Status**
    - ✅ Customer Management module (ui/Advanced BTC DCA Strategy.html)
