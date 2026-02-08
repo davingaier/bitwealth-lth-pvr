@@ -35,8 +35,8 @@ Write-Host ""
 $base64 = Get-Content "$PSScriptRoot\logo-base64-full.txt" -Raw
 Write-Host "✓ Loaded logo ($(($base64.Length / 1024).ToString('F2')) KB)" -ForegroundColor Green
 
-# Create img tag with CSS filter to invert colors (dark -> white on transparent)
-$logoImg = "<img src=`"data:image/png;base64,$base64`" alt=`"BitWealth`" style=`"width: 250px; height: auto; display: block; margin: 0 auto; filter: brightness(0) invert(1);`" />"
+# Create img tag (no filter - natural colors on white background)
+$logoImg = "<img src=`"data:image/png;base64,$base64`" alt=`"BitWealth`" style=`"width: 250px; height: auto; display: block; margin: 0 auto;`" />"
 
 Write-Host ""
 Write-Host "Fetching email templates..." -ForegroundColor Yellow

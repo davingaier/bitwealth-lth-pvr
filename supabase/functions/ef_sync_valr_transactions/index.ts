@@ -537,6 +537,46 @@ Deno.serve(async (req) => {
             } else {
               console.log(`  ✅ Created funding event: ${fundingKind} ${amount} ${currency}`);
               newTransactions++;
+
+              // Send email notification for deposits (only for ACTIVE customers, not first deposit)
+              if (isDeposit && customer.status === "ACTIVE" && customer.email) {
+                try {
+                  const depositDate = new Date(timestamp).toLocaleDateString("en-ZA", { 
+                    year: "numeric", 
+                    month: "long", 
+                    day: "numeric" 
+                  });
+
+                  const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${supabaseKey}`,
+                    },
+                    body: JSON.stringify({
+                      template_key: "subsequent_deposit_notification",
+                      to_email: customer.email,
+                      data: {
+                        first_name: customer.first_names,
+                        amount: Math.abs(amount).toFixed(8),
+                        asset: currency,
+                        deposit_date: depositDate,
+                        portal_url: "https://bitwealth.co.za/customer-portal.html",
+                        website_url: "https://bitwealth.co.za",
+                        to_email: customer.email,
+                      },
+                    }),
+                  });
+
+                  if (emailResponse.ok) {
+                    console.log(`  📧 Sent deposit notification email to ${customer.email}`);
+                  } else {
+                    console.error(`  Failed to send deposit email: ${await emailResponse.text()}`);
+                  }
+                } catch (emailError) {
+                  console.error(`  Error sending deposit email:`, emailError);
+                }
+              }
             }
 
           } catch (txError) {
