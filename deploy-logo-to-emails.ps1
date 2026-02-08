@@ -35,8 +35,8 @@ Write-Host ""
 $base64 = Get-Content "$PSScriptRoot\logo-base64-full.txt" -Raw
 Write-Host "✓ Loaded logo ($(($base64.Length / 1024).ToString('F2')) KB)" -ForegroundColor Green
 
-# Create img tag
-$logoImg = "<img src=`"data:image/png;base64,$base64`" alt=`"BitWealth`" style=`"width: 200px; height: auto; display: block; margin: 0 auto;`" />"
+# Create img tag with CSS filter to invert colors (dark -> white on transparent)
+$logoImg = "<img src=`"data:image/png;base64,$base64`" alt=`"BitWealth`" style=`"width: 250px; height: auto; display: block; margin: 0 auto; filter: brightness(0) invert(1);`" />"
 
 Write-Host ""
 Write-Host "Fetching email templates..." -ForegroundColor Yellow
@@ -60,50 +60,59 @@ foreach ($template in $response) {
     $key = $template.template_key
     $html = $template.body_html
     
-    # Check if template already has logo
-    if ($html -like '*<img src="data:image/png;base64*alt="BitWealth"*') {
-        Write-Host "  ⊙ $key - Already has logo" -ForegroundColor Gray
-        $skippedCount++
-        continue
-    }
-    
     $updated = $false
     $originalHtml = $html
     
-    # Pattern 1: Orange text header (32px)
-    $pattern1 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div>'
-    if ($html -like "*$pattern1*") {
-        $html = $html.Replace($pattern1, $logoImg)
+    # Pattern 0: Replace existing logo with new one (handles logo updates)
+    if ($html -match '<img src="data:image/png;base64,[^"]*" alt="BitWealth"[^>]*\s*/?>')  {
+        $html = $html -replace '<img src="data:image/png;base64,[^"]*" alt="BitWealth"[^>]*\s*/?>',  $logoImg
         $updated = $true
+    }
+    
+    # Pattern 1: Orange text header (32px)
+    if (-not $updated) {
+        $pattern1 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div>'
+        if ($html -like "*$pattern1*") {
+            $html = $html.Replace($pattern1, $logoImg)
+            $updated = $true
+        }
     }
     
     # Pattern 2: White text header (28px) - used in deposit_instructions
-    $pattern2 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 28px; font-weight: 700; color: white; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div>'
-    if ($html -like "*$pattern2*") {
-        $html = $html.Replace($pattern2, $logoImg)
-        $updated = $true
+    if (-not $updated) {
+        $pattern2 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 28px; font-weight: 700; color: white; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div>'
+        if ($html -like "*$pattern2*") {
+            $html = $html.Replace($pattern2, $logoImg)
+            $updated = $true
+        }
     }
     
     # Pattern 3: Centered div wrapper (prospect_confirmation structure)
-    $pattern3 = '<div style="text-align: center;"><div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div></div>'
-    $replacement3 = '<div style="text-align: center;">' + $logoImg + '</div>'
-    if ($html -like "*$pattern3*") {
-        $html = $html.Replace($pattern3, $replacement3)
-        $updated = $true
+    if (-not $updated) {
+        $pattern3 = '<div style="text-align: center;"><div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 32px; font-weight: 700; color: #F39C12; letter-spacing: 0.5px; margin-bottom: 8px;">BitWealth</div></div>'
+        $replacement3 = '<div style="text-align: center;">' + $logoImg + '</div>'
+        if ($html -like "*$pattern3*") {
+            $html = $html.Replace($pattern3, $replacement3)
+            $updated = $true
+        }
     }
     
     # Pattern 4: Simple h1 tag (used in older templates like kyc_request, monthly_statement)
-    $pattern4 = '<h1>BitWealth</h1>'
-    if ($html -like "*$pattern4*") {
-        $html = $html.Replace($pattern4, $logoImg)
-        $updated = $true
+    if (-not $updated) {
+        $pattern4 = '<h1>BitWealth</h1>'
+        if ($html -like "*$pattern4*") {
+            $html = $html.Replace($pattern4, $logoImg)
+            $updated = $true
+        }
     }
     
     # Pattern 5: White div without size specifications (prospect_notification)
-    $pattern5 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 28px; font-weight: 700; color: white; letter-spacing: 0.5px;">BitWealth</div>'
-    if ($html -like "*$pattern5*") {
-        $html = $html.Replace($pattern5, $logoImg)
-        $updated = $true
+    if (-not $updated) {
+        $pattern5 = '<div style="font-family: ''Aptos'', ''Segoe UI'', ''Helvetica Neue'', Arial, sans-serif; font-size: 28px; font-weight: 700; color: white; letter-spacing: 0.5px;">BitWealth</div>'
+        if ($html -like "*$pattern5*") {
+            $html = $html.Replace($pattern5, $logoImg)
+            $updated = $true
+        }
     }
     
     if ($updated) {
@@ -118,7 +127,7 @@ foreach ($template in $response) {
                 -Method Patch `
                 -Body $updateBody | Out-Null
             
-            Write-Host "  ✓ $key - Logo added" -ForegroundColor Green
+            Write-Host "  ✓ $key - Logo updated" -ForegroundColor Green
             $updatedCount++
         } catch {
             Write-Host "  ✗ $key - Update failed: $_" -ForegroundColor Red
