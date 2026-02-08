@@ -3,11 +3,245 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-07
+**Last updated:** 2026-02-08
 
 ---
 
 ## 0. Change Log
+
+### v0.6.43 – CRITICAL: Platform Fee Transfer & Balance Calculation Bug Fixes
+**Date:** 2026-02-08  
+**Purpose:** Fix critical bugs in platform fee accumulation, transfer logic, balance calculation, and deposit notification emails.
+
+**Status:** ✅ COMPLETE - All bugs fixed and deployed to production
+
+#### Issues Discovered During Customer 48 Testing
+
+**Bug #1: Platform Fee Transfers Ignore Accumulated Fees**
+- **Severity:** HIGH - Financial impact (fees not fully transferred)
+- **Problem:** When deposit fee >= minimum threshold (0.06 USDT), code transferred ONLY current fee without checking accumulated fees
+- **Example:** 
+  - Deposit 1: 1.00 USDT → fee 0.0075 USDT (accumulated below threshold) ✅
+  - Deposit 2: 10.00 USDT → fee 0.075 USDT (above threshold)
+  - Expected: Transfer 0.0075 + 0.075 = **0.0825 USDT**
+  - Actual: Transfer **0.075 USDT** only (lost 0.0075)
+- **Root Cause:** `ef_post_ledger_and_balances/index.ts` line 710 - Directly transferred `feeUsdt` without querying `customer_accumulated_fees`
+- **Solution:** Check accumulated fees before transfer, include in total, clear after successful transfer
+- **Impact:** All future deposits now correctly transfer accumulated + current fees
+
+**Bug #2: Platform Fee Transfers Missing from Ledger**
+- **Severity:** CRITICAL - Financial reconciliation breaks
+- **Problem:** Fee transfers executed on VALR but NO ledger debit entry created
+- **Example:**
+  - Total deposits: 11.00 USDT
+  - Transfer out: 0.0825 USDT (confirmed in VALR)
+  - Ledger shows: NO transfer entry
+  - Portal balance: 11.00 USDT (wrong, ignored transfer)
+  - Expected: 10.9175 USDT
+- **Root Cause:** No code to create ledger entry after `transferToMainAccount()` success
+- **Solution:** Insert ledger entry with `kind='transfer', amount_usdt=-totalUsdtToTransfer`
+- **Impact:** All transfers now recorded for accurate balance tracking
+
+**Bug #3: Balance Calculation Double-Deducted Platform Fees**
+- **Severity:** HIGH - Display bug (balance understated)
+- **Problem:** Balance calculation subtracted platform fees TWICE:
+  1. From `platform_fee_usdt` column (metadata)
+  2. From `transfer` entry (actual debit)
+- **Example:**
+  - Deposits: 11.00 USDT, Platform fees: 0.0825 USDT, Transfer: -0.0825 USDT
+  - Wrong: 11.00 - 0.0825 (fees) - 0.0825 (transfer) = **10.835 USDT**
+  - Correct: 11.00 - 0.0825 (transfer only) = **10.9175 USDT**
+- **Root Cause:** Balance calc selected `platform_fee_usdt` and subtracted it
+- **Conceptual Fix:** `platform_fee_usdt` = metadata only, `transfer` entry = actual debit
+- **Solution:** Removed platform_fee columns from balance SELECT, only use transfer amounts
+- **Impact:** Balances now accurately reflect actual funds
+
+**Bug #4: Deposit Notification Emails Not Sending**
+- **Severity:** MEDIUM - Customer experience issue
+- **Problem:** Emails not sent because code checked wrong field with wrong case
+- **Root Cause:** 
+  - Code: `customer.status === "ACTIVE"`
+  - Database: `customer_status = "Active"` (different column, different case)
+- **Solution:** 
+  - Query now selects `customer_status` column
+  - Check changed to `customer.customer_status === "Active"`
+- **Impact:** Deposit notifications now send automatically
+
+**Bug #5: Customer Portal Zero Value Color Coding**
+- **Severity:** LOW - UI polish
+- **Problem:** Zero values in transaction history showed as green instead of gray
+- **Root Cause:** Color logic used `>= 0` which included zero
+- **Solution:** Changed to `> 0 ? green : (< 0 ? red : gray)`
+- **Impact:** Zero values now display in gray as expected
+
+#### Code Changes
+
+**ef_post_ledger_and_balances (v66 → v69)**
+
+Lines 710-795 - Platform fee transfer with accumulated fees:
+```typescript
+// v66 WRONG - Only transfers current fee
+if (feeUsdt >= minUsdt) {
+  const transferResult = await transferToMainAccount(sb, {
+    amount: feeUsdt,  // ❌ Missing accumulated
+  });
+}
+
+// v69 CORRECT - Includes accumulated fees
+if (feeUsdt > 0) {
+  let totalUsdtToTransfer = feeUsdt;
+  let accumulatedAmount = 0;
+  
+  // Query accumulated fees
+  const { data: existingAccum } = await sb
+    .from("customer_accumulated_fees")
+    .select("accumulated_usdt")
+    .eq("customer_id", customerId)
+    .maybeSingle();
+
+  if (existingAccum) {
+    accumulatedAmount = Number(existingAccum.accumulated_usdt || 0);
+    totalUsdtToTransfer = feeUsdt + accumulatedAmount;  // ✅
+  }
+  
+  if (totalUsdtToTransfer >= minUsdt) {
+    const transferResult = await transferToMainAccount(sb, {
+      amount: totalUsdtToTransfer,  // ✅ Total
+      transferType: accumulatedAmount > 0 ? "fee_batch" : "platform_fee",
+    });
+    
+    if (transferResult.success) {
+      // ✅ NEW: Create ledger entry
+      await sb.from("ledger_lines").insert({
+        org_id,
+        customer_id: customerId,
+        trade_date: yyyymmdd(new Date()),
+        kind: "transfer",
+        amount_usdt: -totalUsdtToTransfer,  // Negative
+        note: `Platform fee transfer: ${transferResult.transferId}`,
+      });
+      
+      // Clear accumulated fees
+      if (accumulatedAmount > 0) {
+        await sb.from("customer_accumulated_fees")
+          .update({ accumulated_usdt: 0 })
+          .eq("customer_id", customerId);
+      }
+    }
+  }
+}
+```
+
+Lines 994-1015 - Balance calculation fix:
+```typescript
+// v66 WRONG - Double deduction
+.select("amount_btc, amount_usdt, fee_btc, fee_usdt, platform_fee_btc, platform_fee_usdt")
+// ...
+const btc = prev.btc_balance + dBtc - fBtc - pfBtc;  // ❌
+const usdt = prev.usdt_balance + dUsdt - fUsdt - pfUsdt;  // ❌
+
+// v69 CORRECT - No platform fee deduction
+.select("amount_btc, amount_usdt, fee_btc, fee_usdt")  // ✅
+// ...
+const btc = prev.btc_balance + dBtc - fBtc;  // ✅
+const usdt = prev.usdt_balance + dUsdt - fUsdt;  // ✅
+// Transfer already in amount_usdt as negative value
+```
+
+**ef_sync_valr_transactions (v1 → v2)**
+
+Lines 105 + 543 - Email notification fix:
+```typescript
+// v1 WRONG
+.select("customer_id, first_names, last_name, email")  // ❌ Missing customer_status
+// ...
+if (isDeposit && customer.status === "ACTIVE" && customer.email) {  // ❌ Wrong field & case
+
+// v2 CORRECT
+.select("customer_id, first_names, last_name, email, customer_status")  // ✅
+// ...
+if (isDeposit && customer.customer_status === "Active" && customer.email) {  // ✅
+```
+
+**website/customer-portal.html (Transaction History)**
+
+Lines 836, 851, 864 - Color coding fix:
+```javascript
+// WRONG - Zero shows green
+btcColor = btcAmountRaw >= 0 ? '#10b981' : '#ef4444';
+
+// CORRECT - Zero shows gray
+btcColor = btcAmountRaw > 0 ? '#10b981' : (btcAmountRaw < 0 ? '#ef4444' : '#64748b');
+```
+
+#### Test Results (Customer 48)
+
+**Ledger Entries (After Fix):**
+| Date | Kind | Amount USDT | Platform Fee USDT | Note |
+|------|------|-------------|-------------------|------|
+| 2026-02-07 | topup | 1.00000000 | 0.00750000 | USDT deposit |
+| 2026-02-08 | topup | 10.00000000 | 0.07500000 | USDT deposit |
+| 2026-02-08 | **transfer** | **-0.08250000** | 0.00000000 | **Platform fee transfer: 2144f7d0-a8e0-48e2-8ae5-11fe861e8c37** |
+
+**Balance Verification:**
+- Feb 07: 1.00 USDT ✅
+- Feb 08: 1.00 + 10.00 - 0.0825 = **10.9175 USDT** ✅ (displays as 10.92)
+- Manual check: SUM(amount_usdt) - SUM(fee_usdt) = 10.9175 ✅
+
+**VALR Transfer Log:**
+- Transfer ID: 2144f7d0-a8e0-48e2-8ae5-11fe861e8c37
+- Currency: USDT
+- Amount: **0.08250000** ✅ (0.0075 + 0.075 accumulated)
+- Status: completed
+- VALR API Response: 134957615
+
+**Accumulated Fees (After Transfer):**
+- Accumulated USDT: 0.00000000 ✅ (cleared)
+- Accumulated BTC: 0.00000007 (still accumulating, below 0.000001 threshold)
+
+#### Key Architectural Insights
+
+**Platform Fee Lifecycle:**
+1. **Accrued** - Recorded in `ledger_lines.platform_fee_usdt` (metadata for reporting)
+2. **Accumulated** - If < threshold, added to `customer_accumulated_fees.accumulated_usdt`
+3. **Transferred** - When >= threshold (current + accumulated), moved via `transferToMainAccount()`
+4. **Ledger Entry** - Transfer recorded as `kind='transfer', amount_usdt=-(total)`
+5. **Balance Impact** - Only transfer entry affects balance, not metadata
+
+**Double-Counting Prevention:**
+- Platform fees in ledger = informational only
+- Transfer entry = actual money movement
+- Never subtract both from balance
+
+#### Production Checklist
+
+✅ Bug #1: Accumulated fees included in transfers  
+✅ Bug #2: Ledger entries created for all transfers  
+✅ Bug #3: Balance calculation corrected (no double deduction)  
+✅ Bug #4: Email notifications working (correct field/case)  
+✅ Bug #5: UI color coding fixed (gray for zero)  
+✅ Customer 48 data corrected and verified  
+✅ VALR reconciliation passes (10.9175 USDT)  
+✅ Edge functions deployed:
+  - ef_post_ledger_and_balances v69
+  - ef_sync_valr_transactions v2
+✅ Customer portal UI updated
+
+#### Deployment Commands
+
+```powershell
+# Edge functions
+supabase functions deploy ef_post_ledger_and_balances --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_sync_valr_transactions --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+
+# No database migrations required (data fixes only)
+```
+
+#### Documentation References
+- `PLATFORM_FEE_BUGS_FIXED.md` - Detailed bug analysis and fixes
+- Customer 48 used for end-to-end testing and verification
+
+---
 
 ### v0.6.42 – FEATURE: Crypto Wallet Deposit Support (BTC + USDT) - COMPLETE
 **Date:** 2026-02-07  
