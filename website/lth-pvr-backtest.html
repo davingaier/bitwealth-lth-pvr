@@ -339,12 +339,12 @@
                         
                         <div class="form-group">
                             <label for="startDate">Start Date *</label>
-                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2010-07-17" max="2026-12-31">
+                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2010-07-18" max="2026-12-31">
                         </div>
                         
                         <div class="form-group">
                             <label for="endDate">End Date *</label>
-                            <input type="date" id="endDate" name="endDate" required value="2026-02-08" min="2010-07-17" max="2026-12-31">
+                            <input type="date" id="endDate" name="endDate" required value="2026-02-08" min="2010-07-18" max="2026-12-31">
                         </div>
                         
                         <div class="form-group">
@@ -738,8 +738,8 @@
             
             document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav || 0);
             const lthRoiValue = (lth.total_roi || 0);
-            document.getElementById('lthROI').textContent = (lthRoiValue >= 0 ? '+' : '') + lthRoiValue.toFixed(2) + '%';
-            document.getElementById('lthCAGR').textContent = (lth.cagr || 0).toFixed(2) + '%';
+            document.getElementById('lthROI').textContent = (lthRoiValue >= 0 ? '+' : '') + formatPercent(lthRoiValue) + '%';
+            document.getElementById('lthCAGR').textContent = formatPercent(lth.cagr || 0) + '%';
             document.getElementById('lthContrib').textContent = '$' + formatNumber(lth.contrib_gross || 0);
             
             // LTH PVR fees (convert BTC fees to USD using final BTC price if available)
@@ -750,8 +750,8 @@
             
             document.getElementById('stdFinalNav').textContent = '$' + formatNumber(std.final_nav || 0);
             const stdRoiValue = (std.total_roi || 0);
-            document.getElementById('stdROI').textContent = (stdRoiValue >= 0 ? '+' : '') + stdRoiValue.toFixed(2) + '%';
-            document.getElementById('stdCAGR').textContent = (std.cagr || 0).toFixed(2) + '%';
+            document.getElementById('stdROI').textContent = (stdRoiValue >= 0 ? '+' : '') + formatPercent(stdRoiValue) + '%';
+            document.getElementById('stdCAGR').textContent = formatPercent(std.cagr || 0) + '%';
             document.getElementById('stdContrib').textContent = '$' + formatNumber(std.contrib_gross || 0);
             
             // Standard DCA fees (VALR exchange fees only - NO BitWealth fees)
@@ -819,7 +819,7 @@
                             grid: { color: 'rgba(255, 255, 255, 0.05)' },
                             ticks: {
                                 color: '#A8B2D1',
-                                callback: (value) => (value >= 0 ? '+' : '') + value.toFixed(2) + '%'
+                                callback: (value) => (value >= 0 ? '+' : '') + formatPercent(value) + '%'
                             }
                         }
                     }
@@ -950,6 +950,13 @@
             return new Intl.NumberFormat('en-US', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0
+            }).format(num);
+        }
+        
+        function formatPercent(num) {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
             }).format(num);
         }
         
