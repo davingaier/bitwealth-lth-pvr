@@ -478,7 +478,13 @@
                         
                         <!-- Charts -->
                         <div class="chart-section">
-                            <h3>ROI % Comparison</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 style="margin: 0;">ROI % Comparison</h3>
+                                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #A8B2D1; cursor: pointer;">
+                                    <input type="checkbox" id="logScaleToggle" style="cursor: pointer;">
+                                    <span>Logarithmic Scale</span>
+                                </label>
+                            </div>
                             <div class="chart-container">
                                 <canvas id="roiChart"></canvas>
                             </div>
@@ -816,6 +822,7 @@
                             ticks: { color: '#A8B2D1' }
                         },
                         y: {
+                            type: 'linear',
                             grid: { color: 'rgba(255, 255, 255, 0.05)' },
                             ticks: {
                                 color: '#A8B2D1',
@@ -873,6 +880,7 @@
                             ticks: { color: '#A8B2D1' }
                         },
                         y: {
+                            type: 'linear',
                             grid: { color: 'rgba(255, 255, 255, 0.05)' },
                             ticks: {
                                 color: '#A8B2D1',
@@ -959,6 +967,31 @@
                 maximumFractionDigits: 2
             }).format(num);
         }
+        
+        // Toggle logarithmic scale on both charts
+        function toggleLogScale(useLog) {
+            const scaleType = useLog ? 'logarithmic' : 'linear';
+            
+            if (roiChart) {
+                roiChart.options.scales.y.type = scaleType;
+                roiChart.update();
+            }
+            
+            if (navChart) {
+                navChart.options.scales.y.type = scaleType;
+                navChart.update();
+            }
+        }
+        
+        // Add event listener for log scale toggle (after DOM loads)
+        document.addEventListener('DOMContentLoaded', () => {
+            const logToggle = document.getElementById('logScaleToggle');
+            if (logToggle) {
+                logToggle.addEventListener('change', (e) => {
+                    toggleLogScale(e.target.checked);
+                });
+            }
+        });
         
         // Set max date to yesterday (LTH PVR data only available up to yesterday)
         const today = new Date();
