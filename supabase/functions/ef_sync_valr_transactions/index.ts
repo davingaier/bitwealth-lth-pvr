@@ -224,8 +224,8 @@ Deno.serve(async (req) => {
         // - LIMIT_SELL/MARKET_SELL: Crypto → ZAR conversions (withdrawals - no fee)
         // - BLOCKCHAIN_RECEIVE: External crypto deposits (charge platform fee)
         // - BLOCKCHAIN_SEND: External crypto withdrawals (no fee)
-        // - FIAT_DEPOSIT: ZAR deposits (skip - just fiat, no crypto)
-        // - FIAT_WITHDRAWAL: ZAR withdrawals (skip - just fiat, no crypto)
+        // - FIAT_DEPOSIT: ZAR deposits
+        // - FIAT_WITHDRAWAL: ZAR withdrawals to bank account
         
         const fundingTransactions = transactions.filter((tx: any) => {
           const txTimestamp = new Date(tx.eventAt);
@@ -242,7 +242,9 @@ Deno.serve(async (req) => {
             "MARKET_BUY",          // ZAR → crypto conversion
             "LIMIT_SELL",          // Crypto → ZAR conversion
             "MARKET_SELL",         // Crypto → ZAR conversion
-            "SIMPLE_SELL",         // ZAR withdrawal (to bank)
+            "SIMPLE_SELL",         // ZAR withdrawal (to bank) - legacy
+            "FIAT_WITHDRAWAL",     // ZAR withdrawal (to bank) - current
+            "FIAT_DEPOSIT",        // ZAR deposit (bank to subaccount)
             "BLOCKCHAIN_RECEIVE",  // External crypto deposit
             "BLOCKCHAIN_SEND"      // External crypto withdrawal
           ].includes(txType);
@@ -491,9 +493,9 @@ Deno.serve(async (req) => {
               }
             }
             // ================================================================
-            // ZAR WITHDRAWAL - SIMPLE_SELL with debitCurrency="ZAR"
+            // ZAR WITHDRAWAL - FIAT_WITHDRAWAL or SIMPLE_SELL with debitCurrency="ZAR"
             // ================================================================
-            else if (txType === "SIMPLE_SELL" && debitCurrency === "ZAR") {
+            else if ((txType === "FIAT_WITHDRAWAL" || txType === "SIMPLE_SELL") && debitCurrency === "ZAR") {
               // ZAR withdrawn from subaccount to bank account
               currency = "ZAR";
               amount = debitValue;
@@ -513,6 +515,8 @@ Deno.serve(async (req) => {
                   zar_amount: amount,
                   transaction_id: transactionId,
                   occurred_at: transactedAt,
+                  bank_name: tx.additionalInfo?.bankName,
+                  withdrawal_id: tx.additionalInfo?.withdrawalId,
                 },
                 orgId,
                 customerId
