@@ -323,6 +323,12 @@ Deno.serve(async (req: Request) => {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountUsdt = amount;
           }
+        } else if (asset === "ZAR") {
+          // ZAR transactions (zar_deposit, zar_balance, zar_withdrawal) are informational only
+          // They track fiat movement but don't affect crypto ledger balances
+          // Crypto withdrawals are recorded separately via paired USDT/BTC withdrawal events
+          console.log(`  ℹ️  Skipping ZAR transaction (informational only): ${kind} ${amount} ZAR`);
+          continue;
         } else {
           console.warn("Skipping funding event with unsupported asset", f);
           continue;

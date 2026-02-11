@@ -448,7 +448,57 @@ Deno.serve(async (req) => {
             // ================================================================
             else if (txType === "LIMIT_SELL" || txType === "MARKET_SELL") {
               if ((debitCurrency === "BTC" || debitCurrency === "USDT") && creditCurrency === "ZAR") {
-                // Sold crypto for ZAR = Create ZAR balance (for future bank withdrawal)
+                // Sold crypto for ZAR - Create TWO funding events:
+                // 1. Crypto withdrawal (to reduce crypto balance)
+                // 2. ZAR balance (to track ZAR ready for bank withdrawal)
+                
+                console.log(`  🔄 ${debitCurrency}→ZAR CONVERSION: ${debitValue} ${debitCurrency} → R${creditValue}`);
+                
+                // FIRST: Record the crypto withdrawal (USDT/BTC out)
+                const cryptoIdempotencyKey = `VALR_TX_${transactionId}_CRYPTO_OUT`;
+                const { data: existingCrypto, error: cryptoCheckErr } = await supabase
+                  .from("exchange_funding_events")
+                  .select("funding_id")
+                  .eq("idempotency_key", cryptoIdempotencyKey)
+                  .maybeSingle();
+                
+                if (cryptoCheckErr) {
+                  console.error(`  Error checking idempotency for crypto withdrawal:`, cryptoCheckErr);
+                  throw cryptoCheckErr;
+                }
+                
+                if (!existingCrypto) {
+                  const { error: cryptoInsertErr } = await supabase
+                    .from("exchange_funding_events")
+                    .insert({
+                      org_id: orgId,
+                      customer_id: customerId,
+                      exchange_account_id: account.exchange_account_id,
+                      kind: "withdrawal",
+                      asset: debitCurrency,
+                      amount: -debitValue,  // Negative = withdrawal
+                      ext_ref: transactionId,
+                      occurred_at: new Date(timestamp).toISOString(),
+                      idempotency_key: cryptoIdempotencyKey,
+                      metadata: {
+                        conversion_to: "ZAR",
+                        zar_amount: creditValue,
+                        conversion_rate: creditValue / debitValue,
+                        conversion_fee_value: parseFloat(tx.feeValue || 0),
+                        conversion_fee_asset: tx.feeCurrency || "",
+                      },
+                    });
+                  
+                  if (cryptoInsertErr) {
+                    console.error(`  Error creating crypto withdrawal for conversion:`, cryptoInsertErr);
+                    results.errors++;
+                  } else {
+                    console.log(`  ✅ Created ${debitCurrency} withdrawal: -${debitValue} ${debitCurrency}`);
+                    newTransactions++;
+                  }
+                }
+                
+                // SECOND: Record the ZAR balance (ZAR in) - using existing flow below
                 currency = "ZAR";
                 amount = creditValue;
                 isDeposit = true;  // ZAR coming INTO subaccount
@@ -456,16 +506,14 @@ Deno.serve(async (req) => {
                 
                 // Store conversion metadata
                 metadata = {
-                  usdt_amount: debitValue,
-                  crypto_asset: debitCurrency,
+                  conversion_from: debitCurrency,
+                  crypto_amount: debitValue,
                   conversion_rate: creditValue / debitValue,
                   conversion_fee_value: parseFloat(tx.feeValue || 0),
                   conversion_fee_asset: tx.feeCurrency || "",
                 };
                 
-                console.log(`  🔄 ${debitCurrency}→ZAR CONVERSION: ${debitValue} ${debitCurrency} → R${amount} (ready for withdrawal)`);
-                
-                // Log alert for admin notification (withdrawal preparation)
+                // Log alert for admin notification
                 await logAlert(
                   supabase,
                   "ef_sync_valr_transactions",
@@ -474,7 +522,8 @@ Deno.serve(async (req) => {
                   {
                     customer_id: customerId,
                     customer_name: customerName,
-                    usdt_amount: debitValue,
+                    crypto_amount: debitValue,
+                    crypto_asset: debitCurrency,
                     zar_amount: amount,
                     transaction_id: transactionId,
                     occurred_at: transactedAt,
