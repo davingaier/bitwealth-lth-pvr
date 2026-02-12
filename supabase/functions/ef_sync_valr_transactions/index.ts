@@ -7,8 +7,6 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
-import { getDepositReceivedEmail } from "../_shared/email-templates.ts";
-import { sendHTMLEmail } from "../_shared/smtp.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -347,45 +345,6 @@ Deno.serve(async (req) => {
                 orgId,
                 customerId
               );
-              
-              // Send deposit confirmation email to customer
-              if (customer.email) {
-                try {
-                  const emailTemplate = getDepositReceivedEmail(
-                    customer.first_names || "Customer",
-                    amount.toFixed(2),
-                    "ZAR",
-                    transactedAt
-                  );
-                  
-                  const emailResult = await sendHTMLEmail(
-                    customer.email,
-                    "noreply@bitwealth.co.za",
-                    `Deposit Received - R${amount.toFixed(2)} ZAR Credited to Your Account`,
-                    emailTemplate.html,
-                    emailTemplate.text
-                  );
-                  
-                  if (!emailResult.success) {
-                    console.error(`Failed to send deposit email to ${customer.email}:`, emailResult.error);
-                    await logAlert(
-                      supabase,
-                      "ef_sync_valr_transactions",
-                      "warn",
-                      `Failed to send deposit email to ${customerName}`,
-                      { error: emailResult.error, customer_id: customerId },
-                      orgId,
-                      customerId
-                    );
-                  } else {
-                    console.log(`✓ Deposit confirmation email sent to ${customer.email}`);
-                  }
-                } catch (emailError) {
-                  console.error(`Error sending deposit email:`, emailError);
-                }
-              } else {
-                console.warn(`No email address for customer ${customerId}, skipping deposit notification`);
-              }
             }
             // ================================================================
             // INTERNAL_TRANSFER - Main ↔ Subaccount

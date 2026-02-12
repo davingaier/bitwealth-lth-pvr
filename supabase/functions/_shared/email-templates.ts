@@ -95,8 +95,7 @@ export function getDepositReceivedEmail(
       <div style="background: #fef3c7; padding: 15px; border-left: 4px solid #f59e0b; margin: 20px 0; border-radius: 4px;">
         <strong style="color: #92400e;">ℹ️ ZAR Deposit Note:</strong>
         <p style="color: #78350f; margin: 5px 0 0 0; font-size: 0.9em;">
-          Your ZAR deposit must be manually converted to USDT on VALR before it can be used for trading. 
-          Our team will handle this conversion and notify you once complete.
+          Your ZAR will be automatically converted to USDT to be used for trading. You can view your currency conversions and balances in the Customer Portal.
         </p>
       </div>
       ` : ''}
@@ -151,7 +150,7 @@ WHAT HAPPENS NEXT:
 
 ${depositCurrency === "ZAR" ? `
 NOTE: ZAR Deposit
-Your ZAR deposit must be manually converted to USDT on VALR before it can be used for trading. Our team will handle this conversion and notify you once complete.
+Your ZAR will be automatically converted to USDT to be used for trading. You can view your currency conversions and balances in the Customer Portal.
 ` : ''}
 
 View your portfolio: https://bitwealth.co.za/customer-portal.html
