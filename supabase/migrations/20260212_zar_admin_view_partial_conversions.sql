@@ -32,17 +32,9 @@ SELECT
 FROM lth_pvr.pending_zar_conversions pzc
 JOIN public.customer_details cd USING (customer_id)
 LEFT JOIN LATERAL (
-  SELECT balance 
+  SELECT usdt_balance AS balance 
   FROM lth_pvr.balances_daily 
-  WHERE portfolio_id IN (
-    SELECT portfolio_id 
-    FROM public.customer_portfolios 
-    WHERE customer_id = pzc.customer_id 
-      AND status = 'active'
-    ORDER BY created_at DESC
-    LIMIT 1
-  )
-  AND asset = 'USDT'
+  WHERE customer_id = pzc.customer_id
   ORDER BY date DESC 
   LIMIT 1
 ) bd ON true
