@@ -151,21 +151,35 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${accounts?.length || 0} VALR accounts to sync`);
 
-    // Get the last sync timestamp (look for most recent VALR_TX we've already processed)
-    // Default to 24 hours ago if this is the first run
-    const { data: lastSync } = await supabase
-      .from("exchange_funding_events")
-      .select("occurred_at")
-      .like("idempotency_key", "VALR_TX_%")
-      .order("occurred_at", { ascending: false })
-      .limit(1)
-      .single();
+    // BUG FIX #4: Per-customer sinceDatetime with safety buffer
+    // Build a map of last sync time per customer (instead of global)
+    const customerLastSync = new Map<number, Date>();
+    
+    for (const account of accounts || []) {
+      const strategy = strategies?.find(s => s.exchange_account_id === account.exchange_account_id);
+      if (!strategy) continue;
+      
+      const customerId = strategy.customer_id;
+      
+      // Get last sync for THIS customer
+      const { data: lastSync } = await supabase
+        .from("exchange_funding_events")
+        .select("occurred_at")
+        .eq("customer_id", customerId)
+        .like("idempotency_key", "VALR_TX_%")
+        .order("occurred_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      // Add 1-hour safety buffer to catch late-reporting transactions
+      const sinceDatetime = lastSync?.occurred_at
+        ? new Date(new Date(lastSync.occurred_at).getTime() - 60 * 60 * 1000) // 1 hour before last sync
+        : new Date(Date.now() - 72 * 60 * 60 * 1000); // 72 hours ago for first run
+      
+      customerLastSync.set(customerId, sinceDatetime);
+    }
 
-    const sinceDatetime = lastSync?.occurred_at 
-      ? new Date(lastSync.occurred_at) 
-      : new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
-
-    console.log(`Syncing transactions since: ${sinceDatetime.toISOString()}`);
+    console.log(`Per-customer sync windows configured for ${customerLastSync.size} customers`);
 
     // Process each account
     for (const account of accounts || []) {
@@ -178,8 +192,13 @@ Deno.serve(async (req) => {
 
         const customer = customers.find(c => c.customer_id === strategy.customer_id);
         if (!customer) continue;
+        
+        const customerId = customer.customer_id;
+        const customerName = `${customer.first_names} ${customer.last_name}`;
+        const sinceDatetime = customerLastSync.get(customerId) || new Date(Date.now() - 72 * 60 * 60 * 1000);
 
-        console.log(`Syncing ${customer.first_names} ${customer.last_name} (${account.label})`);
+        console.log(`Syncing ${customerName} (${account.label})`);
+        console.log(`  Sync window: ${sinceDatetime.toISOString()} to ${new Date().toISOString()}`);
 
         // Query VALR transaction history
         const transactionsResponse = await getTransactionHistory(account.subaccount_id);
@@ -251,6 +270,7 @@ Deno.serve(async (req) => {
         });
 
         console.log(`  Filtered to ${fundingTransactions.length} funding transactions since ${sinceDatetime.toISOString()}`);
+        console.log(`  Total from VALR: ${transactions.length}, After date filter: ${fundingTransactions.length}`);
 
         // DEBUG: For Davin's personal subaccount, log ALL transaction details to understand taxonomy
         if (account.subaccount_id === "1419286489401798656") {
@@ -297,15 +317,16 @@ Deno.serve(async (req) => {
             let currency, amount, isDeposit, fundingKind, metadata = {};
             
             // ================================================================
-            // ZAR DEPOSIT - SIMPLE_BUY with creditCurrency="ZAR"
+            // ZAR DEPOSIT - FIAT_DEPOSIT or SIMPLE_BUY with creditCurrency="ZAR"
+            // BUG FIX #1: Added FIAT_DEPOSIT detection (EFT deposits from bank)
             // ================================================================
-            if (txType === "SIMPLE_BUY" && creditCurrency === "ZAR") {
+            if ((txType === "FIAT_DEPOSIT" || txType === "SIMPLE_BUY") && creditCurrency === "ZAR") {
               // ZAR deposited into subaccount (before conversion to USDT)
               currency = "ZAR";
               amount = creditValue;
               isDeposit = true;
               fundingKind = "zar_deposit";
-              console.log(`  💰 ZAR DEPOSIT: R${amount} (awaiting conversion to USDT)`);
+              console.log(`  💰 ZAR DEPOSIT (${txType}): R${amount} (awaiting conversion to USDT)`);
               
               // Log alert for admin notification
               await logAlert(
@@ -318,6 +339,7 @@ Deno.serve(async (req) => {
                   customer_name: customerName,
                   zar_amount: amount,
                   transaction_id: transactionId,
+                  transaction_type: txType,
                   occurred_at: transactedAt,
                 },
                 orgId,
