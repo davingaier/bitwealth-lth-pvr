@@ -8652,10 +8652,12 @@ This will:
               <div style="flex:1;min-width:0;">
                 <div style="font-weight:500;margin-bottom:.25rem;">
                   ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}
-                  <span style="color:#6c757d;font-weight:normal;margin-left:.5rem;">
-                    R${Number(conv.remaining_amount).toFixed(2)}
-                  </span>
                   ${conv.conversion_status === 'partial' ? '<span style="background:#ffc107;color:#000;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PARTIAL</span>' : ''}
+                </div>
+                <div style="font-size:.85rem;color:#4b5563;margin-bottom:.25rem;">
+                  <strong>Deposited:</strong> R${Number(conv.original_zar_amount).toFixed(2)}
+                  <span style="margin:0 .5rem;">•</span>
+                  <strong>Remaining:</strong> <span style="color:#059669;font-weight:600;">R${Number(conv.remaining_amount).toFixed(2)}</span>
                 </div>
                 <div style="font-size:.8rem;color:#6c757d;">
                   <span style="color:${timeColor};font-weight:500;">${hoursAgo}h ago</span>
