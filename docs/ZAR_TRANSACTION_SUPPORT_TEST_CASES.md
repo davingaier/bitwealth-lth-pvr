@@ -48,9 +48,9 @@
 - ✅ Pending conversion appears in Admin UI
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-12
+- [x] Result: **PASS** ✅
+- [x] Notes: R100 ZAR deposit detected successfully, remaining_amount correctly set to 100.00
 
 ---
 
