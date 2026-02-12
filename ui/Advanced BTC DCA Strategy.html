@@ -8594,6 +8594,17 @@ This will:
 
     if (!zarListEl || !zarRefreshBtn) return;
 
+    // Helper function to escape HTML
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     async function loadPendingZarConversions() {
       if (!supabaseClient) {
         zarListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
@@ -8642,8 +8653,9 @@ This will:
                 <div style="font-weight:500;margin-bottom:.25rem;">
                   ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}
                   <span style="color:#6c757d;font-weight:normal;margin-left:.5rem;">
-                    R${Number(conv.zar_amount).toFixed(2)}
+                    R${Number(conv.remaining_amount).toFixed(2)}
                   </span>
+                  ${conv.conversion_status === 'partial' ? '<span style="background:#ffc107;color:#000;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PARTIAL</span>' : ''}
                 </div>
                 <div style="font-size:.8rem;color:#6c757d;">
                   <span style="color:${timeColor};font-weight:500;">${hoursAgo}h ago</span>
