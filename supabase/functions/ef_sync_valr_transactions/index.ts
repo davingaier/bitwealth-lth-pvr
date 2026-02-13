@@ -416,9 +416,10 @@ Deno.serve(async (req) => {
               }
             }
             // ================================================================
-            // ZAR→USDT CONVERSION - LIMIT_BUY/MARKET_BUY with debitCurrency="ZAR"
+            // ZAR→USDT CONVERSION - LIMIT_BUY/MARKET_BUY/SIMPLE_BUY with debitCurrency="ZAR"
+            // BUG FIX #2: Added SIMPLE_BUY detection (instant buy transactions)
             // ================================================================
-            else if (txType === "LIMIT_BUY" || txType === "MARKET_BUY") {
+            else if (txType === "LIMIT_BUY" || txType === "MARKET_BUY" || txType === "SIMPLE_BUY") {
               // ZAR → crypto conversion (customer adding capital)
               if (debitCurrency === "ZAR" && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // Received crypto by spending ZAR = DEPOSIT (charge platform fee)
