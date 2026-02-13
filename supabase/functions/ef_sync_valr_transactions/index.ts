@@ -675,7 +675,7 @@ Deno.serve(async (req) => {
               newTransactions++;
 
               // Send email notification for deposits (only for ACTIVE customers, not first deposit)
-              if (isDeposit && customer.customer_status === "Active" && customer.email) {
+              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email) {
                 try {
                   const depositDate = new Date(timestamp).toLocaleDateString("en-ZA", { 
                     year: "numeric", 
