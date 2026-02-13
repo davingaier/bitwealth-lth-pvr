@@ -3,11 +3,139 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-08 (v0.6.45)
+**Last updated:** 2026-02-13 (v0.6.46)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.46 – ZAR Transaction Support Testing & Critical Bug Fixes
+**Date:** 2026-02-13  
+**Purpose:** Complete ZAR transaction support testing (TC-ZAR-001, TC-ZAR-002) and fix critical bugs discovered during testing.
+
+**Status:** ✅ COMPLETE - All bugs fixed, perfect balance reconciliation achieved
+
+#### Critical Bugs Found & Fixed During Testing
+
+**Bug #1: SIMPLE_BUY Transactions Not Detected (Data Loss)**
+- **Severity:** HIGH - Customer transactions silently missed
+- **Symptom:** R25 ZAR instant buy (Feb 12) not appearing in `exchange_funding_events`
+- **Root Cause:** `ef_sync_valr_transactions` line 423 only checked `LIMIT_BUY | MARKET_BUY` for ZAR→USDT conversions, but VALR uses `SIMPLE_BUY` for instant buy feature
+- **Fix Applied:** Added `|| txType === "SIMPLE_BUY"` to ZAR→USDT conversion detection logic
+- **Verification:** SIMPLE_SELL already supported (line 265) ✅
+- **Deployed:** v28 of `ef_sync_valr_transactions`
+- **Impact:** 0.19084 USDT (R25 worth) was initially missed but recovered
+
+**Bug #2: Org Consolidation Created Duplicate Ledger Entries (Balance Discrepancy)**
+- **Severity:** CRITICAL - $1,252 missing from visible balance
+- **Symptom:** Database balance showed 1.238 USDT but VALR showed 1,253.83 USDT
+- **Root Cause:** Environment switch between Feb 10-13 split customer 999 data across two org_ids:
+  - OLD org_id: `95fdc8ca-ed20-4896-bb31-f4c6fbcced49` (historical)
+  - NEW org_id: `b0a77009-03b9-44a1-ae1d-34f157d44a8b` (current)
+  - Migration `20260213_consolidate_customer_999_org_id.sql` moved funding events but duplicated ledger entries
+- **Duplicate Breakdown:**
+  - 2 topup duplicates: 1,300.84 + 999.00 = 2,299.84 USDT
+  - 1 orphaned topup with valr_transfer_log FK: 9.21 USDT
+  - 6 withdrawal duplicates: 1,058.00 USDT total
+  - **Total duplicates:** 1,067.21 USDT!
+- **Fix Applied:**
+  1. Updated valr_transfer_log FK to correct ledger entry
+  2. Deleted 9 duplicate/orphaned ledger entries
+  3. Recalculated balances from clean ledger
+
+**Bug #3: Manually Inserted Transaction Amount INCORRECT (Data Accuracy)**
+- **Severity:** CRITICAL for audit - 14.2% error on single transaction
+- **Symptom:** Balance 0.19084 USDT off after cleaning duplicates
+- **Root Cause:** Manually inserted Feb 12 Simple Buy used 1.34351 USDT (from truncated screenshot) instead of actual 1.5343512 USDT (from VALR CSV)
+- **Fix Applied:**
+  - Updated funding event with correct amount from VALR CSV export
+  - Corrected ZAR amount: 24.99994504 (not 25.00)
+  - Corrected fee: 0.0249488 USDT (not 0.024949)
+  - Deleted stale ledger entry and regenerated
+
+**Bug #4: Missing Platform Fee Withdrawal (Accounting Gap)**
+- **Severity:** MEDIUM - 0.06957504 USDT unaccounted
+- **Symptom:** Balance 0.06957504 USDT higher than VALR CSV calculation
+- **Root Cause:** Jan 27 09:06 platform fee transfer (0.06957504 USDT) recorded in `valr_transfer_log` but NOT in `exchange_funding_events`
+- **Impact:** Platform fee transferred to main account but customer balance not debited
+- **Fix Applied:** Created withdrawal funding event with idempotency key `VALR_TX_PLATFORM_FEE_20260127_0906` and linked to transfer log
+
+**Bug #5: Customer Deposit Email Not Sent (Notification Failure)**
+- **Severity:** MEDIUM - Customer doesn't receive deposit confirmation
+- **Symptom:** Feb 12 R100 ZAR deposit notification email not sent to customer
+- **Root Cause:** Case-sensitivity bug in ef_sync_valr_transactions line 678:
+  - Code checked: `customer.customer_status === "Active"` (capitalized)
+  - Database had: `"active"` (lowercase)
+  - ZAR deposit detected, funding event created, BUT email blocked by case mismatch
+- **Fix Applied:** Changed to case-insensitive check: `customer.customer_status?.toLowerCase() === "active"`
+- **Deployed:** v29 of `ef_sync_valr_transactions`
+- **Impact:** Future deposits will now trigger customer notification emails correctly
+
+**Bug #6: Pending ZAR Conversions Not Tracking Feb 12 Conversion**
+- **Severity:** LOW - Admin UI doesn't show partial conversion
+- **Symptom:** Admin view only showed Feb 13 R20 conversion, not Feb 12 R25 conversion
+- **Root Cause:** Manually inserted Feb 12 USDT deposit was missing `zar_deposit_id` in metadata, so database trigger `on_zar_conversion_resolve_pending` didn't update `pending_zar_conversions` table
+- **Fix Applied:**
+  1. Updated funding event metadata to add `zar_deposit_id` link
+  2. Manually updated pending conversion: converted_amount 0→24.99994504, remaining_amount 100→75.00005496
+
+#### Final Reconciliation Results
+
+**Source of Truth:** VALR CSV export (`Customer 999_valr_tx_history.csv` - 16 transactions)  
+**Expected Balance:** 1,253.82455518 USDT  
+**Database Balance:** 1,253.82455518 USDT  
+**Discrepancy:** **0.000000 USDT (0.000%)** ✅ **PERFECT MATCH**
+
+**Verification Calculation:**
+```
+CSV deposits:    9.27667188 + 1300.84445764 + 999 + 1.5343512 + 1.2386495 = 2,311.89413022 USDT
+CSV withdrawals: 0.06957504 + 59 + 29.9191 + 13.0752 + 311.2995 + 342.4295 + 302.2767 = 1,058.06957504 USDT
+Net:             2,311.89413022 - 1,058.06957504 = 1,253.82455518 USDT ✅
+```
+
+**Audit Status:** ✅ READY - Zero discrepancy, full transaction traceability, all 16 VALR transactions accounted for
+
+#### Files Modified
+
+**Edge Functions:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts`
+  - Line 423: Added SIMPLE_BUY to ZAR→USDT conversion detection (v28)
+  - Line 678: Changed customer_status check to case-insensitive (v29)
+
+**Database:**
+- Migration: `supabase/migrations/20260213_consolidate_customer_999_org_id.sql` (created, applied)
+- Manual data corrections:
+  - Deleted 9 duplicate/orphaned ledger entries (1,067.21 USDT worth)
+  - Updated 1 funding event amount (0.19084 USDT correction)
+  - Inserted 1 missing platform fee withdrawal (0.06957504 USDT)
+  - Updated 1 pending conversion record with correct converted/remaining amounts
+
+**Documentation:**
+- `docs/ZAR_TRANSACTION_SUPPORT_TEST_CASES.md`
+  - TC-ZAR-001: Marked PASS
+  - TC-ZAR-002: Marked PASS with comprehensive bug documentation
+  - Added "Critical Bugs Found & Fixed During Testing" section
+
+#### Testing Completed
+
+- ✅ TC-ZAR-001: R100 ZAR Deposit Detection - PASS
+- ✅ TC-ZAR-002: SIMPLE_BUY Transaction Type Support - PASS
+- ✅ Balance reconciliation: Perfect 0.000000 USDT match with VALR
+- ✅ Org consolidation: All customer 999 data unified under single org_id
+- ✅ Email notifications: Case-insensitive customer status check deployed
+- ✅ Pending conversions tracking: Both Feb 12 (R25) and Feb 13 (R20) showing correctly
+
+#### Lessons Learned
+
+1. **NEVER manually insert transactions** - Always use CSV import or API data (manual entry caused 14.2% error!)
+2. **ALWAYS cross-verify with authoritative source** - CSV export is gold standard, not screenshots
+3. **Platform fee transfers MUST create withdrawal funding events** - Not just valr_transfer_log entries
+4. **Org consolidation migrations must clean related ledger entries** - Not just source tables
+5. **Acceptable tolerance for financial audit = 0.000000** - Not 0.01, not 0.13!
+6. **Screenshot precision unreliable** - Use CSV exports for exact values
+7. **Case-sensitive string comparisons are dangerous** - Always use .toLowerCase() for status checks
+
+---
 
 ### v0.6.45 – Email Branding Updates & Subsequent Deposit Notifications
 **Date:** 2026-02-08 (Late Evening)  
