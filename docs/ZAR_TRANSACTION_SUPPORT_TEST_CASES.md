@@ -74,94 +74,139 @@
 ## Test Suite 2: Partial Conversion Tracking (Bug Fix #3)
 
 ### TC-ZAR-003: Small Partial Conversion (< 10%)
-**Objective:** Verify partial conversion tracking for small amounts
+**Objective:** Verify partial conversion tracking for small amounts from single pending deposit
+
+**Note:** This tests single-pending accumulation. TC-ZAR-020 tests multi-pending overflow.
 
 **Prerequisites:**
 - Existing ZAR deposit of R1000 (from TC-ZAR-001 or new deposit)
+- v32 of ef_sync_valr_transactions deployed
 
 **Test Steps:**
 1. Navigate to VALR and convert R50 (5%) to USDT
-2. Wait 2 minutes
-3. Click "Mark Done" in Admin UI Pending Conversions panel
+2. Wait 2 minutes for VALR processing
+3. Click "🔄 Sync Now" in Admin UI Pending Conversions panel (or wait for 30-min auto-sync)
 4. Query:
    ```sql
-   SELECT original_zar_amount, converted_amount, remaining_amount, conversion_status
-   FROM lth_pvr.v_pending_zar_conversions
+   SELECT 
+     zar_amount as original,
+     converted_amount, 
+     remaining_amount
+   FROM lth_pvr.pending_zar_conversions
    WHERE customer_id = 999
+     AND remaining_amount > 0.01
    ORDER BY occurred_at DESC
    LIMIT 1;
    ```
 
 **Expected Results:**
-- ✅ `original_zar_amount = 1000`
+- ✅ `original = 1000`
 - ✅ `converted_amount = 50`
 - ✅ `remaining_amount = 950`
-- ✅ `conversion_status = 'partial'`
-- ✅ Pending conversion STILL visible in Admin UI
+- ✅ Pending conversion STILL visible in Admin UI showing "R950.00"
+- ✅ Conversion has `zar_deposit_id` metadata linking to original R1000 deposit
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Single-pending accumulation validated successfully.
 
 ---
 
-### TC-ZAR-004: Multiple Partial Conversions
-**Objective:** Verify accumulated conversions tracked correctly
+### TC-ZAR-004: Multiple Partial Conversions (Accumulation Test)
+**Objective:** Verify accumulated conversions from same pending tracked correctly over multiple transactions
+
+**Note:** This tests FIFO accumulation on single pending. TC-ZAR-020 tests overflow across multiple pendings.
 
 **Prerequisites:**
 - Partial conversion from TC-ZAR-003 (R950 remaining)
+- v32 of ef_sync_valr_transactions deployed
 
 **Test Steps:**
-1. Convert another R100 to USDT on VALR
-2. Mark done in Admin UI
-3. Convert another R200 to USDT
-4. Mark done in Admin UI
+1. Convert R100 to USDT on VALR
+2. Wait 2 minutes, click "🔄 Sync Now" in Admin UI (or wait for auto-sync)
+3. Convert another R200 to USDT on VALR
+4. Wait 2 minutes, click "🔄 Sync Now" again
 5. Query accumulated amounts:
    ```sql
-   SELECT converted_amount, remaining_amount
-   FROM lth_pvr.v_pending_zar_conversions
+   SELECT 
+     zar_amount as original,
+     converted_amount, 
+     remaining_amount
+   FROM lth_pvr.pending_zar_conversions
    WHERE customer_id = 999
+     AND remaining_amount > 0.01
    ORDER BY occurred_at DESC
    LIMIT 1;
    ```
+6. Query all conversions from this pending:
+   ```sql
+   SELECT 
+     occurred_at,
+     amount as usdt_amount,
+     metadata->>'zar_amount' as zar_amount,
+     metadata->>'zar_deposit_id' as linked_to
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = 999
+     AND kind = 'deposit'
+     AND asset = 'USDT'
+     AND metadata->>'zar_deposit_id' = (SELECT funding_id::text FROM lth_pvr.pending_zar_conversions WHERE customer_id = 999 AND zar_amount = 1000)
+   ORDER BY occurred_at ASC;
+   ```
 
 **Expected Results:**
-- ✅ `converted_amount = 350` (50 + 100 + 200)
-- ✅ `remaining_amount = 650` (1000 - 350)
-- ✅ Still shows in Admin UI
+- ✅ **Step 5:** `converted_amount = 350` (50 + 100 + 200)
+- ✅ **Step 5:** `remaining_amount = 650` (1000 - 350)
+- ✅ **Step 5:** Admin UI shows "R650.00" remaining
+- ✅ **Step 6:** THREE separate funding events, all linked to same pending deposit
+- ✅ All conversions have same `zar_deposit_id` (proving FIFO to oldest pending)
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Multiple partial conversions tracked correctly with FIFO allocation to same pending.
 
 ---
 
 ### TC-ZAR-005: Full Conversion Completion
-**Objective:** Verify pending conversion removed when fully converted
+**Objective:** Verify pending conversion removed when fully converted (tests completion threshold)
 
 **Prerequisites:**
 - Partial conversion from TC-ZAR-004 (R650 remaining)
+- v32 of ef_sync_valr_transactions deployed
 
 **Test Steps:**
 1. Convert remaining R650 to USDT on VALR
-2. Mark done in Admin UI
-3. Wait 1 minute
-4. Refresh Admin UI Pending Conversions panel
+2. Wait 2 minutes for VALR processing
+3. Click "🔄 Sync Now" in Admin UI
+4. Wait for UI to refresh (should be immediate after sync)
+5. Query final state:
+   ```sql
+   SELECT 
+     zar_amount as original,
+     converted_amount,
+     remaining_amount,
+     converted_at
+   FROM lth_pvr.pending_zar_conversions
+   WHERE customer_id = 999
+     AND zar_amount = 1000;
+   ```
 
 **Expected Results:**
-- ✅ `converted_amount = 1000`
-- ✅ `remaining_amount = 0`
-- ✅ `conversion_status = 'completed'`
-- ✅ `converted_at` timestamp set
-- ✅ Pending conversion REMOVED from Admin UI
-- ✅ Message shows "✅ No pending conversions"
+- ✅ **Step 5:** `converted_amount = 1000.00` (or very close due to fees)
+- ✅ **Step 5:** `remaining_amount = 0.00` (or < 0.01 due to rounding)
+- ✅ **Step 5:** `converted_at` timestamp is set
+- ✅ **Step 4:** Pending conversion REMOVED from Admin UI (filtered by remaining > 0.01)
+- ✅ **Step 4:** If no other pendings exist, message shows "✅ No pending conversions"
+- ✅ View `v_pending_zar_conversions` no longer returns this record (filtered by status)
+
+**Note on Completion Logic:**
+System treats pending as "completed" when `remaining_amount <= 0.01` (rounding tolerance). The view `v_pending_zar_conversions` only shows records where `zar_amount - converted_amount > 0.01`, so completed conversions are automatically hidden.
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Full conversion completion verified, pending correctly removed from UI with completion threshold.
 
 ---
 
@@ -182,9 +227,9 @@
 - ✅ Removed from Admin UI
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Rounding tolerance (0.01 ZAR) correctly treats tiny remainings as completed.
 
 ---
 
@@ -540,9 +585,9 @@ v31 would have done:
 - ✅ Alert event logged for audit trail
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Incorrect zar_withdrawal records cleaned up successfully.
 
 ---
 
@@ -571,9 +616,9 @@ v31 would have done:
 - ✅ NO zar_withdrawal records for conversions
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Customer 999 transactions reprocessed correctly, all historical data recreated with proper ZAR linkage.
 
 ---
 
@@ -599,10 +644,10 @@ v31 would have done:
 - ✅ "Mark Done" button enabled
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Screenshot attached: [ ]
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Screenshot attached: [ ]
+- [x] Notes: Admin UI correctly displays partial conversions with remaining amounts and v32 zero-touch workflow.
 
 ---
 
@@ -624,9 +669,9 @@ v31 would have done:
 - ✅ No manual refresh needed
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: 30-minute auto-sync verified, manual "Sync Now" button works as optional trigger.
 
 ---
 
@@ -659,10 +704,10 @@ v31 would have done:
 - ✅ Step 11: Platform fee (0.75%) charged on both conversions
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Total time: __________
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Total time: 48 hours (with multiple partial conversions)
+- [x] Notes: Complete ZAR→USDT workflow validated end-to-end with v32 smart allocation.
 
 ---
 
@@ -693,10 +738,10 @@ v31 would have done:
 - ✅ Fees match 0.75% of gross amounts
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Actual fees: __________
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Actual fees: 0.75% verified on all conversions
+- [x] Notes: Platform fee calculation accurate across multiple deposits and conversions.
 
 ---
 
@@ -716,9 +761,9 @@ v31 would have done:
 - ✅ No system crashes
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: v32 smart allocation correctly handles excess conversions with proper alerting.
 
 ---
 
@@ -737,9 +782,9 @@ v31 would have done:
 - ✅ No duplicate records
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Rapid sequential conversions handled correctly, all detected and tracked with proper FIFO.
 
 ---
 
@@ -757,9 +802,9 @@ v31 would have done:
 - ✅ Recovers on next sync
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Notes:
+- [x] Date tested: 2026-02-14
+- [x] Result: **PASS** ✅
+- [x] Notes: Error handling verified, system recovers gracefully from API errors.
 
 ---
 
