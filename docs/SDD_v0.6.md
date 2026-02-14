@@ -3,11 +3,259 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-14 (v0.6.47)
+**Last updated:** 2026-02-14 (v0.6.48)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.48 – SMART ALLOCATION: ZAR Conversion Overflow Handling
+**Date:** 2026-02-14  
+**Purpose:** Fix critical allocation bug where multiple ZAR→USDT conversions could mis-allocate to same pending deposit, causing negative remaining amounts and orphaned pendings.
+
+**Status:** ✅ COMPLETE - Deployed v32
+
+#### Problem Description
+
+**Critical Allocation Bug:**
+
+Current v31 FIFO allocation breaks when conversions don't align with pending amounts:
+
+**Example Scenario:**
+- Pending #1: R75 ZAR deposit (Feb 12)
+- Pending #2: R50 ZAR deposit (Feb 13)
+- Convert R70 on VALR → Auto-sync detects it
+- Convert R30 on VALR → Auto-sync detects it
+
+**v31 Behavior (BROKEN):**
+```
+Processing R70 conversion:
+  Query: oldest pending with remaining > 0.01
+  Finds: Pending #1 (R75 remaining)
+  Links: zar_deposit_id = Pending #1
+  Trigger: Updates to 70/75 (R5 remaining) ✅
+
+Processing R30 conversion:
+  Query: oldest pending with remaining > 0.01
+  Finds: Pending #1 STILL (R5 > 0.01 threshold!)
+  Links: zar_deposit_id = Pending #1 (SAME!)
+  Trigger: Updates to 70+30=100/75 (R-25 remaining) ❌
+
+Result:
+  Pending #1: 100/75 (negative remaining!) ❌
+  Pending #2: 0/50 (never touched) ❌
+```
+
+**Root Cause:** v31 uses `.limit(1)` - only gets single pending, no overflow logic to next pending.
+
+**Impact:** 
+- Wrong pending conversion balances in Admin UI
+- Negative remaining amounts in database
+- Orphaned pendings that never get allocated
+- Financial reporting inaccuracies
+
+#### Solution Implemented: Smart FIFO with Automatic Overflow
+
+**Design Principles:**
+1. **FIFO Allocation:** Always allocate to oldest pending first
+2. **Complete Allocation:** Automatically overflow to next pending if conversion exceeds remaining
+3. **Audit Trail:** Each portion = separate funding event with split metadata
+4. **Zero Manual Intervention:** Works via 30-minute auto-sync + optional manual "Sync Now" trigger
+
+**Algorithm Flow:**
+
+```typescript
+// V32: Query ALL pending conversions (not limit 1)
+const pendingConversions = await getAllPendingConversions(customerId);
+
+let remainingZar = totalZar;  // From VALR transaction
+let remainingUsdt = totalUsdt;
+const allocations = [];
+
+// FIFO allocation loop with overflow
+for (const pending of pendingConversions) {
+  if (remainingZar <= 0.01) break;  // Rounding tolerance
+  
+  const allocateZar = Math.min(remainingZar, pending.remaining_amount);
+  const allocateUsdt = (allocateZar / totalZar) * totalUsdt;  // Proportional
+  
+  allocations.push({
+    zar_deposit_id: pending.funding_id,
+    zar_amount: allocateZar,
+    usdt_amount: allocateUsdt
+  });
+  
+  remainingZar -= allocateZar;
+  remainingUsdt -= allocateUsdt;
+}
+
+// Handle orphaned excess (conversion without matching pending)
+if (remainingZar > 0.01) {
+  allocations.push({
+    zar_deposit_id: null,  // No matching pending
+    zar_amount: remainingZar,
+    usdt_amount: remainingUsdt
+  });
+  logAlert("Excess conversion without pending deposit");
+}
+
+// Create funding event for EACH allocation
+for (const allocation of allocations) {
+  await createFundingEvent({
+    amount: allocation.usdt_amount,
+    metadata: {
+      zar_amount: allocation.zar_amount,
+      zar_deposit_id: allocation.zar_deposit_id,
+      original_transaction_id: transactionId,  // Idempotency
+      is_split_allocation: allocations.length > 1,
+      split_part: `${index + 1} of ${allocations.length}`
+    }
+  });
+}
+```
+
+**Example 1 - Simple Allocation:**
+```
+Input: 70 ZAR conversion → 4.28 USDT
+Pendings: [{remaining: 75 ZAR}]
+
+Allocation: 70 ZAR → Pending #1
+Result: 1 funding event created
+Trigger: Pending #1 = 70/75 ✅
+```
+
+**Example 2 - Overflow Scenario (Fixed by v32):**
+```
+Input: 100 ZAR conversion → 6.12 USDT
+Pendings: [{remaining: 75}, {remaining: 50}]
+
+Allocation 1: 75 ZAR (4.59 USDT) → Pending #1
+Allocation 2: 25 ZAR (1.53 USDT) → Pending #2
+
+Result: 2 funding events from 1 VALR tx
+Triggers:
+  - Pending #1 = 75/75 (completed) ✅
+  - Pending #2 = 25/50 (partial) ✅
+```
+
+**Edge Cases Handled:**
+1. **No pendings found:** Create orphaned funding event (zar_deposit_id = NULL), log warning alert
+2. **Conversion > all pendings:** Allocate available, orphan excess, log warning alert
+3. **Tiny remaining < 0.01 ZAR:** Skip pending (rounding tolerance)
+4. **Split allocations:** Log info alert with breakdown for audit trail
+5. **Idempotency:** Check original_transaction_id to prevent reprocessing same VALR transaction
+
+#### UI/UX Enhancements
+
+**Admin UI Changes (Zero-Touch Workflow):**
+
+**BEFORE (v31):**
+- Pending conversion displayed with TWO buttons:
+  - "Convert on VALR" (opens VALR portal)
+  - "Mark Done" (triggers transaction sync)
+- Required manual clicks after each conversion
+- Confirmation dialog: "Have you completed the conversion?"
+
+**AFTER (v32):**
+- Pending conversion displayed with NO action buttons
+- Single "Sync Now" button at panel level (optional manual trigger)
+- Auto-sync message: "Auto-syncs every 30 minutes to detect conversions"
+- Zero confirmation dialogs needed
+
+**Rationale:**
+- Existing 30-minute auto-sync already detects conversions reliably
+- Manual "Mark Done" creates false impression it's required
+- Customer workflow already involves going to VALR portal to convert
+- Simplified UX reduces clicks and confusion
+
+#### Metadata Fields for Split Allocations
+
+**New metadata fields in `exchange_funding_events`:**
+
+```json
+{
+  "zar_amount": 75.00,
+  "zar_deposit_id": "uuid-of-original-zar-deposit",
+  "conversion_rate": 16.3399,
+  "conversion_fee_zar": 0.1875,
+  "conversion_fee_asset": "ZAR",
+  "original_transaction_id": "VALR_TX_12345678",
+  "is_split_allocation": true,
+  "split_part": "1 of 2"
+}
+```
+
+**Field Purposes:**
+- `original_transaction_id`: Idempotency check (prevent duplicate processing of same VALR tx)
+- `is_split_allocation`: Boolean flag indicating this is part of multi-allocation conversion
+- `split_part`: Human-readable label for audit trail ("1 of 2", "2 of 2", etc.)
+
+#### Alert Logging
+
+**New alert types:**
+
+1. **Info Alert - Split Allocation:**
+   - Trigger: Conversion split across multiple pendings (allocations.length > 1)
+   - Example: "Split ZAR→USDT conversion across 2 pending deposits"
+   - Includes: total_zar, allocations breakdown
+
+2. **Warning Alert - Excess Conversion:**
+   - Trigger: Conversion amount exceeds all available pendings
+   - Example: "Excess ZAR→USDT conversion: R25.00 without matching pending deposit"
+   - Includes: total_zar, excess_zar, excess_usdt
+
+3. **Warning Alert - Orphaned Conversion:**
+   - Trigger: No pendings found at all
+   - Example: "ZAR→USDT conversion without pending deposit: R100.00"
+   - Includes: zar_amount, usdt_amount
+
+#### Files Modified
+
+**Edge Functions:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts` (v31 → v32)
+  - Lines 432-460: Replaced single pending query with smart allocation loop
+  - Added overflow handling logic
+  - Create multiple funding events from single VALR transaction
+  - Added split metadata fields
+  - Proportional USDT calculation: (zar_allocated / zar_total) × usdt_total
+  - Proportional fee calculation: fee × (zar_allocated / zar_total)
+  - Idempotency key pattern: `VALR_TX_{id}_PART_{n}` for split allocations
+
+**Admin UI:**
+- `ui/Advanced BTC DCA Strategy.html`
+  - Line 2588: Updated description: "Auto-syncs every 30 minutes to detect conversions"
+  - Line 2597: Renamed button: "zarRefreshBtn" → "zarSyncNowBtn" with 🔄 icon
+  - Lines 8668-8678: Removed "Convert on VALR" link and "Mark Done" button
+  - Lines 8696-8738: Simplified markZarConverted() → syncNowAndRefresh() (no confirmation dialog)
+
+**Documentation:**
+- `docs/ZAR_TRANSACTION_SUPPORT_TEST_CASES.md` - Added TC-ZAR-020 test case
+- `docs/SDD_v0.6.md` - This change log entry + Future Enhancement section 10.6
+
+#### Testing
+
+**New Test Case:** TC-ZAR-020: Smart Allocation with Overflow
+- Location: `docs/ZAR_TRANSACTION_SUPPORT_TEST_CASES.md`
+- Test Suite 2: Partial Conversion Tracking
+- Validates:
+  - Multiple pendings correctly allocated via FIFO
+  - Overflow splits across pendings
+  - Split metadata correctly populated
+  - Each funding event triggers separate pending update
+  - Orphaned excess creates alert
+
+#### Deployment
+
+```powershell
+cd bitwealth-lth-pvr
+supabase functions deploy ef_sync_valr_transactions --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+**Deployed:** 2026-02-14  
+**Version:** ef_sync_valr_transactions v32  
+**Admin UI:** Updated (no deployment needed - static HTML)
+
+---
 
 ### v0.6.47 – CX FIX: Exclude ZAR→USDT Conversion Emails
 **Date:** 2026-02-14  
@@ -6558,6 +6806,255 @@ Invoke-WebRequest `
 - [ ] Regulatory compliance tracking per jurisdiction
 - [ ] Audit trail exports (CSV, JSON)
 - [ ] Customer statements (monthly/quarterly)
+
+### 10.6 ZAR Transaction Enhancement: Auto-Convert Feature
+**Priority:** HIGH  
+**Status:** DESIGN APPROVED - Implementation Pending  
+**Target:** Q2 2026
+
+#### Overview
+
+Eliminate manual VALR portal interaction for ZAR→USDT conversions by adding "Convert Now" functionality directly to Admin UI. System would automatically place VALR limit orders at best available selling price using existing order execution logic.
+
+#### User Workflow
+
+**Current Workflow (Manual):**
+1. Admin sees pending conversion in Admin UI (e.g., R100 ZAR)
+2. Opens VALR portal in separate tab
+3. Navigates to USDT/ZAR trading pair
+4. Manually places order (limit or instant buy)
+5. Waits for VALR confirmation
+6. Returns to Admin UI
+7. Clicks "Sync Now" to detect conversion
+8. Verifies pending conversion updated
+
+**Proposed Workflow (Automated):**
+1. Admin sees pending conversion in Admin UI
+2. Selects one or multiple pending conversions (checkbox selection)
+3. Clicks "Convert Now" button
+4. System:
+   - Queries VALR order book for best SELL price (market depth)
+   - Places LIMIT order at competitive price (post-only if beneficial)
+   - Initiates WebSocket monitoring for real-time fills
+   - Falls back to MARKET order after 5-minute timeout (same as ef_market_fallback)
+5. Admin sees real-time status updates in UI
+6. Pending conversion auto-updates when filled (existing trigger logic)
+7. Admin receives confirmation notification
+
+**Benefits:**
+- Zero context switching (no VALR portal needed)
+- Bulk conversion support (select multiple pendings)
+- Consistent execution pricing (best limit + market fallback)
+- Real-time status visibility
+- Audit trail in existing system
+- Reduced admin time per conversion: ~2 minutes → ~10 seconds
+
+#### Technical Design
+
+**New Edge Function:** `ef_convert_zar_to_usdt`
+
+**Input:**
+```json
+{
+  "pending_conversion_ids": ["uuid1", "uuid2"],
+  "execution_strategy": "auto"  // Options: "auto", "limit_only", "market_only"
+}
+```
+
+**Logic Flow:**
+1. Validate pending conversions exist and have remaining_amount > 0.01
+2. Calculate total ZAR amount to convert
+3. Query VALR subaccount ZAR balance
+4. Query VALR order book (GET /v1/marketdata/USDTZAR/orderbook)
+5. Calculate optimal limit price:
+   - Find best ASK price (sellers)
+   - Add small buffer (0.1%) to ensure fill
+   - Calculate USDT amount expected
+6. Place LIMIT order:
+   - Use existing VALR authentication (signVALR helper)
+   - Set customerOrderId = `AUTO_CONVERT_{timestamp}_{uuid}`
+   - Set postOnly = false (allow immediate fill if price available)
+   - Route to customer's subaccount (X-VALR-SUB-ACCOUNT-ID header)
+7. Store order in `lth_pvr.exchange_orders` (kind = 'zar_conversion')
+8. Initiate WebSocket monitoring (reuse ef_valr_ws_monitor pattern)
+9. Return order_id to UI for status polling
+
+**Market Fallback Logic:**
+- Reuse existing `ef_market_fallback` pattern
+- If LIMIT not filled after 5 minutes:
+  - Cancel LIMIT order
+  - Place MARKET order (instant fill)
+  - Log alert: "Auto-convert fallback to market order"
+
+**Database Changes:**
+
+```sql
+-- Add new order kind for ZAR conversions
+ALTER TYPE lth_pvr.order_kind ADD VALUE IF NOT EXISTS 'zar_conversion';
+
+-- Track conversion requests
+CREATE TABLE IF NOT EXISTS lth_pvr.zar_conversion_requests (
+  request_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES public.organizations,
+  customer_id INT NOT NULL REFERENCES public.customer_details,
+  pending_conversion_ids UUID[] NOT NULL,  -- Multiple pendings can be converted together
+  total_zar_amount NUMERIC(18,8) NOT NULL,
+  expected_usdt_amount NUMERIC(18,8),
+  order_id UUID REFERENCES lth_pvr.exchange_orders,
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending|executing|filled|failed
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  CONSTRAINT fk_org FOREIGN KEY (org_id) REFERENCES public.organizations(org_id)
+);
+```
+
+**Admin UI Changes:**
+
+```html
+<!-- Pending ZAR Conversions Panel -->
+<div class="card">
+  <h3>⏳ Pending ZAR Conversions</h3>
+  <p class="small-muted">Auto-syncs every 30 minutes. Select conversions to execute instantly.</p>
+  
+  <div id="zarConversionsList">
+    <!-- Each pending conversion now has checkbox -->
+    <div class="conversion-item">
+      <input type="checkbox" class="zar-conversion-select" data-id="{uuid}" data-amount="{zar_amount}">
+      <div>Customer: Davin Personal</div>
+      <div>R75.00 remaining</div>
+      <div>Age: 48h</div>
+    </div>
+  </div>
+  
+  <div style="display:flex;gap:.75rem;">
+    <button id="zarConvertNowBtn" class="btn btn-primary-sm" disabled>
+      📥 Convert Selected (R0.00)
+    </button>
+    <button id="zarSyncNowBtn" class="btn btn-secondary-sm">
+      🔄 Sync Now
+    </button>
+    <span id="zarRefreshMessage"></span>
+  </div>
+</div>
+```
+
+**JavaScript Logic:**
+
+```javascript
+// Enable/disable Convert button based on selection
+document.addEventListener('change', (e) => {
+  if (e.target.classList.contains('zar-conversion-select')) {
+    const selected = document.querySelectorAll('.zar-conversion-select:checked');
+    const totalZar = Array.from(selected)
+      .reduce((sum, cb) => sum + parseFloat(cb.dataset.amount), 0);
+    
+    const convertBtn = document.getElementById('zarConvertNowBtn');
+    convertBtn.disabled = selected.length === 0;
+    convertBtn.textContent = `📥 Convert Selected (R${totalZar.toFixed(2)})`;
+  }
+});
+
+// Convert Now button
+document.getElementById('zarConvertNowBtn').addEventListener('click', async () => {
+  const selected = Array.from(document.querySelectorAll('.zar-conversion-select:checked'));
+  const pendingIds = selected.map(cb => cb.dataset.id);
+  
+  if (!confirm(`Convert ${selected.length} pending conversion(s) to USDT now?`)) return;
+  
+  try {
+    const response = await supabaseClient.functions.invoke('ef_convert_zar_to_usdt', {
+      body: { pending_conversion_ids: pendingIds }
+    });
+    
+    if (response.error) throw response.error;
+    
+    // Show success message and start polling for fill status
+    showNotification('Conversion order placed! Monitoring for fill...', 'success');
+    pollConversionStatus(response.data.order_id);
+    
+  } catch (err) {
+    showNotification(`Conversion failed: ${err.message}`, 'error');
+  }
+});
+
+// Poll order status until filled
+async function pollConversionStatus(orderId) {
+  const maxPolls = 60;  // 5 minutes (5-second intervals)
+  let polls = 0;
+  
+  const interval = setInterval(async () => {
+    polls++;
+    
+    const { data: order } = await supabaseClient
+      .schema('lth_pvr')
+      .from('exchange_orders')
+      .select('status')
+      .eq('order_id', orderId)
+      .single();
+    
+    if (order.status === 'filled') {
+      clearInterval(interval);
+      showNotification('Conversion completed! Refreshing...', 'success');
+      setTimeout(loadPendingZarConversions, 2000);
+    } else if (order.status === 'failed' || polls >= maxPolls) {
+      clearInterval(interval);
+      showNotification('Conversion timeout - check order status', 'warning');
+    }
+  }, 5000);
+}
+```
+
+#### Security Considerations
+
+**Authentication:**
+- Edge function requires authenticated user session
+- RLS policies enforce org_id filtering
+- Only org admins can invoke conversion function
+
+**Rate Limiting:**
+- Max 10 conversions per customer per hour (prevent API abuse)
+- Alert if excessive conversion requests detected
+
+**Error Handling:**
+- VALR API errors logged with full context
+- Failed conversions create alert event
+- Partial fills handled gracefully (same as existing orders)
+- Network failures retry with exponential backoff
+
+#### Testing Plan
+
+**Test Cases:**
+1. **TC-ZAR-021:** Single pending conversion via Auto-Convert
+2. **TC-ZAR-022:** Multiple pending conversions (bulk convert)
+3. **TC-ZAR-023:** LIMIT order immediate fill (good market price)
+4. **TC-ZAR-024:** LIMIT timeout → MARKET fallback
+5. **TC-ZAR-025:** Insufficient ZAR balance (error handling)
+6. **TC-ZAR-026:** VALR API failure (retry logic)
+7. **TC-ZAR-027:** Concurrent conversion requests (idempotency)
+
+#### Implementation Estimate
+
+**Effort:** 16-20 hours  
+**Breakdown:**
+- Edge function: 6 hours
+- Database changes: 2 hours
+- Admin UI updates: 4 hours
+- Testing: 4 hours
+- Documentation: 2 hours
+- Deployment + monitoring: 2 hours
+
+**Dependencies:**
+- Existing VALR authentication helpers (✅ Done)
+- Existing WebSocket monitoring (✅ Done - ef_valr_ws_monitor)
+- Existing market fallback logic (✅ Done - ef_market_fallback)
+- Order execution patterns (✅ Done - ef_execute_orders)
+
+**Risk Assessment:** LOW  
+- Reuses 80% of existing code patterns
+- No new VALR API endpoints needed
+- Graceful degradation: manual workflow still available
+- Limited blast radius: only affects ZAR conversions
 
 ---
 

@@ -1,7 +1,7 @@
 # ZAR Transaction Support - Comprehensive Test Cases
-**Date:** 2026-02-12  
+**Date:** 2026-02-14  
 **Status:** Ready for Execution  
-**Bug Fixes:** #1-#5 + Per-Customer Sync Improvement
+**Bug Fixes:** #1-#8 + Per-Customer Sync + Smart Allocation (v32)
 
 ## Test Environment Setup
 
@@ -184,6 +184,255 @@
 **Actual Results:**
 - [ ] Date tested: __________
 - [ ] Result: PASS / FAIL
+- [ ] Notes:
+
+---
+
+### TC-ZAR-020: Smart Allocation with Overflow (v32 Fix)
+**Objective:** Verify v32 smart FIFO allocation correctly splits conversions across multiple pending deposits with automatic overflow
+
+**Prerequisites:**
+- Customer 999 with cleared previous conversions
+- v32 of ef_sync_valr_transactions deployed
+
+**Test Steps:**
+1. Deposit R75 ZAR via VALR EFT (wait 5 min for processing)
+2. Run sync to create first pending conversion:
+   ```powershell
+   Invoke-WebRequest -Uri "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_sync_valr_transactions" `
+     -Method POST -Headers @{"Authorization" = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"; "Content-Type" = "application/json"} `
+     -Body '{}'
+   ```
+3. Deposit R50 ZAR via VALR EFT (wait 5 min)
+4. Run sync to create second pending conversion
+5. Verify two pending conversions in Admin UI: R75 and R50
+6. On VALR, convert R100 ZAR to USDT in single transaction (combines both pendings with overflow)
+7. Wait 2 minutes for VALR processing
+8. Run sync (or click "🔄 Sync Now" in Admin UI)
+9. Query funding events:
+   ```sql
+   SELECT 
+     funding_id,
+     kind,
+     asset,
+     amount,
+     metadata->>'zar_amount' as zar_amount,
+     metadata->>'zar_deposit_id' as linked_deposit,
+     metadata->>'is_split_allocation' as is_split,
+     metadata->>'split_part' as split_part,
+     occurred_at
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = 999
+     AND occurred_at >= CURRENT_DATE
+     AND kind = 'deposit'
+     AND asset = 'USDT'
+   ORDER BY occurred_at DESC
+   LIMIT 2;
+   ```
+10. Query updated pending conversions:
+    ```sql
+    SELECT 
+      funding_id,
+      zar_amount,
+      converted_amount,
+      remaining_amount,
+      conversion_status
+    FROM lth_pvr.v_pending_zar_conversions
+    WHERE customer_id = 999
+    ORDER BY occurred_at ASC;
+    ```
+11. Query alerts for split allocation notification:
+    ```sql
+    SELECT severity, message, context
+    FROM lth_pvr.alert_events
+    WHERE customer_id = 999
+      AND component = 'ef_sync_valr_transactions'
+      AND created_at >= CURRENT_DATE
+    ORDER BY created_at DESC
+    LIMIT 1;
+    ```
+
+**Expected Results:**
+- ✅ **Step 5:** Two pending conversions visible: R75.00 (oldest) and R50.00 (newest)
+- ✅ **Step 9:** TWO funding events created from ONE VALR transaction:
+  - Funding Event 1:
+    - `zar_amount = 75.00` (depletes first pending completely)
+    - `zar_deposit_id = [uuid of R75 deposit]` (linked)
+    - `is_split_allocation = true`
+    - `split_part = "1 of 2"`
+    - `amount ≈ 4.59 USDT` (proportional: 75/100 × 6.12)
+  - Funding Event 2:
+    - `zar_amount = 25.00` (partial allocation to second pending)
+    - `zar_deposit_id = [uuid of R50 deposit]` (linked)
+    - `is_split_allocation = true`
+    - `split_part = "2 of 2"`
+    - `amount ≈ 1.53 USDT` (proportional: 25/100 × 6.12)
+- ✅ **Step 10:** Pending conversions correctly updated:
+  - Pending #1 (R75 deposit): 
+    - `converted_amount = 75.00`
+    - `remaining_amount = 0.00`
+    - `conversion_status = 'completed'`
+    - REMOVED from Admin UI ✅
+  - Pending #2 (R50 deposit):
+    - `converted_amount = 25.00`
+    - `remaining_amount = 25.00`
+    - `conversion_status = 'partial'`
+    - STILL visible in Admin UI showing "R25.00" ✅
+- ✅ **Step 11:** Info alert logged:
+  - `severity = 'info'`
+  - `message = 'Split ZAR→USDT conversion across 2 pending deposits'`
+  - `context` includes allocations breakdown with zar_amount for each part
+
+**Comparison with v31 Behavior (BROKEN):**
+```
+v31 would have done:
+  - Funding Event 1: 100 ZAR → links to Pending #1 (oldest)
+  - Trigger updates Pending #1: 100/75 (remaining = -25) ❌
+  - Pending #2: 0/50 (never touched) ❌
+  - Admin UI shows: Pending #1 with NEGATIVE remaining ❌
+```
+
+**Actual Results:**
+- [ ] Date tested: __________
+- [ ] Result: PASS / FAIL
+- [ ] Number of funding events created: __________
+- [ ] Pending #1 final status: __________
+- [ ] Pending #2 final status: __________
+- [ ] Split allocation alert logged: YES / NO
+- [ ] Notes:
+
+---
+
+### TC-ZAR-021: Orphaned Conversion (No Pending Deposits)
+**Objective:** Verify v32 handles conversions without matching pending deposits gracefully
+
+**Prerequisites:**
+- Customer 999 with NO pending ZAR conversions
+- v32 of ef_sync_valr_transactions deployed
+
+**Test Steps:**
+1. Verify no pending conversions exist:
+   ```sql
+   SELECT COUNT(*) FROM lth_pvr.v_pending_zar_conversions WHERE customer_id = 999;
+   ```
+2. On VALR, convert R50 ZAR to USDT (without any prior ZAR deposit in our system)
+3. Wait 2 minutes for VALR processing
+4. Run sync or click "🔄 Sync Now"
+5. Query funding event:
+   ```sql
+   SELECT 
+     funding_id,
+     amount,
+     metadata->>'zar_amount' as zar_amount,
+     metadata->>'zar_deposit_id' as linked_deposit,
+     metadata->>'is_split_allocation' as is_split
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = 999
+     AND occurred_at >= NOW() - INTERVAL '5 minutes'
+     AND kind = 'deposit'
+   ORDER BY occurred_at DESC
+   LIMIT 1;
+   ```
+6. Query alert:
+   ```sql
+   SELECT severity, message, context
+   FROM lth_pvr.alert_events
+   WHERE customer_id = 999
+     AND component = 'ef_sync_valr_transactions'
+     AND message LIKE '%without pending deposit%'
+   ORDER BY created_at DESC
+   LIMIT 1;
+   ```
+
+**Expected Results:**
+- ✅ **Step 1:** 0 pending conversions
+- ✅ **Step 5:** Funding event created with:
+  - `zar_amount = 50.00`
+  - `zar_deposit_id = NULL` (orphaned - no matching pending)
+  - `is_split_allocation = false`
+- ✅ **Step 6:** Warning alert logged:
+  - `severity = 'warn'`
+  - `message = 'ZAR→USDT conversion without pending deposit: R50.00'`
+  - `context` includes zar_amount and usdt_amount
+
+**Actual Results:**
+- [ ] Date tested: __________
+- [ ] Result: PASS / FAIL
+- [ ] Funding event created: YES / NO
+- [ ] zar_deposit_id: __________
+- [ ] Alert logged: YES / NO
+- [ ] Notes:
+
+---
+
+### TC-ZAR-022: Excess Conversion (Conversion > All Pendings)
+**Objective:** Verify v32 handles conversions exceeding total pending amount
+
+**Prerequisites:**
+- Customer 999 with single pending conversion of R20
+- v32 of ef_sync_valr_transactions deployed
+
+**Test Steps:**
+1. Deposit R20 ZAR via VALR
+2. Run sync to create pending conversion
+3. On VALR, convert R50 ZAR to USDT (more than pending amount)
+4. Wait 2 minutes
+5. Run sync or click "🔄 Sync Now"
+6. Query funding events:
+   ```sql
+   SELECT 
+     amount,
+     metadata->>'zar_amount' as zar_amount,
+     metadata->>'zar_deposit_id' as linked_deposit,
+     metadata->>'split_part' as split_part
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = 999
+     AND occurred_at >= NOW() - INTERVAL '5 minutes'
+     AND kind = 'deposit'
+   ORDER BY occurred_at DESC;
+   ```
+7. Query pending conversion:
+   ```sql
+   SELECT converted_amount, remaining_amount, conversion_status
+   FROM lth_pvr.v_pending_zar_conversions
+   WHERE customer_id = 999;
+   ```
+8. Query alert:
+   ```sql
+   SELECT severity, message, context
+   FROM lth_pvr.alert_events
+   WHERE customer_id = 999
+     AND message LIKE '%Excess%'
+   ORDER BY created_at DESC
+   LIMIT 1;
+   ```
+
+**Expected Results:**
+- ✅ **Step 6:** TWO funding events created:
+  - Funding Event 1: 
+    - `zar_amount = 20.00` (depletes pending)
+    - `zar_deposit_id = [uuid]` (linked)
+    - `split_part = "1 of 2"`
+  - Funding Event 2:
+    - `zar_amount = 30.00` (excess)
+    - `zar_deposit_id = NULL` (orphaned)
+    - `split_part = "2 of 2"`
+- ✅ **Step 7:** Pending conversion:
+  - `converted_amount = 20.00`
+  - `remaining_amount = 0.00`
+  - `conversion_status = 'completed'`
+  - REMOVED from Admin UI
+- ✅ **Step 8:** Warning alert logged:
+  - `severity = 'warn'`
+  - `message = 'Excess ZAR→USDT conversion: R30.00 without matching pending deposit'`
+  - `context` includes total_zar=50, excess_zar=30, excess_usdt values
+
+**Actual Results:**
+- [ ] Date tested: __________
+- [ ] Result: PASS / FAIL
+- [ ] Number of funding events: __________
+- [ ] Pending conversion status: __________
+- [ ] Excess alert logged: YES / NO
 - [ ] Notes:
 
 ---
@@ -588,14 +837,14 @@
 | Test Suite | Total Tests | Passed | Failed | Skipped | % Pass |
 |------------|-------------|--------|--------|---------|--------|
 | Suite 1: ZAR Deposit Detection | 2 | | | | |
-| Suite 2: Partial Conversion | 4 | | | | |
+| Suite 2: Partial Conversion + Smart Allocation | 7 | | | | |
 | Suite 3: Per-Customer Sync | 3 | | | | |
 | Suite 4: Cleanup & Reprocess | 2 | | | | |
 | Suite 5: Admin UI | 2 | | | | |
 | Suite 6: End-to-End | 2 | | | | |
 | Suite 7: Edge Cases | 3 | | | | |
 | Suite 8: Email Notifications | 1 | | | | |
-| **TOTAL** | **19** | | | | |
+| **TOTAL** | **22** | | | | |
 
 **Critical Bugs Found:** __________  
 **Recommendations:** __________  
@@ -608,10 +857,12 @@
   - [ ] `20260212_zar_partial_conversion_tracking.sql`
   - [ ] `20260212_zar_admin_view_partial_conversions.sql`
   - [ ] `20260212_zar_cleanup_incorrect_records.sql`
-- [ ] Edge function deployed: `ef_sync_valr_transactions` (version 26)
+- [ ] Edge function deployed: `ef_sync_valr_transactions` (version 32)
+- [ ] Admin UI updated: Removed Mark Done buttons, added Sync Now button
+- [ ] v32 smart allocation algorithm tested (TC-ZAR-020, TC-ZAR-021, TC-ZAR-022)
 - [ ] Customer 999 data cleaned and reprocessed
 - [ ] Production environment tested with real EFT deposit
-- [ ] Admin users notified of new partial conversion display
+- [ ] Admin users notified of new zero-touch workflow
 - [ ] Documentation updated: `ZAR_TRANSACTION_SUPPORT_COMPLETE.md`
 
 ---

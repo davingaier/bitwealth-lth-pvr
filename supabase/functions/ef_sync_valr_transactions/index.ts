@@ -417,45 +417,195 @@ Deno.serve(async (req) => {
             }
             // ================================================================
             // ZAR→USDT CONVERSION - LIMIT_BUY/MARKET_BUY/SIMPLE_BUY with debitCurrency="ZAR"
-            // BUG FIX #2: Added SIMPLE_BUY detection (instant buy transactions)
+            // V32: SMART ALLOCATION with AUTOMATIC OVERFLOW
             // ================================================================
             else if (txType === "LIMIT_BUY" || txType === "MARKET_BUY" || txType === "SIMPLE_BUY") {
               // ZAR → crypto conversion (customer adding capital)
               if (debitCurrency === "ZAR" && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
-                // Received crypto by spending ZAR = DEPOSIT (charge platform fee)
-                currency = creditCurrency;
-                amount = creditValue;
-                isDeposit = true;
-                fundingKind = "deposit";
-                
-                // Look up matching ZAR deposit from today to link
-                const startOfDay = new Date(transactedAt);
-                startOfDay.setHours(0, 0, 0, 0);
-                
-                const { data: zarDeposit } = await supabase
-                  .from("exchange_funding_events")
-                  .select("funding_id, amount")
+                // V32: Query ALL pending conversions (not just one)
+                const { data: pendingConversions, error: pendingErr } = await supabase
+                  .from("pending_zar_conversions")
+                  .select("funding_id, zar_amount, remaining_amount")
                   .eq("customer_id", customerId)
-                  .eq("kind", "zar_deposit")
-                  .gte("occurred_at", startOfDay.toISOString())
-                  .order("occurred_at", { ascending: false })
-                  .limit(1)
+                  .gt("remaining_amount", 0.01)  // Has unconverted balance (rounding tolerance)
+                  .order("occurred_at", { ascending: true });  // Oldest first (FIFO)
+                
+                if (pendingErr) {
+                  console.error(`  Error querying pending conversions:`, pendingErr);
+                  throw pendingErr;
+                }
+                
+                // Check if transaction already processed (idempotency)
+                const idempotencyKey = `VALR_TX_${transactionId}`;
+                const { data: existingTx } = await supabase
+                  .from("exchange_funding_events")
+                  .select("funding_id")
+                  .eq("idempotency_key", idempotencyKey)
                   .maybeSingle();
                 
-                // Store conversion metadata
-                metadata = {
-                  zar_amount: debitValue,
-                  conversion_rate: debitValue / creditValue,
-                  conversion_fee_zar: parseFloat(tx.feeValue || 0),
-                  conversion_fee_asset: tx.feeCurrency || "",
-                };
-                
-                if (zarDeposit) {
-                  metadata.zar_deposit_id = zarDeposit.funding_id;
-                  console.log(`  🔄 ZAR→${currency} CONVERSION: R${debitValue} → ${amount} ${currency} (linked to zar_deposit ${zarDeposit.funding_id})`);
-                } else {
-                  console.log(`  🔄 ZAR→${currency} CONVERSION: R${debitValue} → ${amount} ${currency} (no zar_deposit found to link)`);
+                if (existingTx) {
+                  console.log(`  ⏭️  Skipping already processed conversion: ${transactionId}`);
+                  continue;
                 }
+                
+                // SMART ALLOCATION: Distribute ZAR conversion across pendings with overflow
+                const totalZar = debitValue;
+                const totalUsdt = creditValue;
+                let remainingZar = totalZar;
+                let remainingUsdt = totalUsdt;
+                const allocations = [];
+                
+                if (pendingConversions && pendingConversions.length > 0) {
+                  // FIFO allocation loop
+                  for (const pending of pendingConversions) {
+                    if (remainingZar <= 0.01) break;  // Rounding tolerance
+                    
+                    const allocateZar = Math.min(remainingZar, pending.remaining_amount);
+                    const allocateUsdt = (allocateZar / totalZar) * totalUsdt;  // Proportional
+                    
+                    allocations.push({
+                      zar_deposit_id: pending.funding_id,
+                      zar_amount: allocateZar,
+                      usdt_amount: allocateUsdt,
+                    });
+                    
+                    remainingZar -= allocateZar;
+                    remainingUsdt -= allocateUsdt;
+                  }
+                }
+                
+                // Handle orphaned excess (conversion without matching pending)
+                if (remainingZar > 0.01) {
+                  allocations.push({
+                    zar_deposit_id: null,
+                    zar_amount: remainingZar,
+                    usdt_amount: remainingUsdt,
+                  });
+                  
+                  console.warn(`  ⚠️  Excess conversion detected: R${remainingZar.toFixed(2)} without matching pending deposit`);
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "warn",
+                    `Excess ZAR→USDT conversion: R${remainingZar.toFixed(2)} without matching pending deposit`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      transaction_id: transactionId,
+                      total_zar: totalZar,
+                      excess_zar: remainingZar,
+                      excess_usdt: remainingUsdt,
+                    },
+                    orgId,
+                    customerId
+                  );
+                }
+                
+                // Handle no pendings at all (orphaned conversion)
+                if (allocations.length === 0) {
+                  allocations.push({
+                    zar_deposit_id: null,
+                    zar_amount: totalZar,
+                    usdt_amount: totalUsdt,
+                  });
+                  
+                  console.warn(`  ⚠️  ZAR conversion without any pending deposits found`);
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "warn",
+                    `ZAR→USDT conversion without pending deposit: R${totalZar.toFixed(2)}`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      transaction_id: transactionId,
+                      zar_amount: totalZar,
+                      usdt_amount: totalUsdt,
+                    },
+                    orgId,
+                    customerId
+                  );
+                }
+                
+                // Log split allocation if multiple funding events needed
+                if (allocations.length > 1 && allocations.some(a => a.zar_deposit_id !== null)) {
+                  console.log(`  📊 Split allocation: R${totalZar} → ${allocations.length} funding events`);
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "info",
+                    `Split ZAR→USDT conversion across ${allocations.length} pending deposits`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      transaction_id: transactionId,
+                      total_zar: totalZar,
+                      allocations: allocations.map((a, i) => ({
+                        part: `${i + 1} of ${allocations.length}`,
+                        zar_amount: a.zar_amount,
+                        usdt_amount: a.usdt_amount,
+                        linked: a.zar_deposit_id !== null,
+                      })),
+                    },
+                    orgId,
+                    customerId
+                  );
+                }
+                
+                // Create funding event for EACH allocation
+                let allocationIdx = 0;
+                for (const allocation of allocations) {
+                  allocationIdx++;
+                  
+                  const allocationMetadata = {
+                    zar_amount: allocation.zar_amount,
+                    conversion_rate: allocation.zar_amount / allocation.usdt_amount,
+                    conversion_fee_zar: parseFloat(tx.feeValue || 0) * (allocation.zar_amount / totalZar),  // Proportional fee
+                    conversion_fee_asset: tx.feeCurrency || "",
+                    original_transaction_id: transactionId,  // Idempotency tracking
+                    is_split_allocation: allocations.length > 1,
+                    split_part: `${allocationIdx} of ${allocations.length}`,
+                  };
+                  
+                  if (allocation.zar_deposit_id) {
+                    allocationMetadata.zar_deposit_id = allocation.zar_deposit_id;
+                  }
+                  
+                  // Create funding event for this allocation
+                  const allocationIdempotencyKey = allocations.length > 1
+                    ? `${idempotencyKey}_PART_${allocationIdx}`
+                    : idempotencyKey;
+                  
+                  const { error: insertError } = await supabase
+                    .from("exchange_funding_events")
+                    .insert({
+                      org_id: orgId,
+                      customer_id: customerId,
+                      exchange_account_id: account.exchange_account_id,
+                      kind: "deposit",
+                      asset: creditCurrency,
+                      amount: allocation.usdt_amount,  // Positive for deposit
+                      ext_ref: transactionId,
+                      occurred_at: new Date(timestamp).toISOString(),
+                      idempotency_key: allocationIdempotencyKey,
+                      metadata: allocationMetadata,
+                    });
+                  
+                  if (insertError) {
+                    console.error(`  Error creating funding event (allocation ${allocationIdx}):`, insertError);
+                    results.errors++;
+                  } else {
+                    console.log(`  ✅ Created funding event (${allocationIdx}/${allocations.length}): ${allocation.usdt_amount.toFixed(8)} ${creditCurrency} from R${allocation.zar_amount.toFixed(2)}`);
+                    newTransactions++;
+                    
+                    // NO email notification for conversions (they have zar_deposit_id)
+                    // Email only sent for original ZAR deposit
+                  }
+                }
+                
+                // Skip the normal funding event creation path (we already created events above)
+                continue;
+                
               } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
                          (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)

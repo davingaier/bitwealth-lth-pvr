@@ -2585,7 +2585,7 @@
       <!-- Pending ZAR Conversions Panel -->
       <div class="card" id="pendingZarCard">
         <h3>⏳ Pending ZAR Conversions</h3>
-        <p class="small-muted">ZAR deposits awaiting manual conversion to USDT on VALR.</p>
+        <p class="small-muted">ZAR deposits awaiting conversion to USDT. Auto-syncs every 30 minutes to detect conversions.</p>
         
         <div id="zarConversionsContainer" style="margin-bottom:1rem;">
           <div id="zarConversionsList" style="display:grid;gap:.75rem;">
@@ -2594,7 +2594,7 @@
         </div>
         
         <div style="display:flex;gap:.75rem;align-items:center;">
-          <button id="zarRefreshBtn" type="button" class="btn btn-secondary-sm">Refresh</button>
+          <button id="zarSyncNowBtn" type="button" class="btn btn-secondary-sm">🔄 Sync Now</button>
           <span id="zarRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
         </div>
       </div>
@@ -8589,10 +8589,10 @@ This will:
   // --- Pending ZAR Conversions (Administration module) ---
   (() => {
     const zarListEl = document.getElementById('zarConversionsList');
-    const zarRefreshBtn = document.getElementById('zarRefreshBtn');
+    const zarSyncNowBtn = document.getElementById('zarSyncNowBtn');
     const zarRefreshMessage = document.getElementById('zarRefreshMessage');
 
-    if (!zarListEl || !zarRefreshBtn) return;
+    if (!zarListEl || !zarSyncNowBtn) return;
 
     // Helper function to escape HTML
     function escapeHtml(value) {
@@ -8665,18 +8665,6 @@ This will:
                   · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
                 </div>
               </div>
-              <div style="display:flex;gap:.5rem;flex-shrink:0;">
-                <a href="https://valr.com/my/trade?pair=USDTZAR" target="_blank"
-                   class="btn btn-secondary-sm"
-                   style="white-space:nowrap;text-decoration:none;">
-                  Convert on VALR
-                </a>
-                <button onclick="markZarConverted('${conv.id}')"
-                        class="btn btn-secondary-sm"
-                        style="white-space:nowrap;">
-                  Mark Done
-                </button>
-              </div>
             </div>
           `;
         }).join('');
@@ -8692,15 +8680,13 @@ This will:
       }
     }
 
-    // Mark conversion as done (triggers sync to capture conversion transaction)
-    window.markZarConverted = async function(conversionId) {
-      if (!confirm('Have you completed the ZAR→USDT conversion on VALR?')) return;
-
+    // Sync Now button - triggers immediate transaction sync
+    async function syncNowAndRefresh() {
       try {
         zarRefreshMessage.textContent = 'Syncing transactions...';
         zarRefreshMessage.style.color = '#6c757d';
 
-        // Trigger transaction sync to capture the conversion
+        // Trigger transaction sync to capture conversions
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const syncResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_sync_valr_transactions`, {
           method: 'POST',
@@ -8721,20 +8707,20 @@ This will:
         zarRefreshMessage.textContent = 'Synced! Refreshing...';
         zarRefreshMessage.style.color = '#28a745';
 
-        // Wait a moment for database triggers to process
+        // Wait for database triggers to process
         setTimeout(() => {
           loadPendingZarConversions();
         }, 2000);
 
       } catch (err) {
-        console.error('Error marking conversion as done:', err);
+        console.error('Error syncing transactions:', err);
         zarRefreshMessage.textContent = `Error: ${err.message}`;
         zarRefreshMessage.style.color = '#dc3545';
       }
-    };
+    }
 
-    // Refresh button
-    zarRefreshBtn.addEventListener('click', loadPendingZarConversions);
+    // Sync Now button
+    zarSyncNowBtn.addEventListener('click', syncNowAndRefresh);
 
     // Expose for external calls
     window.loadPendingZarConversions = loadPendingZarConversions;
