@@ -3,11 +3,100 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-13 (v0.6.46)
+**Last updated:** 2026-02-14 (v0.6.47)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.47 – CX FIX: Exclude ZAR→USDT Conversion Emails
+**Date:** 2026-02-14  
+**Purpose:** Fix customer confusion caused by receiving deposit notification emails for internal ZAR→USDT conversions.
+
+**Status:** ✅ COMPLETE - Deployed v30
+
+#### Problem Description
+
+**Customer Experience Issue:**
+- Customer deposits R100 ZAR → receives email ✅ (correct)
+- System converts ZAR→USDT → customer receives *another* email saying "USDT deposit received" ❌ (confusing!)
+- Customer thinks: "I only deposited ZAR, why does it say USDT?"
+
+**Impact:** Unnecessary customer confusion and potential support inquiries about "duplicate deposits"
+
+#### Solution Implemented
+
+**Simple One-Line Fix:**
+Exclude conversion-generated USDT deposits from email notifications by checking for `zar_deposit_id` in metadata.
+
+**Logic:**
+- USDT from ZAR conversion → metadata contains `zar_deposit_id` linking to original ZAR deposit → NO email
+- USDT from blockchain deposit → NO `zar_deposit_id` in metadata → SEND email ✅
+
+**Code Change:**
+```typescript
+// BEFORE (v29)
+if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email) {
+
+// AFTER (v30)
+if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email && !metadata.zar_deposit_id) {
+```
+
+**Location:** `supabase/functions/ef_sync_valr_transactions/index.ts` line 678
+
+#### Email Notification Matrix
+
+| Deposit Type | Has zar_deposit_id? | Email Sent? | Rationale |
+|--------------|-------------------|-------------|--------|
+| R100 ZAR (EFT) | ❌ No | ✅ Yes | Customer-initiated deposit |
+| ZAR→USDT conversion | ✅ Yes | ❌ No | Internal system operation |
+| USDT (blockchain) | ❌ No | ✅ Yes | Customer-initiated deposit |
+| BTC (blockchain) | ❌ No | ✅ Yes | Customer-initiated deposit |
+
+#### Customer Journey
+
+**Before Fix (v29):**
+1. Customer deposits R100 ZAR via bank
+2. Receives email: "R100 ZAR Deposit Received" ✅
+3. System converts R25 to USDT
+4. Receives email: "1.53 USDT Deposit Received" ❌ (confusing!)
+5. Customer: "I only deposited ZAR, what's this USDT deposit?"
+
+**After Fix (v30):**
+1. Customer deposits R100 ZAR via bank
+2. Receives email: "R100 ZAR Deposit Received" ✅
+3. System converts R25 to USDT
+4. NO email (conversion is silent) ✅
+5. Customer can see conversion in Customer Portal transaction history if interested
+
+#### Testing
+
+**New Test Case:** TC-ZAR-019: ZAR→USDT Conversion Email Exclusion
+- Location: `docs/ZAR_TRANSACTION_SUPPORT_TEST_CASES.md`
+- Test Suite 8: Customer Email Notifications (CX)
+- Validates email sent for ZAR deposit, NOT sent for conversion
+
+#### Files Modified
+
+**Edge Functions:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts` - Line 678: Added `&& !metadata.zar_deposit_id` condition
+- Deployed as v30
+
+**Documentation:**
+- `docs/ZAR_TRANSACTION_SUPPORT_TEST_CASES.md` - Added TC-ZAR-019 test case
+- `docs/SDD_v0.6.md` - This change log entry
+
+#### Deployment
+
+```powershell
+cd bitwealth-lth-pvr
+supabase functions deploy ef_sync_valr_transactions --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+**Deployed:** 2026-02-14  
+**Version:** ef_sync_valr_transactions v30
+
+---
 
 ### v0.6.46 – ZAR Transaction Support Testing & Critical Bug Fixes
 **Date:** 2026-02-13  

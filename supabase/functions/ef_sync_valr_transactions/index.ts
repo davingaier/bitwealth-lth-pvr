@@ -674,8 +674,9 @@ Deno.serve(async (req) => {
               console.log(`  ✅ Created funding event: ${fundingKind} ${amount} ${currency}`);
               newTransactions++;
 
-              // Send email notification for deposits (only for ACTIVE customers, not first deposit)
-              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email) {
+              // Send email notification for deposits (only for ACTIVE customers, not conversions)
+              // Exclude ZAR→USDT conversions (which have zar_deposit_id) to avoid confusing customers
+              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email && !metadata.zar_deposit_id) {
                 try {
                   const depositDate = new Date(timestamp).toLocaleDateString("en-ZA", { 
                     year: "numeric", 

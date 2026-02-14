@@ -514,6 +514,71 @@
 
 ---
 
+## Test Suite 8: Customer Email Notifications (CX)
+
+### TC-ZAR-019: ZAR→USDT Conversion Email Exclusion
+**Objective:** Verify customers do NOT receive email notification for ZAR→USDT conversions (only for deposits they initiated)
+
+**Prerequisites:**
+- Customer 999 with status 'active'
+- Valid email address in customer_details
+- Email monitoring access (davin.gaier@gmail.com inbox)
+
+**Test Steps:**
+1. Deposit R100 ZAR via EFT to VALR subaccount
+2. Wait 5 minutes for VALR processing
+3. Check email inbox for deposit notification
+4. On VALR, convert R25 ZAR to USDT (instant buy)
+5. Wait 5 minutes
+6. Run transaction sync:
+   ```powershell
+   Invoke-WebRequest `
+     -Uri "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_sync_valr_transactions" `
+     -Method POST `
+     -Headers @{"Authorization" = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"; "Content-Type" = "application/json"} `
+     -Body '{}'
+   ```
+7. Check email inbox again
+8. Verify funding events:
+   ```sql
+   SELECT 
+     occurred_at,
+     kind,
+     asset,
+     amount,
+     metadata->>'zar_deposit_id' as has_conversion_link
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = 999
+     AND occurred_at >= CURRENT_DATE
+   ORDER BY occurred_at DESC;
+   ```
+
+**Expected Results:**
+- ✅ **Step 3:** Receive 1 email for "R100 ZAR Deposit Received" (subject: "Deposit Received - 100 ZAR Credited to Your Account")
+- ✅ **Step 7:** NO new email received (conversion should be silent)
+- ✅ **Step 8:** ZAR deposit has `has_conversion_link = NULL` (no metadata.zar_deposit_id)
+- ✅ **Step 8:** USDT deposit has `has_conversion_link = [uuid]` (metadata.zar_deposit_id present)
+- ✅ Email count: Exactly 1 email (ZAR deposit only)
+
+**CX Rationale:**
+- Customer deposited ZAR → they know about it, should receive confirmation ✅
+- System converted ZAR→USDT → internal operation, customer didn't initiate ❌
+- Sending both emails would confuse customers ("I only deposited ZAR, why does it say USDT deposit?")
+- Customer can see conversion transaction in Customer Portal if interested
+
+**Comparison with BLOCKCHAIN_RECEIVE:**
+- **Blockchain USDT deposit:** NO `zar_deposit_id` → Email SENT ✅ (customer-initiated)
+- **Conversion USDT deposit:** HAS `zar_deposit_id` → Email NOT SENT ✅ (system-initiated)
+
+**Actual Results:**
+- [ ] Date tested: __________
+- [ ] Result: PASS / FAIL
+- [ ] Email received for ZAR deposit: YES / NO
+- [ ] Email received for USDT conversion: YES / NO (should be NO)
+- [ ] Notes:
+
+---
+
 ## Test Summary Template
 
 **Test Execution Date:** __________  
@@ -529,7 +594,8 @@
 | Suite 5: Admin UI | 2 | | | | |
 | Suite 6: End-to-End | 2 | | | | |
 | Suite 7: Edge Cases | 3 | | | | |
-| **TOTAL** | **18** | | | | |
+| Suite 8: Email Notifications | 1 | | | | |
+| **TOTAL** | **19** | | | | |
 
 **Critical Bugs Found:** __________  
 **Recommendations:** __________  
