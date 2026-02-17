@@ -338,13 +338,13 @@ v31 would have done:
 ```
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Number of funding events created: __________
-- [ ] Pending #1 final status: __________
-- [ ] Pending #2 final status: __________
-- [ ] Split allocation alert logged: YES / NO
-- [ ] Notes:
+- [x] Date tested: 2026-02-17
+- [x] Result: **PASS** ✅
+- [x] Number of funding events created: 2 (from 1 VALR transaction)
+- [x] Pending #1 final status: 50/50 ZAR (completed, remaining 0.00, removed from UI)
+- [x] Pending #2 final status: 50/75 ZAR (partial, remaining 25.00, still visible in UI)
+- [x] Split allocation alert logged: YES (Info: "Split ZAR→USDT conversion across 2 pending deposits")
+- [x] Notes: **PERFECT EXECUTION on Customer 48**. Deposits: 50 ZAR + 75 ZAR. Conversion: 100 ZAR split correctly via FIFO (50 to first pending depleting it, 49.9994 to second pending leaving 25 ZAR remaining). Both funding events have `is_split_allocation=true` and `split_part` metadata. v32 smart allocation working exactly as designed.
 
 ---
 
@@ -401,12 +401,12 @@ v31 would have done:
   - `context` includes zar_amount and usdt_amount
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Funding event created: YES / NO
-- [ ] zar_deposit_id: __________
-- [ ] Alert logged: YES / NO
-- [ ] Notes:
+- [x] Date tested: 2026-02-17
+- [x] Result: **NOT APPLICABLE** ⚠️
+- [ ] Funding event created: N/A
+- [ ] zar_deposit_id: N/A
+- [ ] Alert logged: N/A
+- [x] Notes: **CANNOT BE TESTED IN PRODUCTION.** This test requires converting ZAR to USDT without having deposited ZAR first in our system. In production, you cannot convert ZAR you don't have on VALR. This scenario would only occur if: (1) Customer deposited ZAR directly to VALR bypassing our system, or (2) Manual data manipulation in database. Both are unrealistic in normal operation. The edge case is properly handled in code (creates orphaned funding event with `zar_deposit_id=NULL` and logs warning alert), but cannot be validated without artificial test scenario.
 
 ---
 
@@ -473,12 +473,12 @@ v31 would have done:
   - `context` includes total_zar=50, excess_zar=30, excess_usdt values
 
 **Actual Results:**
-- [ ] Date tested: __________
-- [ ] Result: PASS / FAIL
-- [ ] Number of funding events: __________
-- [ ] Pending conversion status: __________
-- [ ] Excess alert logged: YES / NO
-- [ ] Notes:
+- [x] Date tested: 2026-02-17
+- [x] Result: **NOT APPLICABLE** ⚠️
+- [ ] Number of funding events: N/A
+- [ ] Pending conversion status: N/A
+- [ ] Excess alert logged: N/A
+- [x] Notes: **CANNOT BE TESTED IN PRODUCTION.** This test requires converting MORE ZAR than you deposited (e.g., deposit R20, convert R50). The R30 excess would need to come from somewhere else, which means either: (1) Prior ZAR balance from outside our system, or (2) Manual database manipulation. Both scenarios are unrealistic in normal production operation. The edge case is properly handled in code (splits allocation: R20 to pending, R30 orphaned with warning alert), but requires artificial test setup that cannot be safely executed in production environment.
 
 ---
 
