@@ -1,7 +1,7 @@
 # BitWealth Admin Operations Guide
 
-**Version:** 1.0  
-**Last Updated:** January 5, 2026  
+**Version:** 1.1  
+**Last Updated:** February 17, 2026  
 **For:** BitWealth Operations Team  
 **System:** LTH PVR Bitcoin DCA Service
 
@@ -45,6 +45,7 @@
 **Weekly Tasks (30 minutes):**
 - Review trading performance metrics
 - Check alert event history for patterns
+- Review pending ZAR conversions (age > 7 days may indicate customer needs assistance)
 - Verify deposit scanning working correctly
 - Audit customer status consistency
 
@@ -65,6 +66,7 @@
 □ Review any critical/error alerts from overnight
 □ Check new prospect submissions (M1)
 □ Check pending KYC documents (M3)
+□ Check pending ZAR conversions (Administration → Pending ZAR Conversions)
 □ Verify yesterday's trading executed successfully
 □ Check customer portal functioning (spot check with test account)
 ```
@@ -77,7 +79,7 @@
 
 **Key Sections:**
 1. **Customer Maintenance** - View/edit customers, approve KYC
-2. **Administration** - Alerts, pipeline control, system status
+2. **Administration** - Alerts, pipeline control, system status, pending ZAR conversions
 3. **Reporting** - Customer balances, transaction history
 4. **Back-Testing** - Strategy performance analysis
 
@@ -720,7 +722,125 @@ WHERE customer_id = [CUSTOMER_ID];
 
 ---
 
-#### 7. "I want to close my account"
+#### 7. "My ZAR conversion is stuck as 'pending'"
+
+**Resolution:**
+
+**Scenario:** Customer deposited ZAR via bank transfer and converted some to USDT on VALR, but Admin UI still shows the full amount as pending.
+
+**Step 1: Verify conversion detected**
+```sql
+-- Check for USDT deposits with ZAR linkage
+SELECT 
+  funding_id,
+  amount as usdt_amount,
+  metadata->>'zar_amount' as zar_converted,
+  metadata->>'zar_deposit_id' as linked_deposit,
+  occurred_at
+FROM lth_pvr.exchange_funding_events
+WHERE customer_id = [CUSTOMER_ID]
+  AND kind = 'deposit'
+  AND asset = 'USDT'
+  AND metadata->>'zar_deposit_id' IS NOT NULL
+ORDER BY occurred_at DESC
+LIMIT 5;
+```
+
+**Step 2: Check pending conversion status**
+```sql
+-- View pending ZAR conversions
+SELECT 
+  funding_id,
+  zar_amount as original,
+  converted_amount,
+  remaining_amount,
+  occurred_at
+FROM lth_pvr.pending_zar_conversions
+WHERE customer_id = [CUSTOMER_ID]
+  AND remaining_amount > 0.01
+ORDER BY occurred_at DESC;
+```
+
+**If conversion not detected:**
+1. Verify customer converted on VALR (check VALR transaction history)
+2. Manually trigger transaction sync:
+   ```powershell
+   Invoke-WebRequest `
+     -Uri "https://[project].supabase.co/functions/v1/ef_sync_valr_transactions" `
+     -Method POST `
+     -Headers @{"Authorization" = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"; "Content-Type" = "application/json"} `
+     -Body '{}'
+   ```
+3. Check Admin UI → Pending ZAR Conversions panel (auto-refreshes every 30 min)
+4. If still not detected after manual sync:
+   - Verify customer converted in correct subaccount (not main account)
+   - Check alert events for `ef_sync_valr_transactions` errors
+   - Check VALR transaction type (must be SIMPLE_BUY, LIMIT_BUY, or MARKET_BUY for ZAR→USDT)
+
+**If conversion detected but remaining amount wrong:**
+1. May indicate multiple conversions not all synced
+2. Check conversion history:
+   ```sql
+   SELECT 
+     occurred_at,
+     metadata->>'zar_amount' as zar_amount,
+     amount as usdt_amount
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = [CUSTOMER_ID]
+     AND metadata->>'zar_deposit_id' = '[DEPOSIT_FUNDING_ID]'
+   ORDER BY occurred_at;
+   ```
+3. Recalculate and update pending conversion if needed (contact engineering)
+
+**How ZAR Conversion Tracking Works:**
+- ✅ **Automatic:** 30-minute auto-sync detects ZAR→USDT conversions on VALR
+- ✅ **Zero-touch:** No customer action required after converting on VALR
+- ✅ **FIFO allocation:** Conversions allocated to oldest pending deposit first
+- ✅ **Smart overflow:** Large conversions automatically split across multiple pendings
+- ✅ **Completion threshold:** Remaining < R0.01 treated as completed
+
+---
+
+#### 8. "I converted more ZAR than shows in my pending balance"
+
+**Resolution:**
+
+**Scenario:** Customer says "I converted R100 but portal only shows R50 pending"
+
+**This is expected behavior** - System uses FIFO allocation:
+
+**Example:**
+- Customer deposited R75 on Feb 10 (oldest pending)
+- Customer deposited R50 on Feb 12 (newest pending)
+- Customer converts R100 on VALR
+- **System allocates:** R75 to first pending (depletes it), R25 to second pending
+- **Result:** First pending completed (removed from UI), second shows R25 remaining
+
+**Verification:**
+```sql
+-- Show all conversions linked to customer's pending deposits
+SELECT 
+  efe.occurred_at as conversion_date,
+  efe.metadata->>'zar_amount' as zar_converted,
+  efe.amount as usdt_received,
+  pzc.zar_amount as deposit_amount,
+  pzc.occurred_at as deposit_date
+FROM lth_pvr.exchange_funding_events efe
+JOIN lth_pvr.pending_zar_conversions pzc 
+  ON (efe.metadata->>'zar_deposit_id')::uuid = pzc.funding_id
+WHERE efe.customer_id = [CUSTOMER_ID]
+  AND efe.kind = 'deposit'
+  AND efe.asset = 'USDT'
+  AND efe.metadata->>'zar_deposit_id' IS NOT NULL
+ORDER BY efe.occurred_at DESC;
+```
+
+**Customer Communication:**
+"Your ZAR conversions are processed in order of deposit (oldest first). When you convert R100 and you have two pending deposits (R75 and R50), the system allocates R75 to complete the first deposit, and R25 toward the second. This is why your pending balance shows less than the total amount you converted."
+
+---
+
+#### 9. "I want to close my account"
 
 **Resolution:**
 
@@ -1022,6 +1142,195 @@ LIMIT 30;
 
 ---
 
+## ZAR Transaction Monitoring
+
+### Pending ZAR Conversions Panel
+
+**Location:** Admin Portal → Administration Module → Pending ZAR Conversions
+
+**Purpose:** Monitor customers who have deposited ZAR via bank transfer and are progressively converting it to USDT on VALR.
+
+### How ZAR Conversion Tracking Works
+
+**Deposit Flow:**
+1. Customer deposits ZAR to their VALR subaccount via bank EFT (using unique deposit reference)
+2. System detects ZAR deposit via hourly scan (`ef_deposit_scan`)
+3. Creates `zar_deposit` funding event
+4. Creates pending conversion record in `pending_zar_conversions` table
+5. Customer sees their ZAR balance on VALR
+
+**Conversion Flow:**
+1. Customer converts ZAR → USDT on VALR (any amount, any time)
+2. **Automatic detection** (30-minute auto-sync via `ef_sync_valr_transactions`)
+   - Detects SIMPLE_BUY, LIMIT_BUY, or MARKET_BUY transaction types
+   - Allocates conversion to oldest pending deposit (FIFO)
+   - Updates `pending_zar_conversions.converted_amount` and `remaining_amount`
+   - Creates USDT `deposit` funding event with `zar_deposit_id` metadata link
+3. If conversion > remaining amount of oldest pending:
+   - **Smart overflow** automatically splits across multiple pendings
+   - Creates multiple funding events with `split_part` metadata ("1 of 2", "2 of 2")
+   - Logs info alert: "Split ZAR→USDT conversion across N pending deposits"
+4. When `remaining_amount <= 0.01` (rounding tolerance):
+   - Pending conversion marked completed
+   - Removed from Admin UI panel
+   - System ready for next ZAR deposit
+
+### Monitoring Panel Features
+
+**Auto-Refresh:** Panel updates every 30 minutes (matches sync frequency)
+
+**Displayed Information:**
+- Customer name
+- Original ZAR deposit amount
+- Amount already converted to USDT
+- **Remaining ZAR balance** (highlighted, customer must convert this)
+- Age of pending conversion (days since deposit)
+- Current USDT balance
+
+**Manual Sync:**
+- Click "🔄 Sync Now" button to trigger immediate sync
+- Useful if customer reports conversion not showing
+
+**No Action Required:**
+- ✅ **Zero-touch workflow** - System automatically detects conversions
+- ✅ No "Mark Done" buttons or manual steps
+- ✅ Customer simply converts on VALR, system handles the rest
+
+### Common ZAR Conversion Patterns
+
+#### Pattern 1: Progressive Conversion (Most Common)
+```
+Day 1: Deposit R1000 → Pending: R1000
+Day 2: Convert R200  → Pending: R800 (auto-detected)
+Day 5: Convert R300  → Pending: R500 (auto-detected)
+Day 7: Convert R500  → Complete (removed from panel)
+```
+
+#### Pattern 2: Smart Overflow Allocation
+```
+Pending #1: R75 (Feb 10)
+Pending #2: R50 (Feb 12)
+Convert R100 → System splits:
+  - R75 to Pending #1 (depletes it, removed from panel)
+  - R25 to Pending #2 (shows R25 remaining)
+```
+
+#### Pattern 3: Full Immediate Conversion
+```
+Day 1: Deposit R500 → Pending: R500
+Day 1: Convert R500 → Complete (never appears in panel, filtered by remaining > 0.01)
+```
+
+### SQL Queries for ZAR Monitoring
+
+**View all pending conversions:**
+```sql
+SELECT 
+  cd.customer_id,
+  cd.first_name || ' ' || cd.last_name as customer_name,
+  pzc.zar_amount as original,
+  pzc.converted_amount,
+  pzc.remaining_amount,
+  pzc.occurred_at as deposit_date,
+  EXTRACT(EPOCH FROM (NOW() - pzc.occurred_at))/86400 as age_days
+FROM lth_pvr.pending_zar_conversions pzc
+JOIN customer_details cd ON pzc.customer_id = cd.customer_id
+WHERE pzc.remaining_amount > 0.01
+ORDER BY pzc.occurred_at ASC;
+```
+
+**View conversion history for specific customer:**
+```sql
+SELECT 
+  efe.occurred_at as conversion_date,
+  efe.metadata->>'zar_amount' as zar_converted,
+  efe.amount as usdt_received,
+  efe.metadata->>'is_split_allocation' as is_split,
+  efe.metadata->>'split_part' as split_part,
+  pzc.zar_amount as original_deposit,
+  pzc.converted_amount as total_converted,
+  pzc.remaining_amount
+FROM lth_pvr.exchange_funding_events efe
+JOIN lth_pvr.pending_zar_conversions pzc 
+  ON (efe.metadata->>'zar_deposit_id')::uuid = pzc.funding_id
+WHERE efe.customer_id = [CUSTOMER_ID]
+  AND efe.kind = 'deposit'
+  AND efe.asset = 'USDT'
+ORDER BY efe.occurred_at DESC;
+```
+
+**Check for orphaned conversions (conversions without pending):**
+```sql
+-- These should be rare - indicates conversion before deposit was synced
+SELECT 
+  cd.customer_id,
+  cd.first_name || ' ' || cd.last_name as customer_name,
+  efe.occurred_at,
+  efe.metadata->>'zar_amount' as zar_amount,
+  efe.amount as usdt_amount
+FROM lth_pvr.exchange_funding_events efe
+JOIN customer_details cd ON efe.customer_id = cd.customer_id
+WHERE efe.kind = 'deposit'
+  AND efe.asset = 'USDT'
+  AND efe.metadata->>'zar_amount' IS NOT NULL
+  AND efe.metadata->>'zar_deposit_id' IS NULL
+ORDER BY efe.occurred_at DESC;
+```
+
+### Troubleshooting ZAR Conversions
+
+#### Issue: Customer converted but Admin UI still shows full amount pending
+
+**Diagnostic Steps:**
+1. Check if conversion detected:
+   ```sql
+   SELECT COUNT(*) as conversion_count
+   FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = [CUSTOMER_ID]
+     AND metadata->>'zar_deposit_id' = '[DEPOSIT_FUNDING_ID]';
+   ```
+2. If count = 0, conversion not detected:
+   - Verify customer converted in correct subaccount (not main account)
+   - Check VALR transaction type (must be SIMPLE_BUY/LIMIT_BUY/MARKET_BUY)
+   - Manually trigger sync: Click "🔄 Sync Now" or call `ef_sync_valr_transactions`
+3. If count > 0 but remaining amount wrong:
+   - Check `pending_zar_conversions.converted_amount` matches sum of conversions
+   - May need database trigger re-execution (contact engineering)
+
+#### Issue: Conversion shows as "orphaned" in alerts
+
+**Meaning:** System detected ZAR→USDT conversion but found no matching pending deposit
+
+**Causes:**
+1. Customer converted before deposit was synced (timing issue)
+2. Customer converted in wrong subaccount
+3. Manual ZAR deposit directly to VALR (bypassed our system)
+
+**Resolution:**
+1. Check if ZAR deposit exists:
+   ```sql
+   SELECT * FROM lth_pvr.exchange_funding_events
+   WHERE customer_id = [CUSTOMER_ID]
+     AND kind = 'zar_deposit'
+   ORDER BY occurred_at DESC;
+   ```
+2. If no ZAR deposit, create manually:
+   ```sql
+   -- Only if customer confirms they deposited ZAR
+   INSERT INTO lth_pvr.exchange_funding_events (
+     org_id, customer_id, exchange_account_id, 
+     kind, asset, amount, occurred_at, 
+     idempotency_key
+   ) VALUES (
+     '[ORG_ID]', [CUSTOMER_ID], '[EXCHANGE_ACCOUNT_ID]',
+     'zar_deposit', 'ZAR', [ZAR_AMOUNT], '[OCCURRED_AT]',
+     'manual-zar-deposit-' || [CUSTOMER_ID] || '-' || NOW()
+   );
+   ```
+3. Then manually link conversion to deposit (contact engineering)
+
+---
+
 ## Alert Management
 
 ### Alert System Overview
@@ -1141,6 +1450,7 @@ SELECT cron.schedule(
 - `ef_poll_orders` - Order monitoring
 - `ef_post_ledger_and_balances` - Accounting
 - `ef_deposit_scan` - Deposit monitoring
+- `ef_sync_valr_transactions` - ZAR conversion detection and allocation (30-min auto-sync)
 - `ef_balance_reconciliation` - Balance adjustments
 - `ef_approve_kyc` - KYC approval workflow
 
@@ -1513,7 +1823,7 @@ SELECT registration_status FROM customer_details WHERE customer_id = [ID];
 **Key Tables:**
 - `customer_details` - Customer registration and status
 - `customer_portfolios` - Portfolio assignments
-- `exchange_accounts` - VALR subaccounts and deposit references
+- `exchange_accounts` - VALR subaccounts and deposit references (includes btc_wallet_address, usdt_wallet_address)
 - `lth_pvr.ci_bands_daily` - Daily LTH PVR signal data
 - `lth_pvr.decisions_daily` - Daily buy/sell/hold decisions
 - `lth_pvr.order_intents` - Sized orders ready for execution
@@ -1521,6 +1831,8 @@ SELECT registration_status FROM customer_details WHERE customer_id = [ID];
 - `lth_pvr.order_fills` - Executed trade fills
 - `lth_pvr.ledger_lines` - Transaction ledger (GAAP accounting)
 - `lth_pvr.balances_daily` - Daily NAV and balances
+- `lth_pvr.exchange_funding_events` - All deposits and withdrawals (ZAR, BTC, USDT)
+- `lth_pvr.pending_zar_conversions` - Active ZAR deposits awaiting conversion to USDT
 - `lth_pvr.alert_events` - System alerts and errors
 
 ### Appendix B: Edge Function Deployment
@@ -1577,9 +1889,9 @@ SELECT net.http_post(
 
 ---
 
-**Document Version:** 1.0  
-**Last Reviewed:** January 5, 2026  
-**Next Review:** February 5, 2026  
+**Document Version:** 1.1  
+**Last Reviewed:** February 17, 2026  
+**Next Review:** March 17, 2026  
 **Owner:** BitWealth Operations Team
 
 ---
