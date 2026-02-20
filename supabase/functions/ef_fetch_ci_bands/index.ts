@@ -17,16 +17,28 @@ Deno.serve(async (req: Request) => {
   ) {
     let wait = 1000; // 1s -> 2s -> 4s -> 8s -> 15s cap
     let lastError: unknown = null;
+    let lastStatus: number | null = null;
+    let lastStatusText: string | null = null;
 
     for (let i = 0; i < attempts; i++) {
       try {
         const resp = await fetch(url, { headers });
         if (resp.ok) return await resp.json();
+        
+        // Capture HTTP error details for logging
+        lastStatus = resp.status;
+        lastStatusText = resp.statusText;
+        const errorBody = await resp.text().catch(() => "");
+        lastError = `HTTP ${resp.status} ${resp.statusText}${errorBody ? ": " + errorBody.substring(0, 200) : ""}`;
+        
+        console.warn(`Attempt ${i + 1}/${attempts} failed: HTTP ${resp.status} ${resp.statusText}`);
+        
         const ra = Number(resp.headers.get("retry-after"));
         await sleep(ra ? ra * 1000 : wait);
         wait = Math.min(wait * 2, 15000);
       } catch (e) {
         lastError = e;
+        console.warn(`Attempt ${i + 1}/${attempts} failed: ${String(e)}`);
         await sleep(wait);
         wait = Math.min(wait * 2, 15000);
       }
