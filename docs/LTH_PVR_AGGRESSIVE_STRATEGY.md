@@ -1,7 +1,9 @@
 # LTH PVR BTC DCA Aggressive Strategy
 
 **Version:** 1.1 (Rule 2: Momentum-Filtered)  
+
 **Last Updated:** February 20, 2026  
+
 **Status:** Production
 
 ---
@@ -12,7 +14,7 @@ The **LTH PVR Aggressive Strategy** is a systematic Bitcoin Dollar-Cost Averagin
 
 ### What is LTH PVR?
 
-**LTH PVR** stands for **Long-Term Holder Price Variance Ratio**, an on-chain metric that compares Bitcoin's current price to the cost basis of long-term holders (coins held 155+ days). When this ratio is analyzed statistically, it reveals market cycles:
+**LTH PVR** stands for **Long-Term Holder Profit-to-Volatility Ratio**, an on-chain metric that compares Bitcoin's current price to the cost basis of long-term holders (coins held 155+ days). When this ratio is analyzed statistically, it reveals market cycles:
 
 - **Below the mean:** Bitcoin is undervalued relative to long-term holder behavior → **BUY zone**
 - **Above the mean:** Bitcoin is overvalued relative to long-term holder behavior → **SELL zone**
@@ -53,14 +55,14 @@ The strategy divides the market into **11 distinct zones** based on how far pric
 The percentages represent **how much of your available capital** to deploy:
 
 - **BUY percentages:** Applied to your **USDT balance**
-  - Example: If you have $10,000 USDT and price is at -1.0σ (Base 1), you buy: $10,000 × 22.796% = $2,279.60 worth of BTC
-  
+    - Example: If you have $10,000 USDT and price is at -1.0σ (Base 1), you buy: $10,000 × 22.796% = $2,279.60 worth of BTC
 - **SELL percentages:** Applied to your **BTC balance**
-  - Example: If you have 1.0 BTC and price is at +2.0σ (Base 9), you sell: 1.0 × 1.287% = 0.01287 BTC
+    - Example: If you have 1.0 BTC and price is at +2.0σ (Base 9), you sell: 1.0 × 1.287% = 0.01287 BTC
 
 ### Daily Execution
 
 Every day at **03:00 UTC**, the system:
+
 1. Fetches the latest LTH PVR confidence interval bands from ChartInspect
 2. Compares current BTC price to the bands
 3. Determines which tier you're in
@@ -88,18 +90,21 @@ Normal Trading → Price crosses ABOVE +2.0σ → BEAR PAUSE ACTIVATED
 ```
 
 **What Happens During Pause:**
+
 - ✅ **Selling continues** according to the tier rules
 - ❌ **Buying is completely disabled**—even if price drops below mean
 - 🔄 **Pause persists** until price closes below -1.0σ (full reset required)
 
 **Real-World Example:**
+
 - **2021 Bull Peak:** Price reached +2.5σ in March-April 2021 at $60K+
-  - Pause would activate → Stop buying
-  - Bear market begins → Price crashes to $30K (but still above -1.0σ)
-  - Pause continues → No buying during "dead cat bounce"
-  - Late 2021: Price finally drops below -1.0σ → Resume buying at lower prices
+    - Pause would activate → Stop buying
+    - Bear market begins → Price crashes to $30K (but still above -1.0σ)
+    - Pause continues → No buying during "dead cat bounce"
+    - Late 2021: Price finally drops below -1.0σ → Resume buying at lower prices
 
 **Why This Matters:**  
+
 Without this pause, the strategy would keep buying during a bull market blow-off top, leaving no capital for the inevitable bear market accumulation phase.
 
 ---
@@ -111,15 +116,18 @@ Without this pause, the strategy would keep buying during a bull market blow-off
 #### How It Works
 
 The system calculates **5-day price momentum (ROC)**:
+
 - **ROC > 0%:** Price is trending UP over the last 5 days
 - **ROC ≤ 0%:** Price is flat or trending DOWN
 
 **Application:**
+
 - **Base 6 (Mean to +0.5σ):** Always sells (no filter)
 - **Base 7-9 (+0.5σ to +2.0σ):** Only sells if ROC > 0%
 - **Base 10-11 (Above +2.0σ):** Always sells (no filter—extreme zone)
 
 **Example Scenario:**
+
 ```
 Day 1: Price at +1.2σ (Base 8), ROC = +5%  → SELL 0.441% ✅
 Day 2: Price at +1.2σ (Base 8), ROC = -2%  → HOLD ⏸️ (momentum turned negative)
@@ -127,6 +135,7 @@ Day 3: Price at +1.3σ (Base 8), ROC = +3%  → SELL 0.441% ✅ (momentum back u
 ```
 
 **Bear Pause Override (v1.1 Change):**  
+
 When bear pause is active, the momentum filter is **DISABLED**. All sells proceed regardless of ROC. This prevents holding positions during a collapsing market.
 
 ---
@@ -138,6 +147,7 @@ When bear pause is active, the momentum filter is **DISABLED**. All sells procee
 #### The Two Retrace Cases
 
 **Case A: The +1.0σ to +1.5σ Retrace**
+
 ```
 1. Price CLOSES inside [+1.0σ, +1.5σ) → Eligibility ARMED
 2. Price continues rising above +1.5σ (optional)
@@ -147,6 +157,7 @@ When bear pause is active, the momentum filter is **DISABLED**. All sells procee
 ```
 
 **Case B: The +1.5σ to +2.0σ Retrace**
+
 ```
 1. Price CLOSES inside [+1.5σ, +2.0σ) → Eligibility ARMED
 2. Price continues rising above +2.0σ (triggers bear pause)
@@ -172,12 +183,14 @@ Timeline: Day 1→Day 20→Day 35→Day 50→Day 80
 ```
 
 **Key Rules:**
+
 - Retrace buys **suppress** any tier-based sells that day
 - Retrace eligibility **persists** until bear pause activates or price drops below -1.0σ
 - Can retrigger multiple days in a row (buy Base 3 daily while in retrace zone)
 - During bear pause, retrace exceptions are **disabled** (unless exiting pause via < -1.0σ)
 
 **Why This Matters:**  
+
 Retraces from extreme highs often represent the last chance to accumulate before the next leg up. These exceptions ensure you don't miss those opportunities.
 
 ---
@@ -185,18 +198,21 @@ Retraces from extreme highs often represent the last chance to accumulate before
 ## Fee Structure
 
 ### Trading Fees
+
 - **Rate:** 8 basis points (0.08%)
 - **Applied to:** Base currency (BTC) on all trades
 - **Example:** 
-  - Buying $1,000 USDT worth of BTC → Receive 99.92% of BTC (0.08% fee deducted in BTC)
-  - Selling 0.01 BTC → Sell proceeds reduced by 0.08% (fee deducted in BTC before conversion)
+    - Buying $1,000 USDT worth of BTC → Receive 99.92% of BTC (0.08% fee deducted in BTC)
+    - Selling 0.01 BTC → Sell proceeds reduced by 0.08% (fee deducted in BTC before conversion)
 
 ### Contribution Fees
+
 - **Rate:** 18 basis points (0.18%)
 - **Applied to:** Every USDT deposit/contribution
 - **Example:** $5,000 monthly contribution → $4,991 net after $9 fee
 
 ### Monthly Contributions
+
 - **Default:** $5,000 USDT on the 1st of each month
 - **First day:** Optional starting capital (default: $0)
 - All contributions are **gross** amounts (fees deducted automatically)
@@ -214,6 +230,7 @@ price_at_sigma = lth_realized_price × (1 + pvr_mean + sigma × cumulative_std_d
 ```
 
 Where:
+
 - **lth_realized_price:** Average cost basis of long-term holders
 - **pvr_mean:** Historical mean of the LTH PVR ratio
 - **cumulative_std_dev:** Standard deviation of the ratio
@@ -222,6 +239,7 @@ Where:
 ### Momentum Calculation
 
 **5-Day Rate of Change (ROC):**
+
 ```
 ROC = (Price_today / Price_5_days_ago) - 1
 ```
@@ -232,23 +250,24 @@ ROC = (Price_today / Price_5_days_ago) - 1
 
 ### Base Size Percentages (Exact Values)
 
-| Tier | Zone | Percentage | Fraction |
-|------|------|------------|----------|
-| **BUY TIERS** ||||
-| Base 1 | < -1.0σ | 22.796% | 0.22796 |
-| Base 2 | -1.0σ ... -0.75σ | 21.397% | 0.21397 |
-| Base 3 | -0.75σ ... -0.50σ | 19.943% | 0.19943 |
-| Base 4 | -0.50σ ... -0.25σ | 18.088% | 0.18088 |
-| Base 5 | -0.25σ ... Mean | 12.229% | 0.12229 |
-| **SELL TIERS** ||||
-| Base 6 | Mean ... +0.5σ | 0.157% | 0.00157 |
-| Base 7 | +0.5σ ... +1.0σ | 0.200% | 0.00200 |
-| Base 8 | +1.0σ ... +1.5σ | 0.441% | 0.00441 |
-| Base 9 | +1.5σ ... +2.0σ | 1.287% | 0.01287 |
-| Base 10 | +2.0σ ... +2.5σ | 3.300% | 0.03300 |
-| Base 11 | > +2.5σ | 9.572% | 0.09572 |
+| Tier           | Zone              | Percentage | Fraction |
+| -------------- | ----------------- | ---------- | -------- |
+| **BUY TIERS**  |                   |            |          |
+| Base 1         | < -1.0σ           | 22.796%    | 0.22796  |
+| Base 2         | -1.0σ ... -0.75σ  | 21.397%    | 0.21397  |
+| Base 3         | -0.75σ ... -0.50σ | 19.943%    | 0.19943  |
+| Base 4         | -0.50σ ... -0.25σ | 18.088%    | 0.18088  |
+| Base 5         | -0.25σ ... Mean   | 12.229%    | 0.12229  |
+| **SELL TIERS** |                   |            |          |
+| Base 6         | Mean ... +0.5σ    | 0.157%     | 0.00157  |
+| Base 7         | +0.5σ ... +1.0σ   | 0.200%     | 0.00200  |
+| Base 8         | +1.0σ ... +1.5σ   | 0.441%     | 0.00441  |
+| Base 9         | +1.5σ ... +2.0σ   | 1.287%     | 0.01287  |
+| Base 10        | +2.0σ ... +2.5σ   | 3.300%     | 0.03300  |
+| Base 11        | > +2.5σ           | 9.572%     | 0.09572  |
 
 **Design Philosophy:**
+
 - Buy tiers are **monotonically decreasing** (buy less as price rises toward mean)
 - Sell tiers are **monotonically increasing** (sell more as price extends higher)
 - Buy sizes are **much larger** than sell sizes (accumulation > distribution)
@@ -260,18 +279,15 @@ ROC = (Price_today / Price_5_days_ago) - 1
 ### Why This Works
 
 1. **Follows Smart Money:** Long-term holders have historically been the most profitable cohort. Their cost basis acts as a reliable value anchor.
-
-2. **Counter-Cyclical:** Buy when others panic (below mean), sell when others are euphoric (above mean).
-
-3. **Pyramiding:** Position sizes increase as price moves further from equilibrium, maximizing the advantage of extremes.
-
-4. **Cycle Protection:** Bear pause prevents buying bubble tops; momentum filter prevents selling too early.
-
-5. **Adaptive Execution:** Retrace exceptions catch secondary opportunities that pure tier-based systems would miss.
+1. **Counter-Cyclical:** Buy when others panic (below mean), sell when others are euphoric (above mean).
+1. **Pyramiding:** Position sizes increase as price moves further from equilibrium, maximizing the advantage of extremes.
+1. **Cycle Protection:** Bear pause prevents buying bubble tops; momentum filter prevents selling too early.
+1. **Adaptive Execution:** Retrace exceptions catch secondary opportunities that pure tier-based systems would miss.
 
 ### Expected Behavior Over Time
 
 **Bull Market:**
+
 - Accumulate steadily as price climbs from -1.0σ to mean
 - Begin selling small amounts above mean
 - Increase sell size at each tier
@@ -279,11 +295,13 @@ ROC = (Price_today / Price_5_days_ago) - 1
 - Continue selling on the way down until bear pause exits
 
 **Bear Market:**
+
 - Resume buying as price drops below mean
 - Buy most aggressively below -1.0σ (Base 1-2)
 - Retrace exceptions may trigger if price briefly recovers
 
 **Sideways Market:**
+
 - Trade in and out of Base 5-6 range (near mean)
 - Smaller position sizes maintain capital efficiency
 - Momentum filter prevents overtrading in Base 7-9
@@ -295,15 +313,21 @@ ROC = (Price_today / Price_5_days_ago) - 1
 ### What This Strategy Does Well
 
 ✅ **Maximizes bear market accumulation** (buys 20%+ of capital at extreme lows)  
+
 ✅ **Protects against blow-off tops** (bear pause prevents buying euphoria)  
+
 ✅ **Captures retrace opportunities** (buys dips that others miss)  
+
 ✅ **Avoids premature selling** (momentum filter lets winners run)
 
 ### What This Strategy Doesn't Do
 
 ❌ **Time exact tops/bottoms** (systematic, not predictive)  
+
 ❌ **Guarantee profits** (BTC can remain undervalued or overvalued longer than expected)  
+
 ❌ **Work in all market conditions** (optimized for cyclical assets like Bitcoin)  
+
 ❌ **Eliminate drawdowns** (will experience paper losses during bear markets)
 
 ### Key Assumptions
@@ -322,9 +346,9 @@ The strategy includes a Python backtesting engine (`live_lth_pvr_rule2_momo_filt
 
 - **Walk-forward optimization** using Optuna (120 trials, 4 time splits)
 - **Robust scoring:** `median(NAV / (1 + λ*DD + μ*drag))`
-  - NAV: Net Asset Value (terminal portfolio value)
-  - DD: Maximum drawdown (peak-to-trough decline)
-  - drag: Average USDT/NAV (cash drag penalty)
+    - NAV: Net Asset Value (terminal portfolio value)
+    - DD: Maximum drawdown (peak-to-trough decline)
+    - drag: Average USDT/NAV (cash drag penalty)
 - **Parameter constraints:** Buy tiers monotonically decrease, sell tiers monotonically increase
 - **Lookback window:** 2010-01-01 to present (precomputes bear pause state)
 
@@ -362,18 +386,19 @@ This will search for the best Base sizes across 4 time periods and output the op
 
 ### Key Metrics
 
-| Metric | Description | Target Range |
-|--------|-------------|--------------|
-| **NAV** | Total portfolio value (USDT + BTC in USD) | Growing over time |
-| **Total ROI** | `(NAV / Invested) - 1` | > 100% over cycle |
-| **CAGR** | Compound annual growth rate | 15-50%+ |
-| **Max Drawdown** | Largest peak-to-trough decline | < 50% |
-| **Cash Drag** | Average USDT / NAV ratio | 10-30% |
-| **BTC Balance** | Accumulated BTC over time | Increasing in bear, decreasing in bull |
+| Metric           | Description                               | Target Range                           |
+| ---------------- | ----------------------------------------- | -------------------------------------- |
+| **NAV**          | Total portfolio value (USDT + BTC in USD) | Growing over time                      |
+| **Total ROI**    | `(NAV / Invested) - 1`                    | > 100% over cycle                      |
+| **CAGR**         | Compound annual growth rate               | 15-50%+                                |
+| **Max Drawdown** | Largest peak-to-trough decline            | < 50%                                  |
+| **Cash Drag**    | Average USDT / NAV ratio                  | 10-30%                                 |
+| **BTC Balance**  | Accumulated BTC over time                 | Increasing in bear, decreasing in bull |
 
 ### Daily Alerts
 
 The system generates alerts for:
+
 - **Pipeline failures** (CI bands unavailable, order execution issues)
 - **Order fills** (confirmation of buy/sell execution)
 - **Bear pause transitions** (entering/exiting pause state)
@@ -387,12 +412,14 @@ See [ADMIN_OPERATIONS_GUIDE.md](ADMIN_OPERATIONS_GUIDE.md) for monitoring proced
 ## Version History
 
 ### v1.1 (Current)
+
 - **Rule 2:** Momentum filter for sells (ROC > 0% required in Base 7-9)
 - **Bear pause override:** Momentum filter disabled during pause (all sells proceed)
 - **Fee refinement:** Trade fees in BTC (base), contribution fees in USDT
 - **8 decimal precision:** USDT amounts use 8dp (not 2dp) for accuracy
 
 ### v1.0
+
 - **Initial release:** 11-tier system with bear pause
 - **Retrace exceptions:** Cases A and B implemented
 - **ChartInspect integration:** Static CI bands from API
@@ -449,8 +476,11 @@ NORMAL → [price > +2.0σ] → BEAR_PAUSE → [price < -1.0σ] → NORMAL
 ---
 
 **Document Version:** 1.0  
+
 **Strategy Version:** 1.1  
+
 **Created:** February 20, 2026  
+
 **Author:** BitWealth LTH PVR System
 
 For questions or clarifications, refer to the backtesting script source code or consult the SDD.
