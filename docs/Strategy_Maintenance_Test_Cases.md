@@ -305,9 +305,244 @@ WHERE table_schema = 'lth_pvr_bt'
 
 ---
 
-## Phase 2: Database Schema (Iterations 2.1-2.3)
+## Phase 2: Database Schema & Live Trading Integration
 
-**Status:** Not Started
+**Status:** ✅ COMPLETE (2026-02-21)  
+**Summary:** Created strategy_variation_templates table, seeded 3 variations (Progressive/Balanced/Conservative), migrated 7 active customers to Progressive, refactored ef_generate_decisions to load configurations from database.
+
+### Iteration 2.1: Create Database Schema
+
+**Completion Date:** 2026-02-21
+
+#### TC-2.1.1: Table Creation
+**Description:** Verify `lth_pvr.strategy_variation_templates` table created with all required columns  
+**Expected Result:** Table exists with 28 columns including b1-b11, bear pause thresholds, momentum params, retrace_base  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT column_name, data_type, column_default
+FROM information_schema.columns
+WHERE table_schema = 'lth_pvr'
+  AND table_name = 'strategy_variation_templates'
+ORDER BY ordinal_position;
+```
+**Notes:** Migration applied successfully 2026-02-21. All 28 columns present.
+
+#### TC-2.1.2: Foreign Key Column Added
+**Description:** Verify `strategy_variation_id` column added to `public.customer_strategies`  
+**Expected Result:** Column exists as UUID type, nullable, with foreign key constraint  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'customer_strategies'
+  AND column_name = 'strategy_variation_id';
+```
+**Notes:** Column added successfully, nullable to support phased migration.
+
+#### TC-2.1.3: Index Creation
+**Description:** Verify indexes created for performance  
+**Expected Result:** Two indexes exist: production lookup, org-wide search  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'lth_pvr'
+  AND tablename = 'strategy_variation_templates';
+```
+**Notes:** Both indexes created: `idx_strategy_variation_templates_production`, general index on (org_id)
+
+---
+
+### Iteration 2.2: Seed Default Variations
+
+**Completion Date:** 2026-02-21
+
+#### TC-2.2.1: Progressive Variation Seeded
+**Description:** Verify Progressive variation exists with CURRENT PRODUCTION parameters  
+**Expected Result:** Row with variation_name='progressive', is_production=true, correct B1-B11 values  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT 
+  variation_name,
+  display_name,
+  bear_pause_enter_sigma,
+  bear_pause_exit_sigma,
+  b1, b3, b6, b9, b11,
+  retrace_base,
+  is_production,
+  is_active
+FROM lth_pvr.strategy_variation_templates
+WHERE variation_name = 'progressive';
+```
+**Notes:** Progressive variation seeded with enter=2.0σ, exit=-1.0σ, B1=0.22796...B11=0.09572, retrace_base=3, is_production=TRUE
+
+#### TC-2.2.2: Balanced Variation Seeded
+**Description:** Verify Balanced variation exists with earlier exit threshold  
+**Expected Result:** Row with variation_name='balanced', exit=-0.75σ, is_production=false  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT variation_name, bear_pause_exit_sigma, is_production
+FROM lth_pvr.strategy_variation_templates
+WHERE variation_name = 'balanced';
+```
+**Notes:** Balanced variation seeded with exit=-0.75σ (earlier re-entry than Progressive)
+
+#### TC-2.2.3: Conservative Variation Seeded
+**Description:** Verify Conservative variation exists with mean exit threshold  
+**Expected Result:** Row with variation_name='conservative', exit=0σ, is_production=false  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT variation_name, bear_pause_exit_sigma, is_production
+FROM lth_pvr.strategy_variation_templates
+WHERE variation_name = 'conservative';
+```
+**Notes:** Conservative variation seeded with exit=0σ (earliest re-entry at mean band)
+
+#### TC-2.2.4: All Variations Active
+**Description:** Verify all 3 variations have is_active=true  
+**Expected Result:** Count = 3 active variations  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT COUNT(*) as active_variations
+FROM lth_pvr.strategy_variation_templates
+WHERE is_active = true;
+```
+**Notes:** All 3 variations active and ready for assignment
+
+---
+
+### Iteration 2.3: Migrate Existing Customers
+
+**Completion Date:** 2026-02-21
+
+#### TC-2.3.1: Customer Count Validation
+**Description:** Verify correct number of LTH_PVR customers identified for migration  
+**Expected Result:** 7 active LTH_PVR customers with live_enabled=true  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT COUNT(*) as lth_pvr_customers
+FROM public.customer_strategies cs
+JOIN public.customer_details cd ON cs.customer_id = cd.customer_id
+WHERE cs.strategy_code = 'LTH_PVR'
+  AND cs.live_enabled = true
+  AND cd.registration_status = 'active';
+```
+**Notes:** 7 customers identified: IDs 12, 31, 39, 44, 45, 47, 48
+
+#### TC-2.3.2: Migration Completeness
+**Description:** Verify all LTH_PVR customers assigned to Progressive variation  
+**Expected Result:** 0 customers with NULL strategy_variation_id  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT COUNT(*) as unmigrated_customers
+FROM public.customer_strategies
+WHERE strategy_code = 'LTH_PVR'
+  AND live_enabled = true
+  AND strategy_variation_id IS NULL;
+```
+**Notes:** All 7 customers successfully migrated, 0 unmigrated
+
+#### TC-2.3.3: Correct Variation Assignment
+**Description:** Verify all customers assigned to 'progressive' variation  
+**Expected Result:** All 7 customers linked to Progressive (f7ec6155-5b31-4ba2-9d44-f3516f76c1a7)  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT 
+  cs.customer_id,
+  cd.registration_status,
+  sv.variation_name,
+  sv.bear_pause_exit_sigma
+FROM public.customer_strategies cs
+JOIN public.customer_details cd ON cs.customer_id = cd.customer_id
+JOIN lth_pvr.strategy_variation_templates sv ON cs.strategy_variation_id = sv.id
+WHERE cs.strategy_code = 'LTH_PVR'
+  AND cs.live_enabled = true
+ORDER BY cs.customer_id;
+```
+**Notes:** All customers show variation_name='progressive', exit_threshold=-1.0σ
+
+---
+
+### Iteration 2.4: Refactor ef_generate_decisions (Database-Driven Configuration)
+
+**Completion Date:** 2026-02-21  
+**Note:** This iteration was not in the original build plan but became necessary to complete Phase 2 integration.
+
+#### TC-2.4.1: Cross-Schema Query Implementation
+**Description:** Verify ef_generate_decisions loads configurations from strategy_variation_templates  
+**Expected Result:** Function queries both customer_strategies and strategy_variation_templates separately due to PostgREST cross-schema FK limitation  
+**Status:** ✅ PASS  
+**Notes:** Implemented 3-step query approach:
+1. Query customer_strategies (public schema)
+2. Filter by active registration_status
+3. Query strategy_variation_templates (lth_pvr schema) separately
+4. Build variationsMap for in-memory joins
+
+PostgREST doesn't auto-detect FK relationships across schemas, so single joined query not possible.
+
+#### TC-2.4.2: Strategy Filter Applied
+**Description:** Verify ef_generate_decisions only processes LTH_PVR customers  
+**Expected Result:** ADV_DCA customers (e.g., customer_id=9) not processed  
+**Status:** ✅ PASS  
+**Verification Steps:**
+1. Invoke ef_generate_decisions endpoint
+2. Check for errors mentioning ADV_DCA customers
+3. Verify only LTH_PVR customers processed
+**Notes:** Initially failed with "Customer 9 has no strategy_variation_id" error. Fixed by adding `.eq("strategy_code", "LTH_PVR")` filter. Customer 9 is ADV_DCA and correctly excluded.
+
+#### TC-2.4.3: Decision Generation with Database Config
+**Description:** Verify decisions generated using database-loaded variation parameters  
+**Expected Result:** Decisions show Progressive parameters (b1=0.22796, retrace_base=3, exit_sigma=-1.0)  
+**Status:** ✅ PASS  
+**Verification Steps:**
+```sql
+SELECT 
+  dd.customer_id,
+  dd.action,
+  dd.rule,
+  dd.note,
+  sv.variation_name,
+  sv.bear_pause_exit_sigma,
+  sv.b1,
+  sv.b3,
+  sv.retrace_base
+FROM lth_pvr.decisions_daily dd
+JOIN public.customer_strategies cs ON dd.customer_id = cs.customer_id
+JOIN lth_pvr.strategy_variation_templates sv ON cs.strategy_variation_id = sv.id
+WHERE dd.trade_date = CURRENT_DATE
+ORDER BY dd.customer_id
+LIMIT 3;
+```
+**Results:**
+- All 7 customers: variation_name='progressive'
+- Bear pause exit: -1.0σ
+- B1-B11 values: 0.22796 → 0.09572 (Progressive configuration)
+- Retrace base: 3
+- All decisions show "Bear pause active: buying disabled until < -1σ" (correct behavior)
+**Notes:** Database-driven configuration working correctly. Tested 2026-02-21 via manual endpoint invocation.
+
+#### TC-2.4.4: Backward Compatibility Removed
+**Description:** Verify hard-coded PROGRESSIVE_CONFIG removed from ef_generate_decisions  
+**Expected Result:** No hard-coded configuration constants in index.ts  
+**Status:** ✅ PASS  
+**Notes:** Removed 18-line PROGRESSIVE_CONFIG object (lines 70-87). All configuration now loaded from database.
+
+#### TC-2.4.5: Deployment Success
+**Description:** Verify ef_generate_decisions deploys without errors  
+**Expected Result:** Supabase CLI reports successful deployment  
+**Status:** ✅ PASS  
+**Notes:** Deployed 3 times (debugging cross-schema FK issue). Final deployment successful with 3-step query approach.
 
 ---
 
@@ -337,33 +572,51 @@ WHERE table_schema = 'lth_pvr_bt'
 
 ## Summary Statistics
 
-- **Total Test Cases:** 30 defined (Phase 1 complete)
-- **Passed:** 22 ✅
-- **Pending:** 4 ⏳ (require Phase 2+ functionality)
+- **Total Test Cases:** 45 defined (Phases 1-2 complete)
+- **Passed:** 37 ✅
+- **Pending:** 4 ⏳ (require Phase 3+ functionality)
 - **Skipped:** 4 ⏸️ (deferred to Phase 3 simulator testing)
 - **Failed:** 0 ❌
 
 **Phase 1 Completion:** 100% (4/4 iterations complete)
 **Phase 1 Validation:** 100% (all testable scenarios validated)
 
+**Phase 2 Completion:** 100% (4/4 iterations complete - Iteration 2.4 added during implementation)
+**Phase 2 Validation:** 100% (all test cases passed)
+
 ---
 
 ## Notes & Observations
 
-### 2026-02-21
+### 2026-02-21 (Morning - Phase 1)
 - **Iteration 1.1:** Shared logic module created successfully. Unit tests ready but not executed (Deno not in local PATH). Will validate through integration testing.
 - **Iteration 1.2:** Live trading refactored and deployed. Backward compatibility maintained with `strategy_versions` table. Verification deferred to next trading day (2026-02-22 03:05 UTC).
 - **Iteration 1.3:** Back-tester refactored and deployed. Added bear_pause_enter_sigma, bear_pause_exit_sigma, and retrace_base columns to bt_params. Both ef_bt_execute and ef_execute_public_backtests deployed successfully. Verification pending user testing via Admin UI and website.
 - **Iteration 1.4:** Python simulator archived to `docs/legacy/` with comprehensive README.md documenting deprecation, differences from TypeScript, and historical context.
 - **Retrace Base Optimization:** Added retraceBase parameter to StrategyConfig (explores B1-B5 buy Bases). Updated shared logic, live trading, and back-tester. Default: Base 3 (current production).
 - **Phase 1 Status:** ✅ COMPLETE - All 4 iterations finished. Ready for user validation testing (14 pending test cases) before proceeding to Phase 2.
-- **Validation Testing (Later on 2026-02-21):**
+
+### 2026-02-21 (Afternoon - Phase 1 Validation)
+- **Validation Testing:**
   - TC-1.2.6 & TC-1.2.7 ✅ PASS: Manually invoked ef_generate_decisions after deleting today's decisions. Generated decisions for 7 customers with perfect backward compatibility (identical to yesterday's decisions).
   - TC-1.3.6 & TC-1.3.7 ✅ PASS: User confirmed both Admin UI and website back-testing work correctly with refactored shared logic.
   - TC-1.2.8, TC-1.2.9, TC-1.2.10 ⏸️ SKIP: Deferred to Phase 3 simulator testing. Current market conditions do not allow observation of tested code paths (price far from -1.0σ, not in retrace zones). Configuration correctness validated indirectly via TC-1.3.8 and TC-1.3.9.
   - TC-1.3.8 ✅ PASS: Bear pause configuration validated via manual database testing. Created 3 backtest configs (baseline + 2 variants), confirmed enter/exit thresholds affect results correctly. Earlier entry (1.5σ) + later exit (-0.5σ) improved ROI by 0.46pp.
   - TC-1.3.9 ✅ PASS: Retrace Base configuration validated via manual database testing. Confirmed retrace_base parameter correctly controls Base size for retrace exception buys. Base 1 (22.796%) vs Base 3 (19.943%) produced measurable difference (-0.04pp ROI).
   - **Phase 1 Validation Complete:** All critical functionality validated. 22/30 tests passed, 4 deferred to Phase 3 (require market conditions), 4 pending (require Phase 2+ functionality).
+
+### 2026-02-21 (Evening - Phase 2)
+- **Iteration 2.1:** ✅ COMPLETE - Created strategy_variation_templates table (28 columns), added strategy_variation_id FK to customer_strategies, created 2 indexes. Migration applied successfully.
+- **Iteration 2.2:** ✅ COMPLETE - Seeded 3 strategy variations (Progressive/Balanced/Conservative). Progressive marked as production with current optimized parameters. Balanced/Conservative marked experimental.
+- **Iteration 2.3:** ✅ COMPLETE - Migrated all 7 active LTH_PVR customers to Progressive variation. All customers verified with correct variation assignment.
+- **Iteration 2.4:** ✅ COMPLETE (Not in original plan) - Refactored ef_generate_decisions to load configurations from database. **Critical technical issue resolved:** PostgREST doesn't auto-detect cross-schema foreign key relationships (public.customer_strategies → lth_pvr.strategy_variation_templates). Implemented 3-step query workaround:
+  1. Query customer_strategies (public schema)
+  2. Filter by active registration_status
+  3. Query strategy_variation_templates (lth_pvr schema) separately
+  4. Build variationsMap for in-memory joins in TypeScript
+- **Bug Fix:** Added `.eq("strategy_code", "LTH_PVR")` filter to prevent processing ADV_DCA customers (customer 9 was incorrectly included, failing with "no strategy_variation_id" error).
+- **Validation:** Generated decisions for all 7 customers using database-loaded Progressive configuration. All decisions correctly show Progressive parameters (B1=0.22796...B11=0.09572, retrace_base=3, exit_sigma=-1.0σ).
+- **Phase 2 Status:** ✅ COMPLETE - All 15 test cases passed. Database schema deployed, customers migrated, live trading integrated with database-driven configuration.
 
 ---
 

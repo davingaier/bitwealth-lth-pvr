@@ -555,8 +555,8 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
 
 **Tasks:**
 
-- [ ] Create migration `20260221_migrate_customers_to_progressive.sql`
-- [ ] Update ALL customers to 'progressive' variation (per user request):
+- [x] Create migration `20260221_migrate_customers_to_progressive.sql`
+- [x] Update ALL customers to 'progressive' variation (per user request):
 
   ```sql
   UPDATE public.customer_strategies cs
@@ -593,6 +593,73 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
 **Files Created:**
 
 - `supabase/migrations/20260221_migrate_customers_to_progressive.sql`
+
+---
+
+### Iteration 2.4: Refactor ef_generate_decisions for Database-Driven Configuration ✅
+
+**Status:** COMPLETE (2026-02-21)  
+**Note:** This iteration was not in the original build plan but became necessary to complete Phase 2 integration with live trading.
+
+**Tasks:**
+
+- [x] Remove hard-coded PROGRESSIVE_CONFIG from `ef_generate_decisions/index.ts`
+- [x] Implement database query to load strategy variations
+- [x] **Critical Technical Challenge:** PostgREST cross-schema foreign key limitation
+  - **Issue:** PostgREST doesn't auto-detect FK relationships when tables are in different schemas (public.customer_strategies → lth_pvr.strategy_variation_templates)
+  - **Error:** "Could not find a relationship between 'customer_strategies' and 'strategy_variation_id' in the schema cache"
+  - **Solution:** Implemented 3-step query approach:
+    1. Query `public.customer_strategies` separately (with `strategy_variation_id`)
+    2. Filter by `customer_details.registration_status = 'active'`
+    3. Query `lth_pvr.strategy_variation_templates` separately with `IN (variationIds)`
+    4. Build `variationsMap` (Map<string, StrategyVariation>) for in-memory joins in TypeScript
+  - **Alternative Rejected:** Single joined query using PostgREST foreign key syntax (e.g., `strategy_versions:strategy_variation_id(...)`) - PostgREST only detects same-schema FKs
+- [x] Add strategy code filter: `.eq("strategy_code", "LTH_PVR")` to exclude ADV_DCA customers
+- [x] Build StrategyConfig from loaded variation data:
+  ```typescript
+  const config: StrategyConfig = {
+    B: { B1: variation.b1, B2: variation.b2, ..., B11: variation.b11 },
+    bearPauseEnterSigma: variation.bear_pause_enter_sigma,
+    bearPauseExitSigma: variation.bear_pause_exit_sigma,
+    momentumLength: variation.momo_length,
+    momentumThreshold: variation.momo_threshold,
+    enableRetrace: variation.enable_retrace,
+    retraceBase: variation.retrace_base
+  };
+  ```
+- [x] Pass config to `decideTrade()` and `computeBearPauseAt()` functions
+- [x] Deploy with `--no-verify-jwt`
+- [x] Test via manual endpoint invocation:
+  ```powershell
+  curl -X POST "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_generate_decisions" `
+    -H "Authorization: Bearer [anon_key]" `
+    -H "Content-Type: application/json" `
+    -d '{}'
+  ```
+- [x] Verify decisions generated use Progressive variation parameters (B1=0.22796, retrace_base=3, exit_sigma=-1.0σ)
+
+**Deliverable:** Live trading fully integrated with database-driven strategy variation system
+
+**Files Modified:**
+
+- `supabase/functions/ef_generate_decisions/index.ts` (removed hard-coded config, added 3-step query approach)
+
+**Deployment History:**
+
+1. **Attempt 1:** Deployed with single joined query using `strategy_versions:strategy_variation_id(...)` → FAILED (cross-schema FK not detected)
+2. **Attempt 2:** Changed alias to `lth_pvr_strategy_variations:strategy_variation_id(...)` → FAILED (same issue)
+3. **Attempt 3:** Implemented 3-step query with separate schema queries → SUCCESS
+4. **Bug Fix:** Added LTH_PVR filter to exclude customer 9 (ADV_DCA) → SUCCESS
+
+**Validation:**
+
+- Generated decisions for 7 customers (IDs: 12, 31, 39, 44, 45, 47, 48)
+- All decisions correctly use Progressive variation parameters:
+  - Bear pause exit: -1.0σ
+  - B1-B11: 0.22796 → 0.09572
+  - Retrace base: 3
+  - Current rule: "Pause" (bear pause active: buying disabled until < -1σ)
+- No errors, all customers processed successfully
 
 ---
 
