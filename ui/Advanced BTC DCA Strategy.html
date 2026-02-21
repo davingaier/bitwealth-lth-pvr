@@ -896,16 +896,86 @@
         </div>
 
         <!-- Optimization Controls (Hidden by default) -->
-        <div id="optimizationControls" class="card" style="display:none;max-width:800px;margin:2rem auto;">
+        <div id="optimizationModal" class="card" style="display:none;max-width:900px;margin:2rem auto;position:relative;">
+          <button onclick="window.strategyMaintenance.closeOptimizationModal()" type="button" style="position:absolute;top:1rem;right:1rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);">&times;</button>
+          
           <h3>Optimize Strategy Parameters</h3>
-          <p style="color:var(--muted);margin-bottom:1rem;">
-            Grid search optimization to find the best parameter combination for maximum returns.
+          <p style="color:var(--muted);margin-bottom:1.5rem;">
+            Configure parameter ranges for grid search optimization. The optimizer will test all combinations to find the best configuration.
           </p>
-          <!-- Optimization UI to be implemented in Phase 3.8 -->
+
+          <input type="hidden" id="optVariationId">
+          <input type="hidden" id="optVariationName">
+
+          <div style="display:grid;gap:1.5rem;">
+            <!-- Objective Selection -->
+            <div>
+              <label style="display:block;margin-bottom:.5rem;font-weight:600;">Optimization Objective:</label>
+              <select id="optObjective" class="context-select" style="width:100%;">
+                <option value="nav">Final NAV (Maximize absolute returns)</option>
+                <option value="cagr" selected>CAGR (Maximize compound growth rate)</option>
+                <option value="roi">Total ROI (Maximize return percentage)</option>
+                <option value="sharpe">Sharpe Ratio (Maximize risk-adjusted returns)</option>
+              </select>
+            </div>
+
+            <!-- Date Range & Contributions -->
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;">
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
+                <input id="optStartDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
+                <input id="optEndDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Upfront ($):</label>
+                <input id="optUpfront" type="number" min="0" step="1000" value="10000" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Monthly ($):</label>
+                <input id="optMonthly" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+            </div>
+
+            <!-- Parameter Ranges -->
+            <div>
+              <label style="display:block;margin-bottom:.5rem;font-weight:600;">Parameter Ranges to Optimize:</label>
+              <div style="background:#f8f9fa;border:1px solid var(--border);border-radius:8px;padding:1rem;">
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;">
+                  <div>
+                    <label style="display:block;margin-bottom:.25rem;color:var(--muted);">B1 Range (min, max, step):</label>
+                    <input id="optB1Range" type="text" placeholder="0.20, 0.24, 0.01" style="width:100%;height:36px;border-radius:6px;border:1px solid var(--border);padding:0 8px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;margin-bottom:.25rem;color:var(--muted);">B2 Range:</label>
+                    <input id="optB2Range" type="text" placeholder="0.19, 0.23, 0.01" style="width:100%;height:36px;border-radius:6px;border:1px solid var(--border);padding:0 8px;" />
+                  </div>
+                  <div style="grid-column:1/-1;">
+                    <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
+                      <input type="checkbox" id="optUseSmartRanges" checked />
+                      <span style="font-weight:500;">Use Smart Ranges</span>
+                      <span style="color:var(--muted);font-size:.85rem;">(±20% from current config, 3 points per parameter)</span>
+                    </label>
+                  </div>
+                  <div style="grid-column:1/-1;font-size:.85rem;color:var(--muted);padding:.5rem;background:#fff;border-radius:6px;">
+                    <strong>Note:</strong> Leave ranges blank to keep current values. Estimated combinations will be shown before running.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex;gap:.75rem;justify-content:center;">
+              <button id="runOptBtn" type="button" style="padding:.75rem 2rem;background:#10b981;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-weight:600;">Start Optimization</button>
+              <button onclick="window.strategyMaintenance.closeOptimizationModal()" type="button" style="padding:.75rem 2rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Cancel</button>
+            </div>
+          </div>
         </div>
 
         <!-- Optimization Results Panel (Hidden by default) -->
-        <div id="optimizationResultsPanel" class="card" style="display:none;max-width:1000px;margin:2rem auto;">
+        <div id="optimizationResultsPanel" class="card" style="display:none;max-width:1200px;margin:2rem auto;">
           <!-- Results populated dynamically -->
         </div>
       </div>
@@ -9089,16 +9159,117 @@ Momentum:
             <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">${result.sharpe?.toFixed(2) || '0'}</div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;margin-bottom:1.5rem;">
           <div><span style="color:var(--muted);">Max Drawdown:</span> <strong>${result.maxDrawdown?.toFixed(2) || '0'}%</strong></div>
           <div><span style="color:var(--muted);">Total Invested:</span> <strong>$${result.totalInvested?.toLocaleString() || '0'}</strong></div>
           <div><span style="color:var(--muted);">Total BTC Bought:</span> <strong>${result.totalBtcBought?.toFixed(8) || '0'} BTC</strong></div>
           <div><span style="color:var(--muted);">Avg Buy Price:</span> <strong>$${result.avgBuyPrice?.toLocaleString() || '0'}</strong></div>
         </div>
-        <div style="display:flex;gap:.75rem;justify-content:center;margin-top:1.5rem;">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 1rem;">NAV Over Time</h4>
+          <canvas id="simResultsChart" style="max-height:400px;"></canvas>
+        </div>
+        <div style="display:flex;gap:.75rem;justify-content:center;">
           <button onclick="window.strategyMaintenance.hideSimulationResults()" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Close</button>
         </div>
       `;
+
+      // Render Chart.js chart with NAV over time
+      renderSimulationChart(result.dailyResults || []);
+    }
+
+    // Render simulation chart
+    function renderSimulationChart(dailyResults) {
+      const canvas = document.getElementById('simResultsChart');
+      if (!canvas || !dailyResults || dailyResults.length === 0) return;
+
+      const ctx = canvas.getContext('2d');
+      
+      // Destroy existing chart if any
+      if (window.simResultsChartInstance) {
+        window.simResultsChartInstance.destroy();
+      }
+
+      // Prepare data
+      const labels = dailyResults.map(d => d.date || d.close_date);
+      const navData = dailyResults.map(d => d.nav || d.totalValueUsd);
+      const investedData = dailyResults.map(d => d.totalInvested || d.cumulativeInvestedUsd);
+
+      // Create chart
+      window.simResultsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'NAV',
+              data: navData,
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: 'Total Invested',
+              data: investedData,
+              borderColor: '#6b7280',
+              backgroundColor: 'rgba(107, 116, 128, 0.1)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              pointRadius: 0,
+              tension: 0.1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  if (context.parsed.y !== null) {
+                    label += '$' + context.parsed.y.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    });
+                  }
+                  return label;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              ticks: {
+                maxTicksLimit: 12,
+                autoSkip: true
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '$' + value.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
     }
 
     // Hide simulation results
@@ -9108,9 +9279,294 @@ Momentum:
       currentVariationId = null;
     }
 
-    // Optimize variation (placeholder for Phase 3.8)
+    // Optimize variation - show optimization modal
     function optimizeVariation(variationId) {
-      alert('Optimization UI will be implemented in Phase 3.8');
+      currentVariationId = variationId;
+      const variation = currentVariations.find(v => v.id === variationId);
+      
+      if (!variation) return;
+
+      // Populate modal
+      document.getElementById('optVariationId').value = variationId;
+      document.getElementById('optVariationName').value = variation.variation_name;
+
+      // Set default dates (last 5 years)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(endDate.getFullYear() - 5);
+      
+      document.getElementById('optStartDate').value = startDate.toISOString().split('T')[0];
+      document.getElementById('optEndDate').value = endDate.toISOString().split('T')[0];
+
+      // Get current config
+      const config = variation.strategy_config || {};
+      const B = config.B || {};
+
+      // Populate smart ranges (±20% from current values)
+      if (document.getElementById('optUseSmartRanges').checked) {
+        const b1Range = generateSmartRange(B.B1 || 0.22, 0.2, 3);
+        const b2Range = generateSmartRange(B.B2 || 0.21, 0.2, 3);
+        
+        document.getElementById('optB1Range').value = b1Range;
+        document.getElementById('optB2Range').value = b2Range;
+      }
+
+      // Show modal
+      document.getElementById('optimizationModal').style.display = 'block';
+      optimizationResultsPanel.style.display = 'none';
+
+      // Scroll to modal
+      document.getElementById('optimizationModal').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Generate smart range string (min, max, step)
+    function generateSmartRange(currentValue, variancePercent, gridSize) {
+      const variance = currentValue * variancePercent;
+      const min = currentValue - variance;
+      const max = currentValue + variance;
+      const step = (max - min) / (gridSize - 1);
+      
+      return `${min.toFixed(4)}, ${max.toFixed(4)}, ${step.toFixed(4)}`;
+    }
+
+    // Parse range string to object
+    function parseRange(rangeStr) {
+      if (!rangeStr || rangeStr.trim() === '') return null;
+      
+      const parts = rangeStr.split(',').map(s => parseFloat(s.trim()));
+      if (parts.length !== 3 || parts.some(isNaN)) return null;
+      
+      return {
+        min: parts[0],
+        max: parts[1],
+        step: parts[2]
+      };
+    }
+
+    // Close optimization modal
+    function closeOptimizationModal() {
+      document.getElementById('optimizationModal').style.display = 'none';
+      currentVariationId = null;
+    }
+
+    // Run optimization
+    async function runOptimization() {
+      if (!currentVariationId) return;
+
+      try {
+        const variationId = document.getElementById('optVariationId').value;
+        const objective = document.getElementById('optObjective').value;
+        const startDate = document.getElementById('optStartDate').value;
+        const endDate = document.getElementById('optEndDate').value;
+        const upfront = parseFloat(document.getElementById('optUpfront').value);
+        const monthly = parseFloat(document.getElementById('optMonthly').value);
+
+        if (!startDate || !endDate || isNaN(upfront) || isNaN(monthly)) {
+          alert('Please fill in all optimization parameters');
+          return;
+        }
+
+        // Parse parameter ranges
+        const b1Range = parseRange(document.getElementById('optB1Range').value);
+        const b2Range = parseRange(document.getElementById('optB2Range').value);
+
+        if (!b1Range && !b2Range) {
+          alert('Please specify at least one parameter range to optimize');
+          return;
+        }
+
+        // Show loading
+        optimizationResultsPanel.style.display = 'block';
+        optimizationResultsPanel.innerHTML = `
+          <div style="text-align:center;padding:3rem;color:var(--muted);">
+            <div style="font-size:1.2rem;margin-bottom:1rem;">🔍 Optimizing parameters...</div>
+            <div style="font-size:.9rem;">This may take 1-5 minutes depending on the date range and number of parameter combinations.</div>
+            <div style="margin-top:1rem;font-size:.85rem;color:#6b7280;">
+              Estimated combinations: ${estimateCombinations(b1Range, b2Range)}
+            </div>
+          </div>
+        `;
+        optimizationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Build request body
+        const requestBody = {
+          variation_id: variationId,
+          start_date: startDate,
+          end_date: endDate,
+          upfront_usd: upfront,
+          monthly_usd: monthly,
+          objective: objective
+        };
+
+        // Add ranges if specified
+        if (b1Range || b2Range) {
+          requestBody.b_ranges = {};
+          if (b1Range) requestBody.b_ranges.b1 = b1Range;
+          if (b2Range) requestBody.b_ranges.b2 = b2Range;
+        }
+
+        // Call optimizer edge function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_optimize_lth_pvr_strategy`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Optimization failed: ${errorText}`);
+        }
+
+        const results = await response.json();
+        
+        // Hide modal and display results
+        document.getElementById('optimizationModal').style.display = 'none';
+        displayOptimizationResults(results);
+
+      } catch (err) {
+        console.error('Error running optimization:', err);
+        optimizationResultsPanel.innerHTML = `<div style="text-align:center;padding:2rem;color:#ef4444;">Error: ${err.message}</div>`;
+      }
+    }
+
+    // Estimate number of combinations
+    function estimateCombinations(b1Range, b2Range) {
+      let count = 1;
+      
+      if (b1Range) {
+        const steps = Math.ceil((b1Range.max - b1Range.min) / b1Range.step) + 1;
+        count *= steps;
+      }
+      
+      if (b2Range) {
+        const steps = Math.ceil((b2Range.max - b2Range.min) / b2Range.step) + 1;
+        count *= steps;
+      }
+      
+      return count;
+    }
+
+    // Display optimization results
+    function displayOptimizationResults(results) {
+      const variation = currentVariations.find(v => v.id === currentVariationId);
+      if (!variation) {
+        optimizationResultsPanel.innerHTML = '<div style="text-align:center;padding:2rem;color:#ef4444;">Variation not found</div>';
+        return;
+      }
+
+      const best = results.best;
+      const topResults = results.top_results || [];
+      
+      optimizationResultsPanel.innerHTML = `
+        <h3>Optimization Results: ${escapeHtml(variation.variation_name)}</h3>
+        
+        <!-- Summary Stats -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+          <div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Combinations Tested</div>
+            <div style="font-size:1.5rem;font-weight:600;color:var(--ink);">${results.combinations_tested || 0}</div>
+          </div>
+          <div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Combinations Skipped</div>
+            <div style="font-size:1.5rem;font-weight:600;color:#6b7280;">${results.combinations_skipped || 0}</div>
+          </div>
+          <div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Execution Time</div>
+            <div style="font-size:1.5rem;font-weight:600;color:var(--ink);">${results.execution_time_seconds?.toFixed(2) || '0'}s</div>
+          </div>
+          <div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Objective</div>
+            <div style="font-size:1.5rem;font-weight:600;color:#10b981;text-transform:uppercase;">${results.objective || 'N/A'}</div>
+          </div>
+        </div>
+
+        <!-- Best Configuration -->
+        <div style="background:#f0fdf4;border:2px solid #10b981;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 1rem;color:#065f46;">🏆 Best Configuration (Rank #${best?.rank || 1})</h4>
+          
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;">
+            <div style="background:#fff;padding:1rem;border-radius:8px;">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Final NAV</div>
+              <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">$${best?.simulation?.final_nav_usd?.toLocaleString() || '0'}</div>
+            </div>
+            <div style="background:#fff;padding:1rem;border-radius:8px;">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">CAGR</div>
+              <div style="font-size:1.75rem;font-weight:600;color:#3b82f6;">${best?.simulation?.final_cagr_percent?.toFixed(2) || '0'}%</div>
+            </div>
+            <div style="background:#fff;padding:1rem;border-radius:8px;">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">ROI</div>
+              <div style="font-size:1.75rem;font-weight:600;color:#10b981;">${best?.simulation?.final_roi_percent?.toFixed(2) || '0'}%</div>
+            </div>
+            <div style="background:#fff;padding:1rem;border-radius:8px;">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Sharpe Ratio</div>
+              <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">${best?.simulation?.sharpe_ratio?.toFixed(2) || '0'}</div>
+            </div>
+          </div>
+
+          <div style="background:#fff;padding:1rem;border-radius:8px;margin-bottom:1rem;">
+            <strong style="display:block;margin-bottom:.5rem;">Optimized Parameters:</strong>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;font-size:.9rem;">
+              ${Object.entries(best?.config?.B || {}).slice(0, 11).map(([key, val]) => `
+                <div><span style="color:var(--muted);">${key}:</span> <strong>${(val * 100).toFixed(3)}%</strong></div>
+              `).join('')}
+            </div>
+          </div>
+
+          <button onclick="window.strategyMaintenance.applyOptimizedConfig('${best?.config ? JSON.stringify(best.config).replace(/'/g, "\\'") : ''}')" type="button" style="padding:.75rem 1.5rem;background:#10b981;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-weight:600;">Apply This Configuration</button>
+        </div>
+
+        <!-- Top Results Table -->
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 1rem;">Top ${topResults.length} Configurations</h4>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+              <thead>
+                <tr style="background:#f8f9fa;border-bottom:2px solid var(--border);">
+                  <th style="padding:.5rem;text-align:left;">Rank</th>
+                  <th style="padding:.5rem;text-align:right;">B1</th>
+                  <th style="padding:.5rem;text-align:right;">B2</th>
+                  <th style="padding:.5rem;text-align:right;">NAV</th>
+                  <th style="padding:.5rem;text-align:right;">CAGR</th>
+                  <th style="padding:.5rem;text-align:right;">ROI</th>
+                  <th style="padding:.5rem;text-align:right;">Sharpe</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topResults.map(r => `
+                  <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:.5rem;">#${r.rank}</td>
+                    <td style="padding:.5rem;text-align:right;">${((r.config?.B?.B1 || 0) * 100).toFixed(2)}%</td>
+                    <td style="padding:.5rem;text-align:right;">${((r.config?.B?.B2 || 0) * 100).toFixed(2)}%</td>
+                    <td style="padding:.5rem;text-align:right;">$${r.simulation?.final_nav_usd?.toLocaleString() || '0'}</td>
+                    <td style="padding:.5rem;text-align:right;">${r.simulation?.final_cagr_percent?.toFixed(2) || '0'}%</td>
+                    <td style="padding:.5rem;text-align:right;">${r.simulation?.final_roi_percent?.toFixed(2) || '0'}%</td>
+                    <td style="padding:.5rem;text-align:right;">${r.simulation?.sharpe_ratio?.toFixed(2) || '0'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:.75rem;justify-content:center;">
+          <button onclick="window.strategyMaintenance.closeOptimizationResults()" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Close</button>
+        </div>
+      `;
+    }
+
+    // Apply optimized configuration (placeholder)
+    function applyOptimizedConfig(configJson) {
+      alert('Apply configuration feature will be implemented in Phase 3.10.\n\nFor now, you can manually update the variation in the database using the optimized parameters shown above.');
+    }
+
+    // Close optimization results
+    function closeOptimizationResults() {
+      optimizationResultsPanel.style.display = 'none';
+      currentVariationId = null;
     }
 
     // Cancel simulation
@@ -9118,6 +9574,9 @@ Momentum:
     
     // Run simulation button
     document.getElementById('runSimBtn')?.addEventListener('click', runSimulation);
+
+    // Run optimization button
+    document.getElementById('runOptBtn')?.addEventListener('click', runOptimization);
 
     // Initialize on page load
     if (strategyTypeSelector.value === 'LTH_PVR') {
@@ -9130,7 +9589,10 @@ Momentum:
       showSimulationControls,
       optimizeVariation,
       hideSimulationResults,
-      loadLthPvrVariations
+      loadLthPvrVariations,
+      closeOptimizationModal,
+      closeOptimizationResults,
+      applyOptimizedConfig
     };
 
     // Helper function to escape HTML
