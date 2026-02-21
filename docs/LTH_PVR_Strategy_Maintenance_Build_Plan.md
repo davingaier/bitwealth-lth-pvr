@@ -24,6 +24,12 @@
 6. Comprehensive strategy documentation covering all 3 variations
 7. Standard DCA comparison capability (like back-tester)
 
+**Important Fee Handling:**
+- Exchange trade fees (8 bps): Charged in BTC when buying, charged in USDT when selling
+- Platform/performance fees: Always charged in USDT
+
+**Simulator Defaults:** $10,000 upfront, $500 monthly, 2020-01-01 to today
+
 **Timeline:** ~20-22 iterations across 6 phases
 
 ---
@@ -285,6 +291,10 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
   - `computeBearPauseAt(sb, orgId, upToDateStr, config)` - **NEW signature with config**
 - [ ] Update `decideTrade()` to use `config.bearPauseEnterSigma` and `config.bearPauseExitSigma` instead of hard-coded +2.0/-1.0
 - [ ] Update `decideTrade()` to use `config.B.B1` through `config.B.B11` instead of parameter `B`
+- [ ] **CRITICAL:** Ensure fee calculation logic handles currency correctly:
+  - **BUY orders:** `btc_received = btc_gross * (1 - 0.0008)` (fee charged in BTC)
+  - **SELL orders:** `usdt_received = usdt_gross * (1 - 0.0008)` (fee charged in USDT)
+  - This distinction must be preserved in shared logic module
 - [ ] Add unit tests in `supabase/functions/_shared/lth_pvr_strategy_logic.test.ts`:
 
   ```typescript
@@ -654,14 +664,14 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
 **Tasks:**
 
 - [ ] Create `supabase/functions/ef_run_lth_pvr_simulator/index.ts`
-- [ ] Input parameters (with defaults from public website back-tester):
+- [ ] Input parameters (with defaults):
 
   ```typescript
   {
     start_date: "2020-01-01",  // Default: 2020-01-01
     end_date: "2026-02-21",     // Default: today
-    upfront_contrib: 10000,     // Default: $10,000 (matches website)
-    monthly_contrib: 1000,      // Default: $1,000 (matches website)
+    upfront_contrib: 10000,     // Default: $10,000
+    monthly_contrib: 500,       // Default: $500
     variation_ids: ["uuid-progressive", "uuid-balanced", "uuid-conservative"],  // Required
     save_results: false         // Optional: persist to simulation_runs_daily table
   }
@@ -686,9 +696,11 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
   ```
 - [ ] Optional persistence: If `save_results=true`, insert into new `lth_pvr.simulation_runs` and `lth_pvr.simulation_runs_daily` tables
 - [ ] Fee structure (match back-tester):
-    - Platform fee: 0.75% on contributions
-    - Performance fee: 10% (high-water mark)
-    - Exchange trade fee: 8 bps (0.08%) in BTC
+    - Platform fee: 0.75% on contributions (charged in USDT)
+    - Performance fee: 10% (high-water mark, charged in USDT)
+    - Exchange trade fee: 8 bps (0.08%)
+      - **BUY orders:** Fee charged in BTC (receive less BTC)
+      - **SELL orders:** Fee charged in USDT (receive less USDT)
     - Exchange contribution fee: 18 bps (0.18%) in USDT
 - [ ] Error handling:
 
@@ -821,7 +833,7 @@ supabase functions deploy ef_run_lth_pvr_simulator --project-ref wqnmxpooabmedvt
     start_date: "2020-01-01",          // Default: 2020-01-01
     end_date: "2026-02-21",            // Default: today
     upfront_contrib: 10000,            // Default: $10,000
-    monthly_contrib: 1000,             // Default: $1,000
+    monthly_contrib: 500,              // Default: $500
 
     // Grid ranges (optional, uses smart defaults if omitted)
     b1_range: null,  // null = use smart default (current +/- 20% in 10% steps)
@@ -2418,7 +2430,8 @@ lth_pvr.variation_parameter_history (N)
 - Removed multi-strategy support (old Phase 6)
 - Added strategy documentation phase (new Phase 5)
 - Added std_dca comparison phase (new Phase 6)
-- Simulator defaults: $10K upfront, $1K monthly, 2020-01-01 to today
+- **Simulator defaults: $10K upfront, $500 monthly, 2020-01-01 to today**
+- **Fee handling clarified: 8bps in BTC when buying, 8bps in USDT when selling**
 - Optional database persistence (save_results button)
 
 **Next Action:** Begin Phase 1, Iteration 1.1 (Create shared logic module)
