@@ -35,6 +35,7 @@ export interface StrategyConfig {
 
   // Retrace configuration
   enableRetrace: boolean;       // e.g., true (enable retrace exception buys)
+  retraceBase: number;          // e.g., 3 (use B.B3 order size for retrace buys, range: 1-5)
 }
 
 export interface TradingState {
@@ -288,12 +289,15 @@ export function decideTrade(
     exc_b9_to_b7 = false;
   }
 
-  // Trigger retrace buys
+  // Trigger retrace buys (uses configurable Base size)
+  const retraceBaseKey = `B${config.retraceBase}` as keyof typeof config.B;
+  const retracePct = config.B[retraceBaseKey];
+  
   if (exc_b9_to_b7) {
     return {
       action: "BUY",
-      pct: config.B.B3,
-      rule: "Base 3 (retrace B9→B7)",
+      pct: retracePct,
+      rule: `Base ${config.retraceBase} (retrace B9→B7)`,
       note: "Retrace: touched +1.5σ…+2.0σ; now in +0.5σ…+1.0σ",
       state: s,
     };
@@ -302,8 +306,8 @@ export function decideTrade(
   if (exc_b8_to_b6) {
     return {
       action: "BUY",
-      pct: config.B.B3,
-      rule: "Base 3 (retrace B8→B6)",
+      pct: retracePct,
+      rule: `Base ${config.retraceBase} (retrace B8→B6)`,
       note: "Retrace: touched +1.0σ…+1.5σ; now in mean…+0.5σ",
       state: s,
     };

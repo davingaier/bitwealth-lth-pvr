@@ -35,6 +35,7 @@ const PROGRESSIVE_CONFIG: StrategyConfig = {
   momentumLength: 5,
   momentumThreshold: 0.0,
   enableRetrace: true,
+  retraceBase: 3, // Current production default
 };
 
 // Balanced variation (future)
@@ -57,6 +58,7 @@ const BALANCED_CONFIG: StrategyConfig = {
   momentumLength: 5,
   momentumThreshold: 0.0,
   enableRetrace: true,
+  retraceBase: 3,
 };
 
 // Conservative variation (future)
@@ -79,6 +81,7 @@ const CONSERVATIVE_CONFIG: StrategyConfig = {
   momentumLength: 5,
   momentumThreshold: 0.0,
   enableRetrace: true,
+  retraceBase: 3,
 };
 
 // Typical CI bands row (based on 2024-12-15 sample data)

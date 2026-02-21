@@ -1,5 +1,5 @@
 import { getServiceClient } from "./client.ts";
-import { bucketLabel, decideTrade, computeBearPauseAt } from "./lth_pvr_logic.ts";
+import { bucketLabel, decideTrade, computeBearPauseAt, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 // --- Helpers -------------------------------------------------
@@ -59,8 +59,32 @@ Deno.serve(async (_req: any)=>{
     // CRITICAL: Log actual CI bands data to track price source
     console.info(`ef_generate_decisions CI BANDS: date=${signalStr} btc_price=${ci.btc_price} px=${px} ci_obj=`, JSON.stringify(ci));
     
+    // PROGRESSIVE VARIATION CONFIG (hard-coded until Phase 2 database schema)
+    // TODO: Load from lth_pvr.strategy_variation_templates in Phase 2
+    const PROGRESSIVE_CONFIG: StrategyConfig = {
+      B: {
+        B1: 0.22796,
+        B2: 0.21397,
+        B3: 0.19943,
+        B4: 0.18088,
+        B5: 0.12229,
+        B6: 0.00157,
+        B7: 0.00200,
+        B8: 0.00441,
+        B9: 0.01287,
+        B10: 0.03300,
+        B11: 0.09572,
+      },
+      bearPauseEnterSigma: 2.0,
+      bearPauseExitSigma: -1.0,
+      momentumLength: 5,
+      momentumThreshold: 0.0,
+      enableRetrace: true,
+      retraceBase: 3, // Current production: uses Base 3 for retrace buys
+    };
+    
     // If we start mid-pause and there's no prior state, we need today's pause flag.
-    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr);
+    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, PROGRESSIVE_CONFIG);
     // Active customers for this org (public.customer_strategies)
     // CRITICAL: Only process customers with registration_status='active'
     let custs = null;
@@ -116,35 +140,35 @@ Deno.serve(async (_req: any)=>{
       if (svErr) throw new Error(`strategy_versions query failed: ${svErr.message}`);
       for (const s of svs ?? [])svMap.set(String(s.strategy_version_id), s);
     }
-    const DEFAULT_B = {
-      B1: 0.22796,
-      B2: 0.21397,
-      B3: 0.19943,
-      B4: 0.18088,
-      B5: 0.12229,
-      B6: 0.00157,
-      B7: 0.00200,
-      B8: 0.00441,
-      B9: 0.01287,
-      B10: 0.03300,
-      B11: 0.09572
-    };
+    // NOTE: strategy_versions table support maintained for backward compatibility
+    // TODO: Deprecate in Phase 2 when strategy_variation_templates is implemented
+    const DEFAULT_B = PROGRESSIVE_CONFIG.B;
+    
     let wrote = 0;
     for (const c of custs ?? []){
       try {
+        // Build config from strategy_versions (legacy) or use Progressive defaults
         const sv = svMap.get(String(c.strategy_version_id)) ?? {};
-        const B = {
-          B1: Number(sv.b1 ?? DEFAULT_B.B1),
-          B2: Number(sv.b2 ?? DEFAULT_B.B2),
-          B3: Number(sv.b3 ?? DEFAULT_B.B3),
-          B4: Number(sv.b4 ?? DEFAULT_B.B4),
-          B5: Number(sv.b5 ?? DEFAULT_B.B5),
-          B6: Number(sv.b6 ?? DEFAULT_B.B6),
-          B7: Number(sv.b7 ?? DEFAULT_B.B7),
-          B8: Number(sv.b8 ?? DEFAULT_B.B8),
-          B9: Number(sv.b9 ?? DEFAULT_B.B9),
-          B10: Number(sv.b10 ?? DEFAULT_B.B10),
-          B11: Number(sv.b11 ?? DEFAULT_B.B11)
+        const config: StrategyConfig = {
+          B: {
+            B1: Number(sv.b1 ?? DEFAULT_B.B1),
+            B2: Number(sv.b2 ?? DEFAULT_B.B2),
+            B3: Number(sv.b3 ?? DEFAULT_B.B3),
+            B4: Number(sv.b4 ?? DEFAULT_B.B4),
+            B5: Number(sv.b5 ?? DEFAULT_B.B5),
+            B6: Number(sv.b6 ?? DEFAULT_B.B6),
+            B7: Number(sv.b7 ?? DEFAULT_B.B7),
+            B8: Number(sv.b8 ?? DEFAULT_B.B8),
+            B9: Number(sv.b9 ?? DEFAULT_B.B9),
+            B10: Number(sv.b10 ?? DEFAULT_B.B10),
+            B11: Number(sv.b11 ?? DEFAULT_B.B11),
+          },
+          bearPauseEnterSigma: PROGRESSIVE_CONFIG.bearPauseEnterSigma,
+          bearPauseExitSigma: PROGRESSIVE_CONFIG.bearPauseExitSigma,
+          momentumLength: PROGRESSIVE_CONFIG.momentumLength,
+          momentumThreshold: PROGRESSIVE_CONFIG.momentumThreshold,
+          enableRetrace: PROGRESSIVE_CONFIG.enableRetrace,
+          retraceBase: PROGRESSIVE_CONFIG.retraceBase,
         };
         // prior state (< signal date)
         const { data: prevs, error: pErr } = await sb.from("customer_state_daily").select("bear_pause,was_above_p1,was_above_p15,r1_armed,r15_armed").eq("org_id", org_id).eq("customer_id", c.customer_id).lt("date", signalStr).order("date", {
@@ -165,7 +189,7 @@ Deno.serve(async (_req: any)=>{
           r1_armed: true,
           r15_armed: true
         };
-        const { action, pct, rule, note, state } = decideTrade(px, ci, roc5, prev, B);
+        const { action, pct, rule, note, state } = decideTrade(px, ci, roc5, prev, config);
         const band_bucket = bucketLabel(px, ci);
         // decisions upsert
         const up = await sb.from("decisions_daily").upsert({

@@ -155,6 +155,7 @@ CREATE TABLE lth_pvr.strategy_variation_templates (
   momentum_length INT DEFAULT 5,
   momentum_threshold NUMERIC DEFAULT 0.0,
   enable_retrace BOOLEAN DEFAULT TRUE,
+  retrace_base INT DEFAULT 3,  -- Which Base to use for retrace buys (1-5 for B1-B5)
   
   -- Status & Audit
   is_active BOOLEAN DEFAULT true,
@@ -197,7 +198,7 @@ INSERT INTO lth_pvr.strategy_variation_templates (
   org_id, variation_name, display_name, description, sort_order,
   bear_pause_enter_sigma, bear_pause_exit_sigma,
   b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11,
-  momentum_length, momentum_threshold,
+  momentum_length, momentum_threshold, enable_retrace, retrace_base,
   is_production
 ) VALUES
   -- Progressive: CURRENT PRODUCTION (enters +2.0σ, exits -1.0σ)
@@ -208,7 +209,7 @@ INSERT INTO lth_pvr.strategy_variation_templates (
     2.0, -1.0,  -- Bear pause triggers (CURRENT PRODUCTION)
     0.22796, 0.21397, 0.19943, 0.18088, 0.12229,  -- Buy tiers (CURRENT)
     0.00157, 0.00200, 0.00441, 0.01287, 0.03300, 0.09572,  -- Sell tiers (CURRENT)
-    5, 0.0,  -- Momentum params (CURRENT)
+    5, 0.0, true, 3,  -- Momentum params + retrace (CURRENT: Base 3)
     true  -- Production default
   ),
   
@@ -220,7 +221,7 @@ INSERT INTO lth_pvr.strategy_variation_templates (
     2.0, -0.75,  -- Bear pause: enter +2.0σ, exit -0.75σ
     0.20000, 0.19000, 0.18000, 0.16000, 0.11000,  -- Buy tiers (moderate)
     0.00200, 0.00300, 0.00500, 0.01500, 0.04000, 0.10000,  -- Sell tiers (moderate)
-    5, 0.0,  -- Momentum params (same as Progressive)
+    5, 0.0, true, 3,  -- Momentum params + retrace (same as Progressive)
     false  -- Not yet production
   ),
   
@@ -232,7 +233,7 @@ INSERT INTO lth_pvr.strategy_variation_templates (
     2.0, 0.0,  -- Bear pause: enter +2.0σ, exit at mean
     0.18000, 0.17000, 0.16000, 0.14000, 0.10000,  -- Buy tiers (smaller)
     0.00300, 0.00400, 0.00700, 0.02000, 0.05000, 0.12000,  -- Sell tiers (larger)
-    5, 0.0,  -- Momentum params (same as Progressive)
+    5, 0.0, true, 3,  -- Momentum params + retrace (same as Progressive)
     false  -- Not yet production
   );
 
@@ -356,7 +357,8 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
     bearPauseExitSigma: Number(c.strategy_variation.bear_pause_exit_sigma),
     momentumLength: Number(c.strategy_variation.momentum_length ?? 5),
     momentumThreshold: Number(c.strategy_variation.momentum_threshold ?? 0),
-    enableRetrace: c.strategy_variation.enable_retrace ?? true
+    enableRetrace: c.strategy_variation.enable_retrace ?? true,
+    retraceBase: Number(c.strategy_variation.retrace_base ?? 3)
   };
   ```
 - [ ] Pass `config` to `decideTrade()` instead of `B` object
@@ -398,7 +400,8 @@ WHERE strategy_id = (SELECT id FROM public.strategies WHERE code = 'LTH_PVR');
     bearPauseExitSigma: toNum(params.bear_pause_exit_sigma, -1.0),
     momentumLength: toNum(params.momo_len, 5),
     momentumThreshold: toNum(params.momo_thr, 0),
-    enableRetrace: params.enable_retrace ?? true
+    enableRetrace: params.enable_retrace ?? true,
+    retraceBase: toNum(params.retrace_base, 3)
   };
   ```
 - [ ] Add new columns to `lth_pvr_bt.bt_params` table:
@@ -756,6 +759,9 @@ supabase functions deploy ef_run_lth_pvr_simulator --project-ref wqnmxpooabmedvt
     momoLengthRange: number[];     // e.g., [1, 3, 5, 7, 10, 14, 21, 30] days
     momoThresholdRange: number[];  // e.g., [-0.02, -0.01, 0.0, 0.01, 0.02] (percentage)
 
+    // Retrace Base optimization (required)
+    retraceBaseRange: number[];    // e.g., [1, 2, 3, 4, 5] (B1-B5 buy Bases only)
+
     // Optimization metric
     objective: "nav" | "roi" | "cagr" | "sharpe";  // What to maximize
   }
@@ -787,7 +793,7 @@ supabase functions deploy ef_run_lth_pvr_simulator --project-ref wqnmxpooabmedvt
   ```
 - [ ] Grid search logic:
 
-  - Generate all combinations of B1-B11 + momo params
+  - Generate all combinations of B1-B11 + momentum params + retrace Base
   - For each combination:
       - Run simulation via `runSimulation()`
       - Calculate objective score
