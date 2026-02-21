@@ -59,47 +59,24 @@ Deno.serve(async (_req: any)=>{
     // CRITICAL: Log actual CI bands data to track price source
     console.info(`ef_generate_decisions CI BANDS: date=${signalStr} btc_price=${ci.btc_price} px=${px} ci_obj=`, JSON.stringify(ci));
     
-    // PROGRESSIVE VARIATION CONFIG (hard-coded until Phase 2 database schema)
-    // TODO: Load from lth_pvr.strategy_variation_templates in Phase 2
-    const PROGRESSIVE_CONFIG: StrategyConfig = {
-      B: {
-        B1: 0.22796,
-        B2: 0.21397,
-        B3: 0.19943,
-        B4: 0.18088,
-        B5: 0.12229,
-        B6: 0.00157,
-        B7: 0.00200,
-        B8: 0.00441,
-        B9: 0.01287,
-        B10: 0.03300,
-        B11: 0.09572,
-      },
-      bearPauseEnterSigma: 2.0,
-      bearPauseExitSigma: -1.0,
-      momentumLength: 5,
-      momentumThreshold: 0.0,
-      enableRetrace: true,
-      retraceBase: 3, // Current production: uses Base 3 for retrace buys
-    };
-    
-    // If we start mid-pause and there's no prior state, we need today's pause flag.
-    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, PROGRESSIVE_CONFIG);
-    // Active customers for this org (public.customer_strategies)
-    // CRITICAL: Only process customers with registration_status='active'
+    // Active customers with their strategy variations (Phase 2: Load from database)
+    // Note: Must query customer_strategies and strategy_variation_templates separately
+    // because they're in different schemas (public vs lth_pvr) and PostgREST doesn't auto-detect cross-schema FKs
     let custs = null;
+    let variationsMap = new Map();
     {
-      // Query customer_strategies with live_enabled=true (consolidated table)
+      // Step 1: Get active LTH_PVR customers
       const { data: cs, error: csErr } = await sb
         .schema("public")
         .from("customer_strategies")
-        .select("customer_id, strategy_version_id")
+        .select("customer_id, strategy_variation_id")
         .eq("org_id", org_id)
+        .eq("strategy_code", "LTH_PVR")
         .eq("live_enabled", true);
       
       if (csErr) throw new Error(`customer_strategies query failed: ${csErr.message}`);
       
-      // Filter by registration_status='active' from customer_details (public schema)
+      // Step 2: Filter by registration_status='active' from customer_details
       if (cs && cs.length > 0) {
         const customerIds = cs.map(c => c.customer_id);
         const { data: activeCustomers, error: cdErr } = await sb
@@ -114,11 +91,28 @@ Deno.serve(async (_req: any)=>{
         // Only include customers that are in 'active' status
         const activeIds = new Set(activeCustomers?.map(c => c.customer_id) ?? []);
         custs = cs.filter(c => activeIds.has(c.customer_id));
+        
+        // Step 3: Get strategy variations for these customers
+        const variationIds = Array.from(new Set(custs.map(c => c.strategy_variation_id).filter(Boolean)));
+        if (variationIds.length > 0) {
+          const { data: variations, error: varErr } = await sb
+            .schema("lth_pvr")
+            .from("strategy_variation_templates")
+            .select("*")
+            .in("id", variationIds);
+          
+          if (varErr) throw new Error(`strategy_variation_templates query failed: ${varErr.message}`);
+          
+          // Build variations map for quick lookup
+          for (const v of variations ?? []) {
+            variationsMap.set(String(v.id), v);
+          }
+        }
       } else {
         custs = [];
       }
     }
-    console.info(`ef_generate_decisions: ${signalStr} px=${px} roc5=${roc5.toFixed(4)} pauseNow=${pauseNow} custs=${custs?.length ?? 0}`);
+    console.info(`ef_generate_decisions: ${signalStr} px=${px} roc5=${roc5.toFixed(4)} custs=${custs?.length ?? 0}`);
     
     // Alert if no active customers found
     if (!custs || custs.length === 0) {
@@ -130,45 +124,72 @@ Deno.serve(async (_req: any)=>{
         { signal_date: signalStr, trade_date: tradeStr },
         org_id
       );
+      return new Response(JSON.stringify({ ok: true, wrote: 0, reason: "no_active_customers" }), { headers: { "Content-Type": "application/json" }});
     }
     
-    // Strategy versions map
-    const svIds = Array.from(new Set((custs ?? []).map((c: any)=>c.strategy_version_id).filter(Boolean)));
-    const svMap = new Map();
-    if (svIds.length) {
-      const { data: svs, error: svErr } = await sb.from("strategy_versions").select("strategy_version_id,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11").in("strategy_version_id", svIds);
-      if (svErr) throw new Error(`strategy_versions query failed: ${svErr.message}`);
-      for (const s of svs ?? [])svMap.set(String(s.strategy_version_id), s);
+    // Get default production config for computeBearPauseAt (uses first customer's variation as proxy)
+    // All customers currently use same variation (progressive), so this is safe
+    const firstCustomer = custs[0];
+    const defaultVariation = variationsMap.get(String(firstCustomer.strategy_variation_id));
+    if (!defaultVariation) {
+      throw new Error(`Customer ${firstCustomer.customer_id} has no strategy_variation_id assigned or variation not found`);
     }
-    // NOTE: strategy_versions table support maintained for backward compatibility
-    // TODO: Deprecate in Phase 2 when strategy_variation_templates is implemented
-    const DEFAULT_B = PROGRESSIVE_CONFIG.B;
+    
+    const defaultConfig: StrategyConfig = {
+      B: {
+        B1: Number(defaultVariation.b1 ?? 0.22796),
+        B2: Number(defaultVariation.b2 ?? 0.21397),
+        B3: Number(defaultVariation.b3 ?? 0.19943),
+        B4: Number(defaultVariation.b4 ?? 0.18088),
+        B5: Number(defaultVariation.b5 ?? 0.12229),
+        B6: Number(defaultVariation.b6 ?? 0.00157),
+        B7: Number(defaultVariation.b7 ?? 0.00200),
+        B8: Number(defaultVariation.b8 ?? 0.00441),
+        B9: Number(defaultVariation.b9 ?? 0.01287),
+        B10: Number(defaultVariation.b10 ?? 0.03300),
+        B11: Number(defaultVariation.b11 ?? 0.09572),
+      },
+      bearPauseEnterSigma: Number(defaultVariation.bear_pause_enter_sigma ?? 2.0),
+      bearPauseExitSigma: Number(defaultVariation.bear_pause_exit_sigma ?? -1.0),
+      momentumLength: Number(defaultVariation.momentum_length ?? 5),
+      momentumThreshold: Number(defaultVariation.momentum_threshold ?? 0.0),
+      enableRetrace: defaultVariation.enable_retrace ?? true,
+      retraceBase: Number(defaultVariation.retrace_base ?? 3),
+    };
+    
+    // Compute bear pause state (used for all customers since they share same variation)
+    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, defaultConfig);
     
     let wrote = 0;
     for (const c of custs ?? []){
       try {
-        // Build config from strategy_versions (legacy) or use Progressive defaults
-        const sv = svMap.get(String(c.strategy_version_id)) ?? {};
+        // Build config from strategy_variation_templates (Phase 2: Database-driven)
+        const variation = variationsMap.get(String(c.strategy_variation_id));
+        if (!variation) {
+          console.warn(`Customer ${c.customer_id} has no strategy_variation - skipping`);
+          continue;
+        }
+        
         const config: StrategyConfig = {
           B: {
-            B1: Number(sv.b1 ?? DEFAULT_B.B1),
-            B2: Number(sv.b2 ?? DEFAULT_B.B2),
-            B3: Number(sv.b3 ?? DEFAULT_B.B3),
-            B4: Number(sv.b4 ?? DEFAULT_B.B4),
-            B5: Number(sv.b5 ?? DEFAULT_B.B5),
-            B6: Number(sv.b6 ?? DEFAULT_B.B6),
-            B7: Number(sv.b7 ?? DEFAULT_B.B7),
-            B8: Number(sv.b8 ?? DEFAULT_B.B8),
-            B9: Number(sv.b9 ?? DEFAULT_B.B9),
-            B10: Number(sv.b10 ?? DEFAULT_B.B10),
-            B11: Number(sv.b11 ?? DEFAULT_B.B11),
+            B1: Number(variation.b1 ?? 0.22796),
+            B2: Number(variation.b2 ?? 0.21397),
+            B3: Number(variation.b3 ?? 0.19943),
+            B4: Number(variation.b4 ?? 0.18088),
+            B5: Number(variation.b5 ?? 0.12229),
+            B6: Number(variation.b6 ?? 0.00157),
+            B7: Number(variation.b7 ?? 0.00200),
+            B8: Number(variation.b8 ?? 0.00441),
+            B9: Number(variation.b9 ?? 0.01287),
+            B10: Number(variation.b10 ?? 0.03300),
+            B11: Number(variation.b11 ?? 0.09572),
           },
-          bearPauseEnterSigma: PROGRESSIVE_CONFIG.bearPauseEnterSigma,
-          bearPauseExitSigma: PROGRESSIVE_CONFIG.bearPauseExitSigma,
-          momentumLength: PROGRESSIVE_CONFIG.momentumLength,
-          momentumThreshold: PROGRESSIVE_CONFIG.momentumThreshold,
-          enableRetrace: PROGRESSIVE_CONFIG.enableRetrace,
-          retraceBase: PROGRESSIVE_CONFIG.retraceBase,
+          bearPauseEnterSigma: Number(variation.bear_pause_enter_sigma ?? 2.0),
+          bearPauseExitSigma: Number(variation.bear_pause_exit_sigma ?? -1.0),
+          momentumLength: Number(variation.momentum_length ?? 5),
+          momentumThreshold: Number(variation.momentum_threshold ?? 0.0),
+          enableRetrace: variation.enable_retrace ?? true,
+          retraceBase: Number(variation.retrace_base ?? 3),
         };
         // prior state (< signal date)
         const { data: prevs, error: pErr } = await sb.from("customer_state_daily").select("bear_pause,was_above_p1,was_above_p15,r1_armed,r15_armed").eq("org_id", org_id).eq("customer_id", c.customer_id).lt("date", signalStr).order("date", {
