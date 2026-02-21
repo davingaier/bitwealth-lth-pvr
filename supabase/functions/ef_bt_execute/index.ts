@@ -1,5 +1,5 @@
 import { getServiceClient } from "./client.ts";
-import { bucketLabel, decideTrade } from "./lth_pvr_logic.ts";
+import { bucketLabel, decideTrade, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -153,17 +153,24 @@ Deno.serve(async (req)=>{
     };
 
     const allZeroBands = Object.values(B).every((v) => !v || v === 0);
+    
+    // Build StrategyConfig from bt_params (will be updated if using defaults)
+    let config: StrategyConfig = {
+      B,
+      bearPauseEnterSigma: toNum(params.bear_pause_enter_sigma, 2.0),
+      bearPauseExitSigma: toNum(params.bear_pause_exit_sigma, -1.0),
+      momentumLength: Math.max(1, Math.trunc(toNum(params.momo_len, 5))),
+      momentumThreshold: toNum(params.momo_thr, 0.0),
+      enableRetrace: params.enable_retrace === null || typeof params.enable_retrace === "undefined" ? true : !!params.enable_retrace,
+      retraceBase: toNum(params.retrace_base, 3)
+    };
 
     if (allZeroBands) {
       // Use our defaults when the bt_params row has no band values yet
       B = { ...defaultBands };
+      config.B = B;
 
-      // Persist defaults + enable_retrace so bt_params reflects what the sim used
-      const enableRetrace =
-        params.enable_retrace === null || typeof params.enable_retrace === "undefined"
-          ? true
-          : !!params.enable_retrace;
-
+      // Persist defaults so bt_params reflects what the sim used
       await sbBt
         .from("bt_params")
         .update({
@@ -178,19 +185,23 @@ Deno.serve(async (req)=>{
           b9: B.B9,
           b10: B.B10,
           b11: B.B11,
-          enable_retrace: enableRetrace
+          enable_retrace: config.enableRetrace,
+          bear_pause_enter_sigma: config.bearPauseEnterSigma,
+          bear_pause_exit_sigma: config.bearPauseExitSigma,
+          retrace_base: config.retraceBase
         })
         .eq("bt_run_id", bt_run_id);
-
-      params.enable_retrace = enableRetrace;
     } else if (params.enable_retrace === null || typeof params.enable_retrace === "undefined") {
       // Bands exist but enable_retrace is still null – default it to TRUE
       await sbBt
         .from("bt_params")
-        .update({ enable_retrace: true })
+        .update({ 
+          enable_retrace: true,
+          bear_pause_enter_sigma: config.bearPauseEnterSigma,
+          bear_pause_exit_sigma: config.bearPauseExitSigma,
+          retrace_base: config.retraceBase
+        })
         .eq("bt_run_id", bt_run_id);
-
-      params.enable_retrace = true;
     }
 
     // Load ALL price/band rows for the date range.
@@ -393,7 +404,7 @@ Deno.serve(async (req)=>{
       const roc5 = rocSeries[i] ?? 0;
       // Sync precomputed bear_pause from CI view into state
       lthState = syncBearPauseFromRow(lthState, row);
-      const decision = decideTrade(px, row, roc5, lthState, B);
+      const decision = decideTrade(px, row, roc5, lthState, config);
       lthState = decision.state || lthState;
       if (decision.action === "BUY" && decision.pct > 0 && px > 0) {
         const baseUsdt = usdtBal;
