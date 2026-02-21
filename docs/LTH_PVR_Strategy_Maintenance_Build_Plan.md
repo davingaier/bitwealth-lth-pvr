@@ -917,10 +917,96 @@ supabase functions deploy ef_run_lth_pvr_simulator --project-ref wqnmxpooabmedvt
 
 ### Iteration 3.3: Create Grid Search Optimizer ✅
 
+**Status:** COMPLETE (2026-02-21)
+
 **Tasks:**
 
-- [ ] Create `supabase/functions/_shared/lth_pvr_optimizer.ts`
-- [ ] Implement grid search algorithm:
+- [x] Create `supabase/functions/_shared/lth_pvr_optimizer.ts`
+- [x] Implement core functions:
+  - `optimizeParameters(config, ciData, params)` - Main grid search orchestrator
+  - `generateSmartRanges(currentConfig, gridSize)` - Generate ±20% variance ranges around current values
+  - `validateOptimizationConfig(config)` - Validation with error messages
+- [x] Define TypeScript interfaces:
+  - `ParameterRange` - Min/max/step for a single parameter dimension
+  - `OptimizationConfig` - Complete optimization configuration
+  - `OptimizationResult` - Single combination result
+  - `OptimizationOutput` - Complete optimization results
+- [x] Implement grid search algorithm:
+  - 11 nested loops for B1-B11 (only optimize parameters with specified ranges)
+  - 2 additional loops for momentum_length and momentum_threshold
+  - Total combinations = product of all range lengths
+  - Skip invalid combinations (monotonicity violations)
+- [x] **Optimization objectives (4 options - NAV added per user request):**
+  - **nav**: Maximize final Net Asset Value (absolute returns)
+  - **cagr**: Maximize CAGR (default, risk-neutral)
+  - **roi**: Maximize ROI percentage
+  - **sharpe**: Maximize Sharpe ratio (CAGR / MaxDD - risk-adjusted returns)
+- [x] **Constraint validation:**
+  - Buy side: B1 >= B2 >= B3 >= B4 >= B5 (monotonicity toward mean)
+  - Sell side: B6 <= B7 <= B8 <= B9 <= B10 <= B11 (monotonicity away from mean)
+  - No constraint between B5 and B6 (opposite sides of mean)
+  - Skip invalid combinations, increment combinations_skipped counter
+- [x] **Bear pause triggers NOT optimized:**
+  - Fixed per variation design
+  - Progressive: Enter +2.0σ, Exit -1.0σ
+  - Balanced: Enter +2.0σ, Exit -0.75σ
+  - Conservative: Enter +2.0σ, Exit 0σ (mean)
+- [x] Progress reporting:
+  - Optional `onProgress` callback
+  - Called every N% complete (default: 10%)
+  - Parameters: (current, total, percent)
+- [x] Results ranking:
+  - Sort by objective value (descending)
+  - Assign rank (1 = best)
+  - Return top N results (default: 10)
+- [x] Execution time tracking (seconds)
+
+**Implementation Notes:**
+
+```typescript
+// Example usage:
+const optConfig: OptimizationConfig = {
+  baseConfig: progressiveConfig,
+  b_ranges: {
+    b1: { min: 0.20, max: 0.25, step: 0.01 },  // 6 values
+    b2: { min: 0.18, max: 0.23, step: 0.01 }   // 6 values
+    // ... other B fixed (1 value each)
+  },
+  momo_length_range: { min: 3, max: 7, step: 1 },     // 5 values
+  momo_threshold_range: { min: -0.02, max: 0.02, step: 0.01 },  // 5 values
+  objective: 'nav',  // Maximize NAV
+  max_results: 10
+};
+// Total combinations: 6 × 6 × 5 × 5 = 900 simulations
+
+const results = optimizeParameters(optConfig, ciData, simParams);
+// Returns: best config, top 10 results, combinations tested/skipped, execution time
+```
+
+**Smart Ranges Helper:**
+
+```typescript
+// Generate ±20% variance around current config
+const ranges = generateSmartRanges(progressiveConfig, 3);
+// For B1 = 0.22796:
+// { min: 0.18237, max: 0.27355, step: 0.04559 }
+// Values: [0.18237, 0.22796, 0.27355]
+```
+
+**Validation:**
+- ✅ All 4 optimization objectives implemented (NAV, CAGR, ROI, Sharpe)
+- ✅ B1-B11 monotonicity constraint validation
+- ✅ Smart range generation (±20% variance)
+- ✅ Configuration validation with error messages
+- ⏳ 7/11 test cases pending edge function for end-to-end validation
+
+**Deliverable:** Grid search optimizer for B1-B11 + momentum params (no bear pause)
+
+**Files Created:**
+
+- `supabase/functions/_shared/lth_pvr_optimizer.ts` (465 lines)
+
+---
 
   ```typescript
   export interface OptimizationInput {
