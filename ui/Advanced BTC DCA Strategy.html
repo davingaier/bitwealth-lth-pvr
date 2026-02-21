@@ -43,6 +43,7 @@
       border-bottom:1px solid var(--border);
     }
     /* Show the context bar only when a strategy module is active */
+    body:has(#strategy-maintenance-module:target) .context-bar,
     body:has(#balance-maintenance-module:target) .context-bar,
     body:has(#transactions-module:target) .context-bar,
     body:has(#reports-module:target) .context-bar{
@@ -833,8 +834,87 @@
       </div>
     </div>
 
+    <!-- ===================== Strategy Maintenance ===================== -->
     <div id="strategy-maintenance-module" class="module">
-      <h2>Strategy Maintenance</h2><p>This module is under construction.</p>
+      <h2>Strategy Maintenance</h2>
+      
+      <!-- Strategy Selector Bar -->
+      <div class="strategy-selector-bar" style="display:flex;align-items:center;gap:1rem;padding:1rem 0;margin-bottom:1.5rem;border-bottom:1px solid var(--border);">
+        <label for="strategyTypeSelector" style="font-weight:600;">Strategy Type:</label>
+        <select id="strategyTypeSelector" class="context-select" style="min-width:300px;">
+          <option value="">-- Select Strategy --</option>
+          <option value="LTH_PVR" selected>LTH PVR BTC DCA</option>
+          <!-- Future: ADV_DCA, other strategies -->
+        </select>
+      </div>
+
+      <!-- LTH PVR Strategy Panel -->
+      <div id="lthPvrStrategyPanel" class="strategy-panel" style="display:block;">
+        <h3>LTH PVR Strategy Variations</h3>
+        <p style="color:var(--muted);margin-bottom:1.5rem;">
+          Manage strategy variations, run simulations, and optimize parameters.
+        </p>
+
+        <!-- Variation Cards Container -->
+        <div id="variationCardsContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:1.5rem;margin-bottom:2rem;">
+          <!-- Variations loaded dynamically -->
+          <div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);">
+            Loading variations...
+          </div>
+        </div>
+
+        <!-- Simulation Controls (Hidden by default) -->
+        <div id="simulationControls" class="card" style="display:none;max-width:800px;margin:2rem auto;">
+          <h3>Run Simulation</h3>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1rem;">
+            <div>
+              <label for="simStartDate" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
+              <input id="simStartDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
+            <div>
+              <label for="simEndDate" style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
+              <input id="simEndDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
+            <div>
+              <label for="simUpfront" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Upfront Investment ($):</label>
+              <input id="simUpfront" type="number" min="0" step="1000" value="10000" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
+            <div>
+              <label for="simMonthly" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Monthly Contribution ($):</label>
+              <input id="simMonthly" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
+          </div>
+          <div style="display:flex;gap:.75rem;justify-content:center;">
+            <button id="runSimBtn" type="button" style="padding:.75rem 1.5rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Run Simulation</button>
+            <button id="cancelSimBtn" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Simulation Results Panel (Hidden by default) -->
+        <div id="simulationResultsPanel" class="card" style="display:none;max-width:1000px;margin:2rem auto;">
+          <!-- Results populated dynamically -->
+        </div>
+
+        <!-- Optimization Controls (Hidden by default) -->
+        <div id="optimizationControls" class="card" style="display:none;max-width:800px;margin:2rem auto;">
+          <h3>Optimize Strategy Parameters</h3>
+          <p style="color:var(--muted);margin-bottom:1rem;">
+            Grid search optimization to find the best parameter combination for maximum returns.
+          </p>
+          <!-- Optimization UI to be implemented in Phase 3.8 -->
+        </div>
+
+        <!-- Optimization Results Panel (Hidden by default) -->
+        <div id="optimizationResultsPanel" class="card" style="display:none;max-width:1000px;margin:2rem auto;">
+          <!-- Results populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Future strategy panels (ADV_DCA, etc.) -->
+      <div id="advDcaStrategyPanel" class="strategy-panel" style="display:none;">
+        <h3>Advanced DCA Strategy</h3>
+        <p style="color:var(--muted);">Coming soon...</p>
+      </div>
     </div>
 
     <!-- ===================== Import Daily Data ===================== -->
@@ -8746,6 +8826,320 @@ This will:
         });
       }
     }, 5 * 60 * 1000);
+  })();
+
+  // =================== Strategy Maintenance Module ===================
+  (function() {
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0OTc2NzMsImV4cCI6MjA0OTA3MzY3M30.t7YhiLG9j1F1rkipICLbGRFAC3Tl44TqsN3jtv8zOvA';
+
+    // State
+    let currentVariations = [];
+    let currentVariationId = null;
+
+    // DOM elements
+    const strategyTypeSelector = document.getElementById('strategyTypeSelector');
+    const lthPvrStrategyPanel = document.getElementById('lthPvrStrategyPanel');
+    const variationCardsContainer = document.getElementById('variationCardsContainer');
+    const simulationControls = document.getElementById('simulationControls');
+    const simulationResultsPanel = document.getElementById('simulationResultsPanel');
+    const optimizationControls = document.getElementById('optimizationControls');
+    const optimizationResultsPanel = document.getElementById('optimizationResultsPanel');
+
+    // Strategy type selector handler
+    strategyTypeSelector.addEventListener('change', showStrategyMaintenance);
+
+    function showStrategyMaintenance() {
+      const strategyType = strategyTypeSelector.value;
+
+      // Hide all strategy-specific panels
+      document.querySelectorAll('.strategy-panel').forEach(p => p.style.display = 'none');
+
+      // Show selected strategy panel
+      if (strategyType === 'LTH_PVR') {
+        lthPvrStrategyPanel.style.display = 'block';
+        loadLthPvrVariations();
+      }
+      // Future: else if (strategyType === 'ADV_DCA') { ... }
+    }
+
+    // Load LTH PVR variations from database
+    async function loadLthPvrVariations() {
+      try {
+        variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);">Loading variations...</div>';
+
+        // Get org_id from context bar
+        const orgSelect = document.getElementById('orgSelect');
+        const orgId = orgSelect?.value;
+
+        if (!orgId) {
+          variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Please select an organization first</div>';
+          return;
+        }
+
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .select('*')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .order('sort_order');
+
+        if (error) {
+          console.error('Error loading variations:', error);
+          variationCardsContainer.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Error: ${error.message}</div>`;
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);">No variations found</div>';
+          return;
+        }
+
+        currentVariations = data;
+        renderVariationCards(data);
+
+      } catch (err) {
+        console.error('Error in loadLthPvrVariations:', err);
+        variationCardsContainer.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Unexpected error: ${err.message}</div>`;
+      }
+    }
+
+    // Render variation cards
+    function renderVariationCards(variations) {
+      variationCardsContainer.innerHTML = variations.map(v => {
+        const config = v.strategy_config || {};
+        const B = config.B || {};
+        
+        return `
+          <div class="variation-card" data-variation-id="${v.id}" style="background:#f8f9fa;border:1px solid var(--border);border-radius:12px;padding:1.5rem;position:relative;">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:start;margin-bottom:1rem;">
+              <h4 style="margin:0;text-transform:capitalize;">${escapeHtml(v.variation_name)}</h4>
+              ${v.is_production ? '<span class="badge-production" style="background:#10b981;color:#fff;padding:2px 8px;font-size:11px;border-radius:999px;">PRODUCTION</span>' : ''}
+            </div>
+            <div class="card-body">
+              <p style="color:var(--muted);font-size:.9rem;margin-bottom:1rem;">${v.description || 'No description'}</p>
+              <div class="metrics-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;margin-bottom:1rem;font-size:.85rem;">
+                <div>
+                  <span style="color:var(--muted);">Bear Pause Entry:</span>
+                  <strong style="float:right;">${v.bear_pause_enter_sigma > 0 ? '+' : ''}${v.bear_pause_enter_sigma?.toFixed(1) || 'N/A'}σ</strong>
+                </div>
+                <div>
+                  <span style="color:var(--muted);">Bear Pause Exit:</span>
+                  <strong style="float:right;">${v.bear_pause_exit_sigma > 0 ? '+' : ''}${v.bear_pause_exit_sigma?.toFixed(1) || 'N/A'}σ</strong>
+                </div>
+                <div>
+                  <span style="color:var(--muted);">B1 (Buy Tier 1):</span>
+                  <strong style="float:right;">${((B.B1 || 0) * 100).toFixed(2)}%</strong>
+                </div>
+                <div>
+                  <span style="color:var(--muted);">B6 (Sell Tier 1):</span>
+                  <strong style="float:right;">${((B.B6 || 0) * 100).toFixed(3)}%</strong>
+                </div>
+              </div>
+              <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                <button onclick="window.strategyMaintenance.viewVariationDetails('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">View Details</button>
+                <button onclick="window.strategyMaintenance.showSimulationControls('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">Run Simulation</button>
+                <button onclick="window.strategyMaintenance.optimizeVariation('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">Optimize</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // View variation details
+    function viewVariationDetails(variationId) {
+      const variation = currentVariations.find(v => v.id === variationId);
+      if (!variation) return;
+
+      const config = variation.strategy_config || {};
+      const B = config.B || {};
+
+      alert(`Variation: ${variation.variation_name}
+
+Description: ${variation.description}
+
+Bear Pause Configuration:
+  Entry Sigma: ${variation.bear_pause_enter_sigma}
+  Exit Sigma: ${variation.bear_pause_exit_sigma}
+
+Buy Tiers (B1-B5):
+  B1: ${((B.B1 || 0) * 100).toFixed(2)}%
+  B2: ${((B.B2 || 0) * 100).toFixed(2)}%
+  B3: ${((B.B3 || 0) * 100).toFixed(2)}%
+  B4: ${((B.B4 || 0) * 100).toFixed(2)}%
+  B5: ${((B.B5 || 0) * 100).toFixed(2)}%
+
+Sell Tiers (B6-B11):
+  B6: ${((B.B6 || 0) * 100).toFixed(3)}%
+  B7: ${((B.B7 || 0) * 100).toFixed(3)}%
+  B8: ${((B.B8 || 0) * 100).toFixed(3)}%
+  B9: ${((B.B9 || 0) * 100).toFixed(3)}%
+  B10: ${((B.B10 || 0) * 100).toFixed(3)}%
+  B11: ${((B.B11 || 0) * 100).toFixed(3)}%
+
+Momentum:
+  Length: ${config.momentum?.length || 'N/A'}
+  Threshold: ${config.momentum?.threshold || 'N/A'}`);
+    }
+
+    // Show simulation controls
+    function showSimulationControls(variationId) {
+      currentVariationId = variationId;
+      const variation = currentVariations.find(v => v.id === variationId);
+      
+      if (!variation) return;
+
+      // Set default dates (last 5 years)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(endDate.getFullYear() - 5);
+      
+      document.getElementById('simStartDate').value = startDate.toISOString().split('T')[0];
+      document.getElementById('simEndDate').value = endDate.toISOString().split('T')[0];
+
+      // Show simulation controls
+      simulationControls.style.display = 'block';
+      simulationResultsPanel.style.display = 'none';
+
+      // Scroll to controls
+      simulationControls.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Run simulation
+    async function runSimulation() {
+      if (!currentVariationId) return;
+
+      try {
+        const startDate = document.getElementById('simStartDate').value;
+        const endDate = document.getElementById('simEndDate').value;
+        const upfront = parseFloat(document.getElementById('simUpfront').value);
+        const monthly = parseFloat(document.getElementById('simMonthly').value);
+
+        if (!startDate || !endDate || isNaN(upfront) || isNaN(monthly)) {
+          alert('Please fill in all simulation parameters');
+          return;
+        }
+
+        // Show loading
+        simulationResultsPanel.style.display = 'block';
+        simulationResultsPanel.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Running simulation...</div>';
+        simulationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Call simulator edge function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            start_date: startDate,
+            end_date: endDate,
+            upfront_usd: upfront,
+            monthly_usd: monthly,
+            variation_ids: [currentVariationId]
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Simulation failed: ${errorText}`);
+        }
+
+        const results = await response.json();
+        
+        // Display results
+        displaySimulationResults(results);
+
+      } catch (err) {
+        console.error('Error running simulation:', err);
+        simulationResultsPanel.innerHTML = `<div style="text-align:center;padding:2rem;color:#ef4444;">Error: ${err.message}</div>`;
+      }
+    }
+
+    // Display simulation results
+    function displaySimulationResults(results) {
+      const variation = currentVariations.find(v => v.id === currentVariationId);
+      if (!variation || !results[currentVariationId]) {
+        simulationResultsPanel.innerHTML = '<div style="text-align:center;padding:2rem;color:#ef4444;">No results found</div>';
+        return;
+      }
+
+      const result = results[currentVariationId];
+      
+      simulationResultsPanel.innerHTML = `
+        <h3>Simulation Results: ${escapeHtml(variation.variation_name)}</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
+          <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Final NAV</div>
+            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">$${result.finalNav?.toLocaleString() || '0'}</div>
+          </div>
+          <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Total ROI</div>
+            <div style="font-size:1.75rem;font-weight:600;color:#10b981;">${result.totalRoi?.toFixed(2) || '0'}%</div>
+          </div>
+          <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">CAGR</div>
+            <div style="font-size:1.75rem;font-weight:600;color:#3b82f6;">${result.cagr?.toFixed(2) || '0'}%</div>
+          </div>
+          <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Sharpe Ratio</div>
+            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">${result.sharpe?.toFixed(2) || '0'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;">
+          <div><span style="color:var(--muted);">Max Drawdown:</span> <strong>${result.maxDrawdown?.toFixed(2) || '0'}%</strong></div>
+          <div><span style="color:var(--muted);">Total Invested:</span> <strong>$${result.totalInvested?.toLocaleString() || '0'}</strong></div>
+          <div><span style="color:var(--muted);">Total BTC Bought:</span> <strong>${result.totalBtcBought?.toFixed(8) || '0'} BTC</strong></div>
+          <div><span style="color:var(--muted);">Avg Buy Price:</span> <strong>$${result.avgBuyPrice?.toLocaleString() || '0'}</strong></div>
+        </div>
+        <div style="display:flex;gap:.75rem;justify-content:center;margin-top:1.5rem;">
+          <button onclick="window.strategyMaintenance.hideSimulationResults()" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Close</button>
+        </div>
+      `;
+    }
+
+    // Hide simulation results
+    function hideSimulationResults() {
+      simulationControls.style.display = 'none';
+      simulationResultsPanel.style.display = 'none';
+      currentVariationId = null;
+    }
+
+    // Optimize variation (placeholder for Phase 3.8)
+    function optimizeVariation(variationId) {
+      alert('Optimization UI will be implemented in Phase 3.8');
+    }
+
+    // Cancel simulation
+    document.getElementById('cancelSimBtn')?.addEventListener('click', hideSimulationResults);
+    
+    // Run simulation button
+    document.getElementById('runSimBtn')?.addEventListener('click', runSimulation);
+
+    // Initialize on page load
+    if (strategyTypeSelector.value === 'LTH_PVR') {
+      loadLthPvrVariations();
+    }
+
+    // Expose functions globally for onclick handlers
+    window.strategyMaintenance = {
+      viewVariationDetails,
+      showSimulationControls,
+      optimizeVariation,
+      hideSimulationResults,
+      loadLthPvrVariations
+    };
+
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
   })();
 
   </script>
