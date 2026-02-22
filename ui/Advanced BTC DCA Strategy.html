@@ -4383,6 +4383,12 @@
             const v = e.target.value || '';
             console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
+            // Skip processing if we're programmatically updating context
+            if (window.programmaticallyUpdatingContext) {
+              console.log('⏸️ Skipping portfolio change processing - programmatic context update');
+              return;
+            }
+
             if (isMultiCustomerModule()){
               currentPortfolioId = null;
               currentStrategyCode = v ? v.toUpperCase() : null;
