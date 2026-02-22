@@ -8752,8 +8752,11 @@ This will:
     function startAutoRefresh() {
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
       autoRefreshInterval = setInterval(() => {
-        loadPipelineStatus();
-        console.log('Pipeline status auto-refreshed');
+        // Only refresh if currently on admin module
+        if (location.hash === '#admin-module') {
+          loadPipelineStatus();
+          console.log('Pipeline status auto-refreshed');
+        }
       }, 30000); // 30 seconds
     }
 
@@ -8764,11 +8767,11 @@ This will:
       }
     }
 
-    // Load status on authentication
+    // Load status on authentication (only if on admin module)
     document.addEventListener('DOMContentLoaded', () => {
       if (supabaseClient) {
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
+          if (session?.user && location.hash === '#admin-module') {
             loadPipelineStatus();
             startAutoRefresh();
           }
@@ -8783,6 +8786,24 @@ This will:
           stopAutoRefresh();
         }
       });
+    });
+
+    // Handle hash changes to start/stop auto-refresh
+    window.addEventListener('hashchange', () => {
+      if (location.hash === '#admin-module') {
+        // Entering admin module - load status and start auto-refresh
+        if (supabaseClient) {
+          supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+              loadPipelineStatus();
+              startAutoRefresh();
+            }
+          });
+        }
+      } else {
+        // Leaving admin module - stop auto-refresh
+        stopAutoRefresh();
+      }
     });
   })();
 
