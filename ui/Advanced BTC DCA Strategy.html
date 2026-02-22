@@ -4389,10 +4389,10 @@
             const v = e.target.value || '';
             console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
-            // Check if this is a programmatic change (within 2s of context load)
+            // Check if this is a programmatic change (within 10s of context load)
             const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
-            if (timeSinceContextLoad < 2000) {
-              console.log('⏸️ Skipping portfolio change processing - within 2s of context load');
+            if (timeSinceContextLoad < 10000) {
+              console.log('⏸️ Skipping portfolio change processing - within 10s of context load');
               return;
             }
 
@@ -10206,12 +10206,13 @@ Momentum:
             return;
           }
           
-          // Check if this change is within 3 seconds of a context load (programmatic update)
+          // Check if this change is within 10 seconds of a context load (programmatic update)
+          // Use 10s to account for slower context loads when tab regains focus after idle
           const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
           console.log('🔍 Strategy selector changed, time since context load:', timeSinceContextLoad + 'ms');
           
-          if (timeSinceContextLoad < 3000) {
-            console.log('⏸️ Skipping loadLthPvrVariations - within 3s of context load (programmatic)');
+          if (timeSinceContextLoad < 10000) {
+            console.log('⏸️ Skipping loadLthPvrVariations - within 10s of context load (programmatic)');
             return;
           }
           
