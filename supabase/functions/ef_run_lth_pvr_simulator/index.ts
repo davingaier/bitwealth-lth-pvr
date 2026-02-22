@@ -184,16 +184,6 @@ Deno.serve(async (req) => {
         retraceBase: variation.retrace_base ?? 3
       };
       
-      // DEBUG: Log config to verify enable_retrace is being used correctly
-      console.info(`🔍 Simulator config for ${variation.variation_name}:`, {
-        variation_id: variation.id,
-        enableRetrace: config.enableRetrace,
-        enableRetrace_from_db: variation.enable_retrace,
-        retraceBase: config.retraceBase,
-        bearPauseEnterSigma: config.bearPauseEnterSigma,
-        bearPauseExitSigma: config.bearPauseExitSigma
-      });
-      
       // Run simulation
       const simResult = runSimulation(config, ciDataTransformed, {
         upfront_usd,
@@ -207,6 +197,16 @@ Deno.serve(async (req) => {
         variation_id: variation.id,
         variation_name: variation.variation_name,
         display_name: variation.display_name,
+        // DEBUG: Include config used for this simulation
+        debug_config: {
+          enableRetrace: config.enableRetrace,
+          enableRetrace_from_db: variation.enable_retrace,
+          retraceBase: config.retraceBase,
+          bearPauseEnterSigma: config.bearPauseEnterSigma,
+          bearPauseExitSigma: config.bearPauseExitSigma,
+          momentumLength: config.momentumLength,
+          momentumThreshold: config.momentumThreshold
+        },
         // Include debug samples for comparison with back-tester
         debug_first_5_days: simResult.daily.slice(0, 5).map(d => ({
           date: d.trade_date,
