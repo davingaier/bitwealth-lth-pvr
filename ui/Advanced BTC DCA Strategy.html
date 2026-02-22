@@ -4126,14 +4126,14 @@
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
-      // Save the current strategy code before updating
-      const previousStrategyCode = window.currentStrategyCode;
-      window._previousStrategyCode = previousStrategyCode;
+      // Track when context load starts - used to ignore change events from this load
+      window._lastContextLoadTime = Date.now();
+      const myLoadTime = window._lastContextLoadTime;
       
       // Set flag to prevent strategy maintenance from reacting to programmatic changes
       window._contextLoadCounter = (window._contextLoadCounter || 0) + 1;
       const myLoadId = window._contextLoadCounter;
-      console.log('🔒 Setting programmaticallyUpdatingContext = true (load #' + myLoadId + '), previous strategy:', previousStrategyCode);
+      console.log('🔒 Context load #' + myLoadId + ' starting at', myLoadTime);
       window.programmaticallyUpdatingContext = true;
       
       const orgSel  = document.getElementById('orgSelect');
@@ -4389,15 +4389,10 @@
             const v = e.target.value || '';
             console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
-            // Note if we're in programmatic update mode, but don't skip processing
-            const wasProgrammatic = window.programmaticallyUpdatingContext;
-            if (wasProgrammatic) {
-              console.log('⏸️ Skipping portfolio change processing - programmatic context update');
-              // Reset the flag after this first change completes
-              setTimeout(() => {
-                console.log('🔓 Resetting flag after programmatic portfolio change');
-                window.programmaticallyUpdatingContext = false;
-              }, 100);
+            // Check if this is a programmatic change (within 2s of context load)
+            const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
+            if (timeSinceContextLoad < 2000) {
+              console.log('⏸️ Skipping portfolio change processing - within 2s of context load');
               return;
             }
 
@@ -4457,12 +4452,9 @@
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       } finally {
-        // The portfolio change handler will reset the flag when it processes the first change
-        // But set a safety timeout in case no change event fires
-        setTimeout(() => {
-          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', safety timeout)');
-          window.programmaticallyUpdatingContext = false;
-        }, 500);
+        // Reset programmatic flag immediately - we're now using timestamps to detect programmatic changes
+        window.programmaticallyUpdatingContext = false;
+        console.log('🔓 Context load complete (load #' + myLoadId + ')');
       }
     }
 
@@ -10214,28 +10206,19 @@ Momentum:
             return;
           }
           
-          // Don't reload variations if context is being updated programmatically
-          console.log('🔍 Strategy selector changed, checking flag:', window.programmaticallyUpdatingContext);
-          if (window.programmaticallyUpdatingContext) {
-            console.log('⏸️ Skipping loadLthPvrVariations - programmatic context update');
-            return;
-          }
+          // Check if this change is within 3 seconds of a context load (programmatic update)
+          const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
+          console.log('🔍 Strategy selector changed, time since context load:', timeSinceContextLoad + 'ms');
           
-          // Also don't reload if the strategy didn't actually change (both previous and current must have values)
-          const previousCode = window._previousStrategyCode;
-          const currentCode = window.currentStrategyCode;
-          console.log('📊 Strategy check - previous:', previousCode, 'current:', currentCode);
-          
-          // Only skip if we have valid previous code and it matches current (true refresh scenario)
-          if (previousCode && currentCode && previousCode === currentCode) {
-            console.log('⏸️ Skipping loadLthPvrVariations - strategy unchanged (', previousCode, ')');
+          if (timeSinceContextLoad < 3000) {
+            console.log('⏸️ Skipping loadLthPvrVariations - within 3s of context load (programmatic)');
             return;
           }
           
           updateNoStrategyMessage();
           console.log('Strategy code check:', strategyCode, 'equals LTH_PVR?', strategyCode === 'LTH_PVR');
           if (strategyCode === 'LTH_PVR') {
-            console.log('✅ Calling loadLthPvrVariations()');
+            console.log('✅ Calling loadLthPvrVariations() - user initiated');
             loadLthPvrVariations();
           } else {
             console.log('❌ Not calling loadLthPvrVariations, strategy is:', strategyCode);
