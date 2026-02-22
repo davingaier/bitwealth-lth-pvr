@@ -4126,10 +4126,16 @@
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
+      // Set flag to prevent strategy maintenance from reacting to programmatic changes
+      window.programmaticallyUpdatingContext = true;
+      
       const orgSel  = document.getElementById('orgSelect');
       const portSel = document.getElementById('portfolioSelect');
       const custSel = document.getElementById('customerSelect');
-      if(!orgSel || !portSel) return;
+      if(!orgSel || !portSel) {
+        window.programmaticallyUpdatingContext = false;
+        return;
+      }
 
       // Multi-customer modules: Customer Transactions and Strategy Maintenance
       const isMultiCustomerModule = () => {
@@ -4430,6 +4436,9 @@
         portSel.innerHTML='<option value="">Error loading</option>';
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
+      } finally {
+        // Always reset flag after context load completes
+        window.programmaticallyUpdatingContext = false;
       }
     }
 
@@ -10175,6 +10184,12 @@ Momentum:
         
         // Use setTimeout to ensure context bar handler runs first and sets window.currentStrategyCode
         setTimeout(() => {
+          // Don't reload variations if context is being updated programmatically
+          if (window.programmaticallyUpdatingContext) {
+            console.log('⏸️ Skipping loadLthPvrVariations - programmatic context update');
+            return;
+          }
+          
           updateNoStrategyMessage();
           console.log('Strategy code check:', strategyCode, 'equals LTH_PVR?', strategyCode === 'LTH_PVR');
           if (strategyCode === 'LTH_PVR') {
