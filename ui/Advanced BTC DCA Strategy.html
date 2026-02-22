@@ -2889,20 +2889,9 @@
               }
             }
             
-            // Context bar (only reload if not already loaded)
-            // Skip reload if context is already populated with valid data
+            // Context bar (function handles its own one-time loading logic)
             if (event === 'SIGNED_IN' && typeof window.loadOrgContext === 'function') {
-              const orgSel = document.getElementById('orgSelect');
-              const portSel = document.getElementById('portfolioSelect');
-              const hasOrg = orgSel && orgSel.value && orgSel.options.length > 1;
-              const hasStrategy = window.currentStrategyCode != null;
-              
-              if (hasOrg && hasStrategy) {
-                console.log('⏸️ Skipping loadOrgContext - already loaded (org:', orgSel.value, 'strategy:', window.currentStrategyCode, ')');
-              } else {
-                console.log('📥 Loading context (org loaded:', hasOrg, 'strategy loaded:', hasStrategy, ')');
-                window.loadOrgContext();
-              }
+              window.loadOrgContext();
             }
             
             // Customer Transactions module
@@ -4137,13 +4126,21 @@
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
-      console.log('📥 loadOrgContext() called');
+      // Only load once per page session - subsequent calls are skipped
+      if (window._contextLoadedOnce) {
+        console.log('⏸️ Skipping loadOrgContext - already loaded this session');
+        return;
+      }
+      
+      console.log('📥 loadOrgContext() - first load');
+      window._contextLoadedOnce = true;
       
       const orgSel  = document.getElementById('orgSelect');
       const portSel = document.getElementById('portfolioSelect');
       const custSel = document.getElementById('customerSelect');
       if(!orgSel || !portSel) {
         console.log('⚠️ Early exit - missing elements');
+        window._contextLoadedOnce = false; // Reset flag on error
         return;
       }
 
