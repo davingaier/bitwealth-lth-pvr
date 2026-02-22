@@ -4127,12 +4127,14 @@
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
       // Set flag to prevent strategy maintenance from reacting to programmatic changes
+      console.log('🔒 Setting programmaticallyUpdatingContext = true');
       window.programmaticallyUpdatingContext = true;
       
       const orgSel  = document.getElementById('orgSelect');
       const portSel = document.getElementById('portfolioSelect');
       const custSel = document.getElementById('customerSelect');
       if(!orgSel || !portSel) {
+        console.log('🔓 Early exit - resetting flag');
         window.programmaticallyUpdatingContext = false;
         return;
       }
@@ -10189,6 +10191,7 @@ Momentum:
         // Use setTimeout to ensure context bar handler runs first and sets window.currentStrategyCode
         setTimeout(() => {
           // Don't reload variations if context is being updated programmatically
+          console.log('🔍 Strategy selector changed, checking flag:', window.programmaticallyUpdatingContext);
           if (window.programmaticallyUpdatingContext) {
             console.log('⏸️ Skipping loadLthPvrVariations - programmatic context update');
             return;
@@ -10209,6 +10212,12 @@ Momentum:
     // Load variations when navigating to Strategy Maintenance module
     window.addEventListener('hashchange', () => {
       if (location.hash === '#strategy-maintenance-module') {
+        // Don't reload variations if context is being updated programmatically
+        if (window.programmaticallyUpdatingContext) {
+          console.log('⏸️ Skipping loadLthPvrVariations on hashchange - programmatic context update');
+          return;
+        }
+        
         updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
         if (strategyCode === 'LTH_PVR') {
@@ -10221,6 +10230,12 @@ Momentum:
     // (wait for context bar to populate first)
     setTimeout(() => {
       if (location.hash === '#strategy-maintenance-module') {
+        // Don't reload variations if context is being updated programmatically
+        if (window.programmaticallyUpdatingContext) {
+          console.log('⏸️ Skipping loadLthPvrVariations on initial load - programmatic context update');
+          return;
+        }
+        
         updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
         if (strategyCode === 'LTH_PVR') {
