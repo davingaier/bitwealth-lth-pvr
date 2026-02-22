@@ -4073,7 +4073,11 @@
       const custSel = document.getElementById('customerSelect');
       if(!orgSel || !portSel) return;
 
-      const isTxModule = () => location.hash === '#transactions-module';
+      // Multi-customer modules: Customer Transactions and Strategy Maintenance
+      const isMultiCustomerModule = () => {
+        const hash = location.hash;
+        return hash === '#transactions-module' || hash === '#strategy-maintenance-module';
+      };
 
       function setPortPlaceholder(txt){
         portSel.innerHTML = `<option value="">${txt}</option>`;
@@ -4176,8 +4180,8 @@
       function applyContextMode(){
         const custGroup = document.getElementById('ctxCustomerGroup');
 
-        if (isTxModule()){
-          // Customer Transactions is multi-customer → hide customer selector
+        if (isMultiCustomerModule()){
+          // Multi-customer modules → hide customer selector
           if (custGroup) custGroup.style.display = 'none';
 
           if (custSel){
@@ -4308,7 +4312,7 @@
           portSel.addEventListener('change', (e)=>{
             const v = e.target.value || '';
 
-            if (isTxModule()){
+            if (isMultiCustomerModule()){
               currentPortfolioId = null;
               currentStrategyCode = v ? v.toUpperCase() : null;
               window.currentStrategyCode = currentStrategyCode;
@@ -4339,10 +4343,10 @@
           portSel._bound=true;
         }
 
-        // customer change only matters outside Customer Transactions
+        // customer change only matters outside multi-customer modules
         if(custSel && !custSel._ctxBound){
           custSel.addEventListener('change', (e)=>{
-            if (isTxModule()) return;
+            if (isMultiCustomerModule()) return;
             buildPortfolioOptionsForCustomer(e.target.value || '');
           });
           custSel._ctxBound = true;
