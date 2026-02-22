@@ -196,7 +196,24 @@ Deno.serve(async (req) => {
         ...simResult,
         variation_id: variation.id,
         variation_name: variation.variation_name,
-        display_name: variation.display_name
+        display_name: variation.display_name,
+        // Include debug samples for comparison with back-tester
+        debug_first_5_days: simResult.daily.slice(0, 5).map(d => ({
+          date: d.trade_date,
+          action: d.action,
+          pct: d.amount_pct,
+          nav: d.nav_usd,
+          btc: d.btc_balance,
+          usdt: d.usdt_balance
+        })),
+        debug_last_5_days: simResult.daily.slice(-5).map(d => ({
+          date: d.trade_date,
+          action: d.action,
+          pct: d.amount_pct,
+          nav: d.nav_usd,
+          btc: d.btc_balance,
+          usdt: d.usdt_balance
+        }))
       });
       
       console.info(`ef_run_lth_pvr_simulator: ${variation.variation_name} - NAV=$${simResult.final_nav_usd.toFixed(2)}, ROI=${simResult.final_roi_percent.toFixed(2)}%, CAGR=${simResult.final_cagr_percent.toFixed(2)}%`);

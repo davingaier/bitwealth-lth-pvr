@@ -9225,6 +9225,22 @@ Momentum:
           throw new Error(`No simulation result found for variation ${currentVariationId}`);
         }
         
+        // Log debug comparison data
+        console.log('🔬 SIMULATOR DEBUG DATA:');
+        console.log('First 5 days:', result.debug_first_5_days);
+        console.log('Last 5 days:', result.debug_last_5_days);
+        console.log('Final Balances:', {
+          btc: result.final_btc_balance,
+          usdt: result.final_usdt_balance,
+          nav: result.final_nav_usd
+        });
+        console.log('Cumulative Fees:', {
+          platform: result.total_platform_fees_usdt,
+          performance: result.total_performance_fees_usdt,
+          exchange_btc: result.total_exchange_fees_btc,
+          exchange_usdt: result.total_exchange_fees_usdt
+        });
+        
         // Store result for CSV export
         currentSimulationResult = result;
         
