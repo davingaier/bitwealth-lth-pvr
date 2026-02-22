@@ -4437,8 +4437,12 @@
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       } finally {
-        // Always reset flag after context load completes
-        window.programmaticallyUpdatingContext = false;
+        // Reset flag after a delay to ensure all change event handlers complete
+        // Strategy maintenance listener has a 50ms setTimeout, so wait 150ms to be safe
+        setTimeout(() => {
+          window.programmaticallyUpdatingContext = false;
+          console.log('🔓 Context update complete, flag reset');
+        }, 150);
       }
     }
 
