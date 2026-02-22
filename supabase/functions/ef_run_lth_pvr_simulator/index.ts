@@ -184,6 +184,16 @@ Deno.serve(async (req) => {
         retraceBase: variation.retrace_base ?? 3
       };
       
+      // DEBUG: Log config to verify enable_retrace is being used correctly
+      console.info(`🔍 Simulator config for ${variation.variation_name}:`, {
+        variation_id: variation.id,
+        enableRetrace: config.enableRetrace,
+        enableRetrace_from_db: variation.enable_retrace,
+        retraceBase: config.retraceBase,
+        bearPauseEnterSigma: config.bearPauseEnterSigma,
+        bearPauseExitSigma: config.bearPauseExitSigma
+      });
+      
       // Run simulation
       const simResult = runSimulation(config, ciDataTransformed, {
         upfront_usd,

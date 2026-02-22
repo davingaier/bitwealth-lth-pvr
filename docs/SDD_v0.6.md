@@ -4599,11 +4599,11 @@ supabase functions deploy ef_bt_execute --no-verify-jwt
 
 ### v0.6.14 – Website Back-Test CI Bands Fix
 **Date:** 2026-01-09  
-**Purpose:** Fixed website back-tester to use correct CryptoQuant CI bands instead of dummy linear values, resulting in 3.4x performance improvement.
+**Purpose:** Fixed website back-tester to use correct ChartInspect CI bands instead of dummy linear values, resulting in 3.4x performance improvement.
 
 **Problem Identified:**
 - Website back-tests showing 189% ROI vs Admin UI showing 776% ROI for identical parameters ($10K upfront, $1K monthly, 2020-2025)
-- Root cause: Website was using **dummy linear CI bands** (b1=0.05, b2=0.10, b3=0.15... b11=0.55) instead of **real CryptoQuant values** (b1=0.22796, b2=0.21397, b3=0.19943...)
+- Root cause: Website was using **dummy linear CI bands** (b1=0.05, b2=0.10, b3=0.15... b11=0.55) instead of **real ChartInspect values** (b1=0.22796, b2=0.21397, b3=0.19943...)
 - Architecture confusion: B1-B11 are **trade size percentages** (22.796% of balance), NOT price levels
 - CI band **price levels** (price_at_m100=$45,000) stored in `lth_pvr.ci_bands_daily`, NOT in `bt_params`
 
@@ -4612,7 +4612,7 @@ supabase functions deploy ef_bt_execute --no-verify-jwt
 2. **ef_bt_execute automatically applies defaultBands** when B1-B11 are NULL/zero:
    - B1=0.22796, B2=0.21397, B3=0.19943, B4=0.18088, B5=0.12229
    - B6=0.00157, B7=0.002, B8=0.00441, B9=0.01287, B10=0.033, B11=0.09572
-3. **ef_bt_execute queries ci_bands_daily** for actual CryptoQuant **price levels** (price_at_m100, price_at_m075, etc.)
+3. **ef_bt_execute queries ci_bands_daily** for actual ChartInspect **price levels** (price_at_m100, price_at_m075, etc.)
 4. **Decision logic:** Compares current BTC price to CI band price levels, trades the B1-B11 percentage amounts
 5. **Fixed momentum/retrace parameters** to match Admin UI defaults: momo_len=5, momo_thr=0.00, enable_retrace=false
 
@@ -6407,7 +6407,7 @@ ORDER BY created_at DESC;
 1. **CI Band Price Levels** (stored in `lth_pvr.ci_bands_daily`):
    - Absolute dollar amounts: price_at_m100=$45,000, price_at_mean=$62,000, price_at_p100=$85,000, etc.
    - 10 columns: m100, m075, m050, m025, mean, p050, p100, p150, p200, p250
-   - Fetched daily from CryptoQuant API by `ef_fetch_ci_bands`
+   - Fetched daily from ChartInspect API by `ef_fetch_ci_bands`
    - Used by decision logic to determine if BTC price is above/below historical confidence bands
 
 2. **B1-B11 Trade Size Percentages** (stored in `lth_pvr_bt.bt_params`):

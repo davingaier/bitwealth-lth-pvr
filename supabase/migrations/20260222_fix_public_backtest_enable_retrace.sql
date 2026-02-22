@@ -125,17 +125,11 @@ BEGIN
     -- 8. Create back-test run record in lth_pvr_bt schema
     INSERT INTO lth_pvr_bt.bt_runs (
         org_id,
-        run_label,
-        start_date,
-        end_date,
         status
     ) VALUES (
         v_org_id,
-        'Public BT: ' || p_email || ' - ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI'),
-        p_start_date,
-        p_end_date,
-        'pending'
-    ) RETURNING id INTO v_bt_run_id;
+        'running'
+    ) RETURNING bt_run_id INTO v_bt_run_id;
     
     -- 9. Link request to bt_run
     UPDATE public.backtest_requests
