@@ -9539,9 +9539,119 @@ Momentum:
       `;
     }
 
-    // Apply optimized configuration (placeholder)
-    function applyOptimizedConfig(configJson) {
-      alert('Apply configuration feature will be implemented in Phase 3.10.\n\nFor now, you can manually update the variation in the database using the optimized parameters shown above.');
+    // Apply optimized configuration
+    async function applyOptimizedConfig(configJson) {
+      try {
+        // Parse config if it's a string
+        let config;
+        try {
+          config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;
+        } catch (e) {
+          alert('Error parsing configuration data. Please try again.');
+          return;
+        }
+
+        // Get the current variation
+        const variation = currentVariations.find(v => v.id === currentVariationId);
+        if (!variation) {
+          alert('Error: Variation not found. Please reload the page and try again.');
+          return;
+        }
+
+        // Confirmation dialog
+        const confirmed = confirm(
+          `Are you sure you want to apply these optimized parameters to the "${variation.variation_name}" variation?\n\n` +
+          `This will update the variation template and affect ALL customers using this variation.\n\n` +
+          `Changes take effect at the next trading cycle (03:00 UTC).`
+        );
+
+        if (!confirmed) return;
+
+        // Show loading state
+        const applyBtn = event?.target;
+        const originalText = applyBtn?.textContent;
+        if (applyBtn) {
+          applyBtn.disabled = true;
+          applyBtn.textContent = 'Applying...';
+        }
+
+        // Get org_id from context bar
+        const orgSelect = document.getElementById('orgSelect');
+        const orgId = orgSelect?.value;
+
+        if (!orgId) {
+          alert('Error: Organization not selected');
+          if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.textContent = originalText;
+          }
+          return;
+        }
+
+        // Build update object with all B1-B11 parameters
+        const updateData = {
+          bear_pause_enter_sigma: Number(config.bearPauseEnterSigma ?? variation.bear_pause_enter_sigma),
+          bear_pause_exit_sigma: Number(config.bearPauseExitSigma ?? variation.bear_pause_exit_sigma),
+          momentum_length: Number(config.momentumLength ?? variation.momentum_length),
+          momentum_threshold: Number(config.momentumThreshold ?? variation.momentum_threshold),
+          enable_retrace: config.enableRetrace ?? variation.enable_retrace,
+          retrace_base: Number(config.retraceBase ?? variation.retrace_base),
+          updated_at: new Date().toISOString()
+        };
+
+        // Add all B1-B11 values
+        if (config.B) {
+          for (let i = 1; i <= 11; i++) {
+            const key = `B${i}`;
+            const dbKey = `b${i}`;
+            if (config.B[key] !== undefined) {
+              updateData[dbKey] = Number(config.B[key]);
+            }
+          }
+        }
+
+        // Update via Supabase client
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .update(updateData)
+          .eq('id', currentVariationId)
+          .eq('org_id', orgId)
+          .select();
+
+        if (error) {
+          console.error('Error applying configuration:', error);
+          alert(`Failed to apply parameters: ${error.message}`);
+          if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.textContent = originalText;
+          }
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          alert('Error: No variation was updated. Please check permissions.');
+          if (applyBtn) {
+            applyBtn.disabled = false;
+            applyBtn.textContent = originalText;
+          }
+          return;
+        }
+
+        // Success!
+        alert(`Parameters applied successfully to "${variation.variation_name}"!\n\nChanges will take effect at the next trading cycle (03:00 UTC tomorrow).`);
+
+        // Reload variation cards to show updated values
+        await loadLthPvrVariations();
+
+        // Hide optimization results panel
+        optimizationResultsPanel.style.display = 'none';
+        currentVariationId = null;
+
+      } catch (err) {
+        console.error('Error in applyOptimizedConfig:', err);
+        alert(`Error applying configuration: ${err.message}`);
+      }
     }
 
     // Close optimization results

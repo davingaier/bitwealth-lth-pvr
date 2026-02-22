@@ -1299,6 +1299,145 @@ const count = estimateCombinations({ min:0.20, max:0.24, step:0.01 }, { min:0.19
 
 ---
 
+### Iteration 3.9: Admin UI - Apply Optimized Configuration
+
+**Completion Date:** 2026-02-22
+
+#### TC-3.9.1: Apply Configuration Function Implementation
+**Description:** Verify applyOptimizedConfig() function replaces placeholder  
+**Expected Result:** Function parses config and updates database  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Check that applyOptimizedConfig() is no longer a placeholder
+2. Verify function signature accepts config parameter
+3. Verify function is async
+**Notes:** Implemented in Strategy Maintenance module (IIFE)
+
+#### TC-3.9.2: Confirmation Dialog Display
+**Description:** Verify user must confirm before applying configuration  
+**Expected Result:** Confirmation dialog shows with warning about customer impact  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Complete optimization workflow to get results
+2. Click "Apply This Configuration" button
+3. Verify browser confirm() dialog appears
+4. Verify dialog text includes:
+   - Variation name
+   - Warning about affecting ALL customers using variation
+   - Note about 03:00 UTC trading cycle
+**Notes:** Dialog text should be clear and actionable
+
+#### TC-3.9.3: Configuration Update - Database
+**Description:** Verify optimized parameters written to strategy_variation_templates  
+**Expected Result:** All B1-B11 parameters and config values updated in database  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Note current variation parameters before optimization
+2. Run optimization and apply best configuration
+3. Query database to verify updates:
+```sql
+SELECT 
+  b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11,
+  bear_pause_enter_sigma, bear_pause_exit_sigma,
+  momentum_length, momentum_threshold,
+  enable_retrace, retrace_base,
+  updated_at
+FROM lth_pvr.strategy_variation_templates
+WHERE id = '[variation_id]';
+```
+4. Verify all optimized parameters match applied config
+5. Verify updated_at timestamp is recent
+**Notes:** Update uses .schema('lth_pvr').eq('id').eq('org_id')
+
+#### TC-3.9.4: Success Message Display
+**Description:** Verify user sees confirmation after successful apply  
+**Expected Result:** Alert shows success message with trading cycle note  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Apply optimized configuration
+2. After database update completes
+3. Verify alert shows:
+   - Success confirmation
+   - Variation name
+   - Note about 03:00 UTC trading cycle
+**Notes:** Message should reassure user changes will take effect
+
+#### TC-3.9.5: Variation Cards Reload
+**Description:** Verify variation cards refresh to show updated parameters  
+**Expected Result:** Cards display new B1-B11 values from database  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Note B1/B6 percentages displayed on variation card before apply
+2. Apply optimized configuration
+3. Verify loadLthPvrVariations() called automatically
+4. Verify variation cards show updated B1/B6 values
+**Notes:** Uses await loadLthPvrVariations()
+
+#### TC-3.9.6: Optimization Results Panel Hidden
+**Description:** Verify optimization results panel closes after apply  
+**Expected Result:** Panel display:none, currentVariationId cleared  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Apply optimized configuration
+2. Verify optimizationResultsPanel.style.display = 'none'
+3. Verify currentVariationId = null
+**Notes:** Clean UI state after successful apply
+
+#### TC-3.9.7: Error Handling - Invalid Configuration
+**Description:** Verify error handling when config JSON parse fails  
+**Expected Result:** Alert shows parse error message  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Manually call applyOptimizedConfig('invalid-json')
+2. Verify alert: "Error parsing configuration data"
+3. Verify function returns early without database call
+**Notes:** try/catch around JSON.parse()
+
+#### TC-3.9.8: Error Handling - No Organization Selected
+**Description:** Verify error when org_id not available  
+**Expected Result:** Alert shows organization selection error  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Clear org selector value (if possible via console)
+2. Try to apply configuration
+3. Verify alert: "Error: Organization not selected"
+**Notes:** Validates orgSelect?.value
+
+#### TC-3.9.9: Error Handling - Database Update Failure
+**Description:** Verify error handling when Supabase update fails  
+**Expected Result:** Alert shows error message from Supabase  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Simulate database error (e.g., invalid org_id)
+2. Try to apply configuration
+3. Verify alert shows error.message
+4. Verify button re-enabled and text restored
+**Notes:** Catches Supabase error response
+
+#### TC-3.9.10: Loading State During Apply
+**Description:** Verify button disabled and shows "Applying..." during database update  
+**Expected Result:** Button disabled with loading text, then restored  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Click "Apply This Configuration" button
+2. Verify button.disabled = true
+3. Verify button text changes to "Applying..."
+4. After completion, verify button state restored
+**Notes:** Uses event.target to access button element
+
+#### TC-3.9.11: User Cancels Confirmation
+**Description:** Verify no action taken when user clicks Cancel in confirm dialog  
+**Expected Result:** Function returns early, no database changes  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Click "Apply This Configuration"
+2. Click "Cancel" in confirmation dialog
+3. Verify no database update occurs
+4. Verify optimization results panel remains visible
+**Notes:** if (!confirmed) return;
+
+---
+
 ## Phase 4: Testing & Validation (Iterations 4.1-4.3)
 
 **Status:** Not Started
@@ -1319,9 +1458,9 @@ const count = estimateCombinations({ min:0.20, max:0.24, step:0.01 }, { min:0.19
 
 ## Summary Statistics
 
-- **Total Test Cases:** 106 defined (Phases 1-2 complete, Phase 3.1-3.8 added)
+- **Total Test Cases:** 117 defined (Phases 1-2 complete, Phase 3.1-3.9 added)
 - **Passed:** 64 ✅
-- **Pending:** 43 ⏳ (require browser integration testing)
+- **Pending:** 54 ⏳ (require browser integration testing)
 - **Skipped:** 3 ⏸️ (deferred to Phase 3 simulator testing)
 - **Failed:** 0 ❌
 
@@ -1331,9 +1470,16 @@ const count = estimateCombinations({ min:0.20, max:0.24, step:0.01 }, { min:0.19
 **Phase 2 Completion:** 100% (4/4 iterations complete)
 **Phase 2 Validation:** 100% (all test cases passed)
 
-**Phase 3 Completion:** 73% (8/11 iterations complete)
+**Phase 3 Completion:** 82% (9/11 iterations complete)
 **Phase 3.1 Validation:** 100% (14/14 test cases passed)
 **Phase 3.2 Validation:** 94% (16/17 test cases passed, 1 pending integration)
+**Phase 3.3 Validation:** 36% (4/11 test cases passed, 7 pending edge function)
+**Phase 3.4 Validation:** 100% (11/11 estimated test cases passed)
+**Phase 3.5 Validation:** 18% (2/11 test cases passed, 9 pending browser testing)
+**Phase 3.6 Validation:** 100% (implemented with 3.5)
+**Phase 3.7 Validation:** 0% (2/2 test cases pending browser testing)
+**Phase 3.8 Validation:** 0% (6/6 test cases pending browser testing)
+**Phase 3.9 Validation:** 0% (11/11 test cases pending browser testing)
 **Phase 3.3 Validation:** 36% (4/11 test cases passed, 7 pending edge function)
 **Phase 3.4 Validation:** 100% (11/11 estimated test cases passed)
 **Phase 3.5 Validation:** 18% (2/11 test cases passed, 9 pending browser testing)
@@ -1372,6 +1518,41 @@ const count = estimateCombinations({ min:0.20, max:0.24, step:0.01 }, { min:0.19
   - **Fix:** Updated validation to check for valid UUID format using regex pattern. Now rejects "Loading...", empty strings, and invalid UUIDs.
 - **Validation Testing:**
   - TC-1.2.8 ✅ PASS: User confirmed decisions generated correctly 2026-02-22 using database-driven configuration (Progressive variation with exit_sigma=-1.0). All 7 customers showing correct bear pause behavior.
+
+### 2026-02-22 (Afternoon - Phase 3.9)
+- **UI Refactoring: Strategy Maintenance Module**
+  - **Issue:** Strategy Maintenance had redundant two-level selection (context bar strategy + module dropdown)
+  - **Fix:** Removed module-level dropdown, added data-strategy attributes to panels (like Customer Transactions)
+  - **Changes:**
+    - Removed "Strategy Type" selector from module HTML
+    - Added `data-strategy="LTH_PVR"` to LTH PVR panel
+    - Added `data-strategy="ADV_DCA"` to ADV_DCA placeholder panel
+    - Updated CSS: Customer selector now hidden on Strategy Maintenance (multi-customer module)
+    - Updated JavaScript: Replaced `isTxModule()` with `isMultiCustomerModule()` checking both #transactions-module and #strategy-maintenance-module
+    - Added event listeners for context bar strategy selection and hashchange
+    - Strategy panels now automatically show/hide based on `window.currentStrategyCode`
+  - **Result:** Strategy Maintenance now works exactly like Customer Transactions (single-level selection via context bar)
+- **Iteration 3.9:** ✅ COMPLETE - Implemented Apply Optimized Configuration functionality. Modified: `ui/Advanced BTC DCA Strategy.html` (~110 lines added).
+  - ✅ Replaced placeholder applyOptimizedConfig() with full implementation
+  - ✅ Confirmation dialog with variation name and customer impact warning
+  - ✅ Database update via Supabase client:
+    - Updates all B1-B11 parameters
+    - Updates bear_pause_enter_sigma, bear_pause_exit_sigma
+    - Updates momentum_length, momentum_threshold
+    - Updates enable_retrace, retrace_base
+    - Sets updated_at timestamp
+    - Uses .schema('lth_pvr').eq('id').eq('org_id') for security
+  - ✅ Success alert with trading cycle note (03:00 UTC tomorrow)
+  - ✅ Automatic reload of variation cards to show updated values
+  - ✅ Optimization results panel hidden after successful apply
+  - ✅ Loading state: Button disabled with "Applying..." text during update
+  - ✅ Error handling:
+    - JSON parse errors
+    - Missing organization selection
+    - Database update failures
+    - No variation found
+  - ✅ Comprehensive test cases added (11 TCs): confirmation, database update, success message, reload, panel close, error scenarios
+- **Phase 3 Status:** 🔄 IN PROGRESS - 9/11 iterations complete (82%)
 
 ### 2026-02-21 (Evening - Phase 3 continued pt 3)
 - **Iteration 3.4:** ✅ COMPLETE - Created optimizer edge function (ef_optimize_lth_pvr_strategy). Files: index.ts (237 lines), client.ts (14 lines).
