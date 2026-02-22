@@ -1438,6 +1438,311 @@ WHERE id = '[variation_id]';
 
 ---
 
+### Iteration 3.10: Admin UI - CSV Export Functionality
+
+**Status:** ✅ COMPLETE
+
+#### TC-3.10.1: Export Button Presence
+**Description:** Verify "Export to CSV" button appears in simulation results panel  
+**Expected Result:** Green button with 📄 icon visible next to Close button  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Run simulation for any variation
+2. Wait for results to display
+3. Locate button row at bottom of results panel
+4. Verify "Export to CSV" button present
+**Notes:** Button uses onclick="window.strategyMaintenance.exportSimulationToCSV()"
+
+#### TC-3.10.2: CSV Export Function Implementation
+**Description:** Verify exportSimulationToCSV() function exists and is callable  
+**Expected Result:** Function defined in Strategy Maintenance module  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open browser console
+2. Type: typeof window.strategyMaintenance.exportSimulationToCSV
+3. Verify returns "function"
+4. Check function accepts no parameters
+**Notes:** Function reads from currentSimulationResult state variable
+
+#### TC-3.10.3: CSV File Download Trigger
+**Description:** Verify clicking Export button triggers file download  
+**Expected Result:** Browser downloads CSV file with correct filename  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Run simulation for "Progressive" variation
+2. Click "Export to CSV"
+3. Verify browser shows download prompt/notification
+4. Check filename format: `lth_pvr_simulation_progressive_YYYY-MM-DD.csv`
+**Notes:** Uses Blob API + createObjectURL + programmatic link click
+
+#### TC-3.10.4: CSV Header Row
+**Description:** Verify CSV contains correct column headers  
+**Expected Result:** First row has 15 columns in correct order  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Export simulation results to CSV
+2. Open CSV in text editor
+3. Verify first line: `date,btc_balance,usdt_balance,nav,btc_price,action,amount_pct,rule,tier,platform_fee,performance_fee,exchange_fee,cumulative_contrib,cumulative_fees,roi`
+**Notes:** Header row has no quotes, comma-separated
+
+#### TC-3.10.5: CSV Data Accuracy
+**Description:** Verify CSV data matches displayed simulation results  
+**Expected Result:** Values match summary metrics and daily data  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Note Final NAV from results panel summary
+2. Export to CSV
+3. Open CSV, go to last row
+4. Verify `nav` column matches Final NAV (±0.01)
+5. Verify `btc_balance` and `usdt_balance` sum to NAV
+**Notes:** Uses toFixed() for consistent decimal precision
+
+#### TC-3.10.6: CSV Decimal Precision
+**Description:** Verify numeric columns use correct decimal places  
+**Expected Result:** Each column formatted per specification  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Export CSV and open in text editor
+2. Verify decimal places:
+   - btc_balance: 8 decimals (.toFixed(8))
+   - usdt_balance, nav, btc_price: 2 decimals
+   - fees (platform, performance, exchange): 2 decimals
+   - cumulative_contrib, cumulative_fees: 2 decimals
+   - roi: 4 decimals
+**Notes:** amount_pct, rule, tier may be empty strings
+
+#### TC-3.10.7: CSV Opens in Excel/Sheets
+**Description:** Verify CSV is readable in spreadsheet applications  
+**Expected Result:** File opens correctly with proper column separation  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Export CSV file
+2. Open in Microsoft Excel or Google Sheets
+3. Verify no parsing errors
+4. Verify data appears in separate columns (not one column)
+5. Verify dates parse correctly
+**Notes:** Uses UTF-8 charset, type 'text/csv;charset=utf-8;'
+
+#### TC-3.10.8: Error - No Simulation Results
+**Description:** Verify error handling when no results available  
+**Expected Result:** Alert shown: "No simulation results available to export"  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Refresh page
+2. Navigate to Strategy Maintenance
+3. Try to call: window.strategyMaintenance.exportSimulationToCSV()
+4. Verify alert appears with error message
+**Notes:** Checks if (!currentSimulationResult || !currentVariationId)
+
+#### TC-3.10.9: Error - Variation Not Found
+**Description:** Verify error when variation deleted after simulation  
+**Expected Result:** Alert shown: "Variation not found"  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Run simulation
+2. Clear currentVariations: currentVariations = []
+3. Click "Export to CSV"
+4. Verify "Variation not found" alert
+**Notes:** Edge case for concurrent operations
+
+#### TC-3.10.10: Filename Sanitization
+**Description:** Verify variation name sanitized for filename safety  
+**Expected Result:** Special characters replaced with underscores, lowercase  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Create variation named "Test! @#$% Variation"
+2. Run simulation for this variation
+3. Export to CSV
+4. Verify filename: `lth_pvr_simulation_test_______variation_YYYY-MM-DD.csv`
+**Notes:** Uses .replace(/[^a-z0-9]/gi, '_').toLowerCase()
+
+---
+
+### Iteration 3.11: Parameter History & Rollback ✅
+
+**Status:** Complete (Database + UI + Functions)  
+**Component:** History tracking and configuration rollback functionality  
+**Database:** `lth_pvr.variation_parameter_history` table with helper function  
+**Functions:** `loadParameterHistory()`, `rollbackToConfig()`, `closeHistoryModal()`
+
+#### TC-3.11.1: History Button Presence
+**Description:** Verify "📅 History" button appears on variation cards  
+**Expected Result:** Button visible on each variation card between "View Details" and "Run Simulation"  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Navigate to Strategy Maintenance module
+2. Select organization and "LTH PVR BTC DCA" strategy
+3. Verify each variation card displays "📅 History" button
+4. Verify button styling matches design (white background, border)
+
+#### TC-3.11.2: History Modal Opens
+**Description:** Verify history modal opens when History button clicked  
+**Expected Result:** Modal displays with variation name in header  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Click "📅 History" on any variation card
+2. Verify modal appears with dark overlay
+3. Verify header shows "Parameter History: [Variation Name]"
+4. Verify close button (×) in top-right corner
+
+#### TC-3.11.3: History Table Structure
+**Description:** Verify history table displays with correct columns  
+**Expected Result:** 8 columns: Date, Changed By, Type, B1, B6, Bear Exit, Momentum, Actions  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open history modal for any variation
+2. Verify table header contains all 8 columns
+3. Verify table is scrollable horizontally if needed
+4. Verify consistent styling (borders, padding)
+
+#### TC-3.11.4: History Records Loading
+**Description:** Verify history records loaded and displayed  
+**Expected Result:** Records shown in descending chronological order (newest first)  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open history for variation with existing changes
+2. Verify loading message appears briefly
+3. Verify records appear after loading
+4. Verify newest record at top
+5. Verify "No parameter history found" message if no records
+
+#### TC-3.11.5: History Record Data Accuracy
+**Description:** Verify historical configuration values displayed correctly  
+**Expected Result:** B1, B6, Bear Exit, Momentum match historical config  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Apply optimized config to variation (creates history record)
+2. Open history modal
+3. Verify latest record shows:
+   - B1 as percentage with 3 decimals (e.g., "22.796%")
+   - B6 as percentage with 3 decimals
+   - Bear Exit with sigma notation (e.g., "-1σ" or "+2σ")
+   - Momentum as days (e.g., "5 days")
+
+#### TC-3.11.6: Changed By User Display
+**Description:** Verify "Changed By" column displays user email or "System"  
+**Expected Result:** User email shown for manual/optimization changes, "System" for automated  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Manually apply optimized config (creates record with logged-in user)
+2. Open history modal
+3. Verify "Changed By" shows logged-in user's email
+4. For system-generated records, verify "System" displayed
+
+#### TC-3.11.7: Change Type Color Coding
+**Description:** Verify change type badges display with correct colors  
+**Expected Result:** initial=gray, manual=blue, optimization=green, rollback=orange  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Create history with different change types
+2. Open history modal
+3. Verify change type badges color-coded:
+   - initial: #6b7280 (gray)
+   - manual: #3b82f6 (blue)
+   - optimization: #10b981 (green)
+   - rollback: #f59e0b (orange)
+
+#### TC-3.11.8: Rollback Button Presence
+**Description:** Verify "↺ Rollback" button appears for each history record  
+**Expected Result:** Orange rollback button in Actions column for all records  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open history modal with multiple records
+2. Verify each row has "↺ Rollback" button
+3. Verify button styling (orange background, white text)
+4. Hover over button to test cursor style
+
+#### TC-3.11.9: Rollback Confirmation Dialog
+**Description:** Verify confirmation required before rollback  
+**Expected Result:** Confirmation dialog with clear warning message  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Click "↺ Rollback" on any history record
+2. Verify confirmation dialog appears
+3. Verify message includes:
+   - "Are you sure you want to rollback..."
+   - Warning about reverting parameters
+   - Note about 03:00 UTC effect time
+4. Test Cancel button (no changes made)
+
+#### TC-3.11.10: Rollback Updates Database
+**Description:** Verify rollback restores historical configuration  
+**Expected Result:** Variation parameters updated to match rollback target  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Note current B1 value for a variation
+2. Apply optimized config (changes B1)
+3. Open history and rollback to previous config
+4. Confirm rollback
+5. Verify success message appears
+6. Close history modal
+7. Verify variation card shows original B1 value
+
+#### TC-3.11.11: Rollback Creates History Record
+**Description:** Verify rollback action logged to history table  
+**Expected Result:** New "rollback" type record created after successful rollback  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open history modal (note record count)
+2. Perform rollback to older configuration
+3. Re-open history modal
+4. Verify new record at top with:
+   - Type: "rollback" (orange badge)
+   - Changed By: Current user email
+   - Config values matching rollback target
+   - Reason: "Rolled back to configuration from [date]"
+
+#### TC-3.11.12: History Modal Close Functionality
+**Description:** Verify modal closes via × button and Close button  
+**Expected Result:** Modal hidden when either close button clicked  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Open history modal
+2. Click × button in top-right → verify modal closes
+3. Re-open history modal
+4. Click "Close" button at bottom → verify modal closes
+5. Verify no errors in console
+
+#### TC-3.11.13: History Error Handling - No Records
+**Description:** Verify graceful handling when no history exists  
+**Expected Result:** Informative message displayed in table  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Create new variation (no parameter changes yet)
+2. Click "📅 History" button
+3. Verify modal opens successfully
+4. Verify message: "No parameter history found for this variation"
+5. Verify message styled appropriately (muted color)
+
+#### TC-3.11.14: Rollback Error Handling
+**Description:** Verify error handling for failed rollback operations  
+**Expected Result:** Error alert displayed, no partial updates  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Simulate rollback failure (e.g., network error, permission issue)
+2. Verify user sees error alert with message
+3. Verify variation parameters unchanged
+4. Verify history modal remains open for retry
+5. Check console for detailed error logs
+
+#### TC-3.11.15: Apply Config Logs History
+**Description:** Verify applyOptimizedConfig() creates history record  
+**Expected Result:** History record created when optimization applied  
+**Status:** ⏳ PENDING  
+**Verification Steps:**
+1. Run optimization for variation
+2. View optimization results
+3. Click "Apply Optimized Parameters"
+4. Confirm application
+5. Open history modal
+6. Verify new record at top with:
+   - Type: "optimization" (green)
+   - Reason: "Applied optimized configuration from grid search"
+   - old_config: Previous parameter values
+   - new_config: New optimized values
+
+---
+
 ## Phase 4: Testing & Validation (Iterations 4.1-4.3)
 
 **Status:** Not Started
@@ -1458,9 +1763,9 @@ WHERE id = '[variation_id]';
 
 ## Summary Statistics
 
-- **Total Test Cases:** 117 defined (Phases 1-2 complete, Phase 3.1-3.9 added)
+- **Total Test Cases:** 142 defined (Phases 1-2 complete, Phase 3.1-3.11 added)
 - **Passed:** 64 ✅
-- **Pending:** 54 ⏳ (require browser integration testing)
+- **Pending:** 79 ⏳ (require browser integration testing)
 - **Skipped:** 3 ⏸️ (deferred to Phase 3 simulator testing)
 - **Failed:** 0 ❌
 
@@ -1470,7 +1775,7 @@ WHERE id = '[variation_id]';
 **Phase 2 Completion:** 100% (4/4 iterations complete)
 **Phase 2 Validation:** 100% (all test cases passed)
 
-**Phase 3 Completion:** 82% (9/11 iterations complete)
+**Phase 3 Completion:** 100% (11/11 iterations complete) ✅
 **Phase 3.1 Validation:** 100% (14/14 test cases passed)
 **Phase 3.2 Validation:** 94% (16/17 test cases passed, 1 pending integration)
 **Phase 3.3 Validation:** 36% (4/11 test cases passed, 7 pending edge function)
@@ -1480,6 +1785,8 @@ WHERE id = '[variation_id]';
 **Phase 3.7 Validation:** 0% (2/2 test cases pending browser testing)
 **Phase 3.8 Validation:** 0% (6/6 test cases pending browser testing)
 **Phase 3.9 Validation:** 0% (11/11 test cases pending browser testing)
+**Phase 3.10 Validation:** 0% (10/10 test cases pending browser testing)
+**Phase 3.11 Validation:** 0% (15/15 test cases pending browser testing) ← NEW
 **Phase 3.3 Validation:** 36% (4/11 test cases passed, 7 pending edge function)
 **Phase 3.4 Validation:** 100% (11/11 estimated test cases passed)
 **Phase 3.5 Validation:** 18% (2/11 test cases passed, 9 pending browser testing)
@@ -1553,6 +1860,107 @@ WHERE id = '[variation_id]';
     - No variation found
   - ✅ Comprehensive test cases added (11 TCs): confirmation, database update, success message, reload, panel close, error scenarios
 - **Phase 3 Status:** 🔄 IN PROGRESS - 9/11 iterations complete (82%)
+
+### 2026-02-22 (Evening - Phase 3.10)
+- **Bug Fix: Strategy Selection Race Condition**
+  - **Issue:** Strategy Maintenance variations not loading after selecting "LTH PVR BTC DCA" from context bar
+  - **Root Cause:** Event handler race condition - Strategy Maintenance listener fired before context bar set `window.currentStrategyCode`
+  - **Fix:** Modified Strategy Maintenance portfolio change listener to:
+    - Read strategy code directly from `e.target.value` instead of `window.currentStrategyCode`
+    - Use 50ms setTimeout to let context bar handler complete first
+    - Call `updateNoStrategyMessage()` after delay
+  - **Added:** Debug console logging throughout to diagnose timing issues
+  - **Result:** ✅ Variations now load correctly when strategy selected
+- **Iteration 3.10:** ✅ COMPLETE - Implemented CSV Export Functionality. Modified: `ui/Advanced BTC DCA Strategy.html` (~80 lines added).
+  - ✅ Added `currentSimulationResult` state variable to store simulation data for export
+  - ✅ Implemented `exportSimulationToCSV()` function (~75 lines):
+    - Validates simulation results and variation exist
+    - Creates CSV with 15 columns:
+      - date, btc_balance (8 decimals), usdt_balance (2 decimals)
+      - nav, btc_price (2 decimals each)
+      - action, amount_pct, rule, tier
+      - platform_fee, performance_fee, exchange_fee (2 decimals each)
+      - cumulative_contrib, cumulative_fees (2 decimals each)
+      - roi (4 decimals)
+    - Generates comma-separated CSV with proper header row
+    - Uses Blob API with UTF-8 charset for file creation
+    - Triggers browser download with sanitized filename: `lth_pvr_simulation_{variation_name}_{date}.csv`
+    - Sanitizes variation name: removes special characters, converts to lowercase
+    - Comprehensive error handling (no results, no variation, no daily data)
+  - ✅ Added "Export to CSV" button to simulation results panel (green, 📄 icon)
+  - ✅ Updated `runSimulation()` to store results in `currentSimulationResult`
+  - ✅ Exposed `exportSimulationToCSV` in `window.strategyMaintenance` global object
+  - ✅ Comprehensive test cases added (10 TCs): button presence, function implementation, download trigger, CSV format, data accuracy, decimal precision, Excel compatibility, error handling, filename sanitization
+- **Phase 3 Status:** 🔄 IN PROGRESS - 10/11 iterations complete (91%)
+
+### 2026-02-22 (Evening - Phase 3.11)
+- **Iteration 3.11:** ✅ COMPLETE - Implemented Parameter History & Rollback. Modified: database migration + `ui/Advanced BTC DCA Strategy.html` (~220 lines added).
+  - **Database Layer (Migration: `20260222_add_variation_parameter_history.sql`):**
+    - ✅ Created `lth_pvr.variation_parameter_history` table (10 columns):
+      - id (UUID, primary key), variation_id (foreign key to templates)
+      - org_id (foreign key to organizations), changed_at (timestamp)
+      - changed_by (foreign key to auth.users), change_type (enum: manual/optimization/rollback/initial)
+      - change_reason (text), old_config (JSONB, nullable), new_config (JSONB, required)
+      - impact_metrics (JSONB, optional for post-change analysis)
+    - ✅ Added 2 performance indexes:
+      - `idx_variation_parameter_history_variation` on (variation_id, changed_at DESC)
+      - `idx_variation_parameter_history_org` on (org_id, changed_at DESC)
+    - ✅ Enabled RLS with org-level isolation policy
+    - ✅ Created helper function `lth_pvr.log_parameter_change()` (SECURITY DEFINER)
+    - ✅ Added comprehensive column documentation (5 COMMENT ON statements)
+    - ✅ Migration applied successfully via Supabase MCP
+  - **UI Components:**
+    - ✅ Added "📅 History" button to variation cards (between View Details and Run Simulation)
+    - ✅ Created parameter history modal with dark overlay and scrollable table
+    - ✅ Modal displays 8 columns: Date, Changed By, Type, B1, B6, Bear Exit, Momentum, Actions
+    - ✅ Color-coded change type badges: initial=gray, manual=blue, optimization=green, rollback=orange
+    - ✅ Rollback button (↺) in Actions column for each history record
+  - **JavaScript Functions (~220 lines total):**
+    - ✅ `loadParameterHistory(variationId, variationName)` (~75 lines):
+      - Queries `variation_parameter_history` table filtered by variation_id and org_id
+      - Orders by changed_at DESC (newest first), limits to 50 records
+      - Fetches user emails separately (cross-schema auth.users join workaround)
+      - Renders history table with formatted config values (percentages, sigma notation)
+      - Displays loading state, empty state, error handling
+    - ✅ `rollbackToConfig(historyId, variationId)` (~100 lines):
+      - Confirmation dialog with clear warnings about effect timing
+      - Loads historical config from selected record
+      - Loads current variation parameters for old_config snapshot
+      - Updates `strategy_variation_templates` with historical config
+      - Logs rollback action to history table (with reason: "Rolled back to [date]")
+      - Reloads variation cards to show updated parameters
+      - Comprehensive error handling
+    - ✅ `closeHistoryModal()` (~5 lines): Hides modal on × or Close button
+    - ✅ Modified `applyOptimizedConfig()` to log parameter changes:
+      - Builds old_config from current variation parameters before update
+      - Builds new_config from optimization results
+      - Logs to history table with change_type='optimization'
+      - Change reason: "Applied optimized configuration from grid search"
+      - Non-fatal error handling (logs warning if history insert fails)
+  - ✅ Exposed 3 new functions in `window.strategyMaintenance`: loadParameterHistory, rollbackToConfig, closeHistoryModal
+  - ✅ Comprehensive test cases added (15 TCs covering all functionality):
+    - UI presence: History button, modal opening, table structure
+    - Data loading: Records display, sorting, empty state
+    - Data accuracy: Config values, change types, user attribution
+    - Rollback workflow: Confirmation, database update, history logging
+    - Error handling: No records, failed rollback
+    - Integration: Apply config creates history
+- **Config Format (JSONB):**
+  ```json
+  {
+    "B": { "B1": 0.22796, "B2": 0.21397, ..., "B11": 0.09572 },
+    "bearPauseEnterSigma": 2.0,
+    "bearPauseExitSigma": -1.0,
+    "momentumLength": 5,
+    "momentumThreshold": 0.0,
+    "enableRetrace": true,
+    "retraceBase": 3
+  }
+  ```
+- **Security:** RLS policy ensures org-level isolation, SECURITY DEFINER on helper function for cross-schema user attribution
+- **Phase 3 Status:** ✅ COMPLETE - 11/11 iterations complete (100%) 🎉
+- **Total Test Cases:** 142 (64 passed, 79 pending browser testing, 3 skipped)
+- **Next Step:** User to execute comprehensive browser testing (79 pending test cases) before Phase 4
 
 ### 2026-02-21 (Evening - Phase 3 continued pt 3)
 - **Iteration 3.4:** ✅ COMPLETE - Created optimizer edge function (ef_optimize_lth_pvr_strategy). Files: index.ts (237 lines), client.ts (14 lines).

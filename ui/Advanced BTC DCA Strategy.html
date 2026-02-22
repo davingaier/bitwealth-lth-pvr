@@ -978,6 +978,40 @@
         <div id="optimizationResultsPanel" class="card" style="display:none;max-width:1200px;margin:2rem auto;">
           <!-- Results populated dynamically -->
         </div>
+
+        <!-- Parameter History Modal (Hidden by default) -->
+        <div id="parameterHistoryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;overflow:auto;">
+          <div style="background:#fff;border-radius:12px;max-width:1200px;margin:2rem auto;padding:2rem;position:relative;">
+            <button onclick="window.strategyMaintenance.closeHistoryModal()" type="button" style="position:absolute;top:1rem;right:1rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);">&times;</button>
+            
+            <h3 style="margin:0 0 0.5rem;">Parameter History: <span id="historyVariationName"></span></h3>
+            <p style="color:var(--muted);font-size:.9rem;margin-bottom:1.5rem;">View and restore previous parameter configurations</p>
+            
+            <div id="historyTableContainer" style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+                <thead>
+                  <tr style="background:#f8f9fa;">
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Date</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Changed By</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Type</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">B1</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">B6</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Bear Exit</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Momentum</th>
+                    <th style="padding:.75rem;text-align:left;border:1px solid var(--border);">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                  <!-- Populated by loadParameterHistory() -->
+                </tbody>
+              </table>
+            </div>
+            
+            <div style="display:flex;gap:.75rem;justify-content:center;margin-top:1.5rem;">
+              <button onclick="window.strategyMaintenance.closeHistoryModal()" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Close</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ADV_DCA Strategy Panel (Future) -->
@@ -8922,6 +8956,7 @@ This will:
     // State
     let currentVariations = [];
     let currentVariationId = null;
+    let currentSimulationResult = null; // Store current simulation for CSV export
 
     // DOM elements
     const variationCardsContainer = document.getElementById('variationCardsContainer');
@@ -9017,6 +9052,7 @@ This will:
               </div>
               <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
                 <button onclick="window.strategyMaintenance.viewVariationDetails('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">View Details</button>
+                <button onclick="window.strategyMaintenance.loadParameterHistory('${v.id}', '${escapeHtml(v.variation_name)}')" type="button" style="flex:1;padding:.5rem;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">📅 History</button>
                 <button onclick="window.strategyMaintenance.showSimulationControls('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">Run Simulation</button>
                 <button onclick="window.strategyMaintenance.optimizeVariation('${v.id}')" type="button" style="flex:1;padding:.5rem;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font:inherit;font-size:.85rem;">Optimize</button>
               </div>
@@ -9128,6 +9164,9 @@ Momentum:
 
         const results = await response.json();
         
+        // Store results for CSV export
+        currentSimulationResult = results;
+        
         // Display results
         displaySimulationResults(results);
 
@@ -9178,6 +9217,7 @@ Momentum:
           <canvas id="simResultsChart" style="max-height:400px;"></canvas>
         </div>
         <div style="display:flex;gap:.75rem;justify-content:center;">
+          <button onclick="window.strategyMaintenance.exportSimulationToCSV()" type="button" style="padding:.75rem 1.5rem;background:#10b981;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">📄 Export to CSV</button>
           <button onclick="window.strategyMaintenance.hideSimulationResults()" type="button" style="padding:.75rem 1.5rem;background:#6b7280;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Close</button>
         </div>
       `;
@@ -9285,6 +9325,80 @@ Momentum:
       simulationControls.style.display = 'none';
       simulationResultsPanel.style.display = 'none';
       currentVariationId = null;
+    }
+
+    // Export simulation results to CSV
+    function exportSimulationToCSV() {
+      try {
+        if (!currentSimulationResult || !currentVariationId) {
+          alert('No simulation results available to export');
+          return;
+        }
+
+        const variation = currentVariations.find(v => v.id === currentVariationId);
+        if (!variation) {
+          alert('Variation not found');
+          return;
+        }
+
+        const result = currentSimulationResult[currentVariationId];
+        if (!result || !result.dailyResults || result.dailyResults.length === 0) {
+          alert('No daily results available to export');
+          return;
+        }
+
+        // Create CSV header
+        const header = [
+          'date', 'btc_balance', 'usdt_balance', 'nav', 'btc_price',
+          'action', 'amount_pct', 'rule', 'tier',
+          'platform_fee', 'performance_fee', 'exchange_fee',
+          'cumulative_contrib', 'cumulative_fees', 'roi'
+        ].join(',');
+
+        // Create CSV rows from dailyResults
+        const rows = result.dailyResults.map(day => [
+          day.date || '',
+          (day.btc_bal !== undefined ? day.btc_bal.toFixed(8) : ''),
+          (day.usdt_bal !== undefined ? day.usdt_bal.toFixed(2) : ''),
+          (day.nav !== undefined ? day.nav.toFixed(2) : ''),
+          (day.btc_price !== undefined ? day.btc_price.toFixed(2) : ''),
+          day.action || '',
+          (day.amount_pct !== undefined ? day.amount_pct : ''),
+          day.rule || '',
+          (day.tier !== undefined ? day.tier : ''),
+          (day.platform_fee !== undefined ? day.platform_fee.toFixed(2) : '0'),
+          (day.performance_fee !== undefined ? day.performance_fee.toFixed(2) : '0'),
+          (day.exchange_fee !== undefined ? day.exchange_fee.toFixed(2) : '0'),
+          (day.cumulative_contrib !== undefined ? day.cumulative_contrib.toFixed(2) : ''),
+          (day.cumulative_fees !== undefined ? day.cumulative_fees.toFixed(2) : ''),
+          (day.roi !== undefined ? day.roi.toFixed(4) : '')
+        ].join(','));
+
+        // Combine header + rows
+        const csv = [header, ...rows].join('\\n');
+
+        // Create download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Sanitize variation name for filename
+        const sanitizedName = variation.variation_name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const dateStr = new Date().toISOString().split('T')[0];
+        link.download = `lth_pvr_simulation_${sanitizedName}_${dateStr}.csv`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log('✅ CSV exported:', link.download);
+
+      } catch (err) {
+        console.error('Error exporting CSV:', err);
+        alert(`Error exporting CSV: ${err.message}`);
+      }
     }
 
     // Optimize variation - show optimization modal
@@ -9637,6 +9751,30 @@ Momentum:
           }
         }
 
+        // Build old/new config for history logging
+        const oldConfig = {
+          B: {}
+        };
+        for (let i = 1; i <= 11; i++) {
+          oldConfig.B[`B${i}`] = variation[`b${i}`];
+        }
+        oldConfig.bearPauseEnterSigma = variation.bear_pause_enter_sigma;
+        oldConfig.bearPauseExitSigma = variation.bear_pause_exit_sigma;
+        oldConfig.momentumLength = variation.momentum_length;
+        oldConfig.momentumThreshold = variation.momentum_threshold;
+        oldConfig.enableRetrace = variation.enable_retrace;
+        oldConfig.retraceBase = variation.retrace_base;
+
+        const newConfig = {
+          B: config.B || oldConfig.B,
+          bearPauseEnterSigma: updateData.bear_pause_enter_sigma,
+          bearPauseExitSigma: updateData.bear_pause_exit_sigma,
+          momentumLength: updateData.momentum_length,
+          momentumThreshold: updateData.momentum_threshold,
+          enableRetrace: updateData.enable_retrace,
+          retraceBase: updateData.retrace_base
+        };
+
         // Update via Supabase client
         const { data, error } = await supabaseClient
           .schema('lth_pvr')
@@ -9665,6 +9803,27 @@ Momentum:
           return;
         }
 
+        // Log parameter change to history table
+        try {
+          const { data: userData } = await supabaseClient.auth.getUser();
+          const userId = userData?.user?.id;
+
+          await supabaseClient
+            .schema('lth_pvr')
+            .from('variation_parameter_history')
+            .insert({
+              variation_id: currentVariationId,
+              org_id: orgId,
+              changed_by: userId,
+              change_type: 'optimization',
+              change_reason: 'Applied optimized configuration from grid search',
+              old_config: oldConfig,
+              new_config: newConfig
+            });
+        } catch (historyErr) {
+          console.error('Error logging history (non-fatal):', historyErr);
+        }
+
         // Success!
         alert(`Parameters applied successfully to "${variation.variation_name}"!\n\nChanges will take effect at the next trading cycle (03:00 UTC tomorrow).`);
 
@@ -9685,6 +9844,251 @@ Momentum:
     function closeOptimizationResults() {
       optimizationResultsPanel.style.display = 'none';
       currentVariationId = null;
+    }
+
+    // Load parameter history for a variation
+    async function loadParameterHistory(variationId, variationName) {
+      try {
+        // Display modal
+        document.getElementById('historyVariationName').textContent = variationName;
+        document.getElementById('parameterHistoryModal').style.display = 'block';
+        
+        // Show loading state
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted);">Loading history...</td></tr>';
+
+        // Get org_id from context
+        const orgSelect = document.getElementById('orgSelect');
+        const orgId = orgSelect?.value;
+
+        if (!orgId) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444;">Error: Organization not selected</td></tr>';
+          return;
+        }
+
+        // Query history (with LEFT JOIN to auth.users for email)
+        const { data: history, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('variation_parameter_history')
+          .select('*')
+          .eq('variation_id', variationId)
+          .eq('org_id', orgId)
+          .order('changed_at', { ascending: false })
+          .limit(50);
+
+        if (error) {
+          console.error('Error loading history:', error);
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444;">Error: ${error.message}</td></tr>`;
+          return;
+        }
+
+        if (!history || history.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted);">No parameter history found for this variation</td></tr>';
+          return;
+        }
+
+        // Get user emails separately (since cross-schema joins not supported in client)
+        const userIds = [...new Set(history.map(h => h.changed_by).filter(id => id))];
+        let userEmails = {};
+        
+        if (userIds.length > 0) {
+          try {
+            const { data: users } = await supabaseClient.auth.admin.listUsers();
+            users?.users?.forEach(u => {
+              userEmails[u.id] = u.email;
+            });
+          } catch (e) {
+            console.warn('Could not fetch user emails:', e);
+          }
+        }
+
+        // Render history table
+        tbody.innerHTML = history.map(h => {
+          const config = h.new_config || {};
+          const changedBy = h.changed_by ? (userEmails[h.changed_by] || 'User') : 'System';
+          const changeTypeColors = {
+            'initial': '#6b7280',
+            'manual': '#3b82f6',
+            'optimization': '#10b981',
+            'rollback': '#f59e0b'
+          };
+          
+          return `
+            <tr>
+              <td style="padding:.5rem;border:1px solid var(--border);white-space:nowrap;">${new Date(h.changed_at).toLocaleString()}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);">${changedBy}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);">
+                <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.8rem;background:${changeTypeColors[h.change_type] || '#6b7280'};color:#fff;">
+                  ${h.change_type || 'unknown'}
+                </span>
+              </td>
+              <td style="padding:.5rem;border:1px solid var(--border);text-align:right;">${config.B?.B1 ? (config.B.B1 * 100).toFixed(3) + '%' : 'N/A'}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);text-align:right;">${config.B?.B6 ? (config.B.B6 * 100).toFixed(3) + '%' : 'N/A'}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);text-align:right;">${config.bearPauseExitSigma !== undefined ? (config.bearPauseExitSigma > 0 ? '+' : '') + config.bearPauseExitSigma + 'σ' : 'N/A'}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);text-align:right;">${config.momentumLength !== undefined ? config.momentumLength + ' days' : 'N/A'}</td>
+              <td style="padding:.5rem;border:1px solid var(--border);text-align:center;">
+                <button onclick="window.strategyMaintenance.rollbackToConfig('${h.id}', '${variationId}')" 
+                        type="button"
+                        style="padding:4px 12px;background:#f59e0b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85rem;">
+                  ↺ Rollback
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error('Error in loadParameterHistory:', err);
+        const tbody = document.getElementById('historyTableBody');
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:#ef4444;">Error: ${err.message}</td></tr>`;
+        }
+      }
+    }
+
+    // Rollback to a historical configuration
+    async function rollbackToConfig(historyId, variationId) {
+      try {
+        // Confirmation
+        const confirmed = confirm(
+          "Are you sure you want to rollback to this configuration?\n\n" +
+          "This will revert all parameters to this historical point.\n\n" +
+          "Changes take effect at the next trading cycle (03:00 UTC tomorrow)."
+        );
+
+        if (!confirmed) return;
+
+        // Get org_id from context
+        const orgSelect = document.getElementById('orgSelect');
+        const orgId = orgSelect?.value;
+
+        if (!orgId) {
+          alert('Error: Organization not selected');
+          return;
+        }
+
+        // Load historical record
+        const { data: historyRecord, error: historyError } = await supabaseClient
+          .schema('lth_pvr')
+          .from('variation_parameter_history')
+          .select('*')
+          .eq('id', historyId)
+          .single();
+
+        if (historyError) {
+          console.error('Error loading history record:', historyError);
+          alert(`Error loading history: ${historyError.message}`);
+          return;
+        }
+
+        if (!historyRecord) {
+          alert('Error: History record not found');
+          return;
+        }
+
+        // Load current variation for old_config
+        const { data: variation, error: varError } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .select('*')
+          .eq('id', variationId)
+          .eq('org_id', orgId)
+          .single();
+
+        if (varError) {
+          console.error('Error loading variation:', varError);
+          alert(`Error loading variation: ${varError.message}`);
+          return;
+        }
+
+        // Build old config for history logging
+        const oldConfig = {
+          B: {}
+        };
+        for (let i = 1; i <= 11; i++) {
+          oldConfig.B[`B${i}`] = variation[`b${i}`];
+        }
+        oldConfig.bearPauseEnterSigma = variation.bear_pause_enter_sigma;
+        oldConfig.bearPauseExitSigma = variation.bear_pause_exit_sigma;
+        oldConfig.momentumLength = variation.momentum_length;
+        oldConfig.momentumThreshold = variation.momentum_threshold;
+        oldConfig.enableRetrace = variation.enable_retrace;
+        oldConfig.retraceBase = variation.retrace_base;
+
+        // Build update data from historical config
+        const targetConfig = historyRecord.new_config;
+        const updateData = {
+          bear_pause_enter_sigma: Number(targetConfig.bearPauseEnterSigma),
+          bear_pause_exit_sigma: Number(targetConfig.bearPauseExitSigma),
+          momentum_length: Number(targetConfig.momentumLength),
+          momentum_threshold: Number(targetConfig.momentumThreshold),
+          enable_retrace: targetConfig.enableRetrace,
+          retrace_base: Number(targetConfig.retraceBase),
+          updated_at: new Date().toISOString()
+        };
+
+        // Add B1-B11 values
+        if (targetConfig.B) {
+          for (let i = 1; i <= 11; i++) {
+            const key = `B${i}`;
+            const dbKey = `b${i}`;
+            if (targetConfig.B[key] !== undefined) {
+              updateData[dbKey] = Number(targetConfig.B[key]);
+            }
+          }
+        }
+
+        // Update variation
+        const { error: updateError } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .update(updateData)
+          .eq('id', variationId)
+          .eq('org_id', orgId);
+
+        if (updateError) {
+          console.error('Error updating variation:', updateError);
+          alert(`Rollback failed: ${updateError.message}`);
+          return;
+        }
+
+        // Log rollback to history
+        try {
+          const { data: userData } = await supabaseClient.auth.getUser();
+          const userId = userData?.user?.id;
+
+          await supabaseClient
+            .schema('lth_pvr')
+            .from('variation_parameter_history')
+            .insert({
+              variation_id: variationId,
+              org_id: orgId,
+              changed_by: userId,
+              change_type: 'rollback',
+              change_reason: `Rolled back to configuration from ${new Date(historyRecord.changed_at).toLocaleString()}`,
+              old_config: oldConfig,
+              new_config: targetConfig
+            });
+        } catch (historyErr) {
+          console.error('Error logging rollback (non-fatal):', historyErr);
+        }
+
+        // Success
+        alert(`✅ Parameters rolled back successfully to ${new Date(historyRecord.changed_at).toLocaleString()}!`);
+
+        // Reload variations and close modal
+        closeHistoryModal();
+        await loadLthPvrVariations();
+
+      } catch (err) {
+        console.error('Error in rollbackToConfig:', err);
+        alert(`Rollback failed: ${err.message}`);
+      }
+    }
+
+    // Close parameter history modal
+    function closeHistoryModal() {
+      document.getElementById('parameterHistoryModal').style.display = 'none';
     }
 
     // Cancel simulation
@@ -9763,7 +10167,11 @@ Momentum:
       closeOptimizationModal,
       closeOptimizationResults,
       applyOptimizedConfig,
-      updateNoStrategyMessage
+      updateNoStrategyMessage,
+      exportSimulationToCSV,
+      loadParameterHistory,
+      rollbackToConfig,
+      closeHistoryModal
     };
 
     // Helper function to escape HTML
