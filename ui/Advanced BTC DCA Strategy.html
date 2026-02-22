@@ -4446,13 +4446,12 @@
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       } finally {
         // Reset flag after a delay to ensure all change event handlers complete
-        // Portfolio change event can fire ~100ms after applyContextMode completes,
-        // then strategy maintenance listener has an additional 50ms setTimeout
-        // So wait 250ms to ensure everything completes
+        // Change events from innerHTML updates can fire asynchronously with unpredictable timing
+        // Use a generous 1 second delay to ensure all events complete before resetting
         setTimeout(() => {
           window.programmaticallyUpdatingContext = false;
           console.log('🔓 Context update complete, flag reset');
-        }, 250);
+        }, 1000);
       }
     }
 
