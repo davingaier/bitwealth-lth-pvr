@@ -233,7 +233,19 @@ Deno.serve(async (req) => {
           pct: d.amount_pct,
           btc_after: d.btc_balance,
           usdt_after: d.usdt_balance
-        }))
+        })),
+        // Debug: Milestone balances to compare with back-tester
+        debug_milestones: [100, 500, 1000, 1500, 2000, 2243].map(dayNum => {
+          const d = simResult.daily[dayNum - 1];
+          return d ? {
+            day: dayNum,
+            date: d.trade_date,
+            action: d.action,
+            btc: d.btc_balance,
+            usdt: d.usdt_balance,
+            nav: d.nav_usd
+          } : null;
+        }).filter(x => x !== null)
       });
       
       console.info(`ef_run_lth_pvr_simulator: ${variation.variation_name} - NAV=$${simResult.final_nav_usd.toFixed(2)}, ROI=${simResult.final_roi_percent.toFixed(2)}%, CAGR=${simResult.final_cagr_percent.toFixed(2)}%`);
