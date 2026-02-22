@@ -2863,29 +2863,39 @@
         supabaseClient.auth.onAuthStateChange((event, session) => {
           console.log('[Auth] State changed:', event, session?.user?.email);
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // User just signed in or token refreshed - reload data
-            if (location.hash === '#import-module' || !location.hash) {
+            // User just signed in or token refreshed - reload data FOR CURRENT MODULE ONLY
+            const currentHash = location.hash;
+            
+            // Import module data
+            if (currentHash === '#import-module' || !currentHash) {
               clearInlineError('inlineError');
-              loadExistingDates();
+              if (typeof loadExistingDates === 'function') {
+                loadExistingDates();
+              }
             }
-            // Reload alerts if the loadAlerts function exists
-            if (typeof window.loadAlerts === 'function') {
+            
+            // Admin module alerts
+            if (currentHash === '#admin-module' && typeof window.loadAlerts === 'function') {
               window.loadAlerts();
             }
-            // Reload customer fees if the loadCustomerFees function exists
-            if (typeof window.loadCustomerFees === 'function') {
-              window.loadCustomerFees();
+            
+            // Customer Maintenance module data
+            if (currentHash === '#customer-maintenance-module') {
+              if (typeof window.loadCustomerFees === 'function') {
+                window.loadCustomerFees();
+              }
+              if (typeof window.loadCustomers === 'function') {
+                window.loadCustomers();
+              }
             }
-            // Reload customers if the loadCustomers function exists
-            if (typeof window.loadCustomers === 'function') {
-              window.loadCustomers();
-            }
-            // Reload org context if function exists
-            if (typeof window.loadOrgContext === 'function') {
+            
+            // Context bar (needed for all modules on sign-in, but not on token refresh when already signed in)
+            if (event === 'SIGNED_IN' && typeof window.loadOrgContext === 'function') {
               window.loadOrgContext();
             }
-            // Reload placed orders if on that module
-            if (location.hash === '#customer-transactions-module') {
+            
+            // Customer Transactions module
+            if (currentHash === '#customer-transactions-module') {
               if (typeof window.loadPlaced24h === 'function' && typeof window.renderPlaced === 'function') {
                 window.loadPlaced24h().then(window.renderPlaced).catch(console.warn);
               }
@@ -5932,7 +5942,10 @@
     if (window.supabaseClient?.auth?.onAuthStateChange){
       window.supabaseClient.auth.onAuthStateChange((_evt, session)=>{
         console.log('[ADMIN] auth event:', _evt, session?.user?.email);
-        flipUI(session?.user?.email || null);
+        // Only update admin UI if on admin module or on SIGNED_IN event
+        if (_evt === 'SIGNED_IN' || location.hash === '#admin-module') {
+          flipUI(session?.user?.email || null);
+        }
       });
     }
 
