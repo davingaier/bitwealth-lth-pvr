@@ -4121,26 +4121,19 @@
       if (typeof window.strategyMaintenance?.updateNoStrategyMessage === 'function') {
         window.strategyMaintenance.updateNoStrategyMessage();
       }
-      
-      // After visibility updates complete, schedule flag reset after a delay
-      // This ensures all change events triggered by dropdown updates have been processed
-      if (window.programmaticallyUpdatingContext && !window._contextResetScheduled) {
-        window._contextResetScheduled = true;
-        setTimeout(() => {
-          window.programmaticallyUpdatingContext = false;
-          window._contextResetScheduled = false;
-          console.log('🔓 Context update complete, flag reset (from updateStrategyVisibility)');
-        }, 200);
-      }
     }
 
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
+      // Save the current strategy code before updating
+      const previousStrategyCode = window.currentStrategyCode;
+      window._previousStrategyCode = previousStrategyCode;
+      
       // Set flag to prevent strategy maintenance from reacting to programmatic changes
       window._contextLoadCounter = (window._contextLoadCounter || 0) + 1;
       const myLoadId = window._contextLoadCounter;
-      console.log('🔒 Setting programmaticallyUpdatingContext = true (load #' + myLoadId + ')');
+      console.log('🔒 Setting programmaticallyUpdatingContext = true (load #' + myLoadId + '), previous strategy:', previousStrategyCode);
       window.programmaticallyUpdatingContext = true;
       
       const orgSel  = document.getElementById('orgSelect');
@@ -4460,11 +4453,12 @@
       } finally {
         // Don't reset immediately - keep flag set for extended period
         // Change events from innerHTML updates fire asynchronously and unpredictably
-        // Keep flag true for 3 seconds to catch all delayed events
+        // Some change events can be delayed by 10+ seconds due to browser event queue
+        // Keep flag true for 15 seconds to catch all delayed events
         setTimeout(() => {
-          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', after 3s)');
+          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', after 15s)');
           window.programmaticallyUpdatingContext = false;
-        }, 3000);
+        }, 15000);
       }
     }
 
@@ -10214,6 +10208,15 @@ Momentum:
           console.log('🔍 Strategy selector changed, checking flag:', window.programmaticallyUpdatingContext);
           if (window.programmaticallyUpdatingContext) {
             console.log('⏸️ Skipping loadLthPvrVariations - programmatic context update');
+            return;
+          }
+          
+          // Also don't reload if the strategy didn't actually change
+          const previousCode = window._previousStrategyCode;
+          const currentCode = window.currentStrategyCode;
+          console.log('📊 Strategy check - previous:', previousCode, 'current:', currentCode);
+          if (previousCode === currentCode) {
+            console.log('⏸️ Skipping loadLthPvrVariations - strategy unchanged');
             return;
           }
           
