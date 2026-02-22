@@ -59,21 +59,42 @@ Deno.serve(async (req) => {
     
     console.info(`ef_run_lth_pvr_simulator: start=${start_date}, end=${end_date}, upfront=${upfront_usd}, monthly=${monthly_usd}`);
     
-    // Load CI bands data for date range (set high limit to avoid PostgREST 1000-row default)
-    const { data: ciData, error: ciErr } = await sb
-      .from("ci_bands_daily")
-      .select("*")
-      .eq("org_id", org_id)
-      .gte("date", start_date)
-      .lte("date", end_date)
-      .order("date", { ascending: true })
-      .limit(10000); // Allow up to ~27 years of daily data
+    // Load CI bands data for date range with pagination (PostgREST has max-rows=1000 limit)
+    let ciData: any[] = [];
+    let pageSize = 1000;
+    let page = 0;
+    let hasMore = true;
     
-    if (ciErr) {
-      throw new Error(`ci_bands_daily query failed: ${ciErr.message}`);
+    while (hasMore) {
+      const startRow = page * pageSize;
+      const endRow = startRow + pageSize - 1;
+      
+      const { data: pageData, error: ciErr } = await sb
+        .from("ci_bands_daily")
+        .select("*")
+        .eq("org_id", org_id)
+        .gte("date", start_date)
+        .lte("date", end_date)
+        .order("date", { ascending: true })
+        .range(startRow, endRow);
+      
+      if (ciErr) {
+        throw new Error(`ci_bands_daily query failed: ${ciErr.message}`);
+      }
+      
+      if (!pageData || pageData.length === 0) {
+        hasMore = false;
+      } else {
+        ciData = ciData.concat(pageData);
+        hasMore = pageData.length === pageSize; // If we got a full page, there might be more
+        page++;
+        console.info(`Fetched page ${page}: ${pageData.length} rows (total so far: ${ciData.length})`);
+      }
     }
     
-    if (!ciData || ciData.length === 0) {
+    console.info(`CI bands query completed: ${ciData.length} total rows`);
+    
+    if (ciData.length === 0) {
       return new Response(
         JSON.stringify({ 
           error: "No CI bands data found for date range",
