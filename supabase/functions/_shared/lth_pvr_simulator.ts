@@ -567,6 +567,20 @@ export function runSimulation(
   const lastDay = daily[daily.length - 1];
   const metrics = calculateMetrics(daily);
   
+  // Debug logging: Compare first 5 and last 5 days
+  console.log("🔬 Simulator Debug - First 5 days:");
+  for (let i = 0; i < Math.min(5, daily.length); i++) {
+    const d = daily[i];
+    console.log(`  Day ${i}: ${d.trade_date} | Action: ${d.action} ${(d.amount_pct*100).toFixed(1)}% | NAV: $${d.nav_usd.toFixed(2)} | BTC: ${d.btc_balance.toFixed(8)} | USDT: $${d.usdt_balance.toFixed(2)}`);
+  }
+  console.log("🔬 Simulator Debug - Last 5 days:");
+  for (let i = Math.max(0, daily.length - 5); i < daily.length; i++) {
+    const d = daily[i];
+    console.log(`  Day ${i}: ${d.trade_date} | Action: ${d.action} ${(d.amount_pct*100).toFixed(1)}% | NAV: $${d.nav_usd.toFixed(2)} | BTC: ${d.btc_balance.toFixed(8)} | USDT: $${d.usdt_balance.toFixed(2)}`);
+  }
+  console.log(`🔬 Final Balances: BTC=${btcBal.toFixed(8)}, USDT=$${usdtBal.toFixed(2)}, NAV=$${(btcBal * (daily[daily.length-1]?.price_usd || 0) + usdtBal).toFixed(2)}`);
+  console.log(`🔬 Cumulative Fees: Platform=$${platformFeesCum.toFixed(2)}, Performance=$${performanceFeesCum.toFixed(2)}, ExchBTC=${exchangeFeesBtcCum.toFixed(8)}, ExchUSDT=$${exchangeFeesUsdtCum.toFixed(2)}`);
+  
   return {
     // Summary metrics
     final_nav_usd: lastDay?.nav_usd ?? 0,

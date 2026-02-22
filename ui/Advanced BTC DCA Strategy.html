@@ -9267,8 +9267,10 @@ Momentum:
         </div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;margin-bottom:1.5rem;">
           <div><span style="color:var(--muted);">Max Drawdown:</span> <strong>${result.max_drawdown_percent?.toFixed(2) || '0'}%</strong></div>
-          <div><span style="color:var(--muted);">Total Invested:</span> <strong>$${result.total_contrib_net_usdt?.toLocaleString() || '0'}</strong></div>
+          <div><span style="color:var(--muted);">Total Contributions (Gross):</span> <strong>$${result.total_contrib_gross_usdt?.toLocaleString() || '0'}</strong></div>
+          <div><span style="color:var(--muted);">Total Contributions (Net):</span> <strong>$${result.total_contrib_net_usdt?.toLocaleString() || '0'}</strong></div>
           <div><span style="color:var(--muted);">Final BTC:</span> <strong>${result.final_btc_balance?.toFixed(8) || '0'} BTC</strong></div>
+          <div><span style="color:var(--muted);">Final USDT:</span> <strong>$${result.final_usdt_balance?.toLocaleString() || '0'}</strong></div>
           <div><span style="color:var(--muted);">Cash Drag:</span> <strong>${result.cash_drag_percent?.toFixed(2) || '0'}%</strong></div>
         </div>
         <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
