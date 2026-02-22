@@ -500,6 +500,11 @@ export function runSimulation(
         const profitAboveHWM = navForPerfFee - highWaterMark;
         performanceFeeToday = profitAboveHWM * performanceFeeRate;
         
+        // Debug logging for performance fees
+        if (performanceFeeToday > 100) {
+          console.log(`📈 Performance Fee ${tradeDate}: $${performanceFeeToday.toFixed(2)} | HWM: $${highWaterMark.toFixed(2)} → $${navForPerfFee.toFixed(2)} | Profit: $${profitAboveHWM.toFixed(2)}`);
+        }
+        
         // Deduct performance fee from USDT balance
         usdtBal -= performanceFeeToday;
         performanceFeesCum += performanceFeeToday;
