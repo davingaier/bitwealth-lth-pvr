@@ -9271,6 +9271,18 @@ Momentum:
           <div><span style="color:var(--muted);">Final BTC:</span> <strong>${result.final_btc_balance?.toFixed(8) || '0'} BTC</strong></div>
           <div><span style="color:var(--muted);">Cash Drag:</span> <strong>${result.cash_drag_percent?.toFixed(2) || '0'}%</strong></div>
         </div>
+        <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 .75rem;display:flex;align-items:center;gap:.5rem;"><span>💰</span> Fee Breakdown</h4>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;font-size:.9rem;">
+            <div><span style="color:var(--muted);">Platform Fees:</span> <strong>$${result.total_platform_fees_usdt?.toFixed(2) || '0'}</strong></div>
+            <div><span style="color:var(--muted);">Performance Fees:</span> <strong>$${result.total_performance_fees_usdt?.toFixed(2) || '0'}</strong></div>
+            <div><span style="color:var(--muted);">Exchange Fees (BTC):</span> <strong>${result.total_exchange_fees_btc?.toFixed(8) || '0'} BTC</strong></div>
+            <div><span style="color:var(--muted);">Exchange Fees (USDT):</span> <strong>$${result.total_exchange_fees_usdt?.toFixed(2) || '0'}</strong></div>
+            <div style="grid-column:1/-1;margin-top:.5rem;padding-top:.5rem;border-top:1px solid #fbbf24;">
+              <span style="color:var(--muted);">Total Fees (USDT):</span> <strong>$${((result.total_platform_fees_usdt || 0) + (result.total_performance_fees_usdt || 0) + (result.total_exchange_fees_usdt || 0)).toFixed(2)}</strong>
+            </div>
+          </div>
+        </div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
           <h4 style="margin:0 0 1rem;">NAV Over Time</h4>
           <canvas id="simResultsChart" style="max-height:400px;"></canvas>
@@ -9289,6 +9301,9 @@ Momentum:
     function renderSimulationChart(dailyResults) {
       const canvas = document.getElementById('simResultsChart');
       if (!canvas || !dailyResults || dailyResults.length === 0) return;
+
+      console.log(`📊 Rendering chart with ${dailyResults.length} daily results`);
+      console.log(`📅 Date range: ${dailyResults[0]?.trade_date || dailyResults[0]?.close_date} to ${dailyResults[dailyResults.length-1]?.trade_date || dailyResults[dailyResults.length-1]?.close_date}`);
 
       const ctx = canvas.getContext('2d');
       
