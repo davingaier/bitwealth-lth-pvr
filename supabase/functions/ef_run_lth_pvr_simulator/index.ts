@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
       price_at_p150: row.price_at_p150,
       price_at_p175: row.price_at_p175,
       price_at_p200: row.price_at_p200,
+      price_at_p250: row.price_at_p250,
       bear_pause: row.bear_pause
     }));
     

@@ -73,6 +73,7 @@ export interface CIBandData {
   price_at_p150?: number | string;
   price_at_p175?: number | string;
   price_at_p200?: number | string;
+  price_at_p250?: number | string;
   bear_pause?: boolean | null;
   [key: string]: any; // Allow additional properties
 }

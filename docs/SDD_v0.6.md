@@ -3,11 +3,152 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-17 (v0.6.50)
+**Last updated:** 2026-02-22 (v0.6.51)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.51 – Strategy Maintenance Phase 1-3 Complete + Simulator price_at_p250 Bug Fix
+**Date:** 2026-02-21 to 2026-02-22  
+**Purpose:** Complete strategy maintenance Phases 1-3 (logic centralization, database integration, simulator creation) and fix critical simulator bug causing 10x BTC balance discrepancy.
+
+**Status:** ✅ COMPLETE - Phases 1-3 validated, simulator now matches back-tester
+
+#### Phase 1: Logic Centralization & Refactoring ✅
+
+**Completed (2026-02-21):**
+- Created shared logic module `_shared/lth_pvr_strategy_logic.ts` (636 lines)
+  - Exported: StrategyConfig interface, decideTrade(), computeBearPauseAt(), fin(), bucketLabel()
+  - Consolidates all LTH PVR decision logic in single source of truth
+- Refactored `ef_generate_decisions` (live trading) to use shared module
+  - Removed 290-line duplicate `lth_pvr_logic.ts`
+  - Deployed successfully, validated with 7 active customers
+- Refactored `ef_bt_execute` (back-testing) to use shared module
+  - Removed duplicate logic file
+  - Admin UI and public website back-testers validated
+- Archived Python simulator to `docs/legacy/` with comprehensive README
+  - Documented historical optimization results (current production parameters)
+  - Explained deprecation rationale and migration path
+
+**Test Results:** All 10 test cases PASS (TC-1.1.1 through TC-1.4.2)
+
+#### Phase 2: Database Schema & Live Trading Integration ✅
+
+**Completed (2026-02-21):**
+- Created `lth_pvr.strategy_variation_templates` table (28 columns)
+  - Stores variation configurations: B1-B11, bear pause thresholds, momentum params, retrace_base
+  - Added indexes for production lookup and org-wide search
+- Seeded 3 default variations:
+  - **Progressive** (is_production=true): exit=-1.0σ (current production)
+  - **Balanced**: exit=-0.75σ (earlier bear pause exit)
+  - **Conservative**: exit=0σ (mean exit)
+- Added `strategy_variation_id` FK column to `public.customer_strategies`
+- Migrated 7 active LTH_PVR customers to Progressive variation
+- Refactored `ef_generate_decisions` for database-driven configuration
+  - Implemented 3-step query approach (PostgREST cross-schema FK limitation)
+  - Removed hard-coded PROGRESSIVE_CONFIG constant
+  - Deployed and validated with all customers
+
+**Test Results:** All 13 test cases PASS (TC-2.1.1 through TC-2.4.5)
+
+#### Phase 3: TypeScript Simulator Creation ✅
+
+**Completed (2026-02-21):**
+- Created `_shared/lth_pvr_simulator.ts` module (687 lines)
+  - Exported: runSimulation(), calculateMetrics(), 6 TypeScript interfaces
+  - Ported from ef_bt_execute with in-memory execution
+  - Fee structure: platform 0.75%, exchange trade 8 bps (BTC), exchange contrib 18 bps (USDT), performance 10% monthly
+- Created `ef_run_lth_pvr_simulator` edge function
+  - Loads CI bands from database
+  - Supports all 3 variations (Progressive, Balanced, Conservative)
+  - Initial testing showed massive discrepancy vs back-tester
+
+#### CRITICAL BUG: Simulator price_at_p250 Missing (2026-02-22) 🐛
+
+**Problem Discovered:**
+- Simulator: NAV $521,384, BTC 0.0253 ❌
+- Back-tester: NAV $511,974, BTC 0.2343 ✅
+- **10x BTC difference** despite identical configurations and action counts (866 BUYs, 1072 SELLs, 305 HOLDs)
+
+**Root Cause Analysis:**
+- Divergence point: 2025-10-02 (day 2000)
+- Price: $120,593.74 at +2.00σ band
+- **Back-tester:** SELL 3.300% (Base 10) ✅ CORRECT
+- **Simulator:** SELL 9.572% (Base 11) ❌ WRONG
+- Compounded over 231 consecutive SELLs → simulator sold 93% of holdings vs 92%
+
+**Technical Deep Dive:**
+
+Decision logic in `lth_pvr_strategy_logic.ts` (lines 462-478):
+```typescript
+// Base 10: +2.0σ to +2.5σ (sell 3.3%)
+if (fin(p_p250) && px < p_p250) {
+  return { action: "SELL", pct: config.B.B10, rule: "Base 10" };
+}
+
+// Base 11: >= +2.5σ (sell 9.572%)
+return { action: "SELL", pct: config.B.B11, rule: "Base 11" };
+```
+
+**Simulator Bug:**
+- CI bands transformation in `ef_run_lth_pvr_simulator/index.ts` (lines 110-126) stopped at `price_at_p200`
+- **Missing:** `price_at_p250: row.price_at_p250` ❌
+- Result: `p_p250` = undefined in all decision calls
+- Conditional `fin(p_p250) && px < p_p250` evaluated to `false` (fin(undefined) = false)
+- Fallthrough to Base 11 every time price > +2.0σ
+
+**The Fix:**
+1. Added `price_at_p250?: number | string;` to CIBandData interface (`_shared/lth_pvr_simulator.ts` line 76)
+2. Added `price_at_p250: row.price_at_p250,` to data transformation (`ef_run_lth_pvr_simulator/index.ts` line 126)
+3. Deployed updated simulator
+
+**Verification (2026-02-22):**
+- Re-ran Progressive simulation (2020-01-01 to 2026-02-20, $10K upfront + $500/month)
+- **Result:** NAV $511,974, BTC 0.2343 ✅ PERFECT MATCH
+- Simulator now produces identical results to back-tester
+
+**Test Results:** TC-3.1.5 through TC-3.1.8 marked PASS (fee structure, contribution logic, bear pause state, decision integration)
+
+#### Files Modified
+
+**Created:**
+- `supabase/functions/_shared/lth_pvr_strategy_logic.ts` (636 lines)
+- `supabase/functions/_shared/lth_pvr_simulator.ts` (687 lines)
+- `supabase/functions/ef_run_lth_pvr_simulator/index.ts` (289 lines)
+- `docs/legacy/README.md` (215 lines)
+
+**Modified:**
+- `supabase/functions/ef_generate_decisions/index.ts` - Refactored for shared module + database config
+- `supabase/functions/ef_bt_execute/index.ts` - Refactored for shared module
+- `supabase/migrations/20260221_add_bear_pause_columns_to_bt_params.sql` - Bear pause config columns
+- `supabase/migrations/20260221_create_strategy_variation_templates.sql` - Strategy variations table
+- `supabase/migrations/20260221_seed_strategy_variations.sql` - 3 default variations
+- `supabase/migrations/20260221_add_strategy_variation_fk.sql` - FK to customer_strategies
+- `supabase/migrations/20260221_migrate_customers_to_progressive.sql` - Customer migration
+
+**Moved:**
+- `docs/live_lth_pvr_rule2_momo_filter_v1.1.py` → `docs/legacy/live_lth_pvr_rule2_momo_filter_v1.1.py`
+
+**Deployments:**
+- `ef_generate_decisions` - 4 deployments (refactoring iterations)
+- `ef_bt_execute` - 1 deployment
+- `ef_execute_public_backtests` - 1 deployment
+- `ef_run_lth_pvr_simulator` - 2 deployments (initial + price_at_p250 fix)
+
+#### Next Steps
+
+**Phase 3 Remaining:**
+- Iteration 3.2: Create Admin UI simulator module (JavaScript integration)
+- Iteration 3.3: Build optimizer UI (parameter sweep configuration)
+- Iterations 3.4-3.11: Implement optimization algorithms (grid search, Bayesian, genetic)
+
+**Phase 4-6 (Deferred):**
+- Phase 4: Public API endpoints for back-testing
+- Phase 5: Email reporting and scheduler
+- Phase 6: Advanced analytics dashboards
+
+---
 
 ### v0.6.50 – TC-ZAR-020 Smart Allocation Validation Complete
 **Date:** 2026-02-17  
