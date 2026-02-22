@@ -10204,6 +10204,12 @@ Momentum:
         
         // Use setTimeout to ensure context bar handler runs first and sets window.currentStrategyCode
         setTimeout(() => {
+          // CRITICAL: Only reload variations if we're actually on the Strategy Maintenance module
+          if (location.hash !== '#strategy-maintenance-module') {
+            console.log('⏸️ Skipping loadLthPvrVariations - not on Strategy Maintenance module (hash:', location.hash, ')');
+            return;
+          }
+          
           // Don't reload variations if context is being updated programmatically
           console.log('🔍 Strategy selector changed, checking flag:', window.programmaticallyUpdatingContext);
           if (window.programmaticallyUpdatingContext) {
@@ -10211,12 +10217,14 @@ Momentum:
             return;
           }
           
-          // Also don't reload if the strategy didn't actually change
+          // Also don't reload if the strategy didn't actually change (both previous and current must have values)
           const previousCode = window._previousStrategyCode;
           const currentCode = window.currentStrategyCode;
           console.log('📊 Strategy check - previous:', previousCode, 'current:', currentCode);
-          if (previousCode === currentCode) {
-            console.log('⏸️ Skipping loadLthPvrVariations - strategy unchanged');
+          
+          // Only skip if we have valid previous code and it matches current (true refresh scenario)
+          if (previousCode && currentCode && previousCode === currentCode) {
+            console.log('⏸️ Skipping loadLthPvrVariations - strategy unchanged (', previousCode, ')');
             return;
           }
           
