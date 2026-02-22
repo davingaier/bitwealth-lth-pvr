@@ -839,6 +839,15 @@
     <div id="strategy-maintenance-module" class="module">
       <h2>Strategy Maintenance</h2>
 
+      <!-- No Strategy Selected Message -->
+      <div id="noStrategyMessage" style="text-align:center;padding:3rem;color:var(--muted);background:#f8f9fa;border:1px solid var(--border);border-radius:12px;margin:2rem auto;max-width:600px;">
+        <svg style="width:64px;height:64px;margin:0 auto 1rem;opacity:0.3;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+        </svg>
+        <h3 style="margin:0 0 0.5rem 0;color:#374151;">Select a Strategy</h3>
+        <p style="margin:0;">Please select a strategy from the <strong>ACTIVE STRATEGY</strong> dropdown above to view and manage strategy variations.</p>
+      </div>
+
       <!-- LTH PVR Strategy Panel -->
       <div id="lthPvrStrategyPanel" class="strategy-panel" data-strategy="LTH_PVR">
         <h3>LTH PVR Strategy Variations</h3>
@@ -4063,6 +4072,11 @@
           el.classList.add('strategy-hidden');
         }
       });
+      
+      // Update "no strategy selected" message for Strategy Maintenance module
+      if (typeof window.strategyMaintenance?.updateNoStrategyMessage === 'function') {
+        window.strategyMaintenance.updateNoStrategyMessage();
+      }
     }
 
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
@@ -9669,11 +9683,21 @@ Momentum:
     // Run optimization button
     document.getElementById('runOptBtn')?.addEventListener('click', runOptimization);
 
+    // Toggle "no strategy selected" message visibility
+    function updateNoStrategyMessage() {
+      const noStrategyMsg = document.getElementById('noStrategyMessage');
+      if (noStrategyMsg && location.hash === '#strategy-maintenance-module') {
+        const hasStrategy = window.currentStrategyCode && window.currentStrategyCode.trim() !== '';
+        noStrategyMsg.style.display = hasStrategy ? 'none' : 'block';
+      }
+    }
+
     // Load variations when strategy is selected via context bar
     // Listen for portfolio/strategy changes in the context bar
     document.getElementById('portfolioSelect')?.addEventListener('change', () => {
       // Only load variations if we're on the Strategy Maintenance module
       if (location.hash === '#strategy-maintenance-module') {
+        updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
         if (strategyCode === 'LTH_PVR') {
           loadLthPvrVariations();
@@ -9684,6 +9708,7 @@ Momentum:
     // Load variations when navigating to Strategy Maintenance module
     window.addEventListener('hashchange', () => {
       if (location.hash === '#strategy-maintenance-module') {
+        updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
         if (strategyCode === 'LTH_PVR') {
           loadLthPvrVariations();
@@ -9695,6 +9720,7 @@ Momentum:
     // (wait for context bar to populate first)
     setTimeout(() => {
       if (location.hash === '#strategy-maintenance-module') {
+        updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
         if (strategyCode === 'LTH_PVR') {
           loadLthPvrVariations();
@@ -9711,7 +9737,8 @@ Momentum:
       loadLthPvrVariations,
       closeOptimizationModal,
       closeOptimizationResults,
-      applyOptimizedConfig
+      applyOptimizedConfig,
+      updateNoStrategyMessage
     };
 
     // Helper function to escape HTML
