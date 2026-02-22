@@ -9707,22 +9707,26 @@ Momentum:
 
     // Load variations when strategy is selected via context bar
     // Listen for portfolio/strategy changes in the context bar
-    document.getElementById('portfolioSelect')?.addEventListener('change', () => {
-      console.log('🔍 Portfolio change detected');
-      console.log('Current hash:', location.hash);
-      console.log('Current strategy code:', window.currentStrategyCode);
+    document.getElementById('portfolioSelect')?.addEventListener('change', (e) => {
+      console.log('🔍 Portfolio change detected in Strategy Maintenance handler');
       
       // Only load variations if we're on the Strategy Maintenance module
       if (location.hash === '#strategy-maintenance-module') {
-        updateNoStrategyMessage();
-        const strategyCode = window.currentStrategyCode;
-        console.log('Strategy code check:', strategyCode, 'equals LTH_PVR?', strategyCode === 'LTH_PVR');
-        if (strategyCode === 'LTH_PVR') {
-          console.log('✅ Calling loadLthPvrVariations()');
-          loadLthPvrVariations();
-        } else {
-          console.log('❌ Not calling loadLthPvrVariations, strategy is:', strategyCode);
-        }
+        // Get strategy code directly from the select element (don't rely on window.currentStrategyCode timing)
+        const strategyCode = (e.target.value || '').toUpperCase();
+        console.log('Strategy code from select element:', strategyCode);
+        
+        // Use setTimeout to ensure context bar handler runs first and sets window.currentStrategyCode
+        setTimeout(() => {
+          updateNoStrategyMessage();
+          console.log('Strategy code check:', strategyCode, 'equals LTH_PVR?', strategyCode === 'LTH_PVR');
+          if (strategyCode === 'LTH_PVR') {
+            console.log('✅ Calling loadLthPvrVariations()');
+            loadLthPvrVariations();
+          } else {
+            console.log('❌ Not calling loadLthPvrVariations, strategy is:', strategyCode);
+          }
+        }, 50);
       }
     });
 
