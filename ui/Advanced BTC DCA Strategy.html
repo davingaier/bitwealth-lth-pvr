@@ -4389,9 +4389,15 @@
             const v = e.target.value || '';
             console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
-            // Skip processing if we're programmatically updating context
-            if (window.programmaticallyUpdatingContext) {
+            // Note if we're in programmatic update mode, but don't skip processing
+            const wasProgrammatic = window.programmaticallyUpdatingContext;
+            if (wasProgrammatic) {
               console.log('⏸️ Skipping portfolio change processing - programmatic context update');
+              // Reset the flag after this first change completes
+              setTimeout(() => {
+                console.log('🔓 Resetting flag after programmatic portfolio change');
+                window.programmaticallyUpdatingContext = false;
+              }, 100);
               return;
             }
 
@@ -4451,14 +4457,12 @@
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       } finally {
-        // Don't reset immediately - keep flag set for extended period
-        // Change events from innerHTML updates fire asynchronously and unpredictably
-        // Some change events can be delayed by 10+ seconds due to browser event queue
-        // Keep flag true for 15 seconds to catch all delayed events
+        // The portfolio change handler will reset the flag when it processes the first change
+        // But set a safety timeout in case no change event fires
         setTimeout(() => {
-          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', after 15s)');
+          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', safety timeout)');
           window.programmaticallyUpdatingContext = false;
-        }, 15000);
+        }, 500);
       }
     }
 
