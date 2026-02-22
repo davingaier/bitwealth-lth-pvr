@@ -8930,14 +8930,17 @@ This will:
     // Load LTH PVR variations from database
     async function loadLthPvrVariations() {
       try {
+        console.log('📊 loadLthPvrVariations() called');
         variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);">Loading variations...</div>';
 
         // Get org_id from context bar
         const orgSelect = document.getElementById('orgSelect');
         const orgId = orgSelect?.value;
+        console.log('Org ID from selector:', orgId);
 
         // Check if org_id is valid (not empty, not "Loading...", looks like UUID)
         if (!orgId || orgId === 'Loading...' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+          console.log('⚠️ Invalid org_id:', orgId);
           variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Please select an organization first</div>';
           return;
         }
@@ -8950,6 +8953,8 @@ This will:
           .eq('is_active', true)
           .order('sort_order');
 
+        console.log('Supabase query result:', { data, error, orgId });
+
         if (error) {
           console.error('Error loading variations:', error);
           variationCardsContainer.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Error: ${error.message}</div>`;
@@ -8957,10 +8962,12 @@ This will:
         }
 
         if (!data || data.length === 0) {
+          console.log('No variations found for org:', orgId);
           variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);">No variations found</div>';
           return;
         }
 
+        console.log('✅ Loaded', data.length, 'variations');
         currentVariations = data;
         renderVariationCards(data);
 
@@ -9695,12 +9702,20 @@ Momentum:
     // Load variations when strategy is selected via context bar
     // Listen for portfolio/strategy changes in the context bar
     document.getElementById('portfolioSelect')?.addEventListener('change', () => {
+      console.log('🔍 Portfolio change detected');
+      console.log('Current hash:', location.hash);
+      console.log('Current strategy code:', window.currentStrategyCode);
+      
       // Only load variations if we're on the Strategy Maintenance module
       if (location.hash === '#strategy-maintenance-module') {
         updateNoStrategyMessage();
         const strategyCode = window.currentStrategyCode;
+        console.log('Strategy code check:', strategyCode, 'equals LTH_PVR?', strategyCode === 'LTH_PVR');
         if (strategyCode === 'LTH_PVR') {
+          console.log('✅ Calling loadLthPvrVariations()');
           loadLthPvrVariations();
+        } else {
+          console.log('❌ Not calling loadLthPvrVariations, strategy is:', strategyCode);
         }
       }
     });
