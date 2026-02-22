@@ -59,14 +59,15 @@ Deno.serve(async (req) => {
     
     console.info(`ef_run_lth_pvr_simulator: start=${start_date}, end=${end_date}, upfront=${upfront_usd}, monthly=${monthly_usd}`);
     
-    // Load CI bands data for date range
+    // Load CI bands data for date range (set high limit to avoid PostgREST 1000-row default)
     const { data: ciData, error: ciErr } = await sb
       .from("ci_bands_daily")
       .select("*")
       .eq("org_id", org_id)
       .gte("date", start_date)
       .lte("date", end_date)
-      .order("date", { ascending: true });
+      .order("date", { ascending: true })
+      .limit(10000); // Allow up to ~27 years of daily data
     
     if (ciErr) {
       throw new Error(`ci_bands_daily query failed: ${ciErr.message}`);
