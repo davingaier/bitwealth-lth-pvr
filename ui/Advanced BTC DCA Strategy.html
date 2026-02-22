@@ -9162,13 +9162,27 @@ Momentum:
           throw new Error(`Simulation failed: ${errorText}`);
         }
 
-        const results = await response.json();
+        const data = await response.json();
         
-        // Store results for CSV export
-        currentSimulationResult = results;
+        console.log('Simulation response:', data);
+        
+        // Check for success and results array
+        if (!data.success || !data.results || !Array.isArray(data.results)) {
+          throw new Error('Invalid response format from simulator');
+        }
+        
+        // Find result for current variation
+        const result = data.results.find(r => r.variation_id === currentVariationId);
+        
+        if (!result) {
+          throw new Error(`No simulation result found for variation ${currentVariationId}`);
+        }
+        
+        // Store result for CSV export
+        currentSimulationResult = result;
         
         // Display results
-        displaySimulationResults(results);
+        displaySimulationResults(result);
 
       } catch (err) {
         console.error('Error running simulation:', err);
@@ -9177,40 +9191,38 @@ Momentum:
     }
 
     // Display simulation results
-    function displaySimulationResults(results) {
+    function displaySimulationResults(result) {
       const variation = currentVariations.find(v => v.id === currentVariationId);
-      if (!variation || !results[currentVariationId]) {
+      if (!variation || !result) {
         simulationResultsPanel.innerHTML = '<div style="text-align:center;padding:2rem;color:#ef4444;">No results found</div>';
         return;
       }
-
-      const result = results[currentVariationId];
       
       simulationResultsPanel.innerHTML = `
         <h3>Simulation Results: ${escapeHtml(variation.variation_name)}</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
           <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
             <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Final NAV</div>
-            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">$${result.finalNav?.toLocaleString() || '0'}</div>
+            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">$${result.final_nav_usd?.toLocaleString() || '0'}</div>
           </div>
           <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
             <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Total ROI</div>
-            <div style="font-size:1.75rem;font-weight:600;color:#10b981;">${result.totalRoi?.toFixed(2) || '0'}%</div>
+            <div style="font-size:1.75rem;font-weight:600;color:#10b981;">${result.final_roi_percent?.toFixed(2) || '0'}%</div>
           </div>
           <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
             <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">CAGR</div>
-            <div style="font-size:1.75rem;font-weight:600;color:#3b82f6;">${result.cagr?.toFixed(2) || '0'}%</div>
+            <div style="font-size:1.75rem;font-weight:600;color:#3b82f6;">${result.final_cagr_percent?.toFixed(2) || '0'}%</div>
           </div>
           <div style="background:#f8f9fa;padding:1rem;border-radius:8px;border:1px solid var(--border);">
             <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Sharpe Ratio</div>
-            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">${result.sharpe?.toFixed(2) || '0'}</div>
+            <div style="font-size:1.75rem;font-weight:600;color:var(--ink);">${result.sharpe_ratio?.toFixed(2) || '0'}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;margin-bottom:1.5rem;">
-          <div><span style="color:var(--muted);">Max Drawdown:</span> <strong>${result.maxDrawdown?.toFixed(2) || '0'}%</strong></div>
-          <div><span style="color:var(--muted);">Total Invested:</span> <strong>$${result.totalInvested?.toLocaleString() || '0'}</strong></div>
-          <div><span style="color:var(--muted);">Total BTC Bought:</span> <strong>${result.totalBtcBought?.toFixed(8) || '0'} BTC</strong></div>
-          <div><span style="color:var(--muted);">Avg Buy Price:</span> <strong>$${result.avgBuyPrice?.toLocaleString() || '0'}</strong></div>
+          <div><span style="color:var(--muted);">Max Drawdown:</span> <strong>${result.max_drawdown_percent?.toFixed(2) || '0'}%</strong></div>
+          <div><span style="color:var(--muted);">Total Invested:</span> <strong>$${result.total_contrib_net_usdt?.toLocaleString() || '0'}</strong></div>
+          <div><span style="color:var(--muted);">Final BTC:</span> <strong>${result.final_btc_balance?.toFixed(8) || '0'} BTC</strong></div>
+          <div><span style="color:var(--muted);">Cash Drag:</span> <strong>${result.cash_drag_percent?.toFixed(2) || '0'}%</strong></div>
         </div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
           <h4 style="margin:0 0 1rem;">NAV Over Time</h4>
@@ -9223,7 +9235,7 @@ Momentum:
       `;
 
       // Render Chart.js chart with NAV over time
-      renderSimulationChart(result.dailyResults || []);
+      renderSimulationChart(result.daily || []);
     }
 
     // Render simulation chart
@@ -9239,9 +9251,9 @@ Momentum:
       }
 
       // Prepare data
-      const labels = dailyResults.map(d => d.date || d.close_date);
-      const navData = dailyResults.map(d => d.nav || d.totalValueUsd);
-      const investedData = dailyResults.map(d => d.totalInvested || d.cumulativeInvestedUsd);
+      const labels = dailyResults.map(d => d.trade_date || d.close_date);
+      const navData = dailyResults.map(d => d.nav_usd);
+      const investedData = dailyResults.map(d => d.contrib_net_usdt_cum);
 
       // Create chart
       window.simResultsChartInstance = new Chart(ctx, {
@@ -9341,8 +9353,8 @@ Momentum:
           return;
         }
 
-        const result = currentSimulationResult[currentVariationId];
-        if (!result || !result.dailyResults || result.dailyResults.length === 0) {
+        const result = currentSimulationResult;
+        if (!result || !result.daily || result.daily.length === 0) {
           alert('No daily results available to export');
           return;
         }
@@ -9355,24 +9367,31 @@ Momentum:
           'cumulative_contrib', 'cumulative_fees', 'roi'
         ].join(',');
 
-        // Create CSV rows from dailyResults
-        const rows = result.dailyResults.map(day => [
-          day.date || '',
-          (day.btc_bal !== undefined ? day.btc_bal.toFixed(8) : ''),
-          (day.usdt_bal !== undefined ? day.usdt_bal.toFixed(2) : ''),
-          (day.nav !== undefined ? day.nav.toFixed(2) : ''),
-          (day.btc_price !== undefined ? day.btc_price.toFixed(2) : ''),
-          day.action || '',
-          (day.amount_pct !== undefined ? day.amount_pct : ''),
-          day.rule || '',
-          (day.tier !== undefined ? day.tier : ''),
-          (day.platform_fee !== undefined ? day.platform_fee.toFixed(2) : '0'),
-          (day.performance_fee !== undefined ? day.performance_fee.toFixed(2) : '0'),
-          (day.exchange_fee !== undefined ? day.exchange_fee.toFixed(2) : '0'),
-          (day.cumulative_contrib !== undefined ? day.cumulative_contrib.toFixed(2) : ''),
-          (day.cumulative_fees !== undefined ? day.cumulative_fees.toFixed(2) : ''),
-          (day.roi !== undefined ? day.roi.toFixed(4) : '')
-        ].join(','));
+        // Create CSV rows from daily results
+        const rows = result.daily.map(day => {
+          // Calculate cumulative fees
+          const cumulativeFees = (day.platform_fees_paid_usdt || 0) + 
+                                  (day.performance_fees_paid_usdt || 0) + 
+                                  (day.exchange_fees_paid_usdt || 0);
+          
+          return [
+            day.trade_date || '',
+            (day.btc_balance !== undefined ? day.btc_balance.toFixed(8) : ''),
+            (day.usdt_balance !== undefined ? day.usdt_balance.toFixed(2) : ''),
+            (day.nav_usd !== undefined ? day.nav_usd.toFixed(2) : ''),
+            (day.price_usd !== undefined ? day.price_usd.toFixed(2) : ''),
+            day.action || '',
+            (day.amount_pct !== undefined ? day.amount_pct : ''),
+            day.rule || '',
+            day.band_bucket || '',
+            (day.platform_fees_paid_usdt !== undefined ? day.platform_fees_paid_usdt.toFixed(2) : '0'),
+            (day.performance_fees_paid_usdt !== undefined ? day.performance_fees_paid_usdt.toFixed(2) : '0'),
+            (day.exchange_fees_paid_usdt !== undefined ? day.exchange_fees_paid_usdt.toFixed(2) : '0'),
+            (day.contrib_net_usdt_cum !== undefined ? day.contrib_net_usdt_cum.toFixed(2) : ''),
+            cumulativeFees.toFixed(2),
+            (day.total_roi_percent !== undefined ? day.total_roi_percent.toFixed(4) : '')
+          ].join(',');
+        });
 
         // Combine header + rows
         const csv = [header, ...rows].join('\\n');
