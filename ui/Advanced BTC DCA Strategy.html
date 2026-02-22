@@ -9227,8 +9227,10 @@ Momentum:
         
         // Log debug comparison data
         console.log('🔬 SIMULATOR DEBUG DATA:');
-        console.log('First 5 days:', result.debug_first_5_days);
-        console.log('Last 5 days:', result.debug_last_5_days);
+        console.table(result.debug_first_5_days);
+        console.table(result.debug_last_5_days);
+        console.log('📊 First 20 BUY Actions (SIMULATOR):');
+        console.table(result.debug_first_20_buys);
         console.log('Final Balances:', {
           btc: result.final_btc_balance,
           usdt: result.final_usdt_balance,
@@ -9240,6 +9242,35 @@ Momentum:
           exchange_btc: result.total_exchange_fees_btc,
           exchange_usdt: result.total_exchange_fees_usdt
         });
+        console.log('Contributions:', {
+          gross: result.total_contrib_gross_usdt,
+          net: result.total_contrib_net_usdt
+        });
+        console.log('⚠️ Run back-tester with SAME parameters and compare results');
+        console.log('📋 BACK-TESTER COMPARISON DATA:');
+        console.log('First 20 BUY actions from back-tester (ce8ee8b1-aaa7-44af-989d-21736b999063):');
+        console.table([
+          {date: "2020-01-01", rule: "Base 3", pct: 0.19943, btc_after: 0.27858239, usdt_after: 8327.92},
+          {date: "2020-01-02", rule: "Base 3", pct: 0.19943, btc_after: 0.50774822, usdt_after: 6667.09},
+          {date: "2020-01-03", rule: "Base 3", pct: 0.19943, btc_after: 0.68465559, usdt_after: 5337.47},
+          {date: "2020-01-04", rule: "Base 3", pct: 0.19943, btc_after: 0.82812220, usdt_after: 4273.02},
+          {date: "2020-01-05", rule: "Base 3", pct: 0.19943, btc_after: 0.94037149, usdt_after: 3420.85},
+          {date: "2020-01-06", rule: "Base 3", pct: 0.19943, btc_after: 1.02607646, usdt_after: 2738.63},
+          {date: "2020-01-07", rule: "Base 3", pct: 0.19943, btc_after: 1.09184496, usdt_after: 2192.46},
+          {date: "2020-01-08", rule: "Base 3", pct: 0.19943, btc_after: 1.14526385, usdt_after: 1755.22},
+          {date: "2020-01-09", rule: "Base 3", pct: 0.19943, btc_after: 1.18854802, usdt_after: 1405.18},
+          {date: "2020-01-10", rule: "Base 4", pct: 0.18088, btc_after: 1.21869608, usdt_after: 1151.01},
+          {date: "2020-01-11", rule: "Base 3", pct: 0.19943, btc_after: 1.24727970, usdt_after: 921.46},
+          {date: "2020-01-12", rule: "Base 3", pct: 0.19943, btc_after: 1.26954470, usdt_after: 737.70},
+          {date: "2020-01-13", rule: "Base 3", pct: 0.19943, btc_after: 1.28716339, usdt_after: 590.58},
+          {date: "2020-01-14", rule: "Base 4", pct: 0.18088, btc_after: 1.29921131, usdt_after: 483.75},
+          {date: "2020-01-15", rule: "Base 4", pct: 0.18088, btc_after: 1.30895453, usdt_after: 396.25},
+          {date: "2020-01-16", rule: "Base 4", pct: 0.18088, btc_after: 1.31713041, usdt_after: 324.58},
+          {date: "2020-01-17", rule: "Base 4", pct: 0.18088, btc_after: 1.32361667, usdt_after: 265.87},
+          {date: "2020-01-18", rule: "Base 4", pct: 0.18088, btc_after: 1.32899655, usdt_after: 217.78},
+          {date: "2020-01-19", rule: "Base 4", pct: 0.18088, btc_after: 1.33350545, usdt_after: 178.39},
+          {date: "2020-01-20", rule: "Base 4", pct: 0.18088, btc_after: 1.33715785, usdt_after: 146.12}
+        ]);
         
         // Store result for CSV export
         currentSimulationResult = result;

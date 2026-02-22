@@ -204,7 +204,8 @@ Deno.serve(async (req) => {
           pct: d.amount_pct,
           nav: d.nav_usd,
           btc: d.btc_balance,
-          usdt: d.usdt_balance
+          usdt: d.usdt_balance,
+          rule: d.rule
         })),
         debug_last_5_days: simResult.daily.slice(-5).map(d => ({
           date: d.trade_date,
@@ -212,7 +213,16 @@ Deno.serve(async (req) => {
           pct: d.amount_pct,
           nav: d.nav_usd,
           btc: d.btc_balance,
-          usdt: d.usdt_balance
+          usdt: d.usdt_balance,
+          rule: d.rule
+        })),
+        // Debug: First 20 BUY actions to see if amounts match back-tester
+        debug_first_20_buys: simResult.daily.filter(d => d.action === 'BUY').slice(0, 20).map(d => ({
+          date: d.trade_date,
+          rule: d.rule,
+          pct: d.amount_pct,
+          btc_after: d.btc_balance,
+          usdt_after: d.usdt_balance
         }))
       });
       
