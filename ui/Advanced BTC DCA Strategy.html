@@ -8942,7 +8942,8 @@ This will:
         const orgSelect = document.getElementById('orgSelect');
         const orgId = orgSelect?.value;
 
-        if (!orgId) {
+        // Check if org_id is valid (not empty, not "Loading...", looks like UUID)
+        if (!orgId || orgId === 'Loading...' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
           variationCardsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:2rem;color:#ef4444;">Please select an organization first</div>';
           return;
         }

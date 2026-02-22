@@ -69,7 +69,7 @@ Deno.serve(async (_req: any)=>{
       const { data: cs, error: csErr } = await sb
         .schema("public")
         .from("customer_strategies")
-        .select("customer_id, strategy_variation_id")
+        .select("customer_id, strategy_variation_id, strategy_version_id")
         .eq("org_id", org_id)
         .eq("strategy_code", "LTH_PVR")
         .eq("live_enabled", true);
