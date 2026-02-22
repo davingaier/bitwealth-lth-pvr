@@ -4136,10 +4136,14 @@
           .map(([code, name]) => ({ code, name: name || fallbackName(code) }))
           .sort((a,b) => a.name.localeCompare(b.name));
 
+        console.log('📋 Strategy items built:', items);
+
         portSel.innerHTML =
           ['<option value="">Select strategy…</option>']
             .concat(items.map(i => `<option value="${i.code}">${i.name}</option>`))
             .join('');
+
+        console.log('✅ Portfolio selector HTML:', portSel.innerHTML);
 
         portSel.disabled = items.length === 0;
 
@@ -4325,11 +4329,13 @@
         if(!portSel._bound){
           portSel.addEventListener('change', (e)=>{
             const v = e.target.value || '';
+            console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
             if (isMultiCustomerModule()){
               currentPortfolioId = null;
               currentStrategyCode = v ? v.toUpperCase() : null;
               window.currentStrategyCode = currentStrategyCode;
+              console.log('🔧 Set currentStrategyCode to:', currentStrategyCode);
               updateStrategyVisibility();
               return;
             }
