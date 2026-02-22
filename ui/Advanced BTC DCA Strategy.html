@@ -9231,6 +9231,12 @@ Momentum:
         console.log('===================================');
         console.table(result.debug_config);
         
+        console.log('===================================');
+        console.log('📊 SIMULATOR ACTION COUNTS:');
+        console.log('===================================');
+        console.table(result.action_counts);
+        console.log(`Total actions: ${Object.values(result.action_counts || {}).reduce((a, b) => a + b, 0)}`);
+        
         console.log('🔬 SIMULATOR DEBUG DATA:');
         console.table(result.debug_first_5_days);
         console.table(result.debug_last_5_days);

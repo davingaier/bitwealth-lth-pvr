@@ -581,6 +581,12 @@ export function runSimulation(
   console.log(`🔬 Final Balances: BTC=${btcBal.toFixed(8)}, USDT=$${usdtBal.toFixed(2)}, NAV=$${(btcBal * (daily[daily.length-1]?.price_usd || 0) + usdtBal).toFixed(2)}`);
   console.log(`🔬 Cumulative Fees: Platform=$${platformFeesCum.toFixed(2)}, Performance=$${performanceFeesCum.toFixed(2)}, ExchBTC=${exchangeFeesBtcCum.toFixed(8)}, ExchUSDT=$${exchangeFeesUsdtCum.toFixed(2)}`);
   
+  // Count actions for debugging
+  const actionCounts = daily.reduce((acc, d) => {
+    acc[d.action] = (acc[d.action] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
   return {
     // Summary metrics
     final_nav_usd: lastDay?.nav_usd ?? 0,
@@ -606,6 +612,9 @@ export function runSimulation(
     start_date: ciData[0]?.close_date ?? "",
     end_date: ciData[ciData.length - 1]?.close_date ?? "",
     days: ciData.length,
+    
+    // Action counts (for debugging vs back-tester)
+    action_counts: actionCounts,
     
     // Daily results
     daily,
