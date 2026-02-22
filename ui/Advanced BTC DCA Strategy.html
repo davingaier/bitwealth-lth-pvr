@@ -4121,20 +4121,33 @@
       if (typeof window.strategyMaintenance?.updateNoStrategyMessage === 'function') {
         window.strategyMaintenance.updateNoStrategyMessage();
       }
+      
+      // After visibility updates complete, schedule flag reset after a delay
+      // This ensures all change events triggered by dropdown updates have been processed
+      if (window.programmaticallyUpdatingContext && !window._contextResetScheduled) {
+        window._contextResetScheduled = true;
+        setTimeout(() => {
+          window.programmaticallyUpdatingContext = false;
+          window._contextResetScheduled = false;
+          console.log('🔓 Context update complete, flag reset (from updateStrategyVisibility)');
+        }, 200);
+      }
     }
 
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
       // Set flag to prevent strategy maintenance from reacting to programmatic changes
-      console.log('🔒 Setting programmaticallyUpdatingContext = true');
+      window._contextLoadCounter = (window._contextLoadCounter || 0) + 1;
+      const myLoadId = window._contextLoadCounter;
+      console.log('🔒 Setting programmaticallyUpdatingContext = true (load #' + myLoadId + ')');
       window.programmaticallyUpdatingContext = true;
       
       const orgSel  = document.getElementById('orgSelect');
       const portSel = document.getElementById('portfolioSelect');
       const custSel = document.getElementById('customerSelect');
       if(!orgSel || !portSel) {
-        console.log('🔓 Early exit - resetting flag');
+        console.log('🔓 Early exit - resetting flag (load #' + myLoadId + ')');
         window.programmaticallyUpdatingContext = false;
         return;
       }
@@ -4445,13 +4458,13 @@
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
       } finally {
-        // Reset flag after a delay to ensure all change event handlers complete
-        // Change events from innerHTML updates can fire asynchronously with unpredictable timing
-        // Use a generous 1 second delay to ensure all events complete before resetting
+        // Don't reset immediately - keep flag set for extended period
+        // Change events from innerHTML updates fire asynchronously and unpredictably
+        // Keep flag true for 3 seconds to catch all delayed events
         setTimeout(() => {
+          console.log('🔓 Context update complete, flag reset (load #' + myLoadId + ', after 3s)');
           window.programmaticallyUpdatingContext = false;
-          console.log('🔓 Context update complete, flag reset');
-        }, 1000);
+        }, 3000);
       }
     }
 
