@@ -2889,9 +2889,20 @@
               }
             }
             
-            // Context bar (needed for all modules on sign-in, but not on token refresh when already signed in)
+            // Context bar (only reload if not already loaded)
+            // Skip reload if context is already populated with valid data
             if (event === 'SIGNED_IN' && typeof window.loadOrgContext === 'function') {
-              window.loadOrgContext();
+              const orgSel = document.getElementById('orgSelect');
+              const portSel = document.getElementById('portfolioSelect');
+              const hasOrg = orgSel && orgSel.value && orgSel.options.length > 1;
+              const hasStrategy = window.currentStrategyCode != null;
+              
+              if (hasOrg && hasStrategy) {
+                console.log('⏸️ Skipping loadOrgContext - already loaded (org:', orgSel.value, 'strategy:', window.currentStrategyCode, ')');
+              } else {
+                console.log('📥 Loading context (org loaded:', hasOrg, 'strategy loaded:', hasStrategy, ')');
+                window.loadOrgContext();
+              }
             }
             
             // Customer Transactions module
@@ -4126,22 +4137,13 @@
     // Loads organisation(s) via my_orgs(), then portfolios via list_customer_portfolios()
     // Falls back to one pseudo-portfolio per active customer if the RPC is not present yet.
     async function loadOrgContext(){
-      // Track when context load starts - used to ignore change events from this load
-      window._lastContextLoadTime = Date.now();
-      const myLoadTime = window._lastContextLoadTime;
-      
-      // Set flag to prevent strategy maintenance from reacting to programmatic changes
-      window._contextLoadCounter = (window._contextLoadCounter || 0) + 1;
-      const myLoadId = window._contextLoadCounter;
-      console.log('🔒 Context load #' + myLoadId + ' starting at', myLoadTime);
-      window.programmaticallyUpdatingContext = true;
+      console.log('📥 loadOrgContext() called');
       
       const orgSel  = document.getElementById('orgSelect');
       const portSel = document.getElementById('portfolioSelect');
       const custSel = document.getElementById('customerSelect');
       if(!orgSel || !portSel) {
-        console.log('🔓 Early exit - resetting flag (load #' + myLoadId + ')');
-        window.programmaticallyUpdatingContext = false;
+        console.log('⚠️ Early exit - missing elements');
         return;
       }
 
@@ -4389,13 +4391,6 @@
             const v = e.target.value || '';
             console.log('🎯 Context bar portfolio change - raw value:', v, 'isMultiCustomer:', isMultiCustomerModule());
 
-            // Check if this is a programmatic change (within 10s of context load)
-            const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
-            if (timeSinceContextLoad < 10000) {
-              console.log('⏸️ Skipping portfolio change processing - within 10s of context load');
-              return;
-            }
-
             if (isMultiCustomerModule()){
               currentPortfolioId = null;
               currentStrategyCode = v ? v.toUpperCase() : null;
@@ -4451,10 +4446,6 @@
         portSel.innerHTML='<option value="">Error loading</option>';
         orgSel.disabled=true; portSel.disabled=true;
         if (custSel){ custSel.disabled = false; custSel.removeAttribute('disabled'); }
-      } finally {
-        // Reset programmatic flag immediately - we're now using timestamps to detect programmatic changes
-        window.programmaticallyUpdatingContext = false;
-        console.log('🔓 Context load complete (load #' + myLoadId + ')');
       }
     }
 
@@ -10203,16 +10194,6 @@ Momentum:
           // CRITICAL: Only reload variations if we're actually on the Strategy Maintenance module
           if (location.hash !== '#strategy-maintenance-module') {
             console.log('⏸️ Skipping loadLthPvrVariations - not on Strategy Maintenance module (hash:', location.hash, ')');
-            return;
-          }
-          
-          // Check if this change is within 10 seconds of a context load (programmatic update)
-          // Use 10s to account for slower context loads when tab regains focus after idle
-          const timeSinceContextLoad = Date.now() - (window._lastContextLoadTime || 0);
-          console.log('🔍 Strategy selector changed, time since context load:', timeSinceContextLoad + 'ms');
-          
-          if (timeSinceContextLoad < 10000) {
-            console.log('⏸️ Skipping loadLthPvrVariations - within 10s of context load (programmatic)');
             return;
           }
           
