@@ -50,8 +50,9 @@
       display:flex;
     }
 
-    /* Customer Transactions is multi-customer: hide the customer selector in the global context bar */
-    body:has(#transactions-module:target) #ctxCustomerGroup{
+    /* Customer Transactions and Strategy Maintenance are multi-customer: hide the customer selector */
+    body:has(#transactions-module:target) #ctxCustomerGroup,
+    body:has(#strategy-maintenance-module:target) #ctxCustomerGroup{
       display:none;
     }
     .context-group{
@@ -837,19 +838,9 @@
     <!-- ===================== Strategy Maintenance ===================== -->
     <div id="strategy-maintenance-module" class="module">
       <h2>Strategy Maintenance</h2>
-      
-      <!-- Strategy Selector Bar -->
-      <div class="strategy-selector-bar" style="display:flex;align-items:center;gap:1rem;padding:1rem 0;margin-bottom:1.5rem;border-bottom:1px solid var(--border);">
-        <label for="strategyTypeSelector" style="font-weight:600;">Strategy Type:</label>
-        <select id="strategyTypeSelector" class="context-select" style="min-width:300px;">
-          <option value="">-- Select Strategy --</option>
-          <option value="LTH_PVR" selected>LTH PVR BTC DCA</option>
-          <!-- Future: ADV_DCA, other strategies -->
-        </select>
-      </div>
 
       <!-- LTH PVR Strategy Panel -->
-      <div id="lthPvrStrategyPanel" class="strategy-panel" style="display:block;">
+      <div id="lthPvrStrategyPanel" class="strategy-panel" data-strategy="LTH_PVR">
         <h3>LTH PVR Strategy Variations</h3>
         <p style="color:var(--muted);margin-bottom:1.5rem;">
           Manage strategy variations, run simulations, and optimize parameters.
@@ -980,8 +971,8 @@
         </div>
       </div>
 
-      <!-- Future strategy panels (ADV_DCA, etc.) -->
-      <div id="advDcaStrategyPanel" class="strategy-panel" style="display:none;">
+      <!-- ADV_DCA Strategy Panel (Future) -->
+      <div id="advDcaStrategyPanel" class="strategy-panel" data-strategy="ADV_DCA">
         <h3>Advanced DCA Strategy</h3>
         <p style="color:var(--muted);">Coming soon...</p>
       </div>
@@ -5981,8 +5972,9 @@
     .executed-list th, .executed-list td { border:1px solid #eee; padding:.4rem; font-size:.9rem }
     .executed-list .muted{opacity:.7}
 
-    /* Hide global Customer selector ONLY on the multi-customer Customer Transactions module */
-    body[data-active-module="transactions-module"] #ctxCustomerGroup{
+    /* Hide global Customer selector on multi-customer modules */
+    body[data-active-module="transactions-module"] #ctxCustomerGroup,
+    body[data-active-module="strategy-maintenance-module"] #ctxCustomerGroup{
       display: none !important;
     }
 
@@ -8908,30 +8900,14 @@ This will:
     let currentVariationId = null;
 
     // DOM elements
-    const strategyTypeSelector = document.getElementById('strategyTypeSelector');
-    const lthPvrStrategyPanel = document.getElementById('lthPvrStrategyPanel');
     const variationCardsContainer = document.getElementById('variationCardsContainer');
     const simulationControls = document.getElementById('simulationControls');
     const simulationResultsPanel = document.getElementById('simulationResultsPanel');
     const optimizationControls = document.getElementById('optimizationControls');
     const optimizationResultsPanel = document.getElementById('optimizationResultsPanel');
 
-    // Strategy type selector handler
-    strategyTypeSelector.addEventListener('change', showStrategyMaintenance);
-
-    function showStrategyMaintenance() {
-      const strategyType = strategyTypeSelector.value;
-
-      // Hide all strategy-specific panels
-      document.querySelectorAll('.strategy-panel').forEach(p => p.style.display = 'none');
-
-      // Show selected strategy panel
-      if (strategyType === 'LTH_PVR') {
-        lthPvrStrategyPanel.style.display = 'block';
-        loadLthPvrVariations();
-      }
-      // Future: else if (strategyType === 'ADV_DCA') { ... }
-    }
+    // Note: Strategy panels are now controlled by data-strategy attributes and the global
+    // currentStrategyCode variable (set via context bar), just like Customer Transactions.
 
     // Load LTH PVR variations from database
     async function loadLthPvrVariations() {
@@ -9579,10 +9555,38 @@ Momentum:
     // Run optimization button
     document.getElementById('runOptBtn')?.addEventListener('click', runOptimization);
 
-    // Initialize on page load
-    if (strategyTypeSelector.value === 'LTH_PVR') {
-      loadLthPvrVariations();
-    }
+    // Load variations when strategy is selected via context bar
+    // Listen for portfolio/strategy changes in the context bar
+    document.getElementById('portfolioSelect')?.addEventListener('change', () => {
+      // Only load variations if we're on the Strategy Maintenance module
+      if (location.hash === '#strategy-maintenance-module') {
+        const strategyCode = window.currentStrategyCode;
+        if (strategyCode === 'LTH_PVR') {
+          loadLthPvrVariations();
+        }
+      }
+    });
+
+    // Load variations when navigating to Strategy Maintenance module
+    window.addEventListener('hashchange', () => {
+      if (location.hash === '#strategy-maintenance-module') {
+        const strategyCode = window.currentStrategyCode;
+        if (strategyCode === 'LTH_PVR') {
+          loadLthPvrVariations();
+        }
+      }
+    });
+
+    // Load variations on initial page load if already on Strategy Maintenance
+    // (wait for context bar to populate first)
+    setTimeout(() => {
+      if (location.hash === '#strategy-maintenance-module') {
+        const strategyCode = window.currentStrategyCode;
+        if (strategyCode === 'LTH_PVR') {
+          loadLthPvrVariations();
+        }
+      }
+    }, 500);
 
     // Expose functions globally for onclick handlers
     window.strategyMaintenance = {
