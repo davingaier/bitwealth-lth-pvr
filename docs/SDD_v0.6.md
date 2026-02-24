@@ -3,11 +3,111 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-22 (v0.6.51)
+**Last updated:** 2026-02-24 (v0.6.52)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.52 – Retrace Logic Date-Range Sensitivity Discovery + A/B Testing Framework
+**Date:** 2026-02-24  
+**Purpose:** Discovered retrace logic performance is date-range dependent; created systematic testing framework to determine optimal configuration.
+
+**Status:** 🔬 INVESTIGATION - A/B testing in progress
+
+#### Discovery: Retrace Logic Regime Sensitivity
+
+**Problem Identified:**
+User back-tested LTH PVR on **2022-11-09 to 2025-10-10** (bear bottom → bull recovery):
+- **LTH PVR (retrace=true):** $285,750 NAV (+421.8% ROI)
+- **Standard DCA:** $339,280 NAV (+521.97% ROI)
+- **Standard DCA beat LTH PVR by $53.5K (18.7%)** ❌
+
+This contradicts previous testing on **2020-01-01 to 2026-02-20** (full cycle):
+- **LTH PVR (retrace=true):** $511,974 NAV
+- **LTH PVR (retrace=false):** $387,338 NAV
+- **Retrace logic added $124,636 value (32% improvement)** ✅
+
+**Hypothesis:**
+Retrace logic prevents buying during "fake dips" (retracements from overbought zones). In a strong, sustained bull run with few corrections, this causes LTH PVR to miss accumulation opportunities that Standard DCA captures. However, across full market cycles with multiple bear/bull transitions, retrace logic correctly avoids buying weakness and improves long-term performance.
+
+**Implication:** The `enable_retrace` parameter is **date-range sensitive** and may perform differently across market regimes (bear crashes, bull runs, sideways accumulation, etc.).
+
+#### Solution: Systematic A/B Testing Framework
+
+**Created:**
+1. **Migration:** `20260224_add_progressive_no_retrace_variation.sql`
+   - Adds "Progressive No Retrace" variation (identical to Progressive except `enable_retrace=false`)
+   - Enables side-by-side comparison in back-testing module
+
+2. **Test Plan:** `docs/Retrace_Logic_AB_Testing_Plan.md`
+   - Defines 8 market regime tests (R-01 through R-08)
+   - Bear crash, bull run, recovery, sideways, full cycle
+   - Systematic data collection template
+   - Decision framework based on aggregate results
+
+**Test Matrix:**
+| Test ID | Date Range | Regime Type | Status |
+|---------|------------|-------------|--------|
+| R-01 | 2020-01-01 to 2026-02-20 | Full cycle | ✅ Retrace wins (+32%) |
+| R-02 | 2022-11-09 to 2025-10-10 | Recovery | ⏳ Pending no-retrace test |
+| R-03 | 2022-01-01 to 2022-11-30 | Bear crash | ⏳ Pending |
+| R-04 | 2024-01-01 to 2024-10-31 | Bull ATH | ⏳ Pending |
+| R-05 | 2020-03-01 to 2021-04-14 | First bull | ⏳ Pending |
+| R-06 | 2021-04-14 to 2021-11-10 | First correction | ⏳ Pending |
+| R-07 | 2021-11-10 to 2022-11-21 | Long bear | ⏳ Pending |
+| R-08 | 2023-01-01 to 2023-12-31 | Sideways | ⏳ Pending |
+
+**Decision Framework:**
+- If retrace wins ≥6 of 8 tests → Keep `enable_retrace=true` in production
+- If no-retrace wins ≥6 of 8 tests → Switch production to `enable_retrace=false`
+- If split 4-4 or 5-3 → Consider **adaptive retrace** logic based on regime detection
+- If retrace wins full cycle (R-01) by large margin → Keep enabled regardless (long-term optimization priority)
+
+**Integration with Phase 3 Optimizer:**
+If regime-dependent performance confirmed, Phase 3.3-3.11 should test:
+- Retrace Base Size (currently hardcoded to 3): Grid search retrace_base ∈ {1, 2, 3, 4, 5}
+- Retrace eligibility thresholds (different sigma levels)
+- Momentum filter for retrace exceptions
+- Adaptive retrace (enable only in high-volatility regimes)
+
+#### Historical Context: Why enable_retrace Was Disabled (Jan 2026)
+
+**Previously documented reason (v0.6.14, Jan 9 2026):**
+> "Fixed momentum/retrace parameters to match Admin UI defaults: momo_len=5, momo_thr=0.00, enable_retrace=false"
+
+**Investigation (Feb 24 2026):**
+No evidence found of intentional decision to disable retrace. Likely causes:
+1. `bt_params` table created without explicit BOOLEAN DEFAULT (PostgreSQL defaults to `false`)
+2. Admin UI relied on this unintentional `false` default
+3. Jan 9 website fix "matched Admin UI" without questioning whether `false` was correct
+4. Bug propagated until Feb 22 discovery
+
+**Corrective Actions (Feb 21-22):**
+- Fixed public website to `enable_retrace=true`
+- Changed database default to `true`
+- All implementations now use `true` by default
+
+**Current Status (Feb 24):**
+User's back-testing revealed `enable_retrace=true` may not be optimal for all market regimes. Systematic A/B testing framework created to make data-driven decision rather than anecdotal single-test toggling.
+
+#### Files Created
+
+**Migrations:**
+- `supabase/migrations/20260224_add_progressive_no_retrace_variation.sql` - Creates test variation
+
+**Documentation:**
+- `docs/Retrace_Logic_AB_Testing_Plan.md` - Comprehensive test plan with 8 market regimes
+
+#### Next Steps
+
+1. **Apply migration** to create Progressive No Retrace variation
+2. **Execute 8 back-tests** across different market regimes (1-2 weeks)
+3. **Analyze patterns:** Which regimes favor retrace? Which don't?
+4. **Make production decision** based on aggregate results
+5. **Integrate findings** into Phase 3 optimizer parameter sweep
+
+---
 
 ### v0.6.51 – Strategy Maintenance Phase 1-3 Complete + Simulator price_at_p250 Bug Fix
 **Date:** 2026-02-21 to 2026-02-22  
