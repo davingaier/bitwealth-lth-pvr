@@ -204,9 +204,40 @@ Deno.serve(async (req)=>{
         .eq("bt_run_id", bt_run_id);
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // WARMUP PASS: load 2 years of data before start_date so retrace
+    // eligibility flags (was_above_p1, was_above_p15) reflect historical
+    // context. Mirrors the warmup logic in lth_pvr_simulator.ts.
+    // ──────────────────────────────────────────────────────────────────
+    const warmupStartDate = (() => {
+      const d = new Date(start_date);
+      d.setFullYear(d.getFullYear() - 2);
+      return d.toISOString().slice(0, 10);
+    })();
+
     // Load ALL price/band rows for the date range.
     // PostgREST defaults to 1 000 rows, so we page until we’ve got everything.
     const pageSize = 1000;
+    // Load warmup rows (before start_date; ROC = 0 during warmup, same as simulator)
+    let warmupPrices: any[] = [];
+    {
+      let wFrom = 0;
+      while (true) {
+        const { data, error } = await sbBt.from("v_backtest_prices")
+          .select("*")
+          .eq("org_id", org_id)
+          .gte("close_date", warmupStartDate)
+          .lt("close_date", start_date)
+          .order("close_date", { ascending: true })
+          .range(wFrom, wFrom + pageSize - 1);
+        if (error) throw new Error(`warmup v_backtest_prices query failed: ${error.message}`);
+        if (!data || data.length === 0) break;
+        warmupPrices = warmupPrices.concat(data);
+        if (data.length < pageSize) break;
+        wFrom += pageSize;
+      }
+    }
+    // Financial rows
     let from = 0;
     let prices = [];
     while(true){
@@ -228,7 +259,7 @@ Deno.serve(async (req)=>{
     if (!prices.length) {
       throw new Error("no rows in v_backtest_prices for given date range / org");
     }
-    // Pre-compute ROC series
+    // Pre-compute ROC series (financial rows only; warmup uses roc=0 like simulator)
     const rocSeries = computeRocSeries(prices, momoLen);
     // LTH PVR state
     let btcBal = 0;
@@ -265,6 +296,18 @@ Deno.serve(async (req)=>{
       r1_armed: false,
       r15_armed: false
     };
+
+    // Run warmup pass: update lthState over pre-start_date rows (roc=0 during warmup)
+    for (const wRow of warmupPrices) {
+      lthState = syncBearPauseFromRow(lthState, wRow);
+      const wPx = toNum(wRow.btc_price_usd, 0);
+      if (wPx > 0) {
+        const wd = decideTrade(wPx, wRow, 0, lthState, config);
+        lthState = wd.state || lthState;
+      }
+    }
+    console.info(`BT warmup complete (${warmupPrices.length} rows): bear_pause=${lthState.bear_pause} was_above_p1=${lthState.was_above_p1} was_above_p15=${lthState.was_above_p15}`);
+
     let lastMonth = null;
     // Contribution helpers
     let platformFeeToday = 0;  // Track daily platform fees for correct aggregation
