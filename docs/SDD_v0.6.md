@@ -50,9 +50,18 @@ if (usdtBal < 0 && btcBal > 0 && px > 0) {
 }
 ```
 
-**Files changed:**
-- `supabase/functions/_shared/lth_pvr_simulator.ts` — floor guard added after `usdtBal -= performanceFeeToday`
-- `supabase/functions/ef_bt_execute/index.ts` — floor guard added after `usdtBal -= performanceFeeThisMonth`
+**Systems affected (see three-system architecture below):**
+- **System 1 (Public back-tester) + System 2 (Admin UI back-tester):** `supabase/functions/ef_bt_execute/index.ts` — floor guard added after `usdtBal -= performanceFeeThisMonth`
+- **System 3 (Admin UI Simulator):** `supabase/functions/_shared/lth_pvr_simulator.ts` — floor guard added after `usdtBal -= performanceFeeToday`
+
+> **Three-System Architecture Reminder**
+> | # | System | UI | Edge Function |
+> |---|--------|----|---------------|
+> | 1 | Public back-tester | `website/lth-pvr-backtest.html` | `ef_execute_public_backtests` → **`ef_bt_execute`** |
+> | 2 | Admin UI back-tester | Strategy Back-Testing module | **`ef_bt_execute`** (direct) |
+> | 3 | Admin UI Simulator | Strategy Maintenance module | **`ef_run_lth_pvr_simulator`** → `lth_pvr_simulator.ts` |
+> 
+> Systems 1 & 2 share the same full simulation engine (`ef_bt_execute`) and therefore always produce identical results for identical parameters. System 3 is a separate in-memory engine that targets the same results. All three share the decision logic via `_shared/lth_pvr_strategy_logic.ts`.
 
 **R-01 results after fix:**
 
@@ -113,7 +122,7 @@ for (const wRow of warmupPrices) {
 }
 ```
 
-**File changed:** `supabase/functions/ef_bt_execute/index.ts`
+**System affected:** `supabase/functions/ef_bt_execute/index.ts` → Systems 1 & 2 (Public back-tester + Admin UI back-tester). System 3 (Simulator) already had equivalent warmup via v0.6.53.
 
 **R-01 results after warmup fix (before USDT floor guard):**
 
