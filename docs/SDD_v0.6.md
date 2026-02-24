@@ -3,11 +3,129 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-24 (v0.6.53)
+**Last updated:** 2026-02-25 (v0.6.55)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.55 – USDT Floor Guard: BTC→USDT Conversion on Performance Fee Shortfall
+**Date:** 2026-02-25  
+**Purpose:** Prevent USDT balance going negative after monthly performance fee, aligning simulation behaviour with the live trading system.
+
+**Status:** ✅ FIXED & DEPLOYED
+
+#### Problem: Performance Fee Could Overdraft USDT
+
+When a large monthly performance fee exceeded the available USDT balance, both the simulator and back-tester allowed USDT to go deeply negative (e.g. −$4,828 in Feb–Dec 2023 in the R-01 full-cycle test).
+
+The consequence was severe: `tradeUsdt = usdtBal * pct` produced a negative trade size, which the guard `if (tradeUsdt > 0)` correctly blocked. This caused **every BUY signal to be skipped** for the entire period that USDT remained negative — 318 days in the 2023 episode alone — even though contributions kept arriving and genuine buy opportunities existed.
+
+In the **live trading system**, when a customer's USDT is insufficient to cover a performance fee, a manual BTC→USDT conversion is performed to cover the shortfall. The simulation was not modelling this, producing a systematic conservative bias.
+
+**Negative USDT episodes in R-01 (before fix):**
+
+| Episode | Duration | Deepest USDT | BUYs blocked |
+|---------|----------|-------------|-------------|
+| Aug 2020 | 31 days | −$67.55 | 31 |
+| Dec 2020 – Jan 2021 | 38 days | −$1,303.75 | 25 |
+| Feb – Dec 2023 | 318 days | −$4,828.87 | 303 |
+
+#### Fix Applied
+
+Immediately after the performance fee deduction, if `usdtBal < 0`, sell just enough BTC at the current price (less exchange fee) to restore USDT to zero. Record the conversion as a ledger entry.
+
+**Logic (identical in both files):**
+```typescript
+if (usdtBal < 0 && btcBal > 0 && px > 0) {
+  const shortfall = -usdtBal;
+  const btcToSell = shortfall / (px * (1 - tradeFeeRate));
+  const btcSold = Math.min(btcBal, btcToSell);
+  const feeBtc = btcSold * tradeFeeRate;
+  const usdtReceived = (btcSold - feeBtc) * px;
+  btcBal -= btcSold;
+  usdtBal += usdtReceived;          // ≈ 0 after conversion
+  exchangeFeesBtcCum += feeBtc;
+  // ledger entry: kind="fee", note="BTC→USDT conversion to cover performance fee shortfall"
+}
+```
+
+**Files changed:**
+- `supabase/functions/_shared/lth_pvr_simulator.ts` — floor guard added after `usdtBal -= performanceFeeToday`
+- `supabase/functions/ef_bt_execute/index.ts` — floor guard added after `usdtBal -= performanceFeeThisMonth`
+
+**R-01 results after fix:**
+
+| Metric | Before floor guard | After floor guard |
+|--------|--------------------|-------------------|
+| Negative USDT days | 387 | **0** ✅ |
+| BT final NAV | $527,217 | **$514,191** |
+| SIM final NAV | $527,217 | **$514,191** ✅ |
+
+The ~$13K reduction vs the unconstrained model reflects the real cost of BTC→USDT conversions (exchange fees) plus the small opportunity cost of the BTC sold. Both systems remain exactly in sync.
+
+---
+
+### v0.6.54 – Back-tester Retrace Warmup Pass Bug Fix
+**Date:** 2026-02-25  
+**Purpose:** Fixed $15,231 NAV discrepancy between back-tester ($511,986) and simulator ($527,217) on the R-01 full-cycle test. Root cause: back-tester never initialised retrace eligibility flags from historical data before the test window.
+
+**Status:** ✅ FIXED & DEPLOYED
+
+#### Root Cause: was_above_p1 Never Set in Back-tester
+
+The `decideTrade()` function tracks two retrace eligibility flags:
+- `was_above_p1` — price was previously in the +1.0σ…+1.5σ zone
+- `was_above_p15` — price was previously in the +1.5σ…+2.0σ zone
+
+These flags persist across days and only clear when bear_pause is entered or the exit threshold is crossed. The simulator correctly initialises them via its 2-year pre-run warmup pass. The back-tester started its loop on `start_date` with all flags = `false` and only queried price data from `start_date` onwards — it never saw any pre-window price history.
+
+**The specific missed event:**
+- **2019-06-26 and 2019-06-28:** BTC price entered the +1.0σ…+1.5σ range (p100 ≈ $12,147; p150 ≈ $14,245) with `bear_pause = false`, setting `was_above_p1 = true`
+- `bear_pause` never became true again after that, and price never dropped below m100, so the flag remained `true` all the way through 2020–2021
+- The back-tester, starting from 2020-01-01, never processed these June 2019 rows → `was_above_p1` stayed `false`
+
+**Divergence consequence (2020-11-18 onward):**  
+On 2020-11-18 BTC retraced into the mean…+0.5σ zone (price ≈ $17,835; mean ≈ $17,785):
+- **Simulator:** `was_above_p1 = true` → fires retrace BUY "Base 3 (retrace B8→B6)"
+- **Back-tester (old):** `was_above_p1 = false` → fires Base 6 SELL
+
+This opposite decision propagated and compounded over 6 years to a $15,231 final NAV gap.
+
+#### Fix Applied
+
+Added a 2-year warmup pass to `ef_bt_execute/index.ts`, mirroring the simulator's approach:
+
+1. Compute `warmupStartDate = start_date − 2 years`
+2. Fetch `v_backtest_prices` rows from `warmupStartDate` to `start_date − 1 day` (paginated)
+3. Run `syncBearPauseFromRow` + `decideTrade` (roc=0) over each warmup row to build `lthState`
+4. Financial simulation loop begins with correctly initialised state
+
+```typescript
+// Warmup pass (before financial loop)
+for (const wRow of warmupPrices) {
+  lthState = syncBearPauseFromRow(lthState, wRow);
+  const wPx = toNum(wRow.btc_price_usd, 0);
+  if (wPx > 0) {
+    const wd = decideTrade(wPx, wRow, 0, lthState, config);
+    lthState = wd.state || lthState;
+  }
+}
+```
+
+**File changed:** `supabase/functions/ef_bt_execute/index.ts`
+
+**R-01 results after warmup fix (before USDT floor guard):**
+
+| System | NAV | Agreement |
+|--------|-----|-----------|
+| Simulator | $527,217 | — |
+| Back-tester (old) | $511,986 | ❌ −$15,231 |
+| Back-tester (fixed) | $527,217 | ✅ Exact match |
+
+**Key rule established:** Any back-test must initialise `lthState` from a 2-year warmup pass, not from a cold start. Both `ef_bt_execute` and `lth_pvr_simulator` now follow the same rule.
+
+---
 
 ### v0.6.53 – Simulator bear_pause Warmup Bug Fix
 **Date:** 2026-02-24  

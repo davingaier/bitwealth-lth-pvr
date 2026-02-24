@@ -578,7 +578,33 @@ Deno.serve(async (req)=>{
             fee_usdt: performanceFeeThisMonth,
             note: "BitWealth performance fee (10% on profit above high-water mark, net of new contributions)"
           });
-          
+
+          // USDT floor guard: if fee pushed USDT negative, sell BTC to cover shortfall.
+          // Mirrors live system behaviour where we manually convert BTC for the customer.
+          if (usdtBal < 0 && btcBal > 0 && px > 0) {
+            const shortfall = -usdtBal;
+            const btcToSell = shortfall / (px * (1 - tradeFeeRate));
+            const btcSold = Math.min(btcBal, btcToSell);
+            const feeBtc = btcSold * tradeFeeRate;
+            const usdtReceived = (btcSold - feeBtc) * px;
+            btcBal -= btcSold;
+            usdtBal += usdtReceived;
+            exchangeFeesBtcCum += feeBtc;
+            exchangeFeeBtcToday += feeBtc;
+            ledgerRows.push({
+              bt_run_id,
+              org_id,
+              trade_date: tradeDate,
+              close_date: closeDate,
+              kind: "fee",
+              amount_btc: -btcSold,
+              amount_usdt: usdtReceived,
+              fee_btc: feeBtc,
+              fee_usdt: 0,
+              note: "BTC→USDT conversion to cover performance fee shortfall"
+            });
+          }
+
           // Update high-water mark after charging fee (to NAV after fee)
           const navAfterFee = usdtBal + btcBal * px;
           highWaterMark = navAfterFee - contribSinceHWM;

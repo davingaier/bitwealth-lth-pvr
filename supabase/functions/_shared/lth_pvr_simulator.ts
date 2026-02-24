@@ -563,7 +563,31 @@ export function runSimulation(
           fee_usdt: performanceFeeToday,
           note: "BitWealth performance fee (10% on profit above high-water mark)"
         });
-        
+
+        // USDT floor guard: if fee pushed USDT negative, sell BTC to cover shortfall.
+        // Mirrors live system behaviour where we manually convert BTC for the customer.
+        if (usdtBal < 0 && btcBal > 0 && px > 0) {
+          const shortfall = -usdtBal;
+          // BTC needed = shortfall / net proceeds per BTC after exchange fee
+          const btcToSell = shortfall / (px * (1 - tradeFeeRate));
+          const btcSold = Math.min(btcBal, btcToSell);
+          const feeBtc = btcSold * tradeFeeRate;
+          const usdtReceived = (btcSold - feeBtc) * px;
+          btcBal -= btcSold;
+          usdtBal += usdtReceived;
+          exchangeFeesBtcCum += feeBtc;
+          ledger.push({
+            trade_date: tradeDate,
+            close_date: closeDate,
+            kind: "fee",
+            amount_btc: -btcSold,
+            amount_usdt: usdtReceived,
+            fee_btc: feeBtc,
+            fee_usdt: 0,
+            note: "BTC→USDT conversion to cover performance fee shortfall"
+          });
+        }
+
         // Update high-water mark
         const navAfterFee = usdtBal + btcBal * px;
         highWaterMark = navAfterFee - contribSinceHWM;
