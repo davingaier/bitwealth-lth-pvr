@@ -52,6 +52,15 @@ export interface SimulationParams {
   
   /** Exchange contribution fee rate (0.0018 = 18 bps) */
   contrib_fee_rate?: number;
+
+  /**
+   * Financial simulation start date (YYYY-MM-DD).
+   * Rows before this date are used ONLY to warm up the LTH state machine
+   * (bear_pause, retrace eligibility) but no contributions or trades are applied.
+   * This ensures bear_pause is correctly initialised when the test window begins
+   * mid-cycle (e.g. starting in 2022 when bear_pause was entered in late 2021).
+   */
+  sim_start_date?: string;
 }
 
 /**
@@ -282,9 +291,41 @@ export function runSimulation(
   const performanceFeeRate = params.performance_fee_rate ?? 0.10; // 10%
   const contribFeeRate = params.contrib_fee_rate ?? 0.0018; // 18 bps
   
-  // Pre-compute ROC series for momentum filter
+  // Resolve the first date for financial activity (contributions + trades).
+  // If sim_start_date is provided, rows before it are warmup-only.
+  const simStartDate = params.sim_start_date ?? null;
+
+  // Pre-compute ROC series for momentum filter (over full dataset incl. warmup)
   const rocSeries = computeRocSeries(ciData, config.momentumLength);
   
+  // ─────────────────────────────────────────────────────────
+  // WARMUP PASS: run the state machine over any rows that
+  // precede sim_start_date so bear_pause / retrace flags
+  // reflect real historical context before the test window.
+  // ─────────────────────────────────────────────────────────
+  let lthState: LTHState = {
+    bear_pause: false,
+    was_above_p1: false,
+    was_above_p15: false,
+    r1_armed: false,
+    r15_armed: false
+  };
+
+  if (simStartDate) {
+    for (const row of ciData) {
+      if (row.close_date >= simStartDate) break;
+      // Only update state, no financial operations
+      lthState = syncBearPauseFromRow(lthState, row);
+      const px = toNum(row.btc_price_usd, 0);
+      if (px > 0) {
+        const roc5 = 0; // momentum not tracked during warmup
+        const d = decideTrade(px, row, roc5, lthState, config);
+        lthState = d.state || lthState;
+      }
+    }
+    console.info(`Warmup complete: bear_pause=${lthState.bear_pause} was_above_p1=${lthState.was_above_p1} was_above_p15=${lthState.was_above_p15}`);
+  }
+
   // Initialize state
   let btcBal = 0;
   let usdtBal = 0;
@@ -303,19 +344,21 @@ export function runSimulation(
   const daily: DailyResult[] = [];
   const ledger: LedgerEntry[] = [];
   
-  let lthState: LTHState = {
-    bear_pause: false,
-    was_above_p1: false,
-    was_above_p15: false,
-    r1_armed: false,
-    r15_armed: false
-  };
+  // lthState is already initialised by the warmup pass above.
+  // (If no warmup, it was initialised to all-false above.)
   
   let lastMonth: string | null = null;
   
-  // Main simulation loop
-  for (let i = 0; i < ciData.length; i++) {
-    const row = ciData[i];
+  // Main simulation loop — skip warmup rows, but keep rocSeries index aligned
+  const warmupCount = simStartDate
+    ? Math.max(0, ciData.findIndex(r => r.close_date >= simStartDate))
+    : 0;
+  const financialRows = simStartDate
+    ? ciData.filter(r => r.close_date >= simStartDate)
+    : ciData;
+
+  for (let i = 0; i < financialRows.length; i++) {
+    const row = financialRows[i];
     const tradeDate = row.close_date;
     const closeDate = row.close_date;
     const px = toNum(row.btc_price_usd, 0);
@@ -399,7 +442,7 @@ export function runSimulation(
     }
     
     // LTH PVR decision
-    const roc5 = rocSeries[i] ?? 0;
+    const roc5 = rocSeries[warmupCount + i] ?? 0;
     
     // Sync precomputed bear_pause from CI view into state
     lthState = syncBearPauseFromRow(lthState, row);

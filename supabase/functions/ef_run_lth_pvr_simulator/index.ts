@@ -56,8 +56,18 @@ Deno.serve(async (req) => {
     const upfront_usd = body.upfront_usd ?? 10000;
     const monthly_usd = body.monthly_usd ?? 500;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
+
+    // Extend the CI bands query back 2 years before start_date so the warmup
+    // pass in the simulator can correctly initialise bear_pause state.
+    // (e.g. if the user starts a test in 2022 we need to know bear_pause was
+    // entered in late 2021 when BTC exceeded the +2.0σ band.)
+    const warmupStartDate = (() => {
+      const d = new Date(start_date);
+      d.setFullYear(d.getFullYear() - 2);
+      return d.toISOString().split('T')[0];
+    })();
     
-    console.info(`ef_run_lth_pvr_simulator: start=${start_date}, end=${end_date}, upfront=${upfront_usd}, monthly=${monthly_usd}`);
+    console.info(`ef_run_lth_pvr_simulator: start=${start_date} (warmup from ${warmupStartDate}), end=${end_date}, upfront=${upfront_usd}, monthly=${monthly_usd}`);
     
     // Load CI bands data for date range with pagination (PostgREST has max-rows=1000 limit)
     let ciData: any[] = [];
@@ -73,7 +83,7 @@ Deno.serve(async (req) => {
         .from("ci_bands_daily")
         .select("*")
         .eq("org_id", org_id)
-        .gte("date", start_date)
+        .gte("date", warmupStartDate)
         .lte("date", end_date)
         .order("date", { ascending: true })
         .range(startRow, endRow);
@@ -189,7 +199,8 @@ Deno.serve(async (req) => {
       const simResult = runSimulation(config, ciDataTransformed, {
         upfront_usd,
         monthly_usd,
-        org_id
+        org_id,
+        sim_start_date: start_date  // financial sim begins here; rows before are warmup-only
       });
       
       // Add variation metadata

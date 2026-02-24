@@ -3,11 +3,55 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-24 (v0.6.52)
+**Last updated:** 2026-02-24 (v0.6.53)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.53 – Simulator bear_pause Warmup Bug Fix
+**Date:** 2026-02-24  
+**Purpose:** Fixed critical simulator bug causing wildly wrong results for date ranges that start mid-cycle (e.g. 2022 bear crash tests).
+
+**Status:** ✅ FIXED & DEPLOYED
+
+#### Bug: Simulator Never Entered bear_pause Mid-Cycle
+
+**Root Cause:**
+The simulator initialised `bear_pause = false` on day 1 of the test window. For the 2022 bear crash test (2022-01-01 to 2022-11-30), `bear_pause` had actually been entered in Oct/Nov 2021 when BTC exceeded the +2.0σ threshold (~$55K). Since BTC never recovered to $55K+ during 2022, the enter condition (`px > price_at_p200`) never re-fired — so the simulator ran with `bear_pause = false` throughout 2022.
+
+This caused the simulator to:
+- **Incorrectly BUY BTC** from June 2022 onwards ($29K price) when it should HOLD (bear_pause active)
+- Deplete all USDT reserves at poor prices
+- Accumulate far less BTC than the correctly-implemented back-tester
+
+**Symptom (Test R-03, 2022-01-01 to 2022-11-30):**
+| | Before Fix | After Fix | Back-tester |
+|---|---|---|---|
+| Final NAV | $8,229 | $13,213 | $13,213 ✅ |
+| Total ROI | -46.91% | -14.75% | -14.75% ✅ |
+| Final BTC | 0.0479 | 0.76945 | 0.76945 ✅ |
+| Final USDT | $0.24 | $0.21 | $0.21 ✅ |
+
+**Why back-tester was unaffected:**
+The `v_backtest_prices` database view pre-computes `bear_pause` as a running stateful flag across ALL historical data. Even for a back-test starting 2022-01-01, the view correctly shows bear_pause=TRUE (entered in Oct 2021) for all of Jan–Sep 2022, exiting only in Oct 2022 when price dropped below the -1.0σ threshold.
+
+**Fix Applied (2026-02-24):**
+1. **`supabase/functions/_shared/lth_pvr_simulator.ts`**
+   - Added `sim_start_date?: string` to `SimulationParams` interface
+   - Added warmup pass: before `sim_start_date`, process CI bands rows through the state machine only (no contributions/trades) to establish correct `bear_pause` and retrace flags
+   - `financialRows` filtered to `>= sim_start_date`; `rocSeries` index offset by `warmupCount`
+
+2. **`supabase/functions/ef_run_lth_pvr_simulator/index.ts`**
+   - Now loads CI bands from 2 years before `start_date` (`warmupStartDate = start_date - 2 years`)
+   - Passes `sim_start_date: start_date` to simulator to separate warmup from financial period
+
+**Impact:**
+- All 8 A/B retrace tests run before this fix are **INVALID** — must be re-run with the corrected simulator
+- The full-cycle test (R-01: 2020–2026) was already correct (started before the first bull run, so bear_pause was correctly initialised as false)
+- All tests starting within a bull/bear cycle now produce accurate results
+
+---
 
 ### v0.6.52 – Retrace Logic Date-Range Sensitivity Discovery + A/B Testing Framework
 **Date:** 2026-02-24  

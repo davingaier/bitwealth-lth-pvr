@@ -1,7 +1,32 @@
 # Retrace A/B Testing - Quick Start Guide
 
 **Created:** 2026-02-24  
-**Status:** ✅ READY - Migration applied, variations created
+**Status:** ✅ READY - Bug fixed 2026-02-24, all tests need re-run with corrected simulator
+
+---
+
+## 🐛 Bug Fix: Simulator bear_pause Warmup (2026-02-24)
+
+**Root cause discovered and fixed:** The simulator was starting with `bear_pause = false` regardless
+of the actual historical state. For the 2022 bear crash test, `bear_pause` had been entered in
+Oct/Nov 2021 when BTC exceeded the +2.0σ (~$55K) threshold. Since BTC never exceeded $55K
+again during 2022, the enter condition never re-fired — so the simulator incorrectly deployed
+cash into BTC throughout the crash instead of HOLDing.
+
+**Fix applied:**
+- Simulator now loads CI bands from 2 years **before** `start_date` as a warmup pass
+- The warmup runs the state machine (bear\_pause, retrace eligibility) without financial activity
+- Financial simulation (contributions + trades) starts on the requested `start_date` with
+  correctly initialised state
+
+**Validation (Test R-03):**
+| | Before Fix | After Fix | Back-tester |
+|---|---|---|---|
+| NAV | $8,229 | **$13,213** | $13,213 ✅ |
+| ROI | -46.91% | **-14.75%** | -14.75% ✅ |
+| BTC | 0.0479 | **0.76945** | 0.76945 ✅ |
+
+**⚠️ All 8 A/B tests run before this fix are INVALID - re-run all tests.**
 
 ---
 
@@ -75,7 +100,7 @@ Copy this template to track results:
 ---
 
 ## Test R-03: Bear Crash (2022-01-01 to 2022-11-30)
-⏳ **PENDING**
+✅ **BUG FIXED - RE-RUN REQUIRED** (old results invalid)
 - Progressive (retrace=true): $_______
 - Progressive No Retrace: $_______
 - Standard DCA: $_______
