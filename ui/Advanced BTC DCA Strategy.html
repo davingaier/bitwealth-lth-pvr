@@ -10765,7 +10765,7 @@ self.onmessage = function(e) {
 
         const { data: bands, error: bErr } = await sb.schema('lth_pvr')
           .from('ci_bands_daily')
-          .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p025,price_at_p050,price_at_p075,price_at_p100,price_at_p125,price_at_p150,price_at_p175,price_at_p200,price_at_p250,bear_pause')
+          .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250,mode')
           .eq('org_id', orgId)
           .gte('date', warmupDateStr)
           .lte('date', endDate)
@@ -10807,7 +10807,7 @@ self.onmessage = function(e) {
           p150:  toArr('price_at_p150'),
           p200:  toArr('price_at_p200'),
           p250:  toArr('price_at_p250'),
-          bearP: (function(){ const a=new Float64Array(N); for(let i=0;i<N;i++) a[i]=bands[i].bear_pause?1:0; return a; })(),
+          bearP: (function(){ const a=new Float64Array(N); for(let i=0;i<N;i++) a[i]=(bands[i].mode==='bear_pause')?1:0; return a; })(),
           ym:    (function(){ const a=new Int32Array(N); for(let i=0;i<N;i++){ const d=bands[i].date; a[i]=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7)); } return a; })(),
           bpExit: toArr(exitColName)
         };
