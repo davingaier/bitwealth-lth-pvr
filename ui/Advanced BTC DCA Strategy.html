@@ -10702,11 +10702,21 @@ self.onmessage = function(e) {
     async function loadVariations() {
       const sb = window.supabaseClient; if (!sb) return;
       try {
-        const { data } = await sb.schema('lth_pvr').from('strategy_variation_templates')
-          .select('id, variation_name, config_json')
-          .order('variation_name');
+        const { data, error } = await sb.schema('lth_pvr').from('strategy_variation_templates')
+          .select('id, variation_name, sort_order, bear_pause_exit_sigma, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, momentum_length, momentum_threshold, enable_retrace, retrace_base')
+          .order('sort_order');
+        if (!data?.length) { console.warn('loadVariations: no data returned', error); return; }
         const sel = document.getElementById('optVarSelect'); if (!sel) return;
-        sel.innerHTML = data.map(v => `<option value="${v.id}" data-config='${JSON.stringify(v.config_json)}'>${v.variation_name}</option>`).join('');
+        sel.innerHTML = data.map(v => {
+          const cfg = {
+            bearPauseExitSigma: parseFloat(v.bear_pause_exit_sigma) || 0.0,
+            b1: v.b1, b2: v.b2, b3: v.b3, b4: v.b4, b5: v.b5,
+            b6: v.b6, b7: v.b7, b8: v.b8, b9: v.b9, b10: v.b10, b11: v.b11,
+            momentumLength: v.momentum_length, momentumThreshold: v.momentum_threshold,
+            enableRetrace: v.enable_retrace, retraceBase: v.retrace_base
+          };
+          return `<option value="${v.id}" data-config='${JSON.stringify(cfg)}'>${v.variation_name}</option>`;
+        }).join('');
         // Set default end date to today
         const ed = document.getElementById('optEndDate2');
         if (ed && !ed.value) ed.value = new Date().toISOString().slice(0,10);
