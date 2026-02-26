@@ -1,5 +1,6 @@
 import { getServiceClient } from "./client.ts";
 import { optimizeParameters, generateSmartRanges, validateOptimizationConfig } from "../_shared/lth_pvr_optimizer.ts";
+import { runSimulation } from "../_shared/lth_pvr_simulator.ts";
 import type { CIBandData } from "../_shared/lth_pvr_simulator.ts";
 import type { StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 
@@ -37,7 +38,7 @@ Deno.serve(async (req) => {
       monthly_usd = 500,
       objective = "cagr",  // nav | cagr | roi | sharpe
       grid_size = 3,       // Number of points per parameter (default: 3 = current ± 20%)
-      max_results = 10,    // Top N results to return
+      max_results = 6,     // Top N results to return (default: 6)
       // Optional: manually specify ranges for specific parameters
       b_ranges = null,      // { b1: { min, max, step }, b2: {...}, ... }
       momo_length_range = null,
@@ -97,12 +98,19 @@ Deno.serve(async (req) => {
       retraceBase: variations.retrace_base ?? 3,
     };
 
-    // ===== Load CI bands data =====
+    // ===== Load CI bands data (with 2-year warmup for retrace flag initialisation) =====
+    // Mirrors the warmup logic in ef_bt_execute (v0.6.54) and ef_run_lth_pvr_simulator (v0.6.53).
+    const warmupStartDate = (() => {
+      const d = new Date(start_date);
+      d.setFullYear(d.getFullYear() - 2);
+      return d.toISOString().slice(0, 10);
+    })();
+
     const { data: bands, error: bandsError } = await sb
       .from("ci_bands_daily")
       .select("*")
       .eq("org_id", org_id)
-      .gte("date", start_date)
+      .gte("date", warmupStartDate)
       .lte("date", end_date)
       .order("date", { ascending: true });
 
@@ -130,11 +138,11 @@ Deno.serve(async (req) => {
       price_at_p150: row.price_at_p150,
       price_at_p175: row.price_at_p175,
       price_at_p200: row.price_at_p200,
+      price_at_p250: row.price_at_p250,
       bear_pause: row.bear_pause
     }));
     
-    console.log(`Loaded ${ciData.length} CI bands records for optimization`);
-    console.log(`First record: ${ciData[0]?.close_date}, BTC=${ciData[0]?.btc_price_usd}, mean=${ciData[0]?.price_at_mean}`);
+    console.log(`Loaded ${ciData.length} CI bands records (warmup from ${warmupStartDate}, financial from ${start_date})`);
     console.log(`Last record: ${ciData[ciData.length-1]?.close_date}`);
 
     // ===== Generate smart ranges if not provided =====
@@ -172,12 +180,21 @@ Deno.serve(async (req) => {
       upfront_usd: upfront_usd,
       monthly_usd: monthly_usd,
       org_id: org_id,
+      sim_start_date: start_date,  // warmup rows before this date not counted as financial
     };
 
     console.log(`Starting optimization for variation ${variations.variation_name}...`);
     console.log(`  Date range: ${start_date} to ${end_date}`);
     console.log(`  Objective: ${objective}`);
     console.log(`  Grid size: ${grid_size}×${grid_size}×... (parameter count varies)`);
+
+    // ===== Run current config as baseline (for comparison) =====
+    const baselineResult = runSimulation(currentConfig, ciData, {
+      upfront_usd,
+      monthly_usd,
+      org_id,
+      sim_start_date: start_date,
+    });
 
     const optResults = optimizeParameters(optConfig, ciData, simParams);
 
@@ -201,6 +218,22 @@ Deno.serve(async (req) => {
     console.log(`  Combinations skipped: ${optResults.combinations_skipped}`);
     console.log(`  Execution time: ${optResults.execution_time_seconds.toFixed(2)}s`);
 
+    // Helper: extract all summary metrics from a SimulationResult (no daily/ledger arrays)
+    const summarise = (r: any) => ({
+      final_nav_usd: r.final_nav_usd,
+      final_roi_percent: r.final_roi_percent,
+      final_cagr_percent: r.final_cagr_percent,
+      max_drawdown_percent: r.max_drawdown_percent,
+      sharpe_ratio: r.sharpe_ratio,
+      cash_drag_percent: r.cash_drag_percent,
+      final_btc_balance: r.final_btc_balance,
+      final_usdt_balance: r.final_usdt_balance,
+      total_contrib_gross_usdt: r.total_contrib_gross_usdt,
+      total_platform_fees_usdt: r.total_platform_fees_usdt,
+      total_performance_fees_usdt: r.total_performance_fees_usdt,
+      total_exchange_fees_btc: r.total_exchange_fees_btc,
+    });
+
     // ===== Build response =====
     const response = {
       success: true,
@@ -210,17 +243,29 @@ Deno.serve(async (req) => {
       contributions: { upfront_usd, monthly_usd },
       objective,
       grid_size,
-      
-      // Current config baseline
-      current: {
+
+      // Current config baseline (unmodified variation, for comparison)
+      baseline: {
         config: currentConfig,
-        metrics: optResults.best.simulation,  // Placeholder - would need to run current config separately
+        metrics: summarise(baselineResult),
       },
 
-      // Optimization results
-      best: optResults.best,
-      top_results: optResults.top_results,
-      
+      // Best result found
+      best: {
+        rank: 1,
+        config: optResults.best.config,
+        objective_value: optResults.best.objective_value,
+        metrics: summarise(optResults.best.simulation),
+      },
+
+      // Top N results — all 6 metrics per row, no daily/ledger arrays
+      top_results: optResults.top_results.map((r) => ({
+        rank: r.rank,
+        config: r.config,
+        objective_value: r.objective_value,
+        metrics: summarise(r.simulation),
+      })),
+
       // Execution stats
       combinations_tested: optResults.combinations_tested,
       combinations_skipped: optResults.combinations_skipped,

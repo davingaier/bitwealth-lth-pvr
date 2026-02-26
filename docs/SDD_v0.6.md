@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-25 (v0.6.55)
+**Last updated:** 2026-02-26 (v0.6.56)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.56 – Optimizer Bug Fixes: Warmup Pass, price_at_p250, Response Size, Baseline
+**Date:** 2026-02-26  
+**Purpose:** Fix four bugs in `ef_optimize_lth_pvr_strategy` that caused incorrect optimization results and potential response payloads of hundreds of MB.
+
+**Status:** ✅ FIXED & DEPLOYED
+
+#### Bug A – Response Too Large (daily/ledger arrays in top_results)
+**Root cause:** Each `top_results[i].simulation` included the full `daily` array (~2,200 rows) + `ledger` array for every result. With `max_results=10`, a typical response exceeded 200 MB — crashing Deno.
+**Fix:** Added `summarise()` helper that strips `daily`/`ledger` and returns only 12 scalar summary fields. `top_results[i].metrics` now contains exactly those 12 fields. `max_results` default also reduced from 10 → 6.
+
+#### Bug B – Wrong Baseline (winner's metrics shown as current config)
+**Root cause:** `current.metrics` was assigned `optResults.best.simulation` — the *winner's* metrics, not the unmodified variation's metrics. This made the baseline useless for judging improvement.
+**Fix:** Run `runSimulation(currentConfig, ciData, { sim_start_date: start_date })` once before the grid sweep. Response key `current` renamed to `baseline`. The response now contains `baseline.config` (unmodified variation) and `baseline.metrics` (its summarised results).
+
+#### Bug C – Missing 2-Year Warmup Pass (same class as v0.6.54)
+**Root cause:** The optimizer loaded CI bands starting at `start_date`, so `was_above_p1` / retrace state was always uninitialized at simulation start — identical to the v0.6.54 back-tester bug.
+**Fix:** Added `warmupStartDate = start_date − 2 years`. CI bands query now loads from `warmupStartDate`. `simParams` includes `sim_start_date: start_date` so that accounting only begins at the intended start date.
+
+#### Bug D – price_at_p250 Missing from ciData Transform (same class as v0.6.51)
+**Root cause:** The optimizer's CI bands transform did not include `price_at_p250`, causing the Base 11 buy signal (price > +2.0σ) to fire incorrectly when price was above the threshold.
+**Fix:** Added `price_at_p250: row.price_at_p250` to the optimizer's `ciData` transform.
+
+**Files changed:**
+- `supabase/functions/ef_optimize_lth_pvr_strategy/index.ts` — all four bugs
+- `docs/Strategy_Maintenance_Test_Cases.md` — TC-3.3.1–3.3.11 rewritten with phased optimization approach and concrete PowerShell steps
+
+---
 
 ### v0.6.55 – USDT Floor Guard: BTC→USDT Conversion on Performance Fee Shortfall
 **Date:** 2026-02-25  

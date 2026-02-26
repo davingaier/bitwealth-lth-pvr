@@ -408,6 +408,7 @@
     <a href="#reports-module">Portfolio Performance Reporting</a>
     <a href="#backtest-module">Strategy Back-Testing</a>
     <a href="#finance-module">Finance</a>
+    <a href="#optimizer-module">Strategy Optimizer</a>
     <a href="#admin-module">Administration<span class="alert-badge zero" id="alertBadge">0</span></a>
   </nav>
 
@@ -10348,6 +10349,637 @@ Momentum:
 
   })();
 
+  </script>
+
+  <!-- ===================== Strategy Optimizer Module ===================== -->
+  <div id="optimizer-module" class="module">
+    <h2>Strategy Optimizer</h2>
+    <p style="color:var(--muted);max-width:700px;margin-bottom:2rem;">
+      Grid-search optimizer running entirely in your browser using all available CPU cores.
+      Tests ~9.3 million parameter combinations in 15–30 minutes. Results are sorted by your chosen objective.
+    </p>
+
+    <div class="card" style="max-width:720px;margin:0 auto 2rem;">
+      <h3 style="margin-top:0;">Optimization Setup</h3>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1rem;">
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Variation to optimize:</label>
+          <select id="optVarSelect" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
+            <option value="">Loading variations…</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Objective (ranking metric):</label>
+          <select id="optObjective2" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
+            <option value="cagr" selected>CAGR % (default)</option>
+            <option value="nav">Final NAV ($)</option>
+            <option value="sharpe">Sharpe Ratio (CAGR / MaxDD)</option>
+            <option value="maxdd">Min Max Drawdown</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
+          <input id="optStartDate2" type="date" value="2020-01-01" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
+          <input id="optEndDate2" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Upfront Investment ($):</label>
+          <input id="optUpfront2" type="number" min="0" step="1000" value="10000" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+        </div>
+        <div>
+          <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Monthly Contribution ($):</label>
+          <input id="optMonthly2" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+        </div>
+      </div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#1e40af;">
+        <strong>Parameter space:</strong> B1–B5 (buy tiers, 6 values each, monotone-filtered) × B6–B11 (sell tiers, 6 values each, monotone-filtered) × 8 momo lengths × 10 momo thresholds ≈ <strong>9.3M valid combinations</strong>. Bear-pause exit sigma is taken from the selected variation's config.
+      </div>
+      <div style="display:flex;gap:.75rem;align-items:center;">
+        <button id="optRunBtn" type="button" onclick="window.optimizer.run()" style="padding:.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-size:1rem;">▶ Run Optimizer</button>
+        <button id="optStopBtn" type="button" onclick="window.optimizer.stop()" style="display:none;padding:.75rem 2rem;background:#ef4444;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">■ Stop</button>
+        <span id="optStatus" style="color:var(--muted);font-size:.9rem;"></span>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div id="optProgress" style="display:none;max-width:720px;margin:0 auto 2rem;" class="card">
+    </div>
+
+    <!-- Results -->
+    <div id="optResults" style="max-width:100%;overflow-x:auto;">
+    </div>
+  </div><!-- end #optimizer-module -->
+
+  <script>
+  /* =====================================================================
+     Browser-based LTH PVR Strategy Optimizer
+     Runs grid search across ~9.3M parameter combinations using WebWorkers
+     (one worker per CPU core).  No edge function timeout constraints.
+     ===================================================================== */
+  (function () {
+    'use strict';
+
+    // ── Parameter value arrays (hard-coded wide coverage) ──────────────────
+    const B_VALS = {
+      b1: [0.20, 0.26, 0.32, 0.38, 0.44, 0.50],
+      b2: [0.15, 0.21, 0.27, 0.33, 0.39, 0.45],
+      b3: [0.10, 0.14, 0.18, 0.22, 0.26, 0.30],
+      b4: [0.08, 0.11, 0.14, 0.17, 0.20, 0.23],
+      b5: [0.04, 0.07, 0.10, 0.13, 0.16, 0.20],
+      b6: [0.005, 0.010, 0.015, 0.022, 0.030, 0.040],
+      b7: [0.010, 0.020, 0.035, 0.050, 0.070, 0.090],
+      b8: [0.020, 0.040, 0.060, 0.090, 0.120, 0.150],
+      b9: [0.040, 0.080, 0.120, 0.170, 0.220, 0.270],
+      b10: [0.080, 0.130, 0.180, 0.250, 0.330, 0.420],
+      b11: [0.150, 0.260, 0.380, 0.520, 0.660, 0.800]
+    };
+    const MOMO_LENS  = [1, 2, 3, 5, 7, 10, 14, 21];
+    const MOMO_THRS  = [-0.05, -0.02, 0.00, 0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15];
+    const EST_COMBINATIONS = 252 * 462 * 8 * 10; // ~9.3 M
+
+    // ── State ───────────────────────────────────────────────────────────────
+    let workers = [], workerResults = [], optimizerRunning = false;
+    let totalTested = 0, totalSkipped = 0, workersCompleted = 0, startTime = 0, numWorkers = 0;
+
+    // ── WebWorker source (inline blob) ──────────────────────────────────────
+    const WORKER_SRC = `'use strict';
+
+/* Pre-compute ROC series for a given lookback length */
+function computeRoc(px, N, len) {
+  const roc = new Float64Array(N);
+  if (len <= 0) return roc;
+  for (let i = len; i < N; i++) {
+    const a = px[i], b = px[i - len];
+    if (a > 0 && b > 0) roc[i] = a / b - 1;
+  }
+  return roc;
+}
+
+/* Run one simulation; returns {nav, cagr, sharpe, maxDD, cashDrag} */
+function runSim(
+  N, warmupLen, px, mean, m025, m050, m075, m100,
+  p050, p100, p150, p200, p250, bearP, ym, bpExit,
+  B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11,
+  momoThr, roc,
+  upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears
+) {
+  /* ---- warmup pass: initialise bear-pause + retrace state ---- */
+  let bp = false, wp1 = false, wp15 = false, r1 = false, r15 = false;
+  for (let i = 0; i < warmupLen; i++) {
+    const p = px[i]; if (p <= 0) continue;
+    const db = bearP[i] > 0.5;
+    if (!bp && db) { wp1 = false; wp15 = false; r1 = false; r15 = false; }
+    bp = db;
+    const ep = p200[i]; if (ep > 0 && p > ep) bp = true;
+    const xp = bpExit[i];
+    if (bp && xp > 0 && p < xp) { bp = false; wp1=false; wp15=false; r1=false; r15=false; }
+    if (bp) { wp1=false; wp15=false; r1=false; r15=false; continue; }
+    const pp100=p100[i],pp150=p150[i],pp050=p050[i];
+    if (pp100>0&&pp150>0&&p>=pp100&&p<pp150) wp1=true;
+    if (pp150>0&&ep>0&&p>=pp150&&p<ep) wp15=true;
+    if (wp1&&pp050>0&&p>=pp050) r1=true;
+    if (wp15&&pp100>0&&p>=pp100) r15=true;
+  }
+
+  /* ---- financial simulation pass ---- */
+  let btc=0, usdt=0, gCum=0, nCum=0, hwm=0, hwmN=0;
+  let pfCum=0, xBtcCum=0, lastYM=-1, lastPerfYM=-1;
+  let peakNav=0, maxDD=0, usdtNavSum=0, navCount=0, firstRow=true;
+
+  for (let i = warmupLen; i < N; i++) {
+    const p = px[i]; if (p <= 0) continue;
+    const ymv = ym[i];
+    const newMonth = (ymv !== lastYM);
+
+    /* contributions */
+    if (firstRow) {
+      if (upfront > 0) {
+        const f18=upfront*contribRate, pl=(upfront-f18)*platRate, net=upfront-f18-pl;
+        usdt+=net; gCum+=upfront; nCum+=net; pfCum+=pl; xBtcCum+=0;
+      }
+      firstRow = false;
+    }
+    if (newMonth && monthly > 0) {
+      const f18=monthly*contribRate, pl=(monthly-f18)*platRate, net=monthly-f18-pl;
+      usdt+=net; gCum+=monthly; nCum+=net; pfCum+=pl;
+    }
+    if (newMonth) lastYM = ymv;
+
+    /* bear-pause sync from DB then price-based */
+    const db = bearP[i] > 0.5;
+    if (!bp && db) { wp1=false; wp15=false; r1=false; r15=false; }
+    bp = db;
+    const ep = p200[i]; if (ep > 0 && p > ep) bp = true;
+    const xp = bpExit[i];
+    const exiting = (bp && xp > 0 && p < xp);
+    if (exiting) { bp=false; wp1=false; wp15=false; r1=false; r15=false; }
+    if (bp) { wp1=false; wp15=false; r1=false; r15=false; }
+
+    /* retrace state */
+    const pp050=p050[i],pp100=p100[i],pp150=p150[i];
+    if (!bp) {
+      if (pp100>0&&pp150>0&&p>=pp100&&p<pp150) wp1=true;
+      if (pp150>0&&ep>0&&p>=pp150&&p<ep) wp15=true;
+      if (wp1&&pp050>0&&p>=pp050) r1=true;
+      if (wp15&&pp100>0&&p>=pp100) r15=true;
+    }
+
+    /* trade decision */
+    const mn=mean[i],pm025=m025[i],pm050=m050[i],pm075=m075[i],pm100=m100[i],pp250=p250[i];
+    const rv = roc[i];
+    const momOk = bp ? true : (rv > momoThr);
+    let act=0, pct=0;
+
+    const excR1 = wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
+    const excR2 = wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
+
+    if (excR1) { act=1; pct=B3; }
+    else if (excR2) { act=1; pct=B3; }
+    else if (mn>0 && p<mn) {
+      if (!bp || exiting) {
+        if      (pm100>0&&p<pm100) { act=1; pct=B1; }
+        else if (pm075>0&&p<pm075) { act=1; pct=B2; }
+        else if (pm050>0&&p<pm050) { act=1; pct=B3; }
+        else if (pm025>0&&p<pm025) { act=1; pct=B4; }
+        else                       { act=1; pct=B5; }
+      }
+    } else {
+      if      (pp050>0&&p<pp050) { act=-1; pct=B6; }
+      else if (pp100>0&&p<pp100) { act=momOk?-1:0; pct=momOk?B7:0; }
+      else if (pp150>0&&p<pp150) { act=momOk?-1:0; pct=momOk?B8:0; }
+      else if (ep>0&&p<ep)       { act=momOk?-1:0; pct=momOk?B9:0; }
+      else if (pp250>0&&p<pp250) { act=-1; pct=B10; }
+      else                       { act=-1; pct=B11; }
+    }
+
+    /* execute */
+    if (act===1 && pct>0 && usdt>0) {
+      const tu=usdt*pct, bg=tu/p, fee=bg*tradeRate;
+      usdt-=tu; btc+=bg-fee; xBtcCum+=fee;
+    } else if (act===-1 && pct>0 && btc>0) {
+      const bg=btc*pct, fee=bg*tradeRate;
+      btc-=bg+fee; usdt+=bg*p; xBtcCum+=fee;
+    }
+
+    /* monthly performance fee */
+    if (ymv!==lastPerfYM && lastPerfYM!==-1) {
+      const nav=usdt+btc*p, cs=nCum-hwmN, navAdj=nav-cs;
+      if (navAdj>hwm && perfRate>0) {
+        const fee=(navAdj-hwm)*perfRate;
+        usdt-=fee; pfCum+=fee;
+        if (usdt<0 && btc>0) {
+          const bSell=Math.min(btc,(-usdt)/(p*(1-tradeRate))), bFee=bSell*tradeRate;
+          btc-=bSell; usdt+=(bSell-bFee)*p; xBtcCum+=bFee;
+        }
+        const navA=usdt+btc*p; hwm=navA-cs; hwmN=nCum;
+      } else if (navAdj>hwm) { hwm=navAdj; hwmN=nCum; }
+    }
+    if (ymv!==lastPerfYM) lastPerfYM=ymv;
+
+    /* metrics */
+    const nav=usdt+btc*p;
+    if (nav>peakNav) peakNav=nav;
+    if (peakNav>0) { const dd=(peakNav-nav)/peakNav*100; if(dd>maxDD) maxDD=dd; }
+    if (nav>0) { usdtNavSum+=usdt/nav*100; navCount++; }
+  }
+
+  const finalNav = usdt + (N > warmupLen ? btc * px[N-1] : 0);
+  let cagr = 0;
+  if (simYears > 0 && gCum > 0 && finalNav > 0)
+    cagr = (Math.pow(finalNav / gCum, 1 / simYears) - 1) * 100;
+  const sharpe = maxDD > 0 ? cagr / maxDD : 0;
+  const cashDrag = navCount > 0 ? usdtNavSum / navCount : 0;
+  return { nav: finalNav, cagr, sharpe, maxDD, cashDrag };
+}
+
+/* Top-K maintenance */
+const TOP_K = 60;
+function insertTopK(arr, entry) {
+  if (arr.length < TOP_K) { arr.push(entry); arr.sort((a,b)=>b.score-a.score); }
+  else if (entry.score > arr[arr.length-1].score) { arr[arr.length-1]=entry; arr.sort((a,b)=>b.score-a.score); }
+}
+
+self.onmessage = function(e) {
+  const { N, warmupLen, ci, bVals, momoLens, momoThrs, workerId, numWorkers,
+          bpExitSigmaKey, simYears, simParams, objective } = e.data;
+
+  const { px,mean,m025,m050,m075,m100,p050,p100,p150,p200,p250,bearP,ym,bpExit } = ci;
+  const { upfront, monthly, platRate, tradeRate, perfRate, contribRate } = simParams;
+  const { b1v,b2v,b3v,b4v,b5v,b6v,b7v,b8v,b9v,b10v,b11v } = bVals;
+
+  /* Pre-compute ROC for each momoLen (avoids recomputing per sim) */
+  const rocMap = {};
+  for (const ml of momoLens) { rocMap[ml] = computeRoc(px, N, ml); }
+
+  /* Inner-loop size constants for fast skipped-count accumulation */
+  const momoCombo = momoLens.length * momoThrs.length;
+  const sz_b11 = momoCombo;
+  const sz_b10 = b11v.length * sz_b11;
+  const sz_b9  = b10v.length * sz_b10;
+  const sz_b8  = b9v.length  * sz_b9;
+  const sz_b7  = b8v.length  * sz_b8;
+  const sz_b6  = b7v.length  * sz_b7;
+  const sz_b5  = b6v.length  * sz_b6;
+  const sz_b4  = b5v.length  * sz_b5;
+  const sz_b3  = b4v.length  * sz_b4;
+  const sz_b2  = b3v.length  * sz_b3;
+
+  const topK = [];
+  let tested = 0, skipped = 0;
+  const REPORT = 8000;
+
+  for (let i1 = workerId; i1 < b1v.length; i1 += numWorkers) {
+    const B1 = b1v[i1];
+    for (const B2 of b2v) {
+      if (B2 > B1) { skipped += sz_b2; continue; }
+      for (const B3 of b3v) {
+        if (B3 > B2) { skipped += sz_b3; continue; }
+        for (const B4 of b4v) {
+          if (B4 > B3) { skipped += sz_b4; continue; }
+          for (const B5 of b5v) {
+            if (B5 > B4) { skipped += sz_b5; continue; }
+            for (const B6 of b6v) {
+              for (const B7 of b7v) {
+                if (B7 < B6) { skipped += sz_b7; continue; }
+                for (const B8 of b8v) {
+                  if (B8 < B7) { skipped += sz_b8; continue; }
+                  for (const B9 of b9v) {
+                    if (B9 < B8) { skipped += sz_b9; continue; }
+                    for (const B10 of b10v) {
+                      if (B10 < B9) { skipped += sz_b10; continue; }
+                      for (const B11 of b11v) {
+                        if (B11 < B10) { skipped += sz_b11; continue; }
+                        for (const momoLen of momoLens) {
+                          const roc = rocMap[momoLen];
+                          for (const momoThr of momoThrs) {
+                            const r = runSim(
+                              N, warmupLen, px, mean, m025, m050, m075, m100,
+                              p050, p100, p150, p200, p250, bearP, ym, bpExit,
+                              B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,
+                              momoThr, roc,
+                              upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears
+                            );
+                            const score = objective==='nav' ? r.nav
+                                        : objective==='sharpe' ? r.sharpe
+                                        : objective==='maxdd' ? -r.maxDD
+                                        : r.cagr;
+                            insertTopK(topK, { score, ...r, B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,momoLen,momoThr });
+                            tested++;
+                            if ((tested % REPORT) === 0) {
+                              self.postMessage({ type:'progress', tested, skipped });
+                              tested = 0; skipped = 0;
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  self.postMessage({ type:'done', tested, skipped, topK });
+};`;
+
+    // ── Utilities ────────────────────────────────────────────────────────────
+    function fmt(n) { return n > 1e6 ? (n/1e6).toFixed(2)+'M' : n > 1e3 ? (n/1e3).toFixed(1)+'K' : Math.round(n).toString(); }
+    function fmtETA(s) {
+      if (!isFinite(s) || s > 86400) return '> 1 day';
+      if (s > 3600) return (s/3600).toFixed(1)+'h';
+      if (s > 60) return Math.floor(s/60)+'m '+Math.floor(s%60)+'s';
+      return Math.ceil(s)+'s';
+    }
+    function setStatus(msg) { const el = document.getElementById('optStatus'); if (el) el.textContent = msg; }
+
+    // ── Load variations dropdown ──────────────────────────────────────────────
+    async function loadVariations() {
+      const sb = window.supabaseClient; if (!sb) return;
+      try {
+        const { data } = await sb.schema('lth_pvr').from('strategy_variation_templates')
+          .select('id, variation_name, config_json')
+          .order('variation_name');
+        const sel = document.getElementById('optVarSelect'); if (!sel) return;
+        sel.innerHTML = data.map(v => `<option value="${v.id}" data-config='${JSON.stringify(v.config_json)}'>${v.variation_name}</option>`).join('');
+        // Set default end date to today
+        const ed = document.getElementById('optEndDate2');
+        if (ed && !ed.value) ed.value = new Date().toISOString().slice(0,10);
+      } catch(e) { console.warn('loadVariations:', e); }
+    }
+
+    // ── Run optimizer ────────────────────────────────────────────────────────
+    async function run() {
+      if (optimizerRunning) return;
+      const startDate = document.getElementById('optStartDate2')?.value;
+      const endDate   = document.getElementById('optEndDate2')?.value;
+      const upfront   = parseFloat(document.getElementById('optUpfront2')?.value || '10000');
+      const monthly   = parseFloat(document.getElementById('optMonthly2')?.value || '500');
+      const objective = document.getElementById('optObjective2')?.value || 'cagr';
+      const varSel    = document.getElementById('optVarSelect');
+      const varOpt    = varSel?.options[varSel?.selectedIndex];
+      const varCfg    = varOpt?.dataset?.config ? JSON.parse(varOpt.dataset.config) : null;
+
+      if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
+
+      // Determine bear-pause exit sigma column from variation config
+      const bpExitSigma = varCfg?.bearPauseExitSigma ?? 0.0;
+
+      optimizerRunning = true; totalTested = 0; totalSkipped = 0;
+      workersCompleted = 0; workerResults = []; startTime = Date.now();
+
+      document.getElementById('optRunBtn').style.display = 'none';
+      document.getElementById('optStopBtn').style.display = 'inline-block';
+      const prog  = document.getElementById('optProgress');
+      const res   = document.getElementById('optResults');
+      prog.style.display = 'block';
+      prog.innerHTML = '<p>⏳ Loading CI band data from database (2-year warmup included)…</p>';
+      res.innerHTML = '';
+
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) throw new Error('Supabase client not ready—please sign in.');
+
+        // Compute warmup start (2 years before financial start)
+        const warmupDate = new Date(startDate);
+        warmupDate.setFullYear(warmupDate.getFullYear() - 2);
+        const warmupDateStr = warmupDate.toISOString().slice(0,10);
+
+        // Fetch org_id from context
+        const orgId = document.getElementById('orgSelect')?.value;
+
+        const { data: bands, error: bErr } = await sb.schema('lth_pvr')
+          .from('ci_bands_daily')
+          .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p025,price_at_p050,price_at_p075,price_at_p100,price_at_p125,price_at_p150,price_at_p175,price_at_p200,price_at_p250,bear_pause')
+          .eq('org_id', orgId)
+          .gte('date', warmupDateStr)
+          .lte('date', endDate)
+          .order('date', { ascending: true });
+
+        if (bErr || !bands?.length) throw new Error('CI bands fetch failed: ' + (bErr?.message || 'no data'));
+
+        const N = bands.length;
+        const warmupLen = Math.max(0, bands.findIndex(r => r.date >= startDate));
+        const simYears = (new Date(endDate) - new Date(startDate)) / (365.25 * 86400000);
+
+        prog.innerHTML = `<p>✅ Loaded ${N} CI band rows (${warmupLen} warmup + ${N - warmupLen} financial). Building typed arrays…</p>`;
+
+        // Build Float64Array columns
+        const cols = ['btc_price','price_at_mean','price_at_m025','price_at_m050','price_at_m075','price_at_m100',
+                       'price_at_p050','price_at_p100','price_at_p150','price_at_p200','price_at_p250',
+                       'price_at_m025','price_at_m050','price_at_m075','price_at_p025'];
+        function toArr(col) {
+          const a = new Float64Array(N);
+          for (let i=0;i<N;i++) a[i] = parseFloat(bands[i][col]) || 0;
+          return a;
+        }
+
+        // bear_pause exit column (based on variation's bearPauseExitSigma)
+        let exitColName;
+        if      (bpExitSigma < -0.9) exitColName = 'price_at_m100'; // -1.0σ
+        else if (bpExitSigma < -0.5) exitColName = 'price_at_m075'; // -0.75σ
+        else                         exitColName = 'price_at_mean';  // 0σ  (conservative)
+
+        const ci = {
+          px:    toArr('btc_price'),
+          mean:  toArr('price_at_mean'),
+          m025:  toArr('price_at_m025'),
+          m050:  toArr('price_at_m050'),
+          m075:  toArr('price_at_m075'),
+          m100:  toArr('price_at_m100'),
+          p050:  toArr('price_at_p050'),
+          p100:  toArr('price_at_p100'),
+          p150:  toArr('price_at_p150'),
+          p200:  toArr('price_at_p200'),
+          p250:  toArr('price_at_p250'),
+          bearP: (function(){ const a=new Float64Array(N); for(let i=0;i<N;i++) a[i]=bands[i].bear_pause?1:0; return a; })(),
+          ym:    (function(){ const a=new Int32Array(N); for(let i=0;i<N;i++){ const d=bands[i].date; a[i]=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7)); } return a; })(),
+          bpExit: toArr(exitColName)
+        };
+
+        numWorkers = Math.min(navigator.hardwareConcurrency || 4, 16);
+        const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        prog.innerHTML = `<p>🚀 Spawning ${numWorkers} workers across ${numWorkers} CPU cores. Estimated <strong>~${(EST_COMBINATIONS/1e6).toFixed(1)}M</strong> valid combinations…</p>`;
+
+        workers = [];
+        for (let wid = 0; wid < numWorkers; wid++) {
+          const w = new Worker(blobUrl);
+          workers.push(w);
+
+          w.onmessage = function(e) {
+            const msg = e.data;
+            if (msg.type === 'progress') {
+              totalTested += msg.tested; totalSkipped += msg.skipped;
+              updateProgress();
+            } else if (msg.type === 'done') {
+              totalTested += msg.tested; totalSkipped += msg.skipped;
+              if (msg.topK?.length) workerResults.push(...msg.topK);
+              workersCompleted++;
+              if (workersCompleted === numWorkers) onAllDone(objective);
+            }
+          };
+          w.onerror = e => console.error('Worker error:', e);
+
+          w.postMessage({
+            N, warmupLen, ci,
+            bVals: { b1v:B_VALS.b1, b2v:B_VALS.b2, b3v:B_VALS.b3, b4v:B_VALS.b4, b5v:B_VALS.b5,
+                     b6v:B_VALS.b6, b7v:B_VALS.b7, b8v:B_VALS.b8, b9v:B_VALS.b9, b10v:B_VALS.b10, b11v:B_VALS.b11 },
+            momoLens: MOMO_LENS, momoThrs: MOMO_THRS,
+            workerId: wid, numWorkers, simYears, objective,
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 }
+          });
+        }
+
+        URL.revokeObjectURL(blobUrl);
+
+      } catch(err) {
+        console.error('Optimizer error:', err);
+        prog.innerHTML = `<p style="color:#dc2626">❌ Error: ${err.message}</p>`;
+        resetUI();
+      }
+    }
+
+    function updateProgress() {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const rate = elapsed > 0 ? (totalTested / elapsed) : 0;
+      const est  = EST_COMBINATIONS;
+      const pct  = Math.min(99.9, totalTested / est * 100);
+      const eta  = rate > 0 ? (est - totalTested) / rate : Infinity;
+      const prog = document.getElementById('optProgress');
+      if (!prog) return;
+      prog.innerHTML = `
+        <div style="background:#e5e7eb;border-radius:8px;height:20px;overflow:hidden;margin-bottom:.75rem;">
+          <div style="background:#3b82f6;height:100%;width:${pct.toFixed(1)}%;border-radius:8px;transition:width .5s;"></div>
+        </div>
+        <p style="margin:0;font-size:.9rem;color:#374151;">
+          Testing: <strong>${fmt(totalTested)}</strong> valid / ~${fmt(est)} (${pct.toFixed(1)}%)&nbsp;·&nbsp;
+          Speed: <strong>${fmt(rate)}/s</strong>&nbsp;·&nbsp;
+          ETA: <strong>${fmtETA(eta)}</strong>&nbsp;·&nbsp;
+          ${numWorkers} CPU cores active
+        </p>`;
+    }
+
+    function onAllDone(objective) {
+      const elapsed = (Date.now() - startTime) / 1000;
+      workerResults.sort((a,b) => b.score - a.score);
+      const top = workerResults.slice(0, 50);
+      const prog = document.getElementById('optProgress');
+      const res  = document.getElementById('optResults');
+
+      if (prog) prog.innerHTML = `<p style="color:#059669">✅ Done! Tested <strong>${totalTested.toLocaleString()}</strong> valid combinations (${totalSkipped.toLocaleString()} skipped for monotonicity) in <strong>${fmtETA(elapsed)}</strong>.</p>`;
+
+      if (res && top.length) {
+        const objLabel = { cagr:'CAGR', nav:'NAV', sharpe:'Sharpe', maxdd:'Min MaxDD' }[objective] || objective.toUpperCase();
+        const thStyle = 'padding:7px 8px;text-align:right;border:1px solid #e5e7eb;white-space:nowrap;font-size:.8rem;';
+        const tdR = 'padding:5px 7px;text-align:right;border:1px solid #e5e7eb;font-size:.78rem;';
+        const tdL = 'padding:5px 7px;text-align:left;border:1px solid #e5e7eb;font-size:.78rem;font-weight:600;';
+        res.innerHTML = `
+          <div class="card" style="margin-top:1rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+              <h3 style="margin:0;">Top 50 Results — sorted by ${objLabel}</h3>
+              <button onclick="window.optimizer.exportCSV()" style="padding:.4rem .9rem;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">⬇ Export CSV</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:#f3f4f6;">
+                  <th style="${thStyle.replace('text-align:right','text-align:left')}">#</th>
+                  <th style="${thStyle}">NAV $</th><th style="${thStyle}">CAGR%</th>
+                  <th style="${thStyle}">Sharpe</th><th style="${thStyle}">MaxDD%</th><th style="${thStyle}">Drag%</th>
+                  <th style="${thStyle}">B1%</th><th style="${thStyle}">B2%</th><th style="${thStyle}">B3%</th>
+                  <th style="${thStyle}">B4%</th><th style="${thStyle}">B5%</th>
+                  <th style="${thStyle}">B6%</th><th style="${thStyle}">B7%</th><th style="${thStyle}">B8%</th>
+                  <th style="${thStyle}">B9%</th><th style="${thStyle}">B10%</th><th style="${thStyle}">B11%</th>
+                  <th style="${thStyle}">ML</th><th style="${thStyle}">MT%</th>
+                </tr></thead>
+                <tbody>
+                  ${top.map((r,i) => {
+                    const bg = i%2===0?'#fff':'#f9fafb';
+                    const b = n => (n*100).toFixed(n<0.1?2:1); // format B values
+                    return `<tr style="background:${bg};">
+                      <td style="${tdL}">${i+1}</td>
+                      <td style="${tdR}">$${r.nav.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                      <td style="${tdR}">${r.cagr.toFixed(2)}</td>
+                      <td style="${tdR}">${r.sharpe.toFixed(3)}</td>
+                      <td style="${tdR}">${r.maxDD.toFixed(2)}</td>
+                      <td style="${tdR}">${r.cashDrag.toFixed(2)}</td>
+                      <td style="${tdR}">${b(r.B1)}</td><td style="${tdR}">${b(r.B2)}</td><td style="${tdR}">${b(r.B3)}</td>
+                      <td style="${tdR}">${b(r.B4)}</td><td style="${tdR}">${b(r.B5)}</td>
+                      <td style="${tdR}">${b(r.B6)}</td><td style="${tdR}">${b(r.B7)}</td><td style="${tdR}">${b(r.B8)}</td>
+                      <td style="${tdR}">${b(r.B9)}</td><td style="${tdR}">${b(r.B10)}</td><td style="${tdR}">${b(r.B11)}</td>
+                      <td style="${tdR}">${r.momoLen}</td><td style="${tdR}">${(r.momoThr*100).toFixed(1)}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+      }
+
+      resetUI();
+    }
+
+    function stop() {
+      workers.forEach(w => { try { w.terminate(); } catch(e) {} });
+      workers = [];
+      const prog = document.getElementById('optProgress');
+      if (prog) prog.innerHTML = '<p style="color:#d97706">⚠️ Stopped by user.</p>';
+      resetUI();
+    }
+
+    function resetUI() {
+      optimizerRunning = false;
+      const r = document.getElementById('optRunBtn'), s = document.getElementById('optStopBtn');
+      if (r) r.style.display = 'inline-block';
+      if (s) s.style.display = 'none';
+      setStatus('');
+    }
+
+    function exportCSV() {
+      const top = workerResults.slice(0, 50);
+      if (!top.length) { alert('No results to export.'); return; }
+      const h = ['Rank','NAV_USD','CAGR_pct','Sharpe','MaxDD_pct','CashDrag_pct',
+                  'B1','B2','B3','B4','B5','B6','B7','B8','B9','B10','B11','MomoLen','MomoThr_pct'];
+      const rows = top.map((r,i) => [
+        i+1, r.nav.toFixed(2), r.cagr.toFixed(4), r.sharpe.toFixed(6), r.maxDD.toFixed(4), r.cashDrag.toFixed(4),
+        r.B1,r.B2,r.B3,r.B4,r.B5,r.B6,r.B7,r.B8,r.B9,r.B10,r.B11,r.momoLen,(r.momoThr*100).toFixed(2)
+      ]);
+      const csv = [h,...rows].map(r=>r.join(',')).join('\n');
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})),
+        download: `lth_pvr_optimizer_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`
+      });
+      a.click();
+    }
+
+    // ── Init: load variations when module becomes visible ────────────────────
+    function initObserver() {
+      const mod = document.getElementById('optimizer-module');
+      if (!mod) return;
+      let loaded = false;
+      const obs = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && !loaded) { loaded = true; loadVariations(); }
+      }, { threshold: 0.01 });
+      obs.observe(mod);
+      // Also try immediately in case already visible
+      const hash = location.hash;
+      if (hash === '#optimizer-module') { loaded = true; loadVariations(); }
+    }
+
+    // Wait for supabaseClient before registering
+    const initTimer = setInterval(() => {
+      if (window.supabaseClient) { clearInterval(initTimer); initObserver(); }
+    }, 300);
+
+    window.optimizer = { run, stop, exportCSV };
+
+  })();
   </script>
 </body>
 </html>
