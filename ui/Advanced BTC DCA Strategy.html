@@ -10356,7 +10356,7 @@ Momentum:
     <h2>Strategy Optimizer</h2>
     <p style="color:var(--muted);max-width:700px;margin-bottom:2rem;">
       Grid-search optimizer running entirely in your browser using all available CPU cores.
-      Tests ~9.3 million parameter combinations in 15–30 minutes. Results are sorted by your chosen objective.
+      Tests all valid parameter combinations (typically 30–40M) in 15–45 minutes. Results are sorted by your chosen objective.
     </p>
 
     <div class="card" style="max-width:720px;margin:0 auto 2rem;">
@@ -10438,11 +10438,34 @@ Momentum:
     };
     const MOMO_LENS  = [1, 2, 3, 5, 7, 10, 14, 21];
     const MOMO_THRS  = [-0.05, -0.02, 0.00, 0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15];
-    const EST_COMBINATIONS = 252 * 462 * 8 * 10; // ~9.3 M
+    let EST_COMBINATIONS = 0; // computed dynamically in run()
+
+    function computeEstCombinations() {
+      let buy = 0;
+      for (const b1 of B_VALS.b1) for (const b2 of B_VALS.b2) { if (b2>b1) continue;
+        for (const b3 of B_VALS.b3) { if (b3>b2) continue;
+          for (const b4 of B_VALS.b4) { if (b4>b3) continue;
+            for (const b5 of B_VALS.b5) { if (b5>b4) continue; buy++; }
+          }
+        }
+      }
+      let sell = 0;
+      for (const b6 of B_VALS.b6) for (const b7 of B_VALS.b7) { if (b7<b6) continue;
+        for (const b8 of B_VALS.b8) { if (b8<b7) continue;
+          for (const b9 of B_VALS.b9) { if (b9<b8) continue;
+            for (const b10 of B_VALS.b10) { if (b10<b9) continue;
+              for (const b11 of B_VALS.b11) { if (b11<b10) continue; sell++; }
+            }
+          }
+        }
+      }
+      return buy * sell * MOMO_LENS.length * MOMO_THRS.length;
+    }
 
     // ── State ───────────────────────────────────────────────────────────────
     let workers = [], workerResults = [], optimizerRunning = false;
     let totalTested = 0, totalSkipped = 0, workersCompleted = 0, startTime = 0, numWorkers = 0;
+    let lastBands = null, lastWarmupLen = 0, lastSimYears = 0, lastSimParams = null;
 
     // ── WebWorker source (inline blob) ──────────────────────────────────────
     const WORKER_SRC = `'use strict';
@@ -10595,11 +10618,9 @@ function runSim(
   return { nav: finalNav, cagr, sharpe, maxDD, cashDrag };
 }
 
-/* Top-K maintenance */
-const TOP_K = 60;
-function insertTopK(arr, entry) {
-  if (arr.length < TOP_K) { arr.push(entry); arr.sort((a,b)=>b.score-a.score); }
-  else if (entry.score > arr[arr.length-1].score) { arr[arr.length-1]=entry; arr.sort((a,b)=>b.score-a.score); }
+/* Per-B-set deduplication: track best momo combo per unique B1-B11 */
+function bKey(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11) {
+  return B1+'|'+B2+'|'+B3+'|'+B4+'|'+B5+'|'+B6+'|'+B7+'|'+B8+'|'+B9+'|'+B10+'|'+B11;
 }
 
 self.onmessage = function(e) {
@@ -10627,7 +10648,7 @@ self.onmessage = function(e) {
   const sz_b3  = b4v.length  * sz_b4;
   const sz_b2  = b3v.length  * sz_b3;
 
-  const topK = [];
+  const topByBKey = new Map();
   let tested = 0, skipped = 0;
   const REPORT = 8000;
 
@@ -10666,7 +10687,9 @@ self.onmessage = function(e) {
                                         : objective==='sharpe' ? r.sharpe
                                         : objective==='maxdd' ? -r.maxDD
                                         : r.cagr;
-                            insertTopK(topK, { score, ...r, B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,momoLen,momoThr });
+                            const k = bKey(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11);
+                            const ex = topByBKey.get(k);
+                            if (!ex || score > ex.score) topByBKey.set(k, { score, ...r, B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,momoLen,momoThr });
                             tested++;
                             if ((tested % REPORT) === 0) {
                               self.postMessage({ type:'progress', tested, skipped });
@@ -10685,6 +10708,7 @@ self.onmessage = function(e) {
       }
     }
   }
+  const topK = [...topByBKey.values()].sort((a,b)=>b.score-a.score).slice(0,500);
   self.postMessage({ type:'done', tested, skipped, topK });
 };`;
 
@@ -10736,6 +10760,9 @@ self.onmessage = function(e) {
       const varCfg    = varOpt?.dataset?.config ? JSON.parse(varOpt.dataset.config) : null;
 
       if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
+
+      // Compute exact valid combination count (accounts for monotone filtering)
+      EST_COMBINATIONS = computeEstCombinations();
 
       // Determine bear-pause exit sigma column from variation config
       const bpExitSigma = varCfg?.bearPauseExitSigma ?? 0.0;
@@ -10812,6 +10839,10 @@ self.onmessage = function(e) {
           bpExit: toArr(exitColName)
         };
 
+        // Store for daily txs export
+        lastBands = bands; lastWarmupLen = warmupLen; lastSimYears = simYears;
+        lastSimParams = { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, bpExitSigma, exitColName };
+
         numWorkers = Math.min(navigator.hardwareConcurrency || 4, 16);
         const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
         const blobUrl = URL.createObjectURL(blob);
@@ -10878,8 +10909,15 @@ self.onmessage = function(e) {
 
     function onAllDone(objective) {
       const elapsed = (Date.now() - startTime) / 1000;
-      workerResults.sort((a,b) => b.score - a.score);
-      const top = workerResults.slice(0, 50);
+      // Deduplicate by B1-B11: keep best momo combo per unique B-set across all workers
+      const byBKey = new Map();
+      for (const r of workerResults) {
+        const k = [r.B1,r.B2,r.B3,r.B4,r.B5,r.B6,r.B7,r.B8,r.B9,r.B10,r.B11].join('|');
+        const ex = byBKey.get(k);
+        if (!ex || r.score > ex.score) byBKey.set(k, r);
+      }
+      const top = [...byBKey.values()].sort((a,b) => b.score - a.score).slice(0, 50);
+      workerResults = [...byBKey.values()].sort((a,b) => b.score - a.score); // update for export
       const prog = document.getElementById('optProgress');
       const res  = document.getElementById('optResults');
 
@@ -10895,6 +10933,7 @@ self.onmessage = function(e) {
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
               <h3 style="margin:0;">Top 50 Results — sorted by ${objLabel}</h3>
               <button onclick="window.optimizer.exportCSV()" style="padding:.4rem .9rem;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">⬇ Export CSV</button>
+              <button onclick="window.optimizer.exportTopResultDailyTxs()" style="padding:.4rem .9rem;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;margin-left:.5rem;">⬇ Export #1 Daily Txs</button>
             </div>
             <div style="overflow-x:auto;">
               <table style="width:100%;border-collapse:collapse;">
@@ -10951,6 +10990,113 @@ self.onmessage = function(e) {
       setStatus('');
     }
 
+    function exportTopResultDailyTxs() {
+      if (!workerResults.length) { alert('No results available. Run the optimizer first.'); return; }
+      if (!lastBands) { alert('Band data not available. Please run the optimizer again.'); return; }
+      const t = workerResults[0];
+      const { B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,momoLen,momoThr } = t;
+      const { upfront,monthly,platRate,tradeRate,perfRate,contribRate,bpExitSigma,exitColName } = lastSimParams;
+      const bands = lastBands, N = bands.length, wl = lastWarmupLen;
+      const gf = col => bands.map(r => parseFloat(r[col])||0);
+      const px=gf('btc_price'),mean=gf('price_at_mean'),m025=gf('price_at_m025'),m050=gf('price_at_m050'),
+            m075=gf('price_at_m075'),m100=gf('price_at_m100'),p050=gf('price_at_p050'),p100=gf('price_at_p100'),
+            p150=gf('price_at_p150'),p200=gf('price_at_p200'),p250=gf('price_at_p250'),bpExit=gf(exitColName);
+      const bearP = bands.map(r => r.mode==='bear_pause'?1:0);
+      const roc = new Array(N).fill(0);
+      for (let i=momoLen;i<N;i++) { const a=px[i],b=px[i-momoLen]; if(a>0&&b>0) roc[i]=a/b-1; }
+      // warmup
+      let bp=false,wp1=false,wp15=false,r1=false,r15=false;
+      for (let i=0;i<wl;i++) {
+        const p=px[i]; if(p<=0) continue;
+        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} bp=db;
+        const ep=p200[i]; if(ep>0&&p>ep) bp=true;
+        const xp=bpExit[i]; if(bp&&xp>0&&p<xp){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
+        if(bp){wp1=false;wp15=false;r1=false;r15=false;continue;}
+        if(p100[i]>0&&p150[i]>0&&p>=p100[i]&&p<p150[i]) wp1=true;
+        if(p150[i]>0&&p200[i]>0&&p>=p150[i]&&p<p200[i]) wp15=true;
+        if(wp1&&p050[i]>0&&p>=p050[i]) r1=true;
+        if(wp15&&p100[i]>0&&p>=p100[i]) r15=true;
+      }
+      // sim
+      let btc=0,usdt=0,gCum=0,nCum=0,hwm=0,hwmN=0,pfCum=0,xBtcCum=0,lastYM=-1,lastPerfYM=-1,peakNav=0,firstRow=true;
+      const rows = [];
+      const startDate = bands[wl]?.date;
+      for (let i=wl;i<N;i++) {
+        const p=px[i]; if(p<=0) continue;
+        const d=bands[i].date;
+        const ymv=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7));
+        const newMonth=ymv!==lastYM;
+        let cGross=0,cNet=0,perfFeePaid=0;
+        if(firstRow){if(upfront>0){const f=upfront*contribRate,pl=(upfront-f)*platRate,net=upfront-f-pl;usdt+=net;gCum+=upfront;nCum+=net;pfCum+=pl;cGross=upfront;cNet=net;}firstRow=false;}
+        if(newMonth&&monthly>0){const f=monthly*contribRate,pl=(monthly-f)*platRate,net=monthly-f-pl;usdt+=net;gCum+=monthly;nCum+=net;pfCum+=pl;cGross=monthly;cNet=net;}
+        if(newMonth) lastYM=ymv;
+        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} bp=db;
+        const ep=p200[i]; if(ep>0&&p>ep) bp=true;
+        const xp=bpExit[i]; const exiting=(bp&&xp>0&&p<xp);
+        if(exiting){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
+        if(bp){wp1=false;wp15=false;r1=false;r15=false;}
+        if(!bp){
+          if(p100[i]>0&&p150[i]>0&&p>=p100[i]&&p<p150[i]) wp1=true;
+          if(p150[i]>0&&ep>0&&p>=p150[i]&&p<ep) wp15=true;
+          if(wp1&&p050[i]>0&&p>=p050[i]) r1=true;
+          if(wp15&&p100[i]>0&&p>=p100[i]) r15=true;
+        }
+        const mn=mean[i],pp050=p050[i],pp100=p100[i],pp150=p150[i],pp250=p250[i];
+        const momOk=bp?true:(roc[i]>momoThr);
+        let act=0,pct=0,rule='Hold';
+        const excR1=wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
+        const excR2=wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
+        if(excR1){act=1;pct=B3;rule='Retrace-1.5';}
+        else if(excR2){act=1;pct=B3;rule='Retrace-1';}
+        else if(mn>0&&p<mn){
+          if(!bp||exiting){
+            if(m100[i]>0&&p<m100[i]){act=1;pct=B1;rule='Base1';}
+            else if(m075[i]>0&&p<m075[i]){act=1;pct=B2;rule='Base2';}
+            else if(m050[i]>0&&p<m050[i]){act=1;pct=B3;rule='Base3';}
+            else if(m025[i]>0&&p<m025[i]){act=1;pct=B4;rule='Base4';}
+            else{act=1;pct=B5;rule='Base5';}
+          }
+        } else {
+          if(pp050>0&&p<pp050){act=-1;pct=B6;rule='Base6';}
+          else if(pp100>0&&p<pp100){act=momOk?-1:0;pct=momOk?B7:0;rule=momOk?'Base7':'Hold(momo)';}
+          else if(pp150>0&&p<pp150){act=momOk?-1:0;pct=momOk?B8:0;rule=momOk?'Base8':'Hold(momo)';}
+          else if(ep>0&&p<ep){act=momOk?-1:0;pct=momOk?B9:0;rule=momOk?'Base9':'Hold(momo)';}
+          else if(pp250>0&&p<pp250){act=-1;pct=B10;rule='Base10';}
+          else{act=-1;pct=B11;rule='Base11';}
+        }
+        if(bp&&act!==1) rule='BearPause';
+        const uB=usdt,bB=btc; let uDelta=0,bDelta=0,bFee=0;
+        if(act===1&&pct>0&&usdt>0){const tu=usdt*pct,bg=tu/p,fee=bg*tradeRate;usdt-=tu;btc+=bg-fee;xBtcCum+=fee;uDelta=-tu;bDelta=bg-fee;bFee=fee;}
+        else if(act===-1&&pct>0&&btc>0){const bg=btc*pct,fee=bg*tradeRate;btc-=bg+fee;usdt+=bg*p;xBtcCum+=fee;uDelta=bg*p;bDelta=-(bg+fee);bFee=fee;}
+        if(ymv!==lastPerfYM&&lastPerfYM!==-1){
+          const nav=usdt+btc*p,cs=nCum-hwmN,navAdj=nav-cs;
+          if(navAdj>hwm&&perfRate>0){const fee=(navAdj-hwm)*perfRate;usdt-=fee;pfCum+=fee;perfFeePaid=fee;
+            if(usdt<0&&btc>0){const bs=Math.min(btc,(-usdt)/(p*(1-tradeRate))),bf=bs*tradeRate;btc-=bs;usdt+=(bs-bf)*p;xBtcCum+=bf;}
+            const navA=usdt+btc*p;hwm=navA-cs;hwmN=nCum;
+          }else if(navAdj>hwm){hwm=navAdj;hwmN=nCum;}
+        }
+        if(ymv!==lastPerfYM) lastPerfYM=ymv;
+        const nav=usdt+btc*p;
+        if(nav>peakNav) peakNav=nav;
+        const dd=peakNav>0?(peakNav-nav)/peakNav*100:0;
+        const yr=startDate?(new Date(d)-new Date(startDate))/(365.25*86400000):0;
+        const cagr_d=yr>0.01&&gCum>0&&nav>0?(Math.pow(nav/gCum,1/yr)-1)*100:0;
+        rows.push([d,act===1?'BUY':act===-1?'SELL':'HOLD',rule,(pct*100).toFixed(3),p.toFixed(2),
+          uB.toFixed(4),uDelta.toFixed(4),usdt.toFixed(4),
+          bB.toFixed(8),bDelta.toFixed(8),bFee.toFixed(8),btc.toFixed(8),
+          nav.toFixed(2),peakNav.toFixed(2),dd.toFixed(4),bp?1:0,
+          cGross.toFixed(2),cNet.toFixed(4),perfFeePaid.toFixed(4),gCum.toFixed(2),cagr_d.toFixed(4)]);
+      }
+      const hdr=['date','action','rule','trade_pct','btc_price',
+        'usdt_before','usdt_delta','usdt_after','btc_before','btc_delta','btc_fee','btc_after',
+        'nav','peak_nav','drawdown_pct','bear_pause','contrib_gross','contrib_net','perf_fee_paid',
+        'cum_gross_contrib','cagr_pct'];
+      const csv=[hdr,...rows].map(r=>r.join(',')).join('\n');
+      const ts=new Date().toISOString().slice(0,19).replace(/:/g,'-');
+      const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`lth_pvr_opt_top1_daily_${ts}.csv`});
+      a.click();
+    }
+
     function exportCSV() {
       const top = workerResults.slice(0, 50);
       if (!top.length) { alert('No results to export.'); return; }
@@ -10987,7 +11133,7 @@ self.onmessage = function(e) {
       if (window.supabaseClient) { clearInterval(initTimer); initObserver(); }
     }, 300);
 
-    window.optimizer = { run, stop, exportCSV };
+    window.optimizer = { run, stop, exportCSV, exportTopResultDailyTxs };
 
   })();
   </script>
