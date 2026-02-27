@@ -10792,16 +10792,25 @@ self.onmessage = function(e) {
         // Fetch org_id from context
         const orgId = document.getElementById('orgSelect')?.value;
 
-        const { data: bands, error: bErr } = await sb.schema('lth_pvr')
-          .from('ci_bands_daily')
-          .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250,mode')
-          .eq('org_id', orgId)
-          .gte('date', warmupDateStr)
-          .lte('date', endDate)
-          .order('date', { ascending: true })
-          .range(0, 9999); // override Supabase default 1000-row limit (CI bands ~5700 rows total)
-
-        if (bErr || !bands?.length) throw new Error('CI bands fetch failed: ' + (bErr?.message || 'no data'));
+        // Paginate because PostgREST max_rows = 1000 — fetch all pages
+        const PAGE = 1000;
+        let bands = [], page = 0, done = false;
+        while (!done) {
+          const from = page * PAGE, to = from + PAGE - 1;
+          const { data: pg, error: bErr } = await sb.schema('lth_pvr')
+            .from('ci_bands_daily')
+            .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250,mode')
+            .eq('org_id', orgId)
+            .gte('date', warmupDateStr)
+            .lte('date', endDate)
+            .order('date', { ascending: true })
+            .range(from, to);
+          if (bErr) throw new Error('CI bands fetch failed: ' + bErr.message);
+          if (pg?.length) bands = bands.concat(pg);
+          done = !pg || pg.length < PAGE;
+          page++;
+        }
+        if (!bands.length) throw new Error('CI bands fetch failed: no data returned');
 
         const N = bands.length;
         const warmupLen = Math.max(0, bands.findIndex(r => r.date >= startDate));
