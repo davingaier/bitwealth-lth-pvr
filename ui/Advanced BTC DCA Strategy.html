@@ -10395,7 +10395,7 @@ Momentum:
         </div>
       </div>
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#1e40af;">
-        <strong>Parameter space:</strong> B1–B5 (buy tiers, 6 values each, monotone-filtered) × B6–B11 (sell tiers, 6 values each, monotone-filtered) × 8 momo lengths × 10 momo thresholds ≈ <strong>9.3M valid combinations</strong>. Bear-pause exit sigma is taken from the selected variation's config.
+        <strong>Parameter space:</strong> B1–B5 (buy tiers, 6 values each, monotone-filtered) × B6–B11 (sell tiers, 6 values each, monotone-filtered) × 8 momo lengths × 10 momo thresholds = <strong id="optComboCount">~630M valid combinations</strong>. Bear-pause exit sigma is taken from the selected variation's config.
       </div>
       <div style="display:flex;gap:.75rem;align-items:center;">
         <button id="optRunBtn" type="button" onclick="window.optimizer.run()" style="padding:.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-size:1rem;">▶ Run Optimizer</button>
@@ -10763,6 +10763,8 @@ self.onmessage = function(e) {
 
       // Compute exact valid combination count (accounts for monotone filtering)
       EST_COMBINATIONS = computeEstCombinations();
+      const cc = document.getElementById('optComboCount');
+      if (cc) cc.textContent = fmt(EST_COMBINATIONS) + ' valid combinations';
 
       // Determine bear-pause exit sigma column from variation config
       const bpExitSigma = varCfg?.bearPauseExitSigma ?? 0.0;
@@ -10796,13 +10798,15 @@ self.onmessage = function(e) {
           .eq('org_id', orgId)
           .gte('date', warmupDateStr)
           .lte('date', endDate)
-          .order('date', { ascending: true });
+          .order('date', { ascending: true })
+          .range(0, 9999); // override Supabase default 1000-row limit (CI bands ~5700 rows total)
 
         if (bErr || !bands?.length) throw new Error('CI bands fetch failed: ' + (bErr?.message || 'no data'));
 
         const N = bands.length;
         const warmupLen = Math.max(0, bands.findIndex(r => r.date >= startDate));
         const simYears = (new Date(endDate) - new Date(startDate)) / (365.25 * 86400000);
+        console.log(`[Optimizer] bands fetched: N=${N}, warmupLen=${warmupLen}, financial rows=${N-warmupLen}, simYears=${simYears.toFixed(2)}, firstFinancialDate=${bands[warmupLen]?.date}`);
 
         prog.innerHTML = `<p>✅ Loaded ${N} CI band rows (${warmupLen} warmup + ${N - warmupLen} financial). Building typed arrays…</p>`;
 
