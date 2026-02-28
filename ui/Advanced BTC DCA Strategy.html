@@ -10394,6 +10394,10 @@ Momentum:
           <input id="optMonthly2" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
         </div>
       </div>
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;">
+        <input type="checkbox" id="optEnableRetrace" checked style="width:1.1rem;height:1.1rem;cursor:pointer;" />
+        <label for="optEnableRetrace" style="font-size:.9rem;cursor:pointer;user-select:none;">Enable retrace exception buys (B3 buys when price retraces from sell zone)</label>
+      </div>
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#1e40af;">
         <strong>Parameter space:</strong> B1–B5 (buy tiers, 6 values each, monotone-filtered) × B6–B11 (sell tiers, 6 values each, monotone-filtered) × 8 momo lengths × 10 momo thresholds = <strong id="optComboCount">~630M valid combinations</strong>. Bear-pause exit sigma is taken from the selected variation's config.
       </div>
@@ -10465,7 +10469,7 @@ Momentum:
     // ── State ───────────────────────────────────────────────────────────────
     let workers = [], workerResults = [], optimizerRunning = false;
     let totalTested = 0, totalSkipped = 0, workersCompleted = 0, startTime = 0, numWorkers = 0;
-    let lastBands = null, lastWarmupLen = 0, lastSimYears = 0, lastSimParams = null;
+    let lastBands = null, lastWarmupLen = 0, lastSimYears = 0, lastSimParams = null, lastVariationCfg = null;
 
     // ── WebWorker source (inline blob) ──────────────────────────────────────
     const WORKER_SRC = `'use strict';
@@ -10487,7 +10491,8 @@ function runSim(
   p050, p100, p150, p200, p250, bearP, ym, bpExit,
   B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11,
   momoThr, roc,
-  upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears
+  upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
+  enableRetrace
 ) {
   /* ---- warmup pass: initialise bear-pause + retrace state ---- */
   let bp = false, wp1 = false, wp15 = false, r1 = false, r15 = false;
@@ -10501,10 +10506,12 @@ function runSim(
     if (bp && xp > 0 && p < xp) { bp = false; wp1=false; wp15=false; r1=false; r15=false; }
     if (bp) { wp1=false; wp15=false; r1=false; r15=false; continue; }
     const pp100=p100[i],pp150=p150[i],pp050=p050[i];
-    if (pp100>0&&pp150>0&&p>=pp100&&p<pp150) wp1=true;
-    if (pp150>0&&ep>0&&p>=pp150&&p<ep) wp15=true;
-    if (wp1&&pp050>0&&p>=pp050) r1=true;
-    if (wp15&&pp100>0&&p>=pp100) r15=true;
+    if (enableRetrace) {
+      if (pp100>0&&pp150>0&&p>=pp100&&p<pp150) wp1=true;
+      if (pp150>0&&ep>0&&p>=pp150&&p<ep) wp15=true;
+      if (wp1&&pp050>0&&p>=pp050) r1=true;
+      if (wp15&&pp100>0&&p>=pp100) r15=true;
+    }
   }
 
   /* ---- financial simulation pass ---- */
@@ -10543,7 +10550,7 @@ function runSim(
 
     /* retrace state */
     const pp050=p050[i],pp100=p100[i],pp150=p150[i];
-    if (!bp) {
+    if (!bp && enableRetrace) {
       if (pp100>0&&pp150>0&&p>=pp100&&p<pp150) wp1=true;
       if (pp150>0&&ep>0&&p>=pp150&&p<ep) wp15=true;
       if (wp1&&pp050>0&&p>=pp050) r1=true;
@@ -10556,8 +10563,8 @@ function runSim(
     const momOk = bp ? true : (rv > momoThr);
     let act=0, pct=0;
 
-    const excR1 = wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
-    const excR2 = wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
+    const excR1 = enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
+    const excR2 = enableRetrace&&wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
 
     if (excR1) { act=1; pct=B3; }
     else if (excR2) { act=1; pct=B3; }
@@ -10625,7 +10632,7 @@ function bKey(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11) {
 
 self.onmessage = function(e) {
   const { N, warmupLen, ci, bVals, momoLens, momoThrs, workerId, numWorkers,
-          bpExitSigmaKey, simYears, simParams, objective } = e.data;
+          bpExitSigmaKey, simYears, simParams, objective, enableRetrace } = e.data;
 
   const { px,mean,m025,m050,m075,m100,p050,p100,p150,p200,p250,bearP,ym,bpExit } = ci;
   const { upfront, monthly, platRate, tradeRate, perfRate, contribRate } = simParams;
@@ -10681,7 +10688,8 @@ self.onmessage = function(e) {
                               p050, p100, p150, p200, p250, bearP, ym, bpExit,
                               B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,
                               momoThr, roc,
-                              upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears
+                              upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
+                              enableRetrace
                             );
                             const score = objective==='nav' ? r.nav
                                         : objective==='sharpe' ? r.sharpe
@@ -10758,6 +10766,8 @@ self.onmessage = function(e) {
       const varSel    = document.getElementById('optVarSelect');
       const varOpt    = varSel?.options[varSel?.selectedIndex];
       const varCfg    = varOpt?.dataset?.config ? JSON.parse(varOpt.dataset.config) : null;
+      lastVariationCfg = varCfg;  // store for results comparison display
+      const enableRetrace = document.getElementById('optEnableRetrace')?.checked !== false;
 
       if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
 
@@ -10854,7 +10864,7 @@ self.onmessage = function(e) {
 
         // Store for daily txs export
         lastBands = bands; lastWarmupLen = warmupLen; lastSimYears = simYears;
-        lastSimParams = { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, bpExitSigma, exitColName };
+        lastSimParams = { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, bpExitSigma, exitColName, enableRetrace };
 
         numWorkers = Math.min(navigator.hardwareConcurrency || 4, 16);
         const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
@@ -10887,7 +10897,8 @@ self.onmessage = function(e) {
                      b6v:B_VALS.b6, b7v:B_VALS.b7, b8v:B_VALS.b8, b9v:B_VALS.b9, b10v:B_VALS.b10, b11v:B_VALS.b11 },
             momoLens: MOMO_LENS, momoThrs: MOMO_THRS,
             workerId: wid, numWorkers, simYears, objective,
-            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 }
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
+            enableRetrace
           });
         }
 
@@ -10941,12 +10952,29 @@ self.onmessage = function(e) {
         const thStyle = 'padding:7px 8px;text-align:right;border:1px solid #e5e7eb;white-space:nowrap;font-size:.8rem;';
         const tdR = 'padding:5px 7px;text-align:right;border:1px solid #e5e7eb;font-size:.78rem;';
         const tdL = 'padding:5px 7px;text-align:left;border:1px solid #e5e7eb;font-size:.78rem;font-weight:600;';
+        const tdBold = 'padding:5px 7px;text-align:right;border:1px solid #bfdbfe;font-size:.78rem;font-weight:700;background:#eff6ff;color:#1d4ed8;';
+        const tdBoldL = 'padding:5px 7px;text-align:left;border:1px solid #bfdbfe;font-size:.78rem;font-weight:700;background:#eff6ff;color:#1d4ed8;';
+        const b = n => (n*100).toFixed(n<0.1?2:1);
+        // Build current variation row if available
+        const vc = lastVariationCfg;
+        const varRow = vc ? `<tr title="Current variation parameters (for comparison)">
+          <td style="${tdBoldL}">Current</td>
+          <td style="${tdBold}">—</td><td style="${tdBold}">—</td><td style="${tdBold}">—</td><td style="${tdBold}">—</td><td style="${tdBold}">—</td>
+          <td style="${tdBold}">${b(vc.b1||0)}</td><td style="${tdBold}">${b(vc.b2||0)}</td><td style="${tdBold}">${b(vc.b3||0)}</td>
+          <td style="${tdBold}">${b(vc.b4||0)}</td><td style="${tdBold}">${b(vc.b5||0)}</td>
+          <td style="${tdBold}">${b(vc.b6||0)}</td><td style="${tdBold}">${b(vc.b7||0)}</td><td style="${tdBold}">${b(vc.b8||0)}</td>
+          <td style="${tdBold}">${b(vc.b9||0)}</td><td style="${tdBold}">${b(vc.b10||0)}</td><td style="${tdBold}">${b(vc.b11||0)}</td>
+          <td style="${tdBold}">${vc.momentumLength||'—'}</td><td style="${tdBold}">${vc.momentumThreshold!=null?(vc.momentumThreshold*100).toFixed(1):'—'}</td>
+        </tr>` : '';
         res.innerHTML = `
           <div class="card" style="margin-top:1rem;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-              <h3 style="margin:0;">Top 50 Results — sorted by ${objLabel}</h3>
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;">
+              <h3 style="margin:0;flex:1;">Top 50 Results — sorted by ${objLabel}</h3>
               <button onclick="window.optimizer.exportCSV()" style="padding:.4rem .9rem;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">⬇ Export CSV</button>
-              <button onclick="window.optimizer.exportTopResultDailyTxs()" style="padding:.4rem .9rem;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;margin-left:.5rem;">⬇ Export #1 Daily Txs</button>
+              <button onclick="window.optimizer.exportTopResultDailyTxs()" style="padding:.4rem .9rem;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">⬇ Export #1 Daily Txs</button>
+              <button onclick="window.optimizer.refineTopResult()" style="padding:.4rem .9rem;background:#0f766e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">🔬 Refine #1</button>
+              <button onclick="window.optimizer.applyTopResult()" style="padding:.4rem .9rem;background:#0369a1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">📥 Apply #1 to Variation</button>
+              <button onclick="window.optimizer.applyTopResultToNewVariation()" style="padding:.4rem .9rem;background:#b45309;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;">✨ Save as New Variation</button>
             </div>
             <div style="overflow-x:auto;">
               <table style="width:100%;border-collapse:collapse;">
@@ -10961,9 +10989,9 @@ self.onmessage = function(e) {
                   <th style="${thStyle}">ML</th><th style="${thStyle}">MT%</th>
                 </tr></thead>
                 <tbody>
+                  ${varRow}
                   ${top.map((r,i) => {
                     const bg = i%2===0?'#fff':'#f9fafb';
-                    const b = n => (n*100).toFixed(n<0.1?2:1); // format B values
                     return `<tr style="background:${bg};">
                       <td style="${tdL}">${i+1}</td>
                       <td style="${tdR}">$${r.nav.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
@@ -11008,7 +11036,7 @@ self.onmessage = function(e) {
       if (!lastBands) { alert('Band data not available. Please run the optimizer again.'); return; }
       const t = workerResults[0];
       const { B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,momoLen,momoThr } = t;
-      const { upfront,monthly,platRate,tradeRate,perfRate,contribRate,bpExitSigma,exitColName } = lastSimParams;
+      const { upfront,monthly,platRate,tradeRate,perfRate,contribRate,bpExitSigma,exitColName,enableRetrace=true } = lastSimParams;
       const bands = lastBands, N = bands.length, wl = lastWarmupLen;
       const gf = col => bands.map(r => parseFloat(r[col])||0);
       const px=gf('btc_price'),mean=gf('price_at_mean'),m025=gf('price_at_m025'),m050=gf('price_at_m050'),
@@ -11025,13 +11053,16 @@ self.onmessage = function(e) {
         const ep=p200[i]; if(ep>0&&p>ep) bp=true;
         const xp=bpExit[i]; if(bp&&xp>0&&p<xp){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
         if(bp){wp1=false;wp15=false;r1=false;r15=false;continue;}
-        if(p100[i]>0&&p150[i]>0&&p>=p100[i]&&p<p150[i]) wp1=true;
-        if(p150[i]>0&&p200[i]>0&&p>=p150[i]&&p<p200[i]) wp15=true;
-        if(wp1&&p050[i]>0&&p>=p050[i]) r1=true;
-        if(wp15&&p100[i]>0&&p>=p100[i]) r15=true;
+        if(enableRetrace){
+          if(p100[i]>0&&p150[i]>0&&p>=p100[i]&&p<p150[i]) wp1=true;
+          if(p150[i]>0&&p200[i]>0&&p>=p150[i]&&p<p200[i]) wp15=true;
+          if(wp1&&p050[i]>0&&p>=p050[i]) r1=true;
+          if(wp15&&p100[i]>0&&p>=p100[i]) r15=true;
+        }
       }
-      // sim
-      let btc=0,usdt=0,gCum=0,nCum=0,hwm=0,hwmN=0,pfCum=0,xBtcCum=0,lastYM=-1,lastPerfYM=-1,peakNav=0,firstRow=true;
+      // financial sim
+      let btc=0,usdt=0,gCum=0,nCum=0,hwm=0,hwmN=0,hwmInit=false;
+      let pfCum=0,platCum=0,xBtcCum=0,lastYM=-1,lastPerfYM=-1,peakNav=0,firstRow=true;
       const rows = [];
       const startDate = bands[wl]?.date;
       for (let i=wl;i<N;i++) {
@@ -11039,26 +11070,36 @@ self.onmessage = function(e) {
         const d=bands[i].date;
         const ymv=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7));
         const newMonth=ymv!==lastYM;
-        let cGross=0,cNet=0,perfFeePaid=0;
-        if(firstRow){if(upfront>0){const f=upfront*contribRate,pl=(upfront-f)*platRate,net=upfront-f-pl;usdt+=net;gCum+=upfront;nCum+=net;pfCum+=pl;cGross=upfront;cNet=net;}firstRow=false;}
-        if(newMonth&&monthly>0){const f=monthly*contribRate,pl=(monthly-f)*platRate,net=monthly-f-pl;usdt+=net;gCum+=monthly;nCum+=net;pfCum+=pl;cGross=monthly;cNet=net;}
+        let cGross=0,cNet=0,cPlatFee=0,perfFeePaid=0;
+        // upfront on first row
+        if(firstRow){
+          if(upfront>0){const f=upfront*contribRate,pl=(upfront-f)*platRate,net=upfront-f-pl;usdt+=net;gCum+=upfront;nCum+=net;pfCum+=pl;platCum+=pl;cGross+=upfront;cNet+=net;cPlatFee+=pl;}
+          firstRow=false;
+        }
+        // monthly on first day of each new month
+        if(newMonth&&monthly>0){
+          const f=monthly*contribRate,pl=(monthly-f)*platRate,net=monthly-f-pl;
+          usdt+=net;gCum+=monthly;nCum+=net;pfCum+=pl;platCum+=pl;cGross+=monthly;cNet+=net;cPlatFee+=pl;
+        }
         if(newMonth) lastYM=ymv;
+        // bear-pause sync
         const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} bp=db;
         const ep=p200[i]; if(ep>0&&p>ep) bp=true;
         const xp=bpExit[i]; const exiting=(bp&&xp>0&&p<xp);
         if(exiting){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
         if(bp){wp1=false;wp15=false;r1=false;r15=false;}
-        if(!bp){
+        if(!bp&&enableRetrace){
           if(p100[i]>0&&p150[i]>0&&p>=p100[i]&&p<p150[i]) wp1=true;
           if(p150[i]>0&&ep>0&&p>=p150[i]&&p<ep) wp15=true;
           if(wp1&&p050[i]>0&&p>=p050[i]) r1=true;
           if(wp15&&p100[i]>0&&p>=p100[i]) r15=true;
         }
+        // trade decision
         const mn=mean[i],pp050=p050[i],pp100=p100[i],pp150=p150[i],pp250=p250[i];
         const momOk=bp?true:(roc[i]>momoThr);
         let act=0,pct=0,rule='Hold';
-        const excR1=wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
-        const excR2=wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
+        const excR1=enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
+        const excR2=enableRetrace&&wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
         if(excR1){act=1;pct=B3;rule='Retrace-1.5';}
         else if(excR2){act=1;pct=B3;rule='Retrace-1';}
         else if(mn>0&&p<mn){
@@ -11078,36 +11119,192 @@ self.onmessage = function(e) {
           else{act=-1;pct=B11;rule='Base11';}
         }
         if(bp&&act!==1) rule='BearPause';
+        // execute
         const uB=usdt,bB=btc; let uDelta=0,bDelta=0,bFee=0;
         if(act===1&&pct>0&&usdt>0){const tu=usdt*pct,bg=tu/p,fee=bg*tradeRate;usdt-=tu;btc+=bg-fee;xBtcCum+=fee;uDelta=-tu;bDelta=bg-fee;bFee=fee;}
         else if(act===-1&&pct>0&&btc>0){const bg=btc*pct,fee=bg*tradeRate;btc-=bg+fee;usdt+=bg*p;xBtcCum+=fee;uDelta=bg*p;bDelta=-(bg+fee);bFee=fee;}
+        // init HWM on first financial day (after first contribution + trade, before perf fee)
+        if(!hwmInit){ hwm=usdt+btc*p; hwmN=nCum; hwmInit=true; }
+        // monthly performance fee
         if(ymv!==lastPerfYM&&lastPerfYM!==-1){
           const nav=usdt+btc*p,cs=nCum-hwmN,navAdj=nav-cs;
-          if(navAdj>hwm&&perfRate>0){const fee=(navAdj-hwm)*perfRate;usdt-=fee;pfCum+=fee;perfFeePaid=fee;
+          if(navAdj>hwm&&perfRate>0){
+            const fee=(navAdj-hwm)*perfRate;usdt-=fee;pfCum+=fee;perfFeePaid=fee;
             if(usdt<0&&btc>0){const bs=Math.min(btc,(-usdt)/(p*(1-tradeRate))),bf=bs*tradeRate;btc-=bs;usdt+=(bs-bf)*p;xBtcCum+=bf;}
             const navA=usdt+btc*p;hwm=navA-cs;hwmN=nCum;
           }else if(navAdj>hwm){hwm=navAdj;hwmN=nCum;}
         }
         if(ymv!==lastPerfYM) lastPerfYM=ymv;
+        // record row
         const nav=usdt+btc*p;
         if(nav>peakNav) peakNav=nav;
         const dd=peakNav>0?(peakNav-nav)/peakNav*100:0;
         const yr=startDate?(new Date(d)-new Date(startDate))/(365.25*86400000):0;
         const cagr_d=yr>0.01&&gCum>0&&nav>0?(Math.pow(nav/gCum,1/yr)-1)*100:0;
+        const roi_d=gCum>0?(nav/gCum-1)*100:0;
         rows.push([d,act===1?'BUY':act===-1?'SELL':'HOLD',rule,(pct*100).toFixed(3),p.toFixed(2),
           uB.toFixed(4),uDelta.toFixed(4),usdt.toFixed(4),
           bB.toFixed(8),bDelta.toFixed(8),bFee.toFixed(8),btc.toFixed(8),
           nav.toFixed(2),peakNav.toFixed(2),dd.toFixed(4),bp?1:0,
-          cGross.toFixed(2),cNet.toFixed(4),perfFeePaid.toFixed(4),gCum.toFixed(2),cagr_d.toFixed(4)]);
+          cGross.toFixed(2),cNet.toFixed(4),cPlatFee.toFixed(4),perfFeePaid.toFixed(4),
+          platCum.toFixed(4),gCum.toFixed(2),cagr_d.toFixed(4),roi_d.toFixed(4)]);
       }
       const hdr=['date','action','rule','trade_pct','btc_price',
         'usdt_before','usdt_delta','usdt_after','btc_before','btc_delta','btc_fee','btc_after',
-        'nav','peak_nav','drawdown_pct','bear_pause','contrib_gross','contrib_net','perf_fee_paid',
-        'cum_gross_contrib','cagr_pct'];
+        'nav','peak_nav','drawdown_pct','bear_pause',
+        'contrib_gross','contrib_net','platform_fee_paid','perf_fee_paid',
+        'platform_fees_cum','cum_gross_contrib','cagr_pct','total_roi_pct'];
       const csv=[hdr,...rows].map(r=>r.join(',')).join('\n');
       const ts=new Date().toISOString().slice(0,19).replace(/:/g,'-');
       const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`lth_pvr_opt_top1_daily_${ts}.csv`});
       a.click();
+    }
+
+    function buildRefinedBVals(t) {
+      // For each B param: generate 7 values centered on top result, at half the original average step
+      function refineParam(bk, center) {
+        const vals = B_VALS[bk];
+        const step = (vals[vals.length-1] - vals[0]) / (vals.length - 1) / 2; // half the avg step
+        const raw = [-3,-2,-1,0,1,2,3].map(k => Math.round((center + k * step) * 100000) / 100000);
+        const s = new Set(raw.map(v => Math.max(0.001, Math.min(0.999, Math.round(v*100000)/100000))));
+        return [...s].sort((a,b) => a-b);
+      }
+      return {
+        b1v:  refineParam('b1',  t.B1),  b2v: refineParam('b2',  t.B2),
+        b3v:  refineParam('b3',  t.B3),  b4v: refineParam('b4',  t.B4),
+        b5v:  refineParam('b5',  t.B5),  b6v: refineParam('b6',  t.B6),
+        b7v:  refineParam('b7',  t.B7),  b8v: refineParam('b8',  t.B8),
+        b9v:  refineParam('b9',  t.B9),  b10v: refineParam('b10', t.B10),
+        b11v: refineParam('b11', t.B11)
+      };
+    }
+
+    async function refineTopResult() {
+      if (!workerResults.length) { alert('No results. Run optimizer first.'); return; }
+      if (!lastBands) { alert('Band data not available. Please run the optimizer again.'); return; }
+      if (optimizerRunning) { alert('A run is already in progress.'); return; }
+
+      const t = workerResults[0];
+      const bVals = buildRefinedBVals(t);
+      const fixedMomoLens = [t.momoLen];
+      const fixedMomoThrs = [t.momoThr];
+      const objective = document.getElementById('optObjective2')?.value || 'cagr';
+      const { upfront, monthly, platRate, tradeRate, perfRate, contribRate, exitColName, enableRetrace } = lastSimParams;
+
+      const bands = lastBands, N = bands.length, warmupLen = lastWarmupLen, simYears = lastSimYears;
+      function toArr(col) {
+        const a = new Float64Array(N);
+        for (let i=0;i<N;i++) a[i] = parseFloat(bands[i][col])||0;
+        return a;
+      }
+      const ci = {
+        px: toArr('btc_price'), mean: toArr('price_at_mean'),
+        m025: toArr('price_at_m025'), m050: toArr('price_at_m050'),
+        m075: toArr('price_at_m075'), m100: toArr('price_at_m100'),
+        p050: toArr('price_at_p050'), p100: toArr('price_at_p100'),
+        p150: toArr('price_at_p150'), p200: toArr('price_at_p200'), p250: toArr('price_at_p250'),
+        bearP: (()=>{ const a=new Float64Array(N); for(let i=0;i<N;i++) a[i]=(bands[i].mode==='bear_pause')?1:0; return a; })(),
+        ym: (()=>{ const a=new Int32Array(N); for(let i=0;i<N;i++){ const d=bands[i].date; a[i]=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7)); } return a; })(),
+        bpExit: toArr(exitColName)
+      };
+
+      // Count refined combinations
+      let buy=0;
+      for(const b1 of bVals.b1v) for(const b2 of bVals.b2v){if(b2>b1)continue;
+        for(const b3 of bVals.b3v){if(b3>b2)continue;
+          for(const b4 of bVals.b4v){if(b4>b3)continue;
+            for(const b5 of bVals.b5v){if(b5>b4)continue; buy++;}}}}
+      let sell=0;
+      for(const b6 of bVals.b6v) for(const b7 of bVals.b7v){if(b7<b6)continue;
+        for(const b8 of bVals.b8v){if(b8<b7)continue;
+          for(const b9 of bVals.b9v){if(b9<b8)continue;
+            for(const b10 of bVals.b10v){if(b10<b9)continue;
+              for(const b11 of bVals.b11v){if(b11<b10)continue; sell++;}}}}}
+      const refineCombos = buy * sell * fixedMomoLens.length * fixedMomoThrs.length;
+      EST_COMBINATIONS = refineCombos;
+
+      optimizerRunning = true; totalTested = 0; totalSkipped = 0;
+      workersCompleted = 0; workerResults = []; startTime = Date.now();
+
+      document.getElementById('optRunBtn').style.display = 'none';
+      document.getElementById('optStopBtn').style.display = 'inline-block';
+      const prog = document.getElementById('optProgress');
+      prog.style.display = 'block';
+      prog.innerHTML = `<p>🔬 Refining — testing <strong>${refineCombos.toLocaleString()}</strong> fine-grained combinations around B1=${(t.B1*100).toFixed(2)}% … B11=${(t.B11*100).toFixed(2)}% (momo fixed: len=${t.momoLen}, thr=${(t.momoThr*100).toFixed(1)}%)…</p>`;
+      document.getElementById('optResults').innerHTML = '';
+
+      numWorkers = Math.min(navigator.hardwareConcurrency || 4, 16);
+      const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      workers = [];
+      for (let wid = 0; wid < numWorkers; wid++) {
+        const w = new Worker(blobUrl);
+        workers.push(w);
+        w.onmessage = function(e) {
+          const msg = e.data;
+          if (msg.type === 'progress') { totalTested += msg.tested; totalSkipped += msg.skipped; updateProgress(); }
+          else if (msg.type === 'done') {
+            totalTested += msg.tested; totalSkipped += msg.skipped;
+            if (msg.topK?.length) workerResults.push(...msg.topK);
+            workersCompleted++;
+            if (workersCompleted === numWorkers) onAllDone(objective);
+          }
+        };
+        w.onerror = e => console.error('Refine worker error:', e);
+        w.postMessage({
+          N, warmupLen, ci, bVals,
+          momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
+          workerId: wid, numWorkers, simYears, objective,
+          simParams: { upfront, monthly, platRate, tradeRate, perfRate, contribRate },
+          enableRetrace
+        });
+      }
+      URL.revokeObjectURL(blobUrl);
+    }
+
+    async function applyTopResult() {
+      if (!workerResults.length) { alert('No results. Run optimizer first.'); return; }
+      const t = workerResults[0];
+      const varSel = document.getElementById('optVarSelect');
+      const varId = varSel?.value;
+      const varName = varSel?.options[varSel?.selectedIndex]?.text || 'Unknown';
+      if (!varId) { alert('No variation selected.'); return; }
+      const summary = `B1=${(t.B1*100).toFixed(1)}%  B2=${(t.B2*100).toFixed(1)}%  B3=${(t.B3*100).toFixed(1)}%  B4=${(t.B4*100).toFixed(1)}%  B5=${(t.B5*100).toFixed(1)}%\nB6=${(t.B6*100).toFixed(2)}%  B7=${(t.B7*100).toFixed(2)}%  B8=${(t.B8*100).toFixed(2)}%  B9=${(t.B9*100).toFixed(2)}%  B10=${(t.B10*100).toFixed(2)}%  B11=${(t.B11*100).toFixed(2)}%\nMomoLen=${t.momoLen}  MomoThr=${(t.momoThr*100).toFixed(1)}%\nNAV=$${t.nav.toFixed(0)}  CAGR=${t.cagr.toFixed(2)}%  Sharpe=${t.sharpe.toFixed(3)}  MaxDD=${t.maxDD.toFixed(2)}%`;
+      if (!confirm(`Apply top result to variation "${varName}"?\n\n${summary}\n\nThis will overwrite the current parameters for this variation.`)) return;
+      const sb = window.supabaseClient;
+      const orgId = document.getElementById('orgSelect')?.value;
+      const upd = { b1:t.B1,b2:t.B2,b3:t.B3,b4:t.B4,b5:t.B5,b6:t.B6,b7:t.B7,b8:t.B8,b9:t.B9,b10:t.B10,b11:t.B11,
+        momentum_length:t.momoLen, momentum_threshold:t.momoThr, updated_at:new Date().toISOString() };
+      const { error } = await sb.schema('lth_pvr').from('strategy_variation_templates').update(upd).eq('id',varId).eq('org_id',orgId);
+      if (error) { alert('Error updating variation: '+error.message); return; }
+      alert(`✅ Top result applied to "${varName}" successfully!`);
+      loadVariations();
+    }
+
+    async function applyTopResultToNewVariation() {
+      if (!workerResults.length) { alert('No results. Run optimizer first.'); return; }
+      const name = prompt('Enter a name for the new variation:');
+      if (!name?.trim()) return;
+      const t = workerResults[0];
+      const varSel = document.getElementById('optVarSelect');
+      const varOpt = varSel?.options[varSel?.selectedIndex];
+      const srcCfg = varOpt?.dataset?.config ? JSON.parse(varOpt.dataset.config) : {};
+      const er = lastSimParams?.enableRetrace ?? true;
+      const sb = window.supabaseClient;
+      const orgId = document.getElementById('orgSelect')?.value;
+      const { data: { user } } = await sb.auth.getUser();
+      const ins = { org_id:orgId, variation_name:name.trim(), display_name:name.trim(), description:'Created by optimizer',
+        sort_order:99, is_active:false, is_production:false,
+        bear_pause_enter_sigma: parseFloat(srcCfg.bearPauseEnterSigma)||2.0,
+        bear_pause_exit_sigma: parseFloat(srcCfg.bearPauseExitSigma)||0.0,
+        b1:t.B1,b2:t.B2,b3:t.B3,b4:t.B4,b5:t.B5,b6:t.B6,b7:t.B7,b8:t.B8,b9:t.B9,b10:t.B10,b11:t.B11,
+        momentum_length:t.momoLen, momentum_threshold:t.momoThr,
+        enable_retrace:er, retrace_base:3,
+        created_by:user?.id };
+      const { error } = await sb.schema('lth_pvr').from('strategy_variation_templates').insert(ins);
+      if (error) { alert('Error creating variation: '+error.message); return; }
+      alert(`✅ New variation "${name.trim()}" created successfully! (is_active=false — enable it in Strategy Maintenance when ready.)`);
+      loadVariations();
     }
 
     function exportCSV() {
@@ -11146,7 +11343,7 @@ self.onmessage = function(e) {
       if (window.supabaseClient) { clearInterval(initTimer); initObserver(); }
     }, 300);
 
-    window.optimizer = { run, stop, exportCSV, exportTopResultDailyTxs };
+    window.optimizer = { run, stop, exportCSV, exportTopResultDailyTxs, refineTopResult, applyTopResult, applyTopResultToNewVariation };
 
   })();
   </script>
