@@ -200,10 +200,10 @@ Retraces from extreme highs often represent the last chance to accumulate before
 ### Trading Fees
 
 - **Rate:** 8 basis points (0.08%)
-- **Applied to:** Base currency (BTC) on all trades
+- **Applied to:** Base currency (BTC) on BUY trades and quote currency (USDT) on SELL trades
 - **Example:** 
     - Buying $1,000 USDT worth of BTC → Receive 99.92% of BTC (0.08% fee deducted in BTC)
-    - Selling 0.01 BTC → Sell proceeds reduced by 0.08% (fee deducted in BTC before conversion)
+    - Selling 0.01 BTC → Sell proceeds reduced by 0.08% (fee deducted in USDT before conversion)
 
 ### Contribution Fees
 

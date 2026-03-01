@@ -10500,7 +10500,7 @@ function runSim(
     const p = px[i]; if (p <= 0) continue;
     const db = bearP[i] > 0.5;
     if (!bp && db) { wp1 = false; wp15 = false; r1 = false; r15 = false; }
-    bp = db;
+    if (db) bp = true;
     const ep = p200[i]; if (ep > 0 && p > ep) bp = true;
     const xp = bpExit[i];
     if (bp && xp > 0 && p < xp) { bp = false; wp1=false; wp15=false; r1=false; r15=false; }
@@ -10541,7 +10541,7 @@ function runSim(
     /* bear-pause sync from DB then price-based */
     const db = bearP[i] > 0.5;
     if (!bp && db) { wp1=false; wp15=false; r1=false; r15=false; }
-    bp = db;
+    if (db) bp = true;
     const ep = p200[i]; if (ep > 0 && p > ep) bp = true;
     const xp = bpExit[i];
     const exiting = (bp && xp > 0 && p < xp);
@@ -10560,7 +10560,7 @@ function runSim(
     /* trade decision */
     const mn=mean[i],pm025=m025[i],pm050=m050[i],pm075=m075[i],pm100=m100[i],pp250=p250[i];
     const rv = roc[i];
-    const momOk = !enableRetrace || bp || (rv > momoThr);
+    const momOk = bp ? true : (rv > momoThr);
     let act=0, pct=0;
 
     const excR1 = enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
@@ -11049,7 +11049,7 @@ self.onmessage = function(e) {
       let bp=false,wp1=false,wp15=false,r1=false,r15=false;
       for (let i=0;i<wl;i++) {
         const p=px[i]; if(p<=0) continue;
-        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} bp=db;
+        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} if(db) bp=true;
         const ep=p200[i]; if(ep>0&&p>ep) bp=true;
         const xp=bpExit[i]; if(bp&&xp>0&&p<xp){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
         if(bp){wp1=false;wp15=false;r1=false;r15=false;continue;}
@@ -11083,7 +11083,7 @@ self.onmessage = function(e) {
         }
         if(newMonth) lastYM=ymv;
         // bear-pause sync
-        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} bp=db;
+        const db=bearP[i]>0.5; if(!bp&&db){wp1=false;wp15=false;r1=false;r15=false;} if(db) bp=true;
         const ep=p200[i]; if(ep>0&&p>ep) bp=true;
         const xp=bpExit[i]; const exiting=(bp&&xp>0&&p<xp);
         if(exiting){bp=false;wp1=false;wp15=false;r1=false;r15=false;}
@@ -11096,7 +11096,7 @@ self.onmessage = function(e) {
         }
         // trade decision
         const mn=mean[i],pp050=p050[i],pp100=p100[i],pp150=p150[i],pp250=p250[i];
-        const momOk=!enableRetrace||bp||(roc[i]>momoThr);
+        const momOk=bp?true:(roc[i]>momoThr);
         let act=0,pct=0,rule='Hold';
         const excR1=enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
         const excR2=enableRetrace&&wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
