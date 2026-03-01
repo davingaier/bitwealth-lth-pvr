@@ -10560,7 +10560,7 @@ function runSim(
     /* trade decision */
     const mn=mean[i],pm025=m025[i],pm050=m050[i],pm075=m075[i],pm100=m100[i],pp250=p250[i];
     const rv = roc[i];
-    const momOk = bp ? true : (rv > momoThr);
+    const momOk = !enableRetrace || bp || (rv > momoThr);
     let act=0, pct=0;
 
     const excR1 = enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
@@ -11096,7 +11096,7 @@ self.onmessage = function(e) {
         }
         // trade decision
         const mn=mean[i],pp050=p050[i],pp100=p100[i],pp150=p150[i],pp250=p250[i];
-        const momOk=bp?true:(roc[i]>momoThr);
+        const momOk=!enableRetrace||bp||(roc[i]>momoThr);
         let act=0,pct=0,rule='Hold';
         const excR1=enableRetrace&&wp15&&pp050>0&&pp100>0&&p>=pp050&&p<pp100&&!bp;
         const excR2=enableRetrace&&wp1&&mn>0&&pp050>0&&p>=mn&&p<pp050&&!bp;
