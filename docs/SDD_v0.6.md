@@ -3,11 +3,53 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-03 (v0.6.57)
+**Last updated:** 2026-03-03 (v0.6.58)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.58 – SDD Corrections: Actual Cron Schedule & Alert Backlog Cleanup
+**Date:** 2026-03-03  
+**Purpose:** Correct stale pipeline timing documentation (Sections 1.2, 4, 11.4) to match the actual live cron job schedule as verified in the database. Bulk-resolved 12,894 historical alerts.
+
+**Status:** ✅ COMPLETE
+
+#### Documentation Corrections
+
+**Root Cause:** The SDD described the pipeline as running at 03:05/03:10/03:15 UTC with individual cron jobs per step. In practice, those individual step-level cron jobs were **never created**. The pipeline is actually driven by `ef_resume_pipeline` called from `lth_pvr_resume_pipeline_morning` at 05:05 UTC, with a belt-and-suspenders second CI bands fetch at 05:00 UTC.
+
+**Actual cron jobs (as at 2026-03-03):**
+
+| Job ID | Name | Schedule | Purpose |
+|--------|------|----------|---------|
+| 8 | `lthpvr_ci_fetch` | `0 3 * * *` | Initial CI bands fetch at 03:00 UTC |
+| 18 | `ef_fetch_ci_bands_daily_0500_utc` | `0 5 * * *` | Second CI bands fetch at 05:00 UTC (ensures data settled) |
+| 19 | `ef_fetch_ci_bands_guard_30m` | `*/30 * * * *` | Guard: refetch CI bands if missing (runs all hours) |
+| 27 | `lth_pvr_resume_pipeline_morning` | `5 5 * * *` | **Primary pipeline trigger** at 05:05 UTC → calls ef_resume_pipeline |
+| 28 | `lth_pvr_resume_pipeline_guard` | `*/30 3-16 * * *` | Guard: resume pipeline if any step incomplete |
+| 30 | `ef_alert_digest_daily` | `0 5 * * *` | Alert digest email at 05:00 UTC |
+| 31 | `deposit-scan-hourly` | `0 * * * *` | Hourly deposit detection |
+| 37 | `execute_public_backtests` | `*/1 * * * *` | Process queued public back-test requests |
+| 46 | `poll-orders-1min` | `*/1 3-16 * * *` | Order polling every 1 minute 03:00–16:00 UTC |
+| 48 | `sync-valr-transactions-every-30-min` | `*/30 * * * *` | VALR transaction sync every 30 minutes |
+| 50–55 | `lth_market_fallback_00s`–`50s` | `*/1 3-16 * * *` | Market fallback × 6 staggered (0/10/20/30/40/50 sec offsets) |
+| 2 | `valr_balance_finalizer_23_55_utc` | `55 23 * * *` | Daily balance finalization |
+| 14 | `lthpvr_std_dca_roll` | `20 3 * * *` | Standard DCA benchmark roll |
+| 15 | `lthpvr_fee_monthly_close` | `0 0 1 * *` | Monthly fee close |
+| 17 | `lthpvr_fee_invoice_email` | `0 6 1 * *` | Monthly fee invoice email |
+| 38 | `monthly_statement_generation` | `1 0 1 * *` | Monthly customer statements |
+| 39/40 | `monthly-performance-fees` / `monthly-fee-close` | `5/10 0 1 * *` | Performance fee calculation cascade |
+| 41 | `transfer-accumulated-fees` | `0 2 1 * *` | Transfer accumulated fees on month 1 |
+
+**Note:** `poll-orders-1min` runs every 1 minute (not 10 minutes as mentioned in v0.6 WebSocket section). WebSocket monitoring (`ef_valr_ws_monitor`) was deleted in v0.6.41 (2026-02-01) — see `WEBSOCKET_DELETION_2026-02-01.md`. Market fallback cron jobs (×6 staggered) replaced it.
+
+#### Alert Backlog Cleanup
+- **12,894 historical alerts** bulk-resolved with note: "Bulk resolved: historical alert from a fixed bug or expected behaviour. All issues predating 2026-02-24 are known and closed."
+- **Remaining open:** 2,757 alerts (all info/warn severity, from last 7 days; no open errors or criticals)
+- **Resolved by:** `system_bulk_cleanup`
+
+---
 
 ### v0.6.57 – Browser Strategy Optimizer: Enhancements, Bug Fixes & Refinement Workflow
 **Date:** 2026-03-03  
@@ -6077,9 +6119,12 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 
 - **Scheduling:**
   - `pg_cron` jobs for all automated processes
-  - CI bands (03:00 UTC), decisions (03:05), intents (03:10), execution (03:15), polling (every minute)
-  - **Alert digest (05:00 UTC daily)**
-  - Guard function (every 30 minutes)
+  - **CI bands:** First fetch 03:00 UTC, second fetch 05:00 UTC, guard every 30 min (all hours)
+  - **Pipeline:** `lth_pvr_resume_pipeline_morning` triggers the full pipeline (decisions → intents → execute → ledger) at **05:05 UTC** via sequential `ef_resume_pipeline`
+  - **Order monitoring:** `poll-orders-1min` every 1 min 03:00–16:00 UTC; market fallback ×6 staggered jobs every 1 min 03:00–16:00 UTC
+  - **Alert digest:** 05:00 UTC daily
+  - **VALR sync:** every 30 min all hours; deposit scan hourly
+  - **Pipeline guard:** `lth_pvr_resume_pipeline_guard` every 30 min 03:00–16:00 UTC (resumes any incomplete steps)
 
 - **Exchange Integration:**
   - VALR REST API with HMAC authentication
@@ -6879,70 +6924,65 @@ ORDER BY created_at DESC;
 
 ### 4.1 Timeline (UTC)
 
-**03:00** – Fetch CI bands & price
-- `pg_cron` calls `ef_fetch_ci_bands`
-- Inserts/updates `ci_bands_daily` for yesterday (CURRENT_DATE - 1)
-- **Alerting:** Guard function ensures data availability every 30 minutes
+> **Note (updated 2026-03-03):** The pipeline no longer has individual cron jobs per step (03:05/03:10/03:15). All pipeline steps are driven sequentially by `ef_resume_pipeline` triggered at **05:05 UTC**. WebSocket monitoring (`ef_valr_ws_monitor`) was **deleted in v0.6.41 (2026-02-01)**; order monitoring is now handled by `poll-orders-1min` (every 1 min) and 6 staggered market-fallback cron jobs.
 
-**03:05** – Generate decisions
-- `ef_generate_decisions`:
-  - Reads CI bands for signal_date (yesterday)
-  - Calculates momentum from 6-day price history
-  - Determines band bucket and allocation percentage
-  - Writes to `decisions_daily` per active portfolio
-  - **Alerting:** Logs error if CI bands missing
+**03:00** – First CI bands fetch
+- `pg_cron` job `lthpvr_ci_fetch` calls `ef_fetch_ci_bands`
+- Inserts/updates yesterday's CI bands in `ci_bands_daily` (CURRENT_DATE - 1)
+- If data is already present, it is a no-op
 
-**03:10** – Create order intents
-- `ef_create_order_intents`:
-  - Consumes `decisions_daily`
-  - Queries `fn_usdt_available_for_trading()` for budget
-  - Applies LTH PVR allocation logic with retrace rules
-  - Writes `order_intents` with status='pending'
-  - **Alerting:** Logs info for below-minimum orders (carry bucket)
+**Every 30 min (all hours)** – CI bands guard
+- `pg_cron` job `ef_fetch_ci_bands_guard_30m` checks if yesterday's bands exist
+- If missing, calls `ef_fetch_ci_bands` again
+- Logs to `ci_bands_guard_log`
 
-**03:15** – Execute orders
-- `ef_execute_orders`:
-  - Groups eligible `order_intents`
-  - Looks up `exchange_account_id` → `subaccount_id`
-  - Sends limit orders to VALR with HMAC signature
-  - **NEW:** Initiates WebSocket monitoring for submitted orders
-    - Groups orders by subaccount_id
-    - POST to ef_valr_ws_monitor (non-blocking)
-    - Marks orders with ws_monitored_at timestamp
-  - **Alerting:** Logs critical for missing subaccounts, error for API failures, warn for WebSocket failures
+**05:00** – Alert digest email + second CI bands fetch
+- `ef_alert_digest_daily` queries unresolved error/critical alerts, sends email via SMTP, marks `notified_at`
+- `ef_fetch_ci_bands_daily_0500_utc` performs a second CI bands fetch to ensure data is settled before pipeline runs
 
-**03:15–all day** – Order monitoring (hybrid WebSocket + polling)
-- **WebSocket Monitoring (primary):**
-  - `ef_valr_ws_monitor` establishes connection per subaccount
-  - Subscribes to ACCOUNT_ORDER_UPDATE events
-  - Real-time updates (<5 sec latency) for order status and fills
-  - 5-minute timeout, auto-closes when all orders complete
-  - **Alerting:** Error for connection failures, warn for premature closure
-  
-- **Polling Fallback (safety net):**
-  - `ef_poll_orders` (every 10 minutes, reduced from 1 minute):
-    - Only polls orders not updated in last 2 minutes
-    - Targeted polling support via ?order_ids query parameter
-    - Updates last_polled_at, poll_count tracking columns
-    - Fallback logic: if limit unfilled/partial >5 min OR price moves >0.25%, cancel and submit market order
-    - **Alerting:** Logs error for status query failures, warn for excessive fallback usage
-    - **Performance:** 98% API call reduction vs previous 1-minute polling
+**05:05** – **Pipeline execution** (primary trigger)
+- `pg_cron` job `lth_pvr_resume_pipeline_morning` calls `ef_resume_pipeline`
+- `ef_resume_pipeline` checks status via `get_pipeline_status()`, then runs each incomplete step **sequentially** using `await fetch()`:
+  1. **`ef_generate_decisions`**: Reads signal_date CI bands, calculates 5-day ROC momentum, determines band bucket and allocation %, writes to `decisions_daily` per active customer strategy. Logs error if CI bands missing.
+  2. **`ef_create_order_intents`**: Consumes `decisions_daily`, queries available USDT budget, applies allocation logic, writes `order_intents` (pending). Logs info for below-minimum orders (carry bucket). Idempotency key = SHA-256(org_id|customer_id|trade_date|side).
+  3. **`ef_execute_orders`**: Groups eligible order intents, looks up subaccount_id, sends LIMIT orders to VALR (HMAC signed), records in `exchange_orders`. Logs critical for missing subaccounts, error for API failures.
+  4. **`ef_poll_orders`** / `ef_market_fallback`: Run independently (see below).
+  5. **`ef_post_ledger_and_balances`**: Reads fills + funding events, posts `ledger_lines`, rolls into `balances_daily`.
 
-**03:30** – Post ledger & balances
-- `ef_post_ledger_and_balances`:
-  - Reads `v_fills_with_customer` + `exchange_funding_events`
-  - Produces `ledger_lines` events
-  - Rolls into `balances_daily` per portfolio and asset
+**05:05–16:00** – Order monitoring
+- **`poll-orders-1min`** (`*/1 3-16 * * *`): Polls all submitted orders every 1 minute
+  - Checks VALR order status, extracts fills, stores in `order_fills`
+  - If limit order unfilled >5 min OR price moves >0.25%: cancel and submit MARKET order
+- **`lth_market_fallback_00s`–`50s`** (×6 staggered, `*/1 3-16 * * *`): 
+  - Six cron jobs offset by 0/10/20/30/40/50 seconds for effective 10-second polling cadence
+  - Each calls `ef_market_fallback` which handles time-based and price-based LIMIT → MARKET conversion
 
-**05:00** – **Alert Digest Email** (2025-12-27+)
-- `ef_alert_digest`:
-  - Queries unresolved error/critical alerts where `notified_at IS NULL`
-  - Sends email digest via SMTP (nodemailer)
-  - Updates `notified_at` to prevent duplicate emails
+**Every 30 min 03:00–16:00** – Pipeline guard
+- `lth_pvr_resume_pipeline_guard` resumes any incomplete pipeline steps (safety net for morning runner failures)
 
-**Overnight** – Benchmark & fees
-- `ef_std_dca_roll` updates Standard DCA benchmark balances
-- `ef_fee_monthly_close` (monthly) calculates performance fees from `v_monthly_returns`
+**Every 30 min (all hours)** – VALR transaction sync
+- `sync-valr-transactions-every-30-min` calls `ef_sync_valr_transactions`
+- Detects deposits, withdrawals, ZAR conversions; posts to `exchange_funding_events`
+- Sends deposit notification emails (excluding ZAR→USDT conversion events)
+
+**Hourly** – Deposit scan
+- `deposit-scan-hourly` calls `ef_deposit_scan`
+- Detects balance changes on VALR subaccounts
+- Sends welcome email to first-time depositors
+
+**03:20** – Standard DCA benchmark roll
+- `lthpvr_std_dca_roll` calls `ef_std_dca_roll` to update `std_dca_balances_daily`
+
+**23:55** – Balance finalization
+- `valr_balance_finalizer_23_55_utc` finalizes daily balances
+
+**Monthly (day 1)**
+- `lthpvr_fee_monthly_close` (00:00) → performance fee calculation
+- `monthly-performance-fees` (00:05) → `ef_calculate_performance_fees`
+- `monthly-fee-close` (00:10) → `ef_fee_monthly_close`
+- `monthly_statement_generation` (00:01) → `ef_monthly_statement_generator`
+- `transfer-accumulated-fees` (02:00) → `ef_transfer_accumulated_fees`
+- `lthpvr_fee_invoice_email` (06:00) → `ef_fee_invoice_email`
 
 ---
 
@@ -7957,32 +7997,51 @@ async function pollConversionStatus(orderId) {
 
 ### 11.4 Edge Function Execution Flow
 
+> **Updated 2026-03-03** to reflect actual cron job schedule. Individual step cron jobs (03:05/03:10/03:15) never existed in production. WebSocket monitoring deleted 2026-02-01.
+
 ```
-03:00 UTC: ef_fetch_ci_bands
-    ↓
-03:05 UTC: ef_generate_decisions
-    ↓
-03:10 UTC: ef_create_order_intents
-    ↓
-03:15 UTC: ef_execute_orders
-    ↓
-03:15-03:30: ef_poll_orders (every minute)
-    ↓
-03:30 UTC: ef_post_ledger_and_balances
-    ↓
-05:00 UTC: ef_alert_digest
-    ↓
-Overnight: ef_std_dca_roll
-    ↓
-Monthly: ef_fee_monthly_close → ef_fee_invoice_email
+03:00 UTC ─ lthpvr_ci_fetch ──────────────────────────────── ef_fetch_ci_bands (first fetch)
+    │
+    │ (every 30 min, all hours)
+    ├─ ef_fetch_ci_bands_guard_30m ────────────────────────── ef_fetch_ci_bands (guard retry)
+    │
+05:00 UTC ─ ef_fetch_ci_bands_daily_0500_utc ─────────────── ef_fetch_ci_bands (second fetch)
+          ─ ef_alert_digest_daily ────────────────────────── ef_alert_digest (email digest)
+    │
+05:05 UTC ─ lth_pvr_resume_pipeline_morning ──────────────── ef_resume_pipeline
+              │  (sequential await fetch per step)
+              ├──► ef_generate_decisions
+              ├──► ef_create_order_intents
+              ├──► ef_execute_orders
+              └──► ef_post_ledger_and_balances
+    │
+    │ (every 1 min, 03:00–16:00)
+    ├─ poll-orders-1min ───────────────────────────────────── ef_poll_orders
+    ├─ lth_market_fallback_00s/10s/20s/30s/40s/50s ────────── ef_market_fallback (×6 staggered)
+    │
+    │ (every 30 min, 03:00–16:00)
+    ├─ lth_pvr_resume_pipeline_guard ─────────────────────── ef_resume_pipeline (guard)
+    │
+    │ (every 30 min, all hours)
+    ├─ sync-valr-transactions-every-30-min ────────────────── ef_sync_valr_transactions
+    │
+    │ (hourly)
+    ├─ deposit-scan-hourly ────────────────────────────────── ef_deposit_scan
+    │
+03:20 UTC ─ lthpvr_std_dca_roll ──────────────────────────── ef_std_dca_roll
+23:55 UTC ─ valr_balance_finalizer_23_55_utc ─────────────── balance finalization
+    │
+Monthly (day 1):
+    ├─ lthpvr_fee_monthly_close (00:00)
+    ├─ monthly-performance-fees (00:05) ──────────────────── ef_calculate_performance_fees
+    ├─ monthly-fee-close (00:10) ─────────────────────────── ef_fee_monthly_close
+    ├─ monthly_statement_generation (00:01) ──────────────── ef_monthly_statement_generator
+    ├─ transfer-accumulated-fees (02:00) ─────────────────── ef_transfer_accumulated_fees
+    └─ lthpvr_fee_invoice_email (06:00) ──────────────────── ef_fee_invoice_email
 
-Guard: lth_pvr.ensure_ci_bands_today() (every 30 minutes)
-
-Recovery: ef_resume_pipeline (manual or scheduled)
-  - Called via UI "Resume Pipeline" button
-  - Checks pipeline status
-  - Queues incomplete steps asynchronously
-  - Continues from last completed step
+Manual recovery:
+  UI "Resume Pipeline" button → POST ef_resume_pipeline
+  ef_resume_pipeline checks get_pipeline_status() and runs only incomplete steps
 ```
 
 ---
