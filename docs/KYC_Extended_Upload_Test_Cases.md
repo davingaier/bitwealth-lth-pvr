@@ -34,7 +34,7 @@ ORDER BY column_name;
 - `kyc_source_of_income_doc_url` — text, YES
 - `kyc_verified_by` — uuid, YES
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** All 11 KYC columns confirmed with correct types and is_nullable=YES.
 
 ---
 
@@ -50,7 +50,7 @@ WHERE customer_id = (SELECT MIN(customer_id) FROM public.customer_details LIMIT 
 
 **Expected result:** Error — `ERROR: new row for relation "customer_details" violates check constraint "chk_kyc_source_of_income"`
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Constraint fired correctly: ERROR 23514 chk_kyc_source_of_income.
 
 ---
 
@@ -68,7 +68,7 @@ ROLLBACK;
 
 **Expected result:** UPDATE executes without error; ROLLBACK succeeds.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** BEGIN/UPDATE/ROLLBACK all succeeded cleanly; no data changed.
 
 ---
 
@@ -94,7 +94,7 @@ SELECT public.get_customer_onboarding_status(
 - `kyc_bank_conf_uploaded` (boolean)
 - `next_action` — for status='kyc' should contain "X/4 complete" if docs missing
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Customer 51 (status='kyc', 0 docs uploaded). All new keys present: kyc_docs_uploaded=0, kyc_all_docs_uploaded=false, all 5 boolean doc keys false, next_action="Please upload all required KYC documents (0/4 complete)". Legacy kyc_id_uploaded key still present.
 
 ---
 
