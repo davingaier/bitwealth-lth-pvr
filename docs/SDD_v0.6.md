@@ -3,11 +3,48 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-03 (v0.6.59)
+**Last updated:** 2026-03-03 (v0.6.60)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.60 – Email Template Fixes & Deprecations
+**Date:** 2026-03-03  
+**Purpose:** Fix dark/light mode rendering bug in `prospect_confirmation` email, correct product name, update `kyc_portal_registration` to reference all 4 KYC documents, and deprecate unused template `kyc_request` and edge function `ef_upload_kyc_id`.
+
+**Status:** ✅ COMPLETE
+
+#### Scope of Changes
+
+**Fixed: `prospect_confirmation` email template — dark mode rendering bug**  
+In email clients that render in dark mode, the body text was invisible (dark-coloured text on a dark navy background). Root cause: the content `<td>` had no explicit background colour, allowing clients to invert it while keeping the inline text colours dark.
+
+Fixes applied:
+- `<h2>` inline colour changed from `#0A2E4D` (dark navy) → `#ffffff` (white)
+- `<p>` inline colours changed from `#333333` (dark grey) → `#e8f4f8` (soft light blue-white)
+- Content `<td>` given `class="email-content"` and explicit `background-color: #032C48`
+- Dark mode media query extended with: `.email-content { bg: #032C48 }`, `.email-content h2 { color: #fff }`, `.email-content p { color: #e8f4f8 }`
+
+**Fixed: `prospect_confirmation` email template — incorrect product name**  
+Body text changed from "Advanced Bitcoin DCA investment strategy" → "LTH PVR Bitcoin DCA investment strategy" to match the correct product name.
+
+**Updated: `kyc_portal_registration` email template**  
+This template (sent by Admin UI when approving a prospect to invite them to register) still referenced only the ID document. Updated to reflect the new 4-document KYC requirement:
+- Bullet point: "Upload your ID for verification" → "Upload your **KYC documents** for verification"
+- Warning box: "…upload a copy of your ID (passport or identity card)…" → "…upload 4 KYC documents: identity document, proof of address, source of income (with supporting document), and a bank account confirmation letter…"
+
+**Deprecated: `kyc_request` email template**  
+Investigation confirmed this template is not referenced by any edge function, the Admin UI, or any runtime code. It was an early-design template superseded by `kyc_portal_registration`. Deprecated in DB: `name` prefixed with `[DEPRECATED]`, `description` updated with reason and date (2026-03-03).
+
+Active email flow for KYC:
+1. `kyc_portal_registration` — sent by Admin UI when approving a prospect (invites customer to register + upload docs)
+2. `kyc_documents_uploaded_notification` — sent by `ef_upload_kyc_documents` after customer submits all 4 docs (notifies admin)
+
+**Deprecated: `ef_upload_kyc_id` edge function**  
+Fully superseded by `ef_upload_kyc_id`. Not referenced in any edge function, Admin UI, or call chain. Was never added to `redeploy-all-functions.ps1`, so it will not be re-deployed on the next redeploy cycle. Remains live on Supabase until manually undeployed but poses no operational risk.
+
+---
 
 ### v0.6.59 – Extended KYC Document Upload (4 Documents)
 **Date:** 2026-03-03  

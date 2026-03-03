@@ -120,7 +120,7 @@ $response | ConvertTo-Json
 
 **Expected result:** HTTP 400. `error` field lists all missing field names (kyc_id_file_path, kyc_id_file_url, kyc_proof_address_file_path, etc.)
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** HTTP 400. Error body: `{"error":"Missing required fields: kyc_id_file_path, kyc_id_file_url, kyc_proof_address_file_path, kyc_proof_address_file_url, kyc_source_of_income, kyc_source_of_income_file_path, kyc_source_of_income_file_url, kyc_bank_confirmation_file_path, kyc_bank_confirmation_file_url"}`. All 9 missing fields listed by name.
 
 ---
 
@@ -151,7 +151,7 @@ Invoke-RestMethod `
 
 **Expected result:** HTTP 400. `error` contains "Invalid source of income" and lists the valid values.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** HTTP 400. Error body: `{"error":"Invalid source of income: \"Lottery winnings\". Valid values: Employment / Salary, Self-employment / Freelance, Business income, Investments / Dividends, Pension / Retirement, Inheritance / Gift"}`.
 
 ---
 
@@ -161,7 +161,7 @@ Invoke-RestMethod `
 
 **Expected result:** HTTP 404. `error` = "Customer not found"
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** HTTP 404. Error body: `{"error":"Customer not found"}`. customer_id=99999.
 
 ---
 
@@ -178,7 +178,7 @@ Then call the edge function with that customer's ID (full valid body).
 
 **Expected result:** HTTP 400. `error` contains "Invalid customer status" and the actual status value.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** HTTP 400. Error body: `{"error":"Invalid customer status: 'active'. Document upload is only allowed when status='kyc'."}`. Used customer 45 (status=active).
 
 ---
 
@@ -223,7 +223,7 @@ WHERE customer_id = <test_customer_id>;
 - All timestamps are approximately NOW()
 - `email_sent: true` (admin notification sent)
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Customer 51. HTTP 200, success=true, documents_uploaded=4. All 9 KYC columns populated with correct timestamps.
 
 ---
 
@@ -238,7 +238,7 @@ After TC-EF-05, check admin inbox at `admin@bitwealth.co.za`.
 - Body shows income source selection
 - Link to Admin Portal visible
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Customer 51. Admin email received at admin@bitwealth.co.za with all 4 file paths, income source, and portal link.
 
 ---
 
@@ -259,7 +259,7 @@ After TC-EF-05, check admin inbox at `admin@bitwealth.co.za`.
 - 4 upload sections visible: Identity Document, Proof of Address, Source of Income, Bank Account Confirmation Letter
 - "Submit All Documents" button is **disabled** (greyed out)
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Page loaded correctly with 4 sections and disabled submit button.
 
 ---
 
@@ -269,7 +269,7 @@ Log in as an `status='active'` customer and navigate to upload-kyc.html.
 
 **Expected result:** Blue info message appears: "KYC document upload is not required at this stage (status: active). Redirecting…" — page then redirects to customer-portal.html.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Status guard correctly blocked and redirected.
 
 ---
 
@@ -279,7 +279,7 @@ In Section 1 (Identity Document), try to select/drop a `.docx` or `.txt` file.
 
 **Expected result:** Red error message: "Invalid file type. Please upload JPEG, PNG, or PDF." Upload area remains visible; progress does not advance.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Invalid file type correctly rejected.
 
 ---
 
@@ -289,7 +289,7 @@ In any section, attempt to upload a file larger than 10 MB.
 
 **Expected result:** Red error message: "File too large. Maximum size is 10 MB."
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Oversized file correctly rejected.
 
 ---
 
@@ -304,7 +304,7 @@ Upload valid files for sections 1, 2, 4 (skip section 3 for now).
 - Submit button remains **disabled**
 - Completed section cards get a blue border
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Dots 1, 2, 4 filled; dot 3 grey; label showed 3/4; submit disabled.
 
 ---
 
@@ -318,7 +318,7 @@ Then select an income source from the dropdown (without uploading a file first).
 
 **Expected result:** Dot 3 remains grey (both required). Only when BOTH dropdown is set AND a document is uploaded does dot 3 turn blue.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Dual-requirement for section 3 enforced correctly.
 
 ---
 
@@ -328,7 +328,7 @@ After uploading a file in any section, click the "Change" link.
 
 **Expected result:** The file info disappears, upload area reappears, section dot reverts to grey, progress count decreases by 1, submit disables if it was enabled.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Change link correctly resets section state.
 
 ---
 
@@ -338,7 +338,7 @@ Drag a valid PDF file and drop it onto any upload area.
 
 **Expected result:** File is accepted (same validation as click-to-select), section dot turns blue.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Drag-and-drop accepted valid PDF and updated progress correctly.
 
 ---
 
@@ -354,7 +354,7 @@ After completing all 4 sections, click "Submit All Documents".
 - **Verify in DB**: all 4 URL columns populated (see TC-EF-05 SQL)
 - **Verify in Supabase Storage**: `kyc-documents` bucket contains 4 new files under `{user_id}/` with naming `{date}_{last}_{first}_{doctype}.{ext}`
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Full submit flow worked. Progress bar advanced correctly. Success message shown. Redirected to customer-portal.html after 4s. DB and Storage verified.
 
 ---
 
@@ -368,7 +368,7 @@ After TC-UI-09, check Supabase Storage → `kyc-documents` bucket.
 - `2026-03-03_<LastName>_<FirstName>_income.<ext>`
 - `2026-03-03_<LastName>_<FirstName>_bank.<ext>`
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** All 4 files in Storage matched the expected naming convention.
 
 ---
 
@@ -378,7 +378,7 @@ Navigate to upload-kyc.html while not logged in (or after clearing session).
 
 **Expected result:** Error message "Please log in to upload your KYC documents." then redirect to `login.html` after 2.5 seconds.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Unauthenticated access correctly blocked and redirected to login.
 
 ---
 
@@ -409,7 +409,7 @@ Customers missing any of the 4 doc columns should NOT appear in the Admin UI tab
 
 **Expected result:** Admin UI table is empty (or shows only customers with all 4 present). Partial uploads are invisible until fully submitted.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Customers with partial uploads did not appear in the KYC table.
 
 ---
 
@@ -428,7 +428,7 @@ After TC-UI-09, refresh the Admin UI KYC panel.
 
 Each document link opens the correct signed URL in a new tab.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Test customer appeared with all 7 columns. All 4 document icon links opened correct URLs.
 
 ---
 
@@ -438,7 +438,7 @@ In the search box, type part of the test customer's last name or email.
 
 **Expected result:** Table filters in real time; only matching rows shown.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Search filter worked correctly.
 
 ---
 
@@ -459,7 +459,7 @@ WHERE customer_id = <test_customer_id>;
 ```
   Expect: `registration_status = 'setup'`, `kyc_id_verified_at` is set to ~NOW(), `kyc_verified_by` is the admin's UUID.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Verify button moved customer to status='setup', kyc_id_verified_at and kyc_verified_by set correctly. VALR subaccount created.
 
 ---
 
@@ -495,7 +495,7 @@ WHERE template_key = 'kyc_documents_uploaded_notification';
 
 **Expected result:** 1 row returned; all PASS/CASE columns show 'PASS'. Subject = 'KYC Documents Submitted — {{first_name}} {{last_name}}'.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Template verified via SQL — all 5 content checks passed.
 
 ---
 
@@ -507,24 +507,15 @@ Log in as a `status='kyc'` customer via `login.html`.
 
 **Expected result:** Redirected to `upload-kyc.html` (not customer-portal.html). This routing was not changed in this release — confirm it still works.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** kyc-status customer correctly routed to upload-kyc.html.
 
 ---
 
-### TC-REG-02: Legacy ef_upload_kyc_id still deployed and responses correctly
+### TC-REG-02: ef_upload_kyc_id deprecated ⏭
 
-```powershell
-Invoke-RestMethod `
-  -Uri "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_upload_kyc_id" `
-  -Method POST `
-  -Headers @{ "Authorization" = "Bearer <anon_key>"; "Content-Type" = "application/json" } `
-  -Body '{}' `
-  -ErrorAction SilentlyContinue
-```
+**Finding (2026-03-03):** `ef_upload_kyc_id` is fully superseded by `ef_upload_kyc_documents`. It is not referenced in any edge function, the Admin UI, or any call chain. It was never added to `redeploy-all-functions.ps1` so it will not be re-deployed on the next redeploy cycle. The function remains live on Supabase until manually undeployed but poses no risk.
 
-**Expected result:** HTTP 400 with `error: "Missing required fields..."` (not a 404 or deployment error — function still exists).
-
-**Result:** ___  **Notes:** _______________
+**Result:** ⏭ SKIP  **Notes:** ef_upload_kyc_id deprecated 2026-03-03 — superseded by ef_upload_kyc_documents, excluded from redeploy script.
 
 ---
 
@@ -534,7 +525,7 @@ Navigate to Supabase Dashboard → Edge Functions.
 
 **Expected result:** `ef_upload_kyc_documents` appears with status **ACTIVE**, version 1, JWT verification **ON**.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Function confirmed ACTIVE in Supabase Dashboard with JWT verification ON.
 
 ---
 
@@ -544,7 +535,7 @@ Navigate to Admin UI → Customer Management. Confirm existing active customers 
 
 **Expected result:** No regressions in other milestone cards.
 
-**Result:** ___  **Notes:** _______________
+**Result:** ✅ PASS  **Notes:** Active Customers and VALR Account Setup tables unaffected.
 
 ---
 
@@ -552,14 +543,14 @@ Navigate to Admin UI → Customer Management. Confirm existing active customers 
 
 | Section | # Tests | Passed | Failed | Skipped |
 |---------|---------|--------|--------|---------|
-| 1 — DB Schema | 4 | | | |
-| 2 — Edge Function | 6 | | | |
-| 3 — Customer Upload UI | 11 | | | |
-| 4 — Admin UI | 4 | | | |
-| 5 — Email Templates | 2 | | | |
-| 6 — Regression | 4 | | | |
-| **Total** | **31** | | | |
+| 1 — DB Schema | 4 | 4 | 0 | 0 |
+| 2 — Edge Function | 6 | 6 | 0 | 0 |
+| 3 — Customer Upload UI | 11 | 11 | 0 | 0 |
+| 4 — Admin UI | 4 | 4 | 0 | 0 |
+| 5 — Email Templates | 2 | 1 | 0 | 1 |
+| 6 — Regression | 4 | 3 | 0 | 1 |
+| **Total** | **31** | **29** | **0** | **2** |
 
-**Signed off by:** _______________  
-**Date:** _______________  
-**Feature ready for production use:** YES / NO
+**Signed off by:** Davin  
+**Date:** 2026-03-03  
+**Feature ready for production use:** YES

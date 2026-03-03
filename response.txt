@@ -1,0 +1,1 @@
+{"error":"Missing required fields: kyc_id_file_path, kyc_id_file_url, kyc_proof_address_file_path, kyc_proof_address_file_url, kyc_source_of_income, kyc_source_of_income_file_path, kyc_source_of_income_file_url, kyc_bank_confirmation_file_path, kyc_bank_confirmation_file_url"}
