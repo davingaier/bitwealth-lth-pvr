@@ -3,11 +3,124 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-02-26 (v0.6.56)
+**Last updated:** 2026-03-03 (v0.6.57)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.57 – Browser Strategy Optimizer: Enhancements, Bug Fixes & Refinement Workflow
+**Date:** 2026-03-03  
+**Purpose:** Comprehensive enhancements to the browser-based Strategy Optimizer UI — new result-action workflow (apply / save / refine), correctness fixes to the in-browser simulation worker, and the new "Refine Existing Variation" feature that enables fine-grained parameter search without a preceding full optimization run.
+
+**Status:** ✅ COMPLETE
+
+**File changed:** `ui/Advanced BTC DCA Strategy.html` (optimizer module, ~10,350–11,550 lines)
+
+---
+
+#### Feature: Complete Result-Action Workflow
+After an optimization run completes, four action buttons now appear beneath each ranked result:
+
+| Button | Function | Description |
+|--------|----------|--------------|
+| ⬇ Export #1 Daily Txs | `exportTopResultDailyTxs()` | Downloads a CSV of every simulated transaction for the top result, including `platform_fee_paid`, `total_roi_pct`, and cumulative gross spend (`cGross`). HWM tracker correctly initialised to `upfront` on day 1. |
+| 🔬 Refine #1 | `refineTopResult()` | Runs a focused grid search centred on the top result's parameters. |
+| 📥 Apply #1 to Variation | `applyTopResult()` | Writes the top result's B1–B11, momoLen, momoThr directly to the selected `strategy_variation_templates` row in the database. |
+| ✨ Save as New Variation | `applyTopResultToNewVariation()` | Prompts for a name and inserts a new row in `strategy_variation_templates` with the top result's parameters. |
+
+**DB permission fix required for Apply / Save:**
+```sql
+GRANT INSERT, UPDATE, DELETE ON lth_pvr.strategy_variation_templates TO authenticated;
+```
+This grant was missing; without it, `applyTopResult()` and `applyTopResultToNewVariation()` returned "permission denied".
+
+---
+
+#### Feature: Refine #1 — Fine-Grained Grid Search
+`buildRefinedBVals(t)` generates **3 candidate values per B-parameter** (centre − halfStep, centre, centre + halfStep) where `halfStep` = half the average grid step of that band's `B_VALS` array. This produces ~177K combinations at most, completing in < 5 seconds.
+
+**Worker memory limit:** Capped at **4 WebWorkers** (down from 16). Each worker receives a copy of two Float64Arrays (~18 KB each), so 4 workers consume < 150 MB vs the OOM-crash observed at 16 workers.
+
+**Key implementation:`)
+- `buildRefinedBVals(t)` — generates ± half-step arrays for each of B1–B11
+- `refineTopResult()` — uses cached `lastBands` / `lastSimParams`; fixes momoLen & momoThr to top-result values
+
+---
+
+#### Feature: Refine Existing Variation (new in v0.6.57)
+**Button:** 🔬 Refine Existing Variation (teal, in setup card alongside Run Optimizer / Stop)
+
+**Function:** `refineExistingVariation()`
+
+Allows fine-grained refinement of any stored variation **without first running a full optimization**. Workflow:
+1. Select variation from dropdown — its B1–B11, momoLen, momoThr, and `bearPauseExitSigma` are read from the `data-config` attribute already stored by `loadVariations()`.
+2. Reads sim params (start date, end date, upfront, monthly, objective, enableRetrace) from the form.
+3. Fetches CI bands fresh from DB with 2-year warmup (full paginated loop identical to `run()`).
+4. Calls `buildRefinedBVals(t)` centred on the variation's current parameters.
+5. Fixes momoLen and momoThr (does not permute them).
+6. Spawns ≤ 4 WebWorkers → feeds into the same `onAllDone()` / results display as a full run.
+7. Results table shows the same Apply / Save / Refine-again buttons.
+
+---
+
+#### Feature: Current Variation Parameter Display Panel
+`showVariationParams()` — called on dropdown `onchange` — renders a summary card showing the selected variation's current B1–B11, momoLen, momoThr, bearPauseExitSigma, and enableRetrace. This gives immediate visibility before running the optimizer.
+
+**Bug fix:** `showVariationParams` was not accessible from inline HTML `onchange` attributes because it was declared inside the IIFE. Fixed by exposing it as `window.showVariationParams = showVariationParams`.
+
+---
+
+#### Feature: Enable Retrace Checkbox in Optimizer Setup
+A new checkbox (`optEnableRetrace`) in the optimizer setup card allows the user to control whether retrace-exception buys are simulated. The value is:
+- Read in `run()`, `refineTopResult()`, and `refineExistingVariation()`
+- Included in every `worker.postMessage()` payload as `enableRetrace`
+- Stored in `lastSimParams.enableRetrace` for use by `exportTopResultDailyTxs()`
+
+---
+
+#### Bug Fix A – Bear-Pause Stickiness (`if (db) bp = true`)
+**Root cause:** The worker simulation code used `bp = db` to set the bear-pause flag, meaning that on any day where `db = 0` (not a bear-pause day per CI bands), the flag was cleared — regardless of the previous day's state. This caused bear-pause to flicker on/off daily instead of latching until the exit condition.
+
+**Fix:** Changed all 4 occurrences in the worker's state machine from:
+```javascript
+bp = db;     // ❌ clears bp on non-bear-pause days
+```
+to:
+```javascript
+if (db) bp = true;  // ✅ can only SET bp; cleared only by explicit exit-price condition
+```
+Bear-pause now correctly latches and is only released when the BTC price crosses below the configured `bpExit` threshold.
+
+---
+
+#### Bug Fix B – `momOk` Incorrectly Tied to `enableRetrace`
+**Root cause:** The worker computed `momOk` as `enableRetrace ? true : (rv > momoThr)`, effectively disabling the momentum filter whenever retrace was enabled. The momentum filter (B7–B9 sell signals) and retrace exceptions are completely independent features.
+
+**Fix:** Reverted to the correct formula:
+```javascript
+const momOk = bp ? true : (rv > momoThr);
+```
+During bear-pause, all sells proceed (momentum filter bypassed). Outside bear-pause, the momentum Rate-of-Change filter applies normally, regardless of `enableRetrace`.
+
+---
+
+#### Bug Fix C – `exportTopResultDailyTxs` cGross Accumulation
+**Root cause:** Cumulative gross spend (`cGross`) was being assigned (`= tradeUsdt`) instead of accumulated (`+= tradeUsdt`), producing a flat constant value instead of a running total.
+
+**Additional improvements:**
+- HWM (High Water Mark) initialised to `upfront` on day 0 (was 0, producing incorrect performance-fee calculations for the first month)
+- Added `platform_fee_paid` column (per-trade platform fee in $)
+- Added `total_roi_pct` column (rolling ROI % against total contributed capital)
+
+---
+
+#### Bug Fix D – Sell-Loop Extra Closing Brace (Syntax Error)
+**Root cause:** The sell-combination counting loop inside `refineExistingVariation()` had 6 closing braces (`}}}}}}`) instead of 5, prematurely closing the `try` block and leaving the `catch` orphaned — producing an `Uncaught SyntaxError: Missing catch or finally` at page load.
+
+**Fix:** Removed the extra `}` from the b11 loop line.
+
+---
 
 ### v0.6.56 – Optimizer Bug Fixes: Warmup Pass, price_at_p250, Response Size, Baseline
 **Date:** 2026-02-26  
@@ -7131,6 +7244,123 @@ USING (org_id IN (SELECT id FROM public.my_orgs()));
    - **Empty State:** Shows "✅ No pending conversions" with green success message
    - **Lines:** HTML (2625-2645), JavaScript (8450-8605)
    - **Known Issues Fixed:** Schema reference bug (was querying `public.v_pending_zar_conversions` instead of `lth_pvr.v_pending_zar_conversions`)
+
+---
+
+### 7.9 Strategy Optimizer (Browser-Based)
+
+**Location:** Admin UI → Strategy Optimizer tab (`#optimizer-module`)
+
+**Architecture:** Entirely client-side — no edge function required. The full simulation engine is compiled into an inline JavaScript blob and executed inside WebWorkers, allowing all CPU cores to be exploited without Supabase compute constraints.
+
+#### How It Works
+
+1. **CI Bands fetched from DB once** — paginated loop (`PAGE = 1000`) from `lth_pvr.ci_bands_daily` with a 2-year warmup prefix before the selected `startDate`. Results stored in `Float64Array` / `Int32Array` column arrays for fast worker transfer.
+
+2. **Parameter grid built in main thread** — arrays `b1v … b11v` for B1–B11, `momoLens`, `momoThrs`. Monotone constraints applied during combo counting (buy tiers must be descending, sell tiers ascending).
+
+3. **WebWorkers run the simulation** — up to `navigator.hardwareConcurrency` workers (capped at **16** for full runs, **4** for refine runs). Each worker receives a shard `[workerId, numWorkers]` of the combination space and streams back progress + a `topK=10` list.
+
+4. **Results merged** — `onAllDone()` merges and re-ranks all worker `topK` lists by the chosen objective (CAGR, NAV, Sharpe, MaxDD), then renders the top-10 table.
+
+#### Setup Card Fields
+
+| Field | Element ID | Description |
+|-------|-----------|-------------|
+| Variation to optimise | `optVarSelect` | Dropdown populated by `loadVariations()`. Selected variation's config stored as `data-config` JSON on each `<option>`. Changing selection calls `showVariationParams()`. |
+| Objective (ranking metric) | `optObjective2` | CAGR % (default), NAV $, Sharpe ratio, Max drawdown % |
+| Start Date | `optStartDate2` | Simulation start (default 2020-01-01) |
+| End Date | `optEndDate2` | Simulation end (default today) |
+| Upfront Investment ($) | `optUpfront2` | Initial USDT deposit |
+| Monthly Contribution ($) | `optMonthly2` | Monthly USDT DCA amount |
+| Enable retrace exception buys | `optEnableRetrace` | Checkbox — threads `enableRetrace` into worker simulations |
+
+#### Buttons
+
+| Button | ID | Function |
+|--------|----|----------|
+| ▶ Run Optimizer | `optRunBtn` | `window.optimizer.run()` — full grid search |
+| 🔬 Refine Existing Variation | `optRefineExistingBtn` | `window.optimizer.refineExistingVariation()` — fine-grained search centred on selected variation's current params, fresh DB fetch |
+| ■ Stop | `optStopBtn` | `window.optimizer.stop()` — terminates all workers |
+
+#### Results Table Action Buttons (per-run)
+
+Appeared beneath results after any run completes:
+
+| Button | Function | Action |
+|--------|----------|--------|
+| ⬇ Export #1 Daily Txs | `exportTopResultDailyTxs()` | CSV with columns: date, action, rule, gross_usdt, platform_fee_paid, net_usdt, btc_price, btc_bought, btc_sold, btc_bal, usdt_bal, nav, total_roi_pct, cGross |
+| 🔬 Refine #1 | `refineTopResult()` | Fine-grained search centred on top result; uses cached `lastBands` |
+| 📥 Apply #1 to Variation | `applyTopResult()` | Updates `lth_pvr.strategy_variation_templates` with top result's B1–B11 + momo params |
+| ✨ Save as New Variation | `applyTopResultToNewVariation()` | Inserts new row in `strategy_variation_templates` |
+
+#### Variation Parameter Display (`showVariationParams`)
+Called on dropdown change. Renders an info panel inside the setup card showing the selected variation's current B1–B11, momentum length, momentum threshold, bear-pause exit σ, and enable-retrace flag. Exposes as `window.showVariationParams` so inline `onchange` attributes can reference it.
+
+#### Refinement System
+
+**`buildRefinedBVals(t)`** — generates 3 values per B-param:
+- `centre − halfStep`
+- `centre` (the current value)
+- `centre + halfStep`
+
+where `halfStep = (B_VALS[last] − B_VALS[0]) / (2 × (B_VALS.length − 1))` — i.e., half the average grid step for that band. Produces at most ~177K valid combinations after monotone filtering.
+
+**`refineTopResult()`** — uses `lastBands` (cached from prior run), fixes momoLen & momoThr, spawns ≤ 4 workers.
+
+**`refineExistingVariation()`** — reads params from the selected variation's `data-config`, fetches CI bands fresh from DB (full 2-year warmup paginated loop), then calls `buildRefinedBVals()` and spawns ≤ 4 workers. Does not require a prior optimization run.
+
+#### Key Simulation Parameters (Worker)
+
+```javascript
+simParams: {
+  upfront,          // initial USDT
+  monthly,          // monthly DCA
+  platRate: 0.0075, // 0.75% platform fee on contributions
+  tradeRate: 0.0008,// 8 bps exchange trade fee (in BTC)
+  perfRate:  0.10,  // 10% monthly performance fee (HWM)
+  contribRate: 0.0018 // 18 bps exchange contribution fee (in USDT)
+}
+```
+
+#### Bear-Pause State Machine (Correct Behaviour)
+
+```javascript
+// Bear-pause LATCHES ON when CI bands flag it:
+if (db) bp = true;   // ✅ correct — only SET here
+
+// Bear-pause RELEASES when price crosses below exit threshold:
+if (bp && px < bpExit) bp = false;  // ✅ only CLEARED here
+```
+
+**Momentum filter during bear-pause:**
+```javascript
+const momOk = bp ? true : (rv > momoThr);  // ✅ sell filter bypassed during bear-pause only
+```
+The momentum filter is completely independent of `enableRetrace`.
+
+#### `window.optimizer` API
+
+```javascript
+window.optimizer = {
+  run,
+  stop,
+  exportCSV,
+  exportTopResultDailyTxs,
+  refineTopResult,
+  refineExistingVariation,
+  applyTopResult,
+  applyTopResultToNewVariation
+};
+window.showVariationParams = showVariationParams;
+```
+
+#### Required DB Grant
+
+```sql
+-- Required for Apply #1 to Variation and Save as New Variation:
+GRANT INSERT, UPDATE, DELETE ON lth_pvr.strategy_variation_templates TO authenticated;
+```
 
 ---
 
