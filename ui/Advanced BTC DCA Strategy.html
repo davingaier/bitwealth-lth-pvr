@@ -10364,7 +10364,7 @@ Momentum:
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1rem;">
         <div>
           <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Variation to optimize:</label>
-          <select id="optVarSelect" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
+          <select id="optVarSelect" onchange="showVariationParams()" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
             <option value="">Loading variations…</option>
           </select>
         </div>
@@ -10394,6 +10394,7 @@ Momentum:
           <input id="optMonthly2" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
         </div>
       </div>
+      <div id="optVarParams" style="margin-bottom:.75rem;"></div>
       <div style="margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;">
         <input type="checkbox" id="optEnableRetrace" checked style="width:1.1rem;height:1.1rem;cursor:pointer;" />
         <label for="optEnableRetrace" style="font-size:.9rem;cursor:pointer;user-select:none;">Enable retrace exception buys (B3 buys when price retraces from sell zone)</label>
@@ -10731,11 +10732,45 @@ self.onmessage = function(e) {
     function setStatus(msg) { const el = document.getElementById('optStatus'); if (el) el.textContent = msg; }
 
     // ── Load variations dropdown ──────────────────────────────────────────────
+    function showVariationParams() {
+      const sel = document.getElementById('optVarSelect');
+      const opt = sel?.options[sel?.selectedIndex];
+      const el  = document.getElementById('optVarParams');
+      if (!el) return;
+      if (!opt?.dataset?.config) { el.innerHTML = ''; return; }
+      const c = JSON.parse(opt.dataset.config);
+      const bp = v => v != null ? (v * 100).toFixed(v < 0.1 ? 2 : 1) + '%' : '—';
+      const prodBadge = c.isProduction
+        ? '<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 8px;font-size:.78rem;font-weight:700;">● Production: TRUE</span>'
+        : '<span style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a;border-radius:4px;padding:1px 8px;font-size:.78rem;font-weight:600;">○ Production: FALSE</span>';
+      el.innerHTML = `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.7rem 1rem;font-size:.82rem;">
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.55rem;">
+          <span style="font-weight:700;color:#374151;font-size:.85rem;">Current parameters:</span>
+          ${prodBadge}
+          <span style="color:#6b7280;">BP Exit σ: <strong>${c.bearPauseExitSigma ?? '—'}</strong></span>
+          <span style="color:#6b7280;">Retrace: <strong>${c.enableRetrace ? 'On' : 'Off'}</strong></span>
+          <span style="color:#6b7280;">Momo Len: <strong>${c.momentumLength ?? '—'}</strong></span>
+          <span style="color:#6b7280;">Momo Thr: <strong>${c.momentumThreshold != null ? (c.momentumThreshold*100).toFixed(1)+'%' : '—'}</strong></span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(11,1fr);gap:3px;text-align:center;">
+          ${[1,2,3,4,5,6,7,8,9,10,11].map(n => {
+            const v = c['b'+n]; const isBuy = n <= 5;
+            const bg = isBuy ? '#dbeafe' : '#fef3c7';
+            const col = isBuy ? '#1e40af' : '#92400e';
+            return `<div style="background:${bg};color:${col};border-radius:4px;padding:3px 2px;">
+              <div style="font-size:.68rem;opacity:.7;">B${n}</div>
+              <div style="font-weight:700;font-size:.8rem;">${bp(v)}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+
     async function loadVariations() {
       const sb = window.supabaseClient; if (!sb) return;
       try {
         const { data, error } = await sb.schema('lth_pvr').from('strategy_variation_templates')
-          .select('id, variation_name, sort_order, bear_pause_exit_sigma, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, momentum_length, momentum_threshold, enable_retrace, retrace_base')
+          .select('id, variation_name, sort_order, bear_pause_exit_sigma, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, momentum_length, momentum_threshold, enable_retrace, retrace_base, is_production')
           .order('sort_order');
         if (!data?.length) { console.warn('loadVariations: no data returned', error); return; }
         const sel = document.getElementById('optVarSelect'); if (!sel) return;
@@ -10745,13 +10780,15 @@ self.onmessage = function(e) {
             b1: v.b1, b2: v.b2, b3: v.b3, b4: v.b4, b5: v.b5,
             b6: v.b6, b7: v.b7, b8: v.b8, b9: v.b9, b10: v.b10, b11: v.b11,
             momentumLength: v.momentum_length, momentumThreshold: v.momentum_threshold,
-            enableRetrace: v.enable_retrace, retraceBase: v.retrace_base
+            enableRetrace: v.enable_retrace, retraceBase: v.retrace_base,
+            isProduction: v.is_production
           };
           return `<option value="${v.id}" data-config='${JSON.stringify(cfg)}'>${v.variation_name}</option>`;
         }).join('');
         // Set default end date to today
         const ed = document.getElementById('optEndDate2');
         if (ed && !ed.value) ed.value = new Date().toISOString().slice(0,10);
+        showVariationParams(); // display params for the default (first) selection
       } catch(e) { console.warn('loadVariations:', e); }
     }
 
@@ -11161,13 +11198,15 @@ self.onmessage = function(e) {
     }
 
     function buildRefinedBVals(t) {
-      // For each B param: generate 7 values centered on top result, at half the original average step
+      // For each B param: generate 3 values (centre - half-step, centre, centre + half-step)
+      // Half-step = half the average grid step of the original B_VALS array.
+      // 3^5 buy × 3^6 sell = 177,147 max valid combos — completes in <1 second.
       function refineParam(bk, center) {
         const vals = B_VALS[bk];
         const step = (vals[vals.length-1] - vals[0]) / (vals.length - 1) / 2; // half the avg step
-        const raw = [-3,-2,-1,0,1,2,3].map(k => Math.round((center + k * step) * 100000) / 100000);
-        const s = new Set(raw.map(v => Math.max(0.001, Math.min(0.999, Math.round(v*100000)/100000))));
-        return [...s].sort((a,b) => a-b);
+        const r = v => Math.max(0.001, Math.min(0.999, Math.round(v * 100000) / 100000));
+        const set = new Set([r(center - step), r(center), r(center + step)]);
+        return [...set].sort((a, b) => a - b);
       }
       return {
         b1v:  refineParam('b1',  t.B1),  b2v: refineParam('b2',  t.B2),
@@ -11233,7 +11272,8 @@ self.onmessage = function(e) {
       prog.innerHTML = `<p>🔬 Refining — testing <strong>${refineCombos.toLocaleString()}</strong> fine-grained combinations around B1=${(t.B1*100).toFixed(2)}% … B11=${(t.B11*100).toFixed(2)}% (momo fixed: len=${t.momoLen}, thr=${(t.momoThr*100).toFixed(1)}%)…</p>`;
       document.getElementById('optResults').innerHTML = '';
 
-      numWorkers = Math.min(navigator.hardwareConcurrency || 4, 16);
+      // Cap at 4 workers: refine combos are tiny (<200K), more workers just waste memory on cloning
+      numWorkers = Math.min(navigator.hardwareConcurrency || 4, 4);
       const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
       const blobUrl = URL.createObjectURL(blob);
       workers = [];
