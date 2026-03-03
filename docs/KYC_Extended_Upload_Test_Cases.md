@@ -465,24 +465,15 @@ WHERE customer_id = <test_customer_id>;
 
 ## Section 5 — Email Templates
 
-### TC-EMAIL-01: kyc_request template shows all 4 documents
+### TC-EMAIL-01: kyc_request template is deprecated ⏭
 
-**SQL to verify:**
-```sql
-SELECT 
-  CASE WHEN body_html LIKE '%Bank Account Confirmation%' THEN 'PASS' ELSE 'FAIL' END AS has_bank_doc,
-  CASE WHEN body_html LIKE '%Proof of Address%' THEN 'PASS' ELSE 'FAIL' END AS has_addr_doc,
-  CASE WHEN body_html LIKE '%Source of income%' THEN 'PASS' ELSE 'FAIL' END AS has_income_doc,
-  CASE WHEN body_html LIKE '%Identity document%' THEN 'PASS' ELSE 'FAIL' END AS has_id_doc,
-  CASE WHEN body_html LIKE '%1–2 business days%' THEN 'PASS' ELSE 'FAIL' END AS has_updated_instructions,
-  CASE WHEN body_html LIKE '%<ol>%' THEN 'PASS' ELSE 'FAIL' END AS uses_ordered_list
-FROM public.email_templates
-WHERE template_key = 'kyc_request';
-```
+**Finding (2026-03-03):** `kyc_request` is not referenced by any edge function, the Admin UI, or any runtime code. It was an early-design template superseded by `kyc_portal_registration`. It has been **deprecated** in the DB (name prefixed `[DEPRECATED]`, description updated).
 
-**Expected result:** All 6 columns show 'PASS'.
+The active email flow for KYC is:
+1. `kyc_portal_registration` — sent by Admin UI when approving a prospect (invites customer to register + upload docs)
+2. `kyc_documents_uploaded_notification` — sent by `ef_upload_kyc_documents` after customer submits all 4 docs (notifies admin)
 
-**Result:** ___  **Notes:** _______________
+**Result:** ⏭ SKIP  **Notes:** Template deprecated 2026-03-03 — not in use.
 
 ---
 
