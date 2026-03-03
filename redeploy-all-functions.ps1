@@ -30,6 +30,7 @@ $functions = @(
     "ef_std_dca_roll",
     "ef_valr_deposit_scan",
     "ef_valr_ws_monitor",
+    "ef_upload_kyc_documents",
     "real-txs-allocate-deposits",
     "real-txs-extract",
     "real-txs-sync-valr",

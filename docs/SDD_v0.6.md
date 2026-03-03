@@ -3,11 +3,85 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-03 (v0.6.58)
+**Last updated:** 2026-03-03 (v0.6.59)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.59 – Extended KYC Document Upload (4 Documents)
+**Date:** 2026-03-03  
+**Purpose:** Extend the customer KYC document upload step from 1 document (ID copy only) to 4 documents: identity document, proof of address, source of income (dropdown + supporting document), and bank account confirmation letter.
+
+**Status:** ✅ COMPLETE
+
+#### Scope of Changes
+
+**DB Migration: `add_kyc_additional_documents`**
+New columns added to `public.customer_details`:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `kyc_proof_address_url` | TEXT | Signed URL for proof of address document |
+| `kyc_proof_address_uploaded_at` | TIMESTAMPTZ | Upload timestamp |
+| `kyc_source_of_income` | TEXT | Customer-selected dropdown value (constrained) |
+| `kyc_source_of_income_doc_url` | TEXT | Signed URL for income supporting document |
+| `kyc_source_of_income_doc_uploaded_at` | TIMESTAMPTZ | Upload timestamp |
+| `kyc_bank_confirmation_url` | TEXT | Signed URL for bank account confirmation letter |
+| `kyc_bank_confirmation_uploaded_at` | TIMESTAMPTZ | Upload timestamp |
+
+Allowed values for `kyc_source_of_income` (enforced by DB CHECK constraint):
+- Employment / Salary
+- Self-employment / Freelance
+- Business income
+- Investments / Dividends
+- Pension / Retirement
+- Inheritance / Gift
+
+**New Edge Function: `ef_upload_kyc_documents`** (JWT: ENABLED)
+- Replaces `ef_upload_kyc_id` for new customers
+- Accepts all 4 document URLs + income dropdown value in a single call
+- Validates `registration_status='kyc'` and income source against allowed values
+- Updates all 9 new+existing KYC columns in one DB update
+- Fires `kyc_documents_uploaded_notification` admin email only after ALL 4 docs confirmed
+- Legacy `ef_upload_kyc_id` left deployed (not modified) for backward compatibility
+
+**Updated: `public.get_customer_onboarding_status()`**
+- Now selects all 5 KYC-related URL columns
+- Counts completed sections (0–4) for progress display
+- Returns new keys: `kyc_docs_uploaded`, `kyc_all_docs_uploaded`, `kyc_id_doc_uploaded`, `kyc_proof_address_uploaded`, `kyc_source_of_income_set`, `kyc_income_doc_uploaded`, `kyc_bank_conf_uploaded`
+- `next_action` for status='kyc' now shows "X/4 complete" progress
+- Legacy key `kyc_id_uploaded` retained for backward compatibility
+
+**Redesigned: `website/upload-kyc.html`** (complete rebuild, was 556 lines → 516 lines)
+- Replaced single-file upload with 4-section progressive form
+- Progress dots (1–4) turn blue/filled as each section completes
+- Section 1: Identity document (🪪)
+- Section 2: Proof of address (🏠)
+- Section 3: Source of income — dropdown picker + supporting document (💼)
+- Section 4: Bank account confirmation letter (🏦)
+- Submit button disabled until all 4 sections are complete
+- All 4 files uploaded to `kyc-documents` bucket on submit, then single `ef_upload_kyc_documents` call
+- File naming convention: `{yyyy-mm-dd}_{last}_{first}_{doctype}.{ext}` (doctype: id/address/income/bank)
+- 1-year signed URLs created for each file (admin long-term access)
+
+**Updated: Admin UI KYC Verification Panel** (`ui/Advanced BTC DCA Strategy.html`)
+- Table now shows 7 columns: ID, Name, Email, Submitted, Income Source, Documents (4 links), Actions
+- Query now requires ALL 4 document URL columns to be NOT NULL (only shows fully-submitted customers)
+- Document cell shows compact icon links: 🪪 ID | 🏠 Address | 💼 Income | 🏦 Bank — each opens in new tab
+- Income source value displayed in its own column
+- Single "Verify" button retained (moves customer to 'setup', triggers VALR subaccount creation)
+
+**Updated: Email Templates in DB**
+- **New template: `kyc_documents_uploaded_notification`** — admin notification when all 4 docs submitted. Shows customer details + all 4 file paths + income source selection.
+- **Updated: `kyc_request`** — checklist now lists all 4 required documents (numbered ordered list). Instructions paragraph updated to direct customers to upload via the portal in one step.
+- `kyc_id_uploaded_notification` left unchanged (legacy, for `ef_upload_kyc_id`).
+
+#### Design Decisions (with Future Enhancement Notes)
+- **One-session upload:** All 4 documents must be uploaded in a single session. Customer cannot save partial progress. → *Future enhancement: allow partial saves with per-section storage, so customers can return to complete remaining docs.*
+- **Single Verify button:** Admin approves all 4 docs with one button (same as today). → *Future enhancement: add individual per-document approve buttons + final Approve All action for granular review.*
+
+---
 
 ### v0.6.58 – SDD Corrections: Actual Cron Schedule & Alert Backlog Cleanup
 **Date:** 2026-03-03  
@@ -5741,12 +5815,14 @@ Customer Manual Transfer → VALR Balance Changes → Hourly Reconciliation Scan
    - **New column:** `exchange_accounts.deposit_ref` (TEXT)
    - **New storage bucket:** `kyc-documents` (private, 10MB limit, image/* + application/pdf)
    - **Existing columns:** kyc_id_document_url, kyc_id_verified_at, kyc_verified_by (already exist)
+   - **v0.6.59 columns:** kyc_proof_address_url, kyc_proof_address_uploaded_at, kyc_source_of_income, kyc_source_of_income_doc_url, kyc_source_of_income_doc_uploaded_at, kyc_bank_confirmation_url, kyc_bank_confirmation_uploaded_at
 
 3. **Edge Functions Status**
    - ✅ `ef_prospect_submit` (deployed and tested)
    - ✅ `ef_customer_register` (deployed and tested)
    - ✅ `ef_confirm_strategy` (deployed 2025-12-31 - replaces ef_approve_kyc)
-   - ✅ `ef_upload_kyc_id` (deployed 2025-12-30 with JWT verification)
+   - ✅ `ef_upload_kyc_id` (deployed 2025-12-30, legacy — superseded by ef_upload_kyc_documents)
+   - ✅ `ef_upload_kyc_documents` (deployed 2026-03-03 — handles all 4 KYC docs in one call)
    - ✅ `ef_valr_create_subaccount` (deployed 2025-12-30 --no-verify-jwt)
    - ✅ `ef_deposit_scan` (deployed 2025-12-30 - hourly pg_cron job active)
 
@@ -5754,7 +5830,9 @@ Customer Manual Transfer → VALR Balance Changes → Hourly Reconciliation Scan
    - ✅ `prospect_notification` (active)
    - ✅ `prospect_confirmation` (active)
    - ✅ `kyc_portal_registration` (created 2025-12-31)
-   - ✅ `kyc_id_uploaded_notification` (created 2025-12-30)
+   - ✅ `kyc_id_uploaded_notification` (created 2025-12-30, legacy)
+   - ✅ `kyc_documents_uploaded_notification` (created 2026-03-03 — all 4 docs, sent to admin)
+   - ✅ `kyc_request` (updated 2026-03-03 — lists all 4 required documents)
    - ✅ `deposit_instructions` (created 2025-12-30)
    - ✅ `funds_deposited_admin_notification` (created 2025-12-30)
    - ✅ `registration_complete_welcome` (created 2025-12-30)
@@ -5763,11 +5841,10 @@ Customer Manual Transfer → VALR Balance Changes → Hourly Reconciliation Scan
 5. **UI Components Status**
    - ✅ Customer Management module (ui/Advanced BTC DCA Strategy.html)
    - ✅ Strategy selection dropdown (implemented 2025-12-31 - Milestone 2)
-   - ✅ KYC ID Verification card - View Document + Verify button (built 2025-12-30)
+   - ✅ KYC ID Verification card — 4-doc review + single Verify button (updated 2026-03-03)
    - ✅ VALR Account Setup card - 3-stage workflow (built 2025-12-30)
    - ✅ Active Customers card - Set Inactive button (built 2025-12-30)
-   - ✅ Customer portal ID upload page (website/upload-kyc.html - built 2025-12-30)
-   - ⏳ Customer portal onboarding progress indicator (deferred - not critical)
+   - ✅ Customer portal KYC upload page (website/upload-kyc.html — rebuilt 2026-03-03 for 4 docs)
 
 6. **Implementation Status**
    - **Completion:** 100% (all 6 milestones built and deployed)

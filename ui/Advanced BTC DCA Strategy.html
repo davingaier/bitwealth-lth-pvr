@@ -726,7 +726,7 @@
       <!-- KYC ID Verification card -->
       <div class="card" id="kycVerificationCard">
         <h3>KYC ID Verification</h3>
-        <p class="small-muted">Review and verify customer ID documents uploaded during registration.</p>
+        <p class="small-muted">Review and verify KYC documents uploaded by customers (all 4 documents required before a customer appears here).</p>
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
           <button id="kycRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
           <input id="kycSearchInput" type="text" placeholder="Search by name or email..." style="flex:1;min-width:250px;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;">
@@ -738,13 +738,14 @@
                 <th style="min-width:80px;">ID</th>
                 <th style="min-width:150px;">Name</th>
                 <th style="min-width:200px;">Email</th>
-                <th style="min-width:140px;">Uploaded</th>
-                <th style="min-width:150px;">Document</th>
+                <th style="min-width:140px;">Submitted</th>
+                <th style="min-width:160px;">Income Source</th>
+                <th style="min-width:260px;">Documents</th>
                 <th style="min-width:120px;">Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="6" class="muted">Loading KYC verifications...</td></tr>
+              <tr><td colspan="7" class="muted">Loading KYC verifications...</td></tr>
             </tbody>
           </table>
         </div>
@@ -7487,9 +7488,12 @@ This will:
       try {
         const { data, error } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_names, last_name, email, kyc_id_document_url, created_at, registration_status')
+          .select('customer_id, first_names, last_name, email, kyc_id_document_url, kyc_id_uploaded_at, kyc_proof_address_url, kyc_source_of_income, kyc_source_of_income_doc_url, kyc_bank_confirmation_url, created_at, registration_status')
           .eq('registration_status', 'kyc')
           .not('kyc_id_document_url', 'is', null)
+          .not('kyc_proof_address_url', 'is', null)
+          .not('kyc_source_of_income_doc_url', 'is', null)
+          .not('kyc_bank_confirmation_url', 'is', null)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -7513,22 +7517,32 @@ This will:
       );
 
       if (filtered.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No pending verifications</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="7" class="muted">No pending verifications</td></tr>';
         return;
       }
 
       tableBody.innerHTML = filtered.map(customer => {
-        const uploadDate = customer.created_at 
-          ? new Date(customer.created_at).toLocaleString('en-ZA', { 
+        const uploadDate = customer.kyc_id_uploaded_at || customer.created_at
+          ? new Date(customer.kyc_id_uploaded_at || customer.created_at).toLocaleString('en-ZA', { 
               dateStyle: 'short', 
               timeStyle: 'short' 
             })
           : 'N/A';
 
-        // Extract filename from URL for display
-        const fileName = customer.kyc_id_document_url 
-          ? customer.kyc_id_document_url.split('/').pop().split('?')[0]
-          : 'N/A';
+        // Build compact document link set
+        function docLink(url, label, emoji) {
+          if (!url) return `<span style="color:#a0aec0;font-size:0.8em;">${emoji} ${label}</span>`;
+          const name = url.split('/').pop().split('?')[0];
+          return `<a href="${url}" target="_blank" title="${name}"
+            style="color:#3b82f6;text-decoration:none;font-size:0.8em;white-space:nowrap;">
+            ${emoji} ${label}</a>`;
+        }
+        const docLinks = [
+          docLink(customer.kyc_id_document_url,         'ID',      '🪪'),
+          docLink(customer.kyc_proof_address_url,       'Address', '🏠'),
+          docLink(customer.kyc_source_of_income_doc_url,'Income',  '💼'),
+          docLink(customer.kyc_bank_confirmation_url,   'Bank',    '🏦'),
+        ].join('<br>');
 
         return `
           <tr>
@@ -7536,13 +7550,8 @@ This will:
             <td>${customer.first_names} ${customer.last_name}</td>
             <td>${customer.email}</td>
             <td>${uploadDate}</td>
-            <td>
-              <a href="${customer.kyc_id_document_url}" target="_blank" 
-                 style="color: #3b82f6; text-decoration: none; font-size: 0.85em;"
-                 title="${fileName}">
-                📄 View Document
-              </a>
-            </td>
+            <td style="font-size:0.85em;">${customer.kyc_source_of_income || '—'}</td>
+            <td>${docLinks}</td>
             <td>
               <button class="btn btn-primary-sm" 
                       onclick="window.verifyKycId(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"

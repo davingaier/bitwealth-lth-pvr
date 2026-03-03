@@ -2,6 +2,7 @@
 -- Purpose: Get customer onboarding milestone status
 -- Called by: Customer portal dashboard (for non-active customers)
 -- RLS: Customer can only see their own status
+-- Updated: 2026-02-25 — tracks all 4 KYC document sections
 
 CREATE OR REPLACE FUNCTION public.get_customer_onboarding_status(p_customer_id INTEGER)
 RETURNS JSONB
@@ -15,11 +16,17 @@ DECLARE
   v_milestones JSONB;
   v_next_action TEXT;
   v_portal_access BOOLEAN;
+  v_docs_uploaded INT;
+  v_all_kyc_docs BOOLEAN;
 BEGIN
   -- Get customer details
   SELECT 
     registration_status,
     kyc_id_document_url,
+    kyc_proof_address_url,
+    kyc_source_of_income,
+    kyc_source_of_income_doc_url,
+    kyc_bank_confirmation_url,
     created_at
   INTO v_customer
   FROM public.customer_details
@@ -29,6 +36,21 @@ BEGIN
     RETURN jsonb_build_object('error', 'Customer not found');
   END IF;
 
+  -- Check whether all 4 KYC document sections have been completed
+  v_all_kyc_docs :=
+    v_customer.kyc_id_document_url          IS NOT NULL AND
+    v_customer.kyc_proof_address_url         IS NOT NULL AND
+    v_customer.kyc_source_of_income          IS NOT NULL AND
+    v_customer.kyc_source_of_income_doc_url  IS NOT NULL AND
+    v_customer.kyc_bank_confirmation_url     IS NOT NULL;
+
+  -- Count completed doc sections for progress display
+  v_docs_uploaded :=
+    (CASE WHEN v_customer.kyc_id_document_url          IS NOT NULL THEN 1 ELSE 0 END) +
+    (CASE WHEN v_customer.kyc_proof_address_url         IS NOT NULL THEN 1 ELSE 0 END) +
+    (CASE WHEN v_customer.kyc_source_of_income_doc_url  IS NOT NULL THEN 1 ELSE 0 END) +
+    (CASE WHEN v_customer.kyc_bank_confirmation_url     IS NOT NULL THEN 1 ELSE 0 END);
+
   -- Determine milestone (1-6) based on registration_status
   CASE v_customer.registration_status
     WHEN 'prospect' THEN 
@@ -36,11 +58,10 @@ BEGIN
       v_next_action := 'Waiting for admin to confirm interest and select strategy';
     WHEN 'kyc' THEN 
       v_milestone := 3;
-      -- Check if ID document already uploaded
-      IF v_customer.kyc_id_document_url IS NOT NULL THEN
-        v_next_action := 'ID document received - verification in progress';
+      IF v_all_kyc_docs THEN
+        v_next_action := 'All KYC documents received - verification in progress';
       ELSE
-        v_next_action := 'Please upload your ID document';
+        v_next_action := 'Please upload all required KYC documents (' || v_docs_uploaded || '/4 complete)';
       END IF;
     WHEN 'setup' THEN 
       v_milestone := 4;
@@ -74,14 +95,23 @@ BEGIN
 
   -- Build response
   v_result := jsonb_build_object(
-    'customer_id', p_customer_id,
-    'current_milestone', v_milestone,
-    'milestone_statuses', v_milestones,
-    'next_action', v_next_action,
-    'portal_access_granted', v_portal_access,
-    'registration_status', v_customer.registration_status,
-    'kyc_id_uploaded', v_customer.kyc_id_document_url IS NOT NULL,
-    'created_at', v_customer.created_at
+    'customer_id',                p_customer_id,
+    'current_milestone',          v_milestone,
+    'milestone_statuses',         v_milestones,
+    'next_action',                v_next_action,
+    'portal_access_granted',      v_portal_access,
+    'registration_status',        v_customer.registration_status,
+    -- Legacy key (kept for backwards compatibility)
+    'kyc_id_uploaded',            v_customer.kyc_id_document_url IS NOT NULL,
+    -- Granular KYC document status
+    'kyc_docs_uploaded',          v_docs_uploaded,
+    'kyc_all_docs_uploaded',      v_all_kyc_docs,
+    'kyc_id_doc_uploaded',        v_customer.kyc_id_document_url          IS NOT NULL,
+    'kyc_proof_address_uploaded', v_customer.kyc_proof_address_url         IS NOT NULL,
+    'kyc_source_of_income_set',   v_customer.kyc_source_of_income          IS NOT NULL,
+    'kyc_income_doc_uploaded',    v_customer.kyc_source_of_income_doc_url  IS NOT NULL,
+    'kyc_bank_conf_uploaded',     v_customer.kyc_bank_confirmation_url     IS NOT NULL,
+    'created_at',                 v_customer.created_at
   );
 
   RETURN v_result;
@@ -91,4 +121,4 @@ $$;
 -- Grant execute to authenticated users
 GRANT EXECUTE ON FUNCTION public.get_customer_onboarding_status(INTEGER) TO authenticated;
 
-COMMENT ON FUNCTION public.get_customer_onboarding_status IS 'Returns customer onboarding pipeline status (6 milestones) and next action required';
+COMMENT ON FUNCTION public.get_customer_onboarding_status IS 'Returns customer onboarding pipeline status (6 milestones) and next action required. Tracks all 4 KYC document sections.';
