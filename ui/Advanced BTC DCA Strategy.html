@@ -10402,9 +10402,10 @@ Momentum:
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#1e40af;">
         <strong>Parameter space:</strong> B1–B5 (buy tiers, 6 values each, monotone-filtered) × B6–B11 (sell tiers, 6 values each, monotone-filtered) × 8 momo lengths × 10 momo thresholds = <strong id="optComboCount">~630M valid combinations</strong>. Bear-pause exit sigma is taken from the selected variation's config.
       </div>
-      <div style="display:flex;gap:.75rem;align-items:center;">
-        <button id="optRunBtn" type="button" onclick="window.optimizer.run()" style="padding:.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-size:1rem;">▶ Run Optimizer</button>
-        <button id="optStopBtn" type="button" onclick="window.optimizer.stop()" style="display:none;padding:.75rem 2rem;background:#ef4444;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">■ Stop</button>
+      <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+        <button id="optRunBtn" type="button" onclick="window.optimizer.run()" style="padding:.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-size:1rem;">&#9654; Run Optimizer</button>
+        <button id="optRefineExistingBtn" type="button" onclick="window.optimizer.refineExistingVariation()" style="padding:.75rem 1.5rem;background:#0f766e;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;font-size:1rem;">&#128300; Refine Existing Variation</button>
+        <button id="optStopBtn" type="button" onclick="window.optimizer.stop()" style="display:none;padding:.75rem 2rem;background:#ef4444;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">&#9632; Stop</button>
         <span id="optStatus" style="color:var(--muted);font-size:.9rem;"></span>
       </div>
     </div>
@@ -10820,6 +10821,7 @@ self.onmessage = function(e) {
       workersCompleted = 0; workerResults = []; startTime = Date.now();
 
       document.getElementById('optRunBtn').style.display = 'none';
+      const _reb = document.getElementById('optRefineExistingBtn'); if (_reb) _reb.style.display = 'none';
       document.getElementById('optStopBtn').style.display = 'inline-block';
       const prog  = document.getElementById('optProgress');
       const res   = document.getElementById('optResults');
@@ -11062,9 +11064,11 @@ self.onmessage = function(e) {
 
     function resetUI() {
       optimizerRunning = false;
-      const r = document.getElementById('optRunBtn'), s = document.getElementById('optStopBtn');
-      if (r) r.style.display = 'inline-block';
-      if (s) s.style.display = 'none';
+      const r = document.getElementById('optRunBtn'), s = document.getElementById('optStopBtn'),
+            re = document.getElementById('optRefineExistingBtn');
+      if (r)  r.style.display  = 'inline-block';
+      if (re) re.style.display = 'inline-block';
+      if (s)  s.style.display  = 'none';
       setStatus('');
     }
 
@@ -11218,6 +11222,155 @@ self.onmessage = function(e) {
       };
     }
 
+    async function refineExistingVariation() {
+      if (optimizerRunning) { alert('A run is already in progress.'); return; }
+
+      // Read variation config from selected dropdown option
+      const varSel = document.getElementById('optVarSelect');
+      const varOpt = varSel?.options[varSel?.selectedIndex];
+      const varCfg = varOpt?.dataset?.config ? JSON.parse(varOpt.dataset.config) : null;
+      if (!varCfg || varCfg.b1 == null) { alert('No variation selected or variation has no parameters.'); return; }
+
+      // Build a pseudo-result object from the variation's current params
+      const t = {
+        B1: varCfg.b1, B2: varCfg.b2, B3: varCfg.b3, B4: varCfg.b4, B5: varCfg.b5,
+        B6: varCfg.b6, B7: varCfg.b7, B8: varCfg.b8, B9: varCfg.b9, B10: varCfg.b10, B11: varCfg.b11,
+        momoLen: varCfg.momentumLength ?? 5,
+        momoThr: varCfg.momentumThreshold ?? 0.0
+      };
+
+      const startDate = document.getElementById('optStartDate2')?.value;
+      const endDate   = document.getElementById('optEndDate2')?.value;
+      const upfront   = parseFloat(document.getElementById('optUpfront2')?.value || '10000');
+      const monthly   = parseFloat(document.getElementById('optMonthly2')?.value || '500');
+      const objective = document.getElementById('optObjective2')?.value || 'cagr';
+      const enableRetrace = document.getElementById('optEnableRetrace')?.checked !== false;
+      if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
+
+      const bpExitSigma = varCfg.bearPauseExitSigma ?? 0.0;
+      let exitColName;
+      if      (bpExitSigma < -0.9) exitColName = 'price_at_m100';
+      else if (bpExitSigma < -0.5) exitColName = 'price_at_m075';
+      else                         exitColName = 'price_at_mean';
+
+      lastVariationCfg = varCfg;
+      optimizerRunning = true; totalTested = 0; totalSkipped = 0;
+      workersCompleted = 0; workerResults = []; startTime = Date.now();
+
+      document.getElementById('optRunBtn').style.display = 'none';
+      document.getElementById('optRefineExistingBtn').style.display = 'none';
+      document.getElementById('optStopBtn').style.display = 'inline-block';
+      const prog = document.getElementById('optProgress');
+      prog.style.display = 'block';
+      prog.innerHTML = '<p>&#9203; Loading CI band data…</p>';
+      document.getElementById('optResults').innerHTML = '';
+
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) throw new Error('Supabase client not ready—please sign in.');
+        const orgId = document.getElementById('orgSelect')?.value;
+        const warmupDate = new Date(startDate);
+        warmupDate.setFullYear(warmupDate.getFullYear() - 2);
+        const warmupDateStr = warmupDate.toISOString().slice(0,10);
+
+        const PAGE = 1000;
+        let bands = [], page = 0, done = false;
+        while (!done) {
+          const from = page * PAGE, to = from + PAGE - 1;
+          const { data: pg, error: bErr } = await sb.schema('lth_pvr')
+            .from('ci_bands_daily')
+            .select('date,btc_price,price_at_mean,price_at_m025,price_at_m050,price_at_m075,price_at_m100,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250,mode')
+            .eq('org_id', orgId)
+            .gte('date', warmupDateStr)
+            .lte('date', endDate)
+            .order('date', { ascending: true })
+            .range(from, to);
+          if (bErr) throw new Error('CI bands fetch failed: ' + bErr.message);
+          if (pg?.length) bands = bands.concat(pg);
+          done = !pg || pg.length < PAGE;
+          page++;
+        }
+        if (!bands.length) throw new Error('No CI band data returned for the selected date range.');
+
+        const N = bands.length;
+        const warmupLen = Math.max(0, bands.findIndex(r => r.date >= startDate));
+        const simYears = (new Date(endDate) - new Date(startDate)) / (365.25 * 86400000);
+
+        function toArr(col) {
+          const a = new Float64Array(N);
+          for (let i=0;i<N;i++) a[i] = parseFloat(bands[i][col]) || 0;
+          return a;
+        }
+        const ci = {
+          px: toArr('btc_price'), mean: toArr('price_at_mean'),
+          m025: toArr('price_at_m025'), m050: toArr('price_at_m050'),
+          m075: toArr('price_at_m075'), m100: toArr('price_at_m100'),
+          p050: toArr('price_at_p050'), p100: toArr('price_at_p100'),
+          p150: toArr('price_at_p150'), p200: toArr('price_at_p200'), p250: toArr('price_at_p250'),
+          bearP: (()=>{ const a=new Float64Array(N); for(let i=0;i<N;i++) a[i]=(bands[i].mode==='bear_pause')?1:0; return a; })(),
+          ym: (()=>{ const a=new Int32Array(N); for(let i=0;i<N;i++){ const d=bands[i].date; a[i]=parseInt(d.slice(0,4))*100+parseInt(d.slice(5,7)); } return a; })(),
+          bpExit: toArr(exitColName)
+        };
+
+        lastBands = bands; lastWarmupLen = warmupLen; lastSimYears = simYears;
+        lastSimParams = { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, bpExitSigma, exitColName, enableRetrace };
+
+        const bVals = buildRefinedBVals(t);
+        const fixedMomoLens = [t.momoLen];
+        const fixedMomoThrs = [t.momoThr];
+
+        // Count combos
+        let buy=0;
+        for(const b1 of bVals.b1v) for(const b2 of bVals.b2v){if(b2>b1)continue;
+          for(const b3 of bVals.b3v){if(b3>b2)continue;
+            for(const b4 of bVals.b4v){if(b4>b3)continue;
+              for(const b5 of bVals.b5v){if(b5>b4)continue; buy++;}}}}
+        let sell=0;
+        for(const b6 of bVals.b6v) for(const b7 of bVals.b7v){if(b7<b6)continue;
+          for(const b8 of bVals.b8v){if(b8<b7)continue;
+            for(const b9 of bVals.b9v){if(b9<b8)continue;
+              for(const b10 of bVals.b10v){if(b10<b9)continue;
+                for(const b11 of bVals.b11v){if(b11<b10)continue; sell++;}}}}}}
+        EST_COMBINATIONS = buy * sell;
+
+        const varName = varOpt?.text || 'selected variation';
+        prog.innerHTML = `<p>&#128300; Refining <strong>${varName}</strong> — testing <strong>${EST_COMBINATIONS.toLocaleString()}</strong> fine-grained combinations (momo fixed: len=${t.momoLen}, thr=${(t.momoThr*100).toFixed(1)}%)…</p>`;
+
+        numWorkers = Math.min(navigator.hardwareConcurrency || 4, 4);
+        const blob = new Blob([WORKER_SRC], { type:'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        workers = [];
+        for (let wid = 0; wid < numWorkers; wid++) {
+          const w = new Worker(blobUrl);
+          workers.push(w);
+          w.onmessage = function(e) {
+            const msg = e.data;
+            if (msg.type === 'progress') { totalTested += msg.tested; totalSkipped += msg.skipped; updateProgress(); }
+            else if (msg.type === 'done') {
+              totalTested += msg.tested; totalSkipped += msg.skipped;
+              if (msg.topK?.length) workerResults.push(...msg.topK);
+              workersCompleted++;
+              if (workersCompleted === numWorkers) onAllDone(objective);
+            }
+          };
+          w.onerror = e => console.error('Refine-existing worker error:', e);
+          w.postMessage({
+            N, warmupLen, ci, bVals,
+            momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
+            workerId: wid, numWorkers, simYears, objective,
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
+            enableRetrace
+          });
+        }
+        URL.revokeObjectURL(blobUrl);
+
+      } catch(err) {
+        console.error('Refine existing error:', err);
+        prog.innerHTML = `<p style="color:#dc2626">&#10060; Error: ${err.message}</p>`;
+        resetUI();
+      }
+    }
+
     async function refineTopResult() {
       if (!workerResults.length) { alert('No results. Run optimizer first.'); return; }
       if (!lastBands) { alert('Band data not available. Please run the optimizer again.'); return; }
@@ -11266,6 +11419,7 @@ self.onmessage = function(e) {
       workersCompleted = 0; workerResults = []; startTime = Date.now();
 
       document.getElementById('optRunBtn').style.display = 'none';
+      const _reb2 = document.getElementById('optRefineExistingBtn'); if (_reb2) _reb2.style.display = 'none';
       document.getElementById('optStopBtn').style.display = 'inline-block';
       const prog = document.getElementById('optProgress');
       prog.style.display = 'block';
@@ -11383,7 +11537,7 @@ self.onmessage = function(e) {
       if (window.supabaseClient) { clearInterval(initTimer); initObserver(); }
     }, 300);
 
-    window.optimizer = { run, stop, exportCSV, exportTopResultDailyTxs, refineTopResult, applyTopResult, applyTopResultToNewVariation };
+    window.optimizer = { run, stop, exportCSV, exportTopResultDailyTxs, refineTopResult, refineExistingVariation, applyTopResult, applyTopResultToNewVariation };
     window.showVariationParams = showVariationParams; // expose for inline onchange
 
   })();
