@@ -81,7 +81,7 @@ BitWealth is registered (or in the process of registering) with the Financial In
 
 ### 2.1 Overview
 
-BitWealth provides an automated Bitcoin Dollar-Cost Averaging (DCA) investment service to retail and corporate clients in South Africa. The core product is the **Long-Term Holder Price Variance Ratio (LTH PVR) DCA Strategy**, which automatically purchases Bitcoin using client funds at intervals and price levels determined by an on-chain analytical signal.
+BitWealth provides an automated Bitcoin Dollar-Cost Averaging (DCA) investment service to retail and corporate clients in South Africa. The core product is the **Long-Term Holder Profit-to-Volatility Ratio (LTH PVR) DCA Strategy**, which automatically purchases Bitcoin using client funds at intervals and price levels determined by an on-chain analytical signal.
 
 BitWealth is not an exchange. It does not hold order books, facilitate peer-to-peer trades, or offer speculative or leveraged products. It acts as an investment service provider that uses a licensed crypto exchange (VALR) as its execution venue.
 

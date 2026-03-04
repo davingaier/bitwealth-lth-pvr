@@ -259,6 +259,6 @@ Add a **"Compliance"** module to `ui/Advanced BTC DCA Strategy.html` containing:
 | Phase 1 | goAML registration | ⏳ Blocked on Phase 0 |
 | Phase 2 | DB — KYC fields + compliance schema | ✅ Migration applied 2026-03-04 |
 | Phase 3 | TFS screening automation | ✅ Complete 2026-03-04 |
-| Phase 4 | ATMS rules | ⏸️ Not started |
-| Phase 5 | Compliance Admin UI module | ⏸️ Not started |
+| Phase 4 | ATMS rules (8 rules, ef_atms_monitor, daily cron) | ✅ Complete 2026-03-04 |
+| Phase 5 | Compliance Admin UI module | ✅ Complete 2026-03-04 |
 | Phase 6 | goAML XML report generator | ⏸️ Blocked on Phase 1 (needs XSD) |
