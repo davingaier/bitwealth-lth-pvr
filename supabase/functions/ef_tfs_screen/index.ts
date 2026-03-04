@@ -521,9 +521,22 @@ async function writeScreeningResult(
   }
 }
 
+// ─── CORS ────────────────────────────────────────────────────────────────────
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS_HEADERS });
+  }
+
   const startedAt = Date.now();
 
   let body: {
@@ -681,14 +694,14 @@ Deno.serve(async (req: Request) => {
         fic_tfs_list_version: ficListVersion,
         elapsed_seconds:  parseFloat(elapsed),
       }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
     );
 
   } catch (e) {
     console.error("ef_tfs_screen fatal error:", e.message);
     return new Response(
       JSON.stringify({ success: false, error: e.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
     );
   }
 });
