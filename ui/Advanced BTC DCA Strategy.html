@@ -102,9 +102,19 @@
     body:has(#reports-module:target) nav a[href="#reports-module"],
     body:has(#backtest-module:target) nav a[href="#backtest-module"],
     body:has(#finance-module:target) nav a[href="#finance-module"],
-    body:has(#admin-module:target) nav a[href="#admin-module"]{
+    body:has(#admin-module:target) nav a[href="#admin-module"],
+    body:has(#compliance-module:target) nav a[href="#compliance-module"]{
       border-bottom:2px solid var(--series-btc-price);
       color:var(--series-btc-price);
+    }
+
+    /* Compliance severity row highlights */
+    tr.compliance-critical td { background:#fff0f0; }
+    tr.compliance-high td { background:#fffbf0; }
+    .tfs-frozen-badge {
+      display:inline-block; padding:2px 7px; border-radius:999px;
+      font-size:11px; font-weight:600; background:#fee2e2; color:#991b1b;
+      border:1px solid #fecaca; white-space:nowrap;
     }
 
     main{padding:2em}
@@ -409,6 +419,7 @@
     <a href="#backtest-module">Strategy Back-Testing</a>
     <a href="#finance-module">Finance</a>
     <a href="#optimizer-module">Strategy Optimizer</a>
+    <a href="#compliance-module">🛡️ Compliance<span class="alert-badge zero" id="complianceBadge" style="background:#dc2626;">0</span></a>
     <a href="#admin-module">Administration<span class="alert-badge zero" id="alertBadge">0</span></a>
   </nav>
 
@@ -2827,6 +2838,93 @@
         </div>
       </div>
     </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       FIC COMPLIANCE MODULE
+  ════════════════════════════════════════════════════════════════════════ -->
+  <main>
+  <div id="compliance-module" class="module">
+    <h2>🛡️ FIC Compliance</h2>
+
+    <!-- ── TFS Sanctions Screening Card ──────────────────────────────────── -->
+    <div class="card" id="tfsAlertsCard">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+        <h3 style="margin:0;">Targeted Financial Sanctions (TFS) Screening</h3>
+        <span id="tfsCriticalBadge" class="status-pill critical" style="display:none;"></span>
+        <div style="margin-left:auto;display:flex;gap:.5rem;">
+          <button id="tfsRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          <button id="tfsRunNowBtn" type="button" class="btn">▶ Run Screen Now</button>
+        </div>
+      </div>
+      <p class="small-muted" style="margin-bottom:.75rem;">
+        Alerts from TFS and UNSC sanctions list screening. <strong>Confirmed matches must be frozen immediately</strong> and a TPR filed with the FIC within 24 hours.
+        Do <strong>not</strong> inform the client (tipping-off is a criminal offence under s.29(2) FIC Act).
+      </p>
+
+      <div id="tfsRunStatus" style="font-size:.85rem;color:#6c757d;margin-bottom:.75rem;"></div>
+
+      <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;">
+        <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem;">
+          Show:
+          <select id="tfsStatusFilter" class="context-select" style="height:32px;">
+            <option value="open">Open only</option>
+            <option value="all">All (including dismissed)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="table-scroll">
+        <table id="tfsAlertsTable">
+          <thead>
+            <tr>
+              <th style="min-width:140px;">Customer</th>
+              <th style="min-width:100px;">Date</th>
+              <th style="min-width:90px;">Severity</th>
+              <th style="min-width:90px;">Status</th>
+              <th>Description</th>
+              <th style="min-width:90px;">Account</th>
+              <th style="min-width:180px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tfsAlertsBody">
+            <tr><td colspan="7" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── KYC Completeness Card ──────────────────────────────────────────── -->
+    <div class="card" id="kycCompletenessCard">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+        <h3 style="margin:0;">KYC Completeness</h3>
+        <span id="kycIncompleteBadge" class="status-pill warn" style="display:none;"></span>
+        <div style="margin-left:auto;">
+          <button id="kycRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+        </div>
+      </div>
+      <p class="small-muted" style="margin-bottom:.75rem;">
+        Active customers with incomplete FIC KYC data (score below 15/15). All fields must be complete prior to the annual compliance review.
+      </p>
+
+      <div class="table-scroll">
+        <table id="kycTable">
+          <thead>
+            <tr>
+              <th style="min-width:160px;">Customer</th>
+              <th style="min-width:80px;">Score</th>
+              <th>Missing Fields</th>
+              <th style="min-width:100px;">TFS Screen</th>
+              <th style="min-width:120px;">KYC Reviewed</th>
+            </tr>
+          </thead>
+          <tbody id="kycTableBody">
+            <tr><td colspan="5" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
   </main>
 
   <script>
@@ -11551,5 +11649,347 @@ self.onmessage = function(e) {
 
   })();
   </script>
+  <!-- ═══ FIC Compliance Module Script ═══ -->
+  <script>
+  (function () {
+    'use strict';
+
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const EF_TFS_SCREEN_URL = SUPABASE_URL + '/functions/v1/ef_tfs_screen';
+
+    // ── Formatting helpers ─────────────────────────────────────────────────
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString('en-ZA', { year:'numeric', month:'short', day:'numeric' });
+    }
+    function fmtDateTime(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleString('en-ZA', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+    }
+    function severityPill(sev) {
+      const cls = sev === 'critical' ? 'critical' : sev === 'high' ? 'warn' : 'info';
+      return `<span class="status-pill ${cls}">${sev}</span>`;
+    }
+    function statusPill(st) {
+      const cls = { pending:'warn', under_review:'info', escalated:'critical', dismissed:'skipped', reported:'filled' }[st] || 'info';
+      return `<span class="status-pill ${cls}">${st.replace('_',' ')}</span>`;
+    }
+    function scoreBar(score, max) {
+      const pct = Math.round((score / max) * 100);
+      const col = pct < 50 ? '#dc2626' : pct < 80 ? '#d97706' : '#16a34a';
+      return `<div style="display:flex;align-items:center;gap:.4rem;">
+        <div style="flex:1;height:8px;background:#e5e7eb;border-radius:4px;">
+          <div style="width:${pct}%;height:8px;background:${col};border-radius:4px;"></div>
+        </div>
+        <span style="font-size:.8rem;font-weight:600;">${score}/${max}</span>
+      </div>`;
+    }
+
+    // ── Supabase client getter (waits for global client) ───────────────────
+    function getSb() { return window.supabaseClient || null; }
+
+    // ── Load TFS alerts ────────────────────────────────────────────────────
+    async function loadTfsAlerts() {
+      const sb = getSb();
+      if (!sb) return;
+      const tfsBody    = document.getElementById('tfsAlertsBody');
+      const badge      = document.getElementById('tfsCriticalBadge');
+      const navBadge   = document.getElementById('complianceBadge');
+      const showAll    = document.getElementById('tfsStatusFilter')?.value === 'all';
+
+      tfsBody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+
+      const { data, error } = await sb.rpc('list_fic_tfs_alerts', { p_show_all: showAll });
+
+      if (error) {
+        tfsBody.innerHTML = `<tr><td colspan="7" style="color:#b91c1c;">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      const rows = data || [];
+      if (rows.length === 0) {
+        tfsBody.innerHTML = '<tr><td colspan="7" class="muted">No TFS alerts. ✓</td></tr>';
+        badge.style.display = 'none';
+        if (navBadge) { navBadge.textContent = '0'; navBadge.classList.add('zero'); }
+        return;
+      }
+
+      const criticalCount = rows.filter(r => r.severity === 'critical' && r.status !== 'dismissed').length;
+      const openCount     = rows.filter(r => !['dismissed','reported'].includes(r.status)).length;
+
+      if (criticalCount > 0) {
+        badge.textContent = `${criticalCount} confirmed match${criticalCount > 1 ? 'es' : ''} — freeze required`;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+      if (navBadge) {
+        navBadge.textContent = openCount;
+        navBadge.classList.toggle('zero', openCount === 0);
+      }
+
+      tfsBody.innerHTML = rows.map(r => {
+        const isFrozen    = r.compliance_frozen;
+        const isConfirmed = r.severity === 'critical';
+        const isDismissed = r.status === 'dismissed' || r.status === 'reported';
+        const rowClass    = isConfirmed && !isDismissed ? 'compliance-critical'
+                          : r.severity === 'high'      ? 'compliance-high' : '';
+
+        const frozenBadge = isFrozen
+          ? `<span class="tfs-frozen-badge">🔒 Frozen</span>`
+          : `<span class="status-pill filled">Active</span>`;
+
+        // Actions
+        let actions = '';
+        if (!isDismissed) {
+          if (isConfirmed && !isFrozen) {
+            actions += `<button class="btn" style="background:#dc2626;font-size:.8rem;padding:.25rem .65rem;"
+              onclick="complianceModule.freezeAccount(${r.customer_id},'${r.alert_id}','${r.first_names} ${r.last_name}')">
+              🔒 Freeze Account
+            </button> `;
+          }
+          if (isFrozen && isConfirmed) {
+            actions += `<button class="btn btn-secondary-sm" style="font-size:.8rem;"
+              onclick="complianceModule.unfreezeAccount(${r.customer_id},'${r.first_names} ${r.last_name}')">
+              🔓 Unfreeze
+            </button> `;
+          }
+          if (!isConfirmed || isFrozen) {
+            actions += `<button class="btn btn-secondary-sm" style="font-size:.8rem;"
+              onclick="complianceModule.dismissAlert('${r.alert_id}','${r.first_names} ${r.last_name}')">
+              ✓ Dismiss
+            </button>`;
+          }
+        }
+        if (!actions) actions = '<span class="muted" style="font-size:.8rem;">—</span>';
+
+        return `<tr class="${rowClass}">
+          <td style="text-align:left;">
+            <strong>${r.first_names} ${r.last_name}</strong><br>
+            <span style="font-size:.75rem;color:#6b7280;">${r.email_address || '—'}</span>
+          </td>
+          <td style="font-size:.8rem;">${fmtDate(r.created_at)}</td>
+          <td>${severityPill(r.severity)}</td>
+          <td>${statusPill(r.status)}</td>
+          <td style="text-align:left;font-size:.82rem;max-width:320px;">${r.description}</td>
+          <td>${frozenBadge}</td>
+          <td style="white-space:nowrap;">${actions}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Freeze account ─────────────────────────────────────────────────────
+    async function freezeAccount(customerId, alertId, customerName) {
+      const sb = getSb();
+      if (!sb) return;
+      const confirmed = window.confirm(
+        `FREEZE ACCOUNT\n\nYou are about to:\n• Freeze ${customerName}'s account\n• Disable all their active strategies\n\nThis is required for a TFS confirmed match. You must also file a TPR with the FIC within 24 hours.\n\nDo NOT inform the client (tipping-off offence).\n\nProceed?`
+      );
+      if (!confirmed) return;
+
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Freezing…';
+
+      const { data, error } = await sb.rpc('fic_freeze_customer_account', {
+        p_customer_id: customerId,
+        p_alert_id:    alertId,
+        p_note:        'Account frozen via Compliance UI: TFS confirmed match. TPR required.'
+      });
+
+      if (error) {
+        alert(`Freeze failed: ${error.message}\n\nManual steps required:\n1. Set customer_details.compliance_frozen = TRUE for customer ID ${customerId}\n2. Disable customer_strategies.live_enabled for all strategies\n3. File TPR with FIC within 24 hours`);
+        btn.disabled = false; btn.textContent = '🔒 Freeze Account';
+        return;
+      }
+
+      document.getElementById('tfsRunStatus').textContent = `✓ Account ${customerName} (ID: ${customerId}) frozen at ${new Date().toLocaleTimeString()}. File TPR with FIC now.`;
+      await loadTfsAlerts();
+    }
+
+    // ── Unfreeze account ───────────────────────────────────────────────────
+    async function unfreezeAccount(customerId, customerName) {
+      const sb = getSb();
+      if (!sb) return;
+      const note = window.prompt(
+        `UNFREEZE ACCOUNT — ${customerName}\n\nConfirm that the TFS match has been reviewed and resolved as a false positive.\n\nEnter reason for unfreezing:`,
+        'False positive confirmed — manual review complete'
+      );
+      if (!note) return;
+
+      const { error } = await sb.rpc('fic_unfreeze_customer_account', {
+        p_customer_id: customerId,
+        p_note: note
+      });
+
+      if (error) {
+        alert(`Unfreeze failed: ${error.message}`);
+        return;
+      }
+      document.getElementById('tfsRunStatus').textContent = `✓ Account ${customerName} unfrozen at ${new Date().toLocaleTimeString()}.`;
+      await loadTfsAlerts();
+    }
+
+    // ── Dismiss alert ──────────────────────────────────────────────────────
+    async function dismissAlert(alertId, customerName) {
+      const sb = getSb();
+      if (!sb) return;
+      const note = window.prompt(
+        `DISMISS ALERT — ${customerName}\n\nThis marks the TFS alert as a false positive. Document your reason:`,
+        'False positive — name similarity only, ID documents verified against sanctions entry, no match confirmed'
+      );
+      if (!note) return;
+
+      const { error } = await sb.rpc('fic_dismiss_compliance_alert', {
+        p_alert_id: alertId,
+        p_note:     note
+      });
+
+      if (error) { alert(`Dismiss failed: ${error.message}`); return; }
+      await loadTfsAlerts();
+    }
+
+    // ── Run TFS screen ─────────────────────────────────────────────────────
+    async function runTfsScreen() {
+      const btn = document.getElementById('tfsRunNowBtn');
+      const statusEl = document.getElementById('tfsRunStatus');
+      btn.disabled = true;
+      btn.textContent = '⏳ Screening…';
+      statusEl.textContent = 'Fetching sanctions lists and screening all active customers…';
+
+      try {
+        // ef_tfs_screen is --no-verify-jwt so we can call without auth
+        const resp = await fetch(EF_TFS_SCREEN_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trigger: 'scheduled' })
+        });
+        const result = await resp.json();
+        if (result.success) {
+          const r = result.results || {};
+          statusEl.innerHTML = `✓ Screening complete — ${result.screened} customers screened: ` +
+            `<strong>${r.clear || 0} clear</strong>, ` +
+            `<span style="color:${(r.possible_match||0) > 0 ? '#d97706':'inherit'}">${r.possible_match || 0} possible matches</span>, ` +
+            `<span style="color:${(r.confirmed_match||0) > 0 ? '#dc2626':'inherit'}">${r.confirmed_match || 0} confirmed matches</span>. ` +
+            `UNSC list: ${result.unsc_list_version || '—'}.`;
+          await loadTfsAlerts();
+        } else {
+          statusEl.textContent = `Error: ${result.error || 'Unknown error from ef_tfs_screen'}`;
+        }
+      } catch(e) {
+        statusEl.textContent = `Network error: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Run Screen Now';
+      }
+    }
+
+    // ── Load KYC completeness ──────────────────────────────────────────────
+    async function loadKycCompleteness() {
+      const sb = getSb();
+      if (!sb) return;
+      const tbody  = document.getElementById('kycTableBody');
+      const badge  = document.getElementById('kycIncompleteBadge');
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+
+      const { data, error } = await sb.rpc('list_fic_kyc_incomplete');
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:#b91c1c;">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      const rows = data || [];
+      if (badge) {
+        badge.textContent = `${rows.length} incomplete`;
+        badge.style.display = rows.length > 0 ? 'inline-block' : 'none';
+      }
+
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">All active customers have complete KYC data. ✓</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const missing = (r.missing_fields || []).map(f =>
+          `<span style="display:inline-block;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;font-size:.75rem;margin:1px;">${f}</span>`
+        ).join(' ');
+
+        const tfsResult = r.latest_tfs_result
+          ? `<span class="status-pill ${r.latest_tfs_result === 'clear' ? 'filled' :
+              r.latest_tfs_result === 'confirmed_match' ? 'critical' : 'warn'}">${r.latest_tfs_result.replace('_',' ')}</span>
+             <br><span style="font-size:.73rem;color:#9ca3af;">${fmtDate(r.latest_tfs_screened_at)}</span>`
+          : '<span class="muted" style="font-size:.8rem;">Not screened</span>';
+
+        return `<tr>
+          <td style="text-align:left;">
+            <strong>${r.first_names} ${r.last_name}</strong><br>
+            <span style="font-size:.75rem;color:#6b7280;">${r.email_address || ''}</span>
+          </td>
+          <td>${scoreBar(r.fic_completeness_score, r.fic_completeness_max)}</td>
+          <td style="text-align:left;">${missing || '—'}</td>
+          <td>${tfsResult}</td>
+          <td style="font-size:.8rem;">${fmtDate(r.fic_kyc_reviewed_at)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Wire up event listeners ────────────────────────────────────────────
+    function init() {
+      document.getElementById('tfsRefreshBtn')?.addEventListener('click', loadTfsAlerts);
+      document.getElementById('tfsRunNowBtn')?.addEventListener('click', runTfsScreen);
+      document.getElementById('tfsStatusFilter')?.addEventListener('change', loadTfsAlerts);
+      document.getElementById('kycRefreshBtn')?.addEventListener('click', loadKycCompleteness);
+    }
+
+    // ── Load when module becomes visible ──────────────────────────────────
+    function setupObserver() {
+      const mod = document.getElementById('compliance-module');
+      if (!mod) return;
+      let loaded = false;
+
+      const obs = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && !loaded) {
+          loaded = true;
+          loadTfsAlerts();
+          loadKycCompleteness();
+        }
+      }, { threshold: 0.01 });
+      obs.observe(mod);
+
+      // Handle direct URL navigation to #compliance-module
+      if (location.hash === '#compliance-module') {
+        loaded = true;
+        loadTfsAlerts();
+        loadKycCompleteness();
+      }
+
+      window.addEventListener('hashchange', () => {
+        if (location.hash === '#compliance-module' && !loaded) {
+          loaded = true;
+          loadTfsAlerts();
+          loadKycCompleteness();
+        } else if (location.hash === '#compliance-module') {
+          // Re-load on every visit
+          loadTfsAlerts();
+          loadKycCompleteness();
+          loaded = true;
+        }
+      });
+    }
+
+    // ── Expose for inline onclick handlers ────────────────────────────────
+    window.complianceModule = { freezeAccount, unfreezeAccount, dismissAlert };
+
+    // Wait for supabaseClient, then init
+    const initTimer = setInterval(() => {
+      if (window.supabaseClient) {
+        clearInterval(initTimer);
+        init();
+        setupObserver();
+      }
+    }, 300);
+  })();
+  </script>
+
 </body>
 </html>

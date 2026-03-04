@@ -134,15 +134,16 @@ The business model of receiving ZAR, purchasing BTC on behalf of clients, and ma
 
 ---
 
-### 🟢 Phase 3 — TFS Screening Automation (Development)
+### ✅ Phase 3 — TFS Screening Automation (Complete — 2026-03-04)
 
-| # | Action |
-|---|--------|
-| **3.1** | Source the FIC TFS list and UNSC list in machine-readable format; identify update frequency and format |
-| **3.2** | Build `ef_tfs_screen` edge function — screens a customer's name and DOB against both lists; writes result to `fic.tfs_screening_log` |
-| **3.3** | Trigger screening on every new customer onboarding (during the KYC approval step) |
-| **3.4** | Build scheduled cron re-screen — runs when FIC/UNSC publishes list updates |
-| **3.5** | Build automatic response to a positive match: freeze `customer_strategies.live_enabled = false`; create `fic.compliance_alerts` record; send immediate email alert to Compliance Officer |
+| # | Action | Status |
+|---|--------|--------|
+| **3.1** | Source the FIC TFS list and UNSC list in machine-readable format; identify update frequency and format | ✅ UNSC public XML confirmed. FIC TFS XML attempted with graceful fallback. |
+| **3.2** | Build `ef_tfs_screen` edge function — screens customers against both lists; fuzzy name matching (Levenshtein) + exact ID + name+DOB; writes to `fic.tfs_screening_log` | ✅ Deployed 2026-03-04 |
+| **3.3** | Trigger screening on every new customer onboarding — pass `{ customer_id }` in POST body | ✅ Supported via `trigger: "onboarding"` mode |
+| **3.4** | Daily cron re-screen — `fic_tfs_screen_daily` at 02:00 UTC; screens all customers not screened in 30 days | ✅ Cron job active |
+| **3.5** | Automatic response to positive match: create `fic.compliance_alerts` (severity: critical); escalate confirmed matches to `lth_pvr.alert_events` for daily digest email | ✅ Implemented — `possible_match` = high alert; `confirmed_match` = critical alert + digest notification |
+| **3.6** | Test customers (`is_test = TRUE`) always skipped — never appear in screening log | ✅ `is_test` column added to `customer_details` |
 
 ---
 
@@ -257,7 +258,7 @@ Add a **"Compliance"** module to `ui/Advanced BTC DCA Strategy.html` containing:
 | Phase 0 | Legal/structural resolution | ⏳ Pending (requires FSP partner) |
 | Phase 1 | goAML registration | ⏳ Blocked on Phase 0 |
 | Phase 2 | DB — KYC fields + compliance schema | ✅ Migration applied 2026-03-04 |
-| Phase 3 | TFS screening automation | ⏸️ Not started |
+| Phase 3 | TFS screening automation | ✅ Complete 2026-03-04 |
 | Phase 4 | ATMS rules | ⏸️ Not started |
 | Phase 5 | Compliance Admin UI module | ⏸️ Not started |
 | Phase 6 | goAML XML report generator | ⏸️ Blocked on Phase 1 (needs XSD) |
