@@ -1,0 +1,635 @@
+REFERENCE
+GUIDE FOR ALL
+ACCOUNTABLE
+INSTITUTIONS
+
+Contents
+1. INTRODUCTION ............................................................................................................ 4
+2. WHAT IS THE FINANCIAL INTELLIGENCE CENTRE? ............................................... 4
+3. WHAT IS MONEY LAUNDERING, TERRORIST FINANCING AND PROLIFERATION
+FINANCING? ................................................................................................................. 4
+4. WHAT AMENDMENTS HAVE BEEN MADE TO THE SCHEDULES TO THE FIC
+ACT?.............................................................................................................................. 5
+5. WHAT ARE THE OBLIGATIONS FOR ACCOUNTABLE INSTITUTIONS? ................. 6
+6. HOW DO ACCOUNTABLE INSTITUTIONS REGISTER WITH THE CENTRE? .......... 6
+7. WHAT IS A RISK-BASED APPROACH ........................................................................ 8
+8. WHAT IS A RISK MANAGEMENT AND COMPLIANCE PROGRAMME ..................... 8
+9. WHAT IS CUSTOMER DUE DILIGENCE? ................................................................... 8
+10. HOW DO ACCOUNTABLE INSTITUTIONS DETERMINE WHETHER CLIENTS ARE
+POLITICALLY EXPOSED PERSONS? ......................................................................... 9
+11. WHAT ARE TARGETED FINANCIAL SANCTIONS? ................................................... 9
+12. WHAT IS TRANSACTION MONITORING ................................................................... 10
+13. WHAT REGULATORY REPORTS NEED TO BE SUBMITTED TO THE CENTRE .... 10
+14. WHAT ARE THE ASPECTS RELATED TO RECORD-KEEPING .............................. 11
+15. WHAT TRAINING OF EMPLOYEES DO ACCOUNTABLE INSTITUTIONS NEED TO
+IMPLEMENT ................................................................................................................ 11
+16. WHAT IS THE COMPLIANCE FUNCTION FOR ACCOUNTABLE INSTITUTIONS? 12
+17. CAN ACCOUNTABLE INSTITUTIONS OUTSOURCE THEIR OBLIGATIONS? ....... 12
+18. WHAT SOURCES OF INFORMATION CAN ACCOUNTABLE INSTITUTIONS USE?
+12
+Directives issued by the Centre ................................................................................... 13
+Guidance issued by the Centre ................................................................................... 14
+Risk assessments conducted by the Centre .............................................................. 21
+Case studies .................................................................................................................. 24
+Scams awareness ......................................................................................................... 24
+Financial Action Task Force Guidance ...................................................................... 24
+19. COMMUNICATION WITH THE CENTRE .................................................................... 25
+Table 1: Schedule item guidance ......................................................................................... 6
+Table 2: Directives issued by the Centre ............................................................................ 13
+Table 3: Guidance Notes issued by the Centre .................................................................. 15
+Reference Guide for all accountable institutions
+Page 2 of 25
+
+Table 4: Guidance Notes issued by the Centre .................................................................. 21
+Table 5: Sector risk assessments issued by the Centre ..................................................... 22
+Table 6: Summary of sections, regulations and associated guidance ................................ 23
+Figure 1: Compliance obligations in terms of the FIC Act ..................................................... 6
+Reference Guide for all accountable institutions
+Page 3 of 25
+
+1. INTRODUCTION
+The Financial Intelligence Centre (the Centre) has issued this reference guide to assist
+all new, and existing accountable institutions. This guide provides an overview of who
+the Centre is, what the Financial Intelligence Centre Act, 2001 (Act 38 of 2001) (the
+FIC Act) requires from accountable institutions (in the form of FIC Act compliance
+obligations) and directs accountable institutions to the range of issued guidance
+material that is available. Accountable institutions are strongly encouraged to view all
+material through the links provided in this document as it provides valuable information
+that can aid in effective compliance with the FIC Act.
+2. WHAT IS THE FINANCIAL INTELLIGENCE CENTRE?
+The FIC Act was enacted in 2001, which directed the establishment of the Centre. The
+Centre was subsequently established in 2003 as the national centre for the gathering
+and analysis of financial data. The Centre’s primary role is to contribute to safeguarding
+the integrity of South Africa’s financial system and its institutions, and to make them
+intolerant to money laundering, terrorist financing and proliferation financing abuse,
+which directly underpins the integrity and stability of the financial sector. The Centre is
+the South Africa’s financial intelligence unit.
+3. WHAT IS MONEY LAUNDERING, TERRORIST FINANCING AND
+PROLIFERATION FINANCING?
+• Money laundering is the process that criminals use to launder their funds so that the
+proceeds they have acquired from illicit (illegal) activities appear to be legitimate.
+• Terrorist financing is the process of funding terrorists, terrorist acts or terrorist
+organisations .
+• Proliferation financing is where individuals, entities, countries or governments raise
+funds in order to assist with their purchasing of weapons of mass destruction.
+Reference Guide for all accountable institutions
+Page 4 of 25
+
+The FIC Act lists institutions which are deemed to be vulnerable to being abused by
+criminals for money laundering, terrorist financing or proliferation financing purposes.
+4. WHAT AMENDMENTS HAVE BEEN MADE TO THE SCHEDULES TO THE FIC
+ACT?
+Schedule 1 to the FIC Act has been amended, whereby additional items, called
+accountable institutions, have been included to bring in new categories of businesses.
+Certain items have been amended to either widen current items or cater for technical
+amendments. All reporting institutions listed in Schedule 3 of the FIC Act have been
+deleted. The detailed list of Schedules amendments can be found here.
+Where appropriate, guidance has been published to provide further information on
+specific items. Listed below lists is guidance that has been issued regarding the
+amended items. All guidance is available on the FIC website, www.fic.gov.za.
+Item Description Guidance explaining the definition
+& risk indicators
+Item 1 Legal practitioners Draft PCC 47A
+Item 2 Trust and company service providers Draft PCC 6A
+Item 4 Authorised user of an exchange
+Item 7A Co-operative banks
+Item 8 Life insurers
+Item 11 Credit providers Draft PCC 23A
+Item 12 Financial services providers
+Item 16 Ithala Development Finance
+Corporation* deleted (will now fall
+under item 11 of credit providers)
+Item 19 Money or value transfer provider Draft PCC 118
+Item 20 High-value goods dealers Draft PCC 119
+Item 21 South African Mint Company (RF) Pty
+Limited
+Reference Guide for all accountable institutions
+Page 5 of 25
+
+Item 22 Crypto asset service providers Draft PCC 120
+Item 23 Clearing system participants
+Table 1: Schedule item guidance
+5. WHAT ARE THE OBLIGATIONS FOR ACCOUNTABLE INSTITUTIONS?
+Accountable institutions are subject to certain obligations in terms of the FIC Act:
+Figure 1: Compliance obligations of accountable institutions in terms of the FIC Act
+6. HOW DO ACCOUNTABLE INSTITUTIONS REGISTER WITH THE CENTRE?
+Before any accountable institution can submit a regulatory report to the Centre, they
+must register with the Centre via its reporting and registration system. Registration is
+free and must be completed via the Centre’s online registration and reporting system
+called goAML, which is accessible via the website www.fic.gov.za. For further
+Reference Guide for all accountable institutions
+Page 6 of 25
+
+guidance on how to register refer to the goAML User Guide and public compliance
+communication (PCC) 5D.
+There are three simple steps to registering with the Financial Intelligence Centre:
+Step 1 – Access the platform: Go to the Centre’s website www.fic.gov.za, click on
+o
+“click here to report or register” which will give the user access the goAML platform
+Step 2 – Register the entity: Register the entity, and receive an ORG ID
+o
+(organisation identity) number
+Step 3 – Register the compliance officer: The accountable institution’s compliance
+o
+officer must use the ORG ID number received to register as a user against the entity
+profile. The compliance officer MUST be the first person to register.
+• This is practically done by:
+Capturing ALL information correctly and attaching the correct documents
+o
+Complete all necessary fields on the goAML system (both for the organisation and
+user) and make sure to attach the following -
+A certified copy of an identity document/passport of the compliance officer;
+o
+and
+A signed authorisation letter from the entity when registering
+o
+ Must be on the letterhead of the entity; and
+ Must contain the username and surname; and
+ Identity or passport number, occupation of the user; and
+ The role of the user to be allocated on the system.
+• Bear in mind:
+Wait for the registration to first be approved by the Centre
+o
+Once the registration form has been submitted electronically via the system, a
+registration reference number (SHREG number), will be provided. The reference
+number must be used for any registration related enquiries.
+Confirmation of registration will be sent after approval
+o
+Reference Guide for all accountable institutions
+Page 7 of 25
+
+The compliance officer will receive an e-mail from the Centre confirming the approval
+or rejection of the registration and will confirm the entity’s Org ID number.
+7. WHAT IS A RISK-BASED APPROACH
+Accountable institutions must implement a risk-based approach (RBA) to combating
+money laundering, terrorist financing and proliferation financing (ML, TF and PF.) An
+RBA entails implementing controls that are proportionate to the level of ML, TF and
+PF risk identified. Accountable institutions must conduct risk assessments on a
+business level, client level and on in regard to new products and processes.
+Guidance Note 7 and public compliance communication (PCC) 53 sets out
+guidance on a risk-based approach.
+8. WHAT IS A RISK MANAGEMENT AND COMPLIANCE PROGRAMME
+Accountable institutions must develop, document, maintain and implement a risk
+management and compliance programme (RMCP.) An RMCP should be unique to
+the accountable institution. Section 42 of the FIC Act sets out what controls must be
+contained in the RMCP. The RMCP must be easily accessible upon request of the
+supervisory body or an employee of the accountable institution.
+For further guidance on how to develop and document an RMCP refer to Guidance
+Note 7 and PCC 53.
+9. WHAT IS CUSTOMER DUE DILIGENCE?
+In order to combat ML, TF and PF all accountable institutions must identify and verify
+their clients. Customer due diligence (CDD) refers to the knowledge that an
+accountable institution has about its clients and the institution’s understanding of the
+Reference Guide for all accountable institutions
+Page 8 of 25
+
+business that the client is conducting with it. The level of identification and verification
+must be determined in line with the client’s risk profile.
+For further guidance on how to conduct CDD refer to Guidance Note 7.
+10. HOW DO ACCOUNTABLE INSTITUTIONS DETERMINE WHETHER CLIENTS
+ARE POLITICALLY EXPOSED PERSONS1?
+Accountable institutions are required to determine whether their client is a foreign
+prominent public official (FPPO) or domestic prominent influential person (DPIP.)
+Various methods may be used to determine these categories of persons, and often
+the client themselves is a source in this regard.
+For further guidance on DPIPs and FPPOs, refer to PCC 51.
+11. WHAT ARE TARGETED FINANCIAL SANCTIONS?
+Section 28A of the FIC Act requires all accountable institutions to scrutinise client
+information to identify designated persons or entities who are listed on the:
+• Targeted financial sanction (TFS) list as published in terms of section 26A of
+the FIC Act, which is found on the FIC website, and
+• TFS list as published in terms of section 25 of Protection of Constitutional
+Democracy Against Terrorist and Related Activities Act, 2004 (Act 33 of 2004)
+(POCDATARA Act) which is found on the United Nations Security Council
+website.
+This requirement is not risk-based and must be applied to all prospective clients
+regardless of risk. Accountable institutions must not provide products or services to
+designated persons or entities.
+For further guidance on South Africa’s TFS regime, refer to PCC 44 and PCC 54.
+1 Politically exposed persons or PEPs is a term used to describe foreign prominent public officials and
+domestic prominent influential persons
+Reference Guide for all accountable institutions
+Page 9 of 25
+
+12. WHAT IS TRANSACTION MONITORING
+Accountable institutions must scrutinise single transactions and transactions
+undertaken throughout the course of the business relationship with the client, to
+determine whether the transactions are aligned to the accountable institution’s
+knowledge of the client and the client’s business within the context of the clients ML,
+TF and PF risk profile. Transaction monitoring is aimed at identifying suspicious and
+unusual transactions and large cash payments.
+For further guidance on transactional monitoring, refer to Guidance Note 7,
+Directive 5 and PCC 45 which discusses the use of an automated transaction
+monitoring system.
+13. WHAT REGULATORY REPORTS NEED TO BE SUBMITTED TO THE CENTRE
+Accountable institutions must report to the Centre. There are three main regulatory
+reporting obligations for accountable institutions:
+• Cash threshold reports (cash received or issued exceeding R49 999.99). The
+threshold has recently been increased by an amendment to the Regulations to the
+FIC Act.
+• Suspicious and unusual transaction reports – where the reporter suspects that
+a transaction or activity involves money laundering, terrorist financing or a
+contravention of financial sanctions.
+• Terrorist property reports – where an accountable institution has in its
+possession property of a designated person.
+Accountable Institutions are required to submit regulatory reports electronically via the
+goAML system. If a regulatory report is rejected, it must be remediated by the
+accountable institution.
+Reference Guide for all accountable institutions
+Page 10 of 25
+
+Refer to:
+Guidance Note 5C and the CTR reporting user guide.
+Guidance Note 4B and the STR reporting user guide
+Guidance Note 6A and the TPR reporting user guide.
+PCC 50 and the User Guide on Remediation of rejected Reports on how to
+remediate
+14. WHAT ARE THE ASPECTS RELATED TO RECORD-KEEPING
+Accountable institutions must keep records of client identification and verification
+information for a period of five years from the termination of the business relationship,
+transactional information for a period of 5 years from the date a transaction is
+concluded, and regulatory reports submitted to the Centre for the period 5 years from
+submitting a transaction or activity report contemplated in section 29 of the FIC Act.
+Refer to section 23 of the FIC Act. Records may be kept in electronic form.
+Regardless of the manner in which records are kept, accountable institutions must
+ensure that the following principles are applied:
+• The accountable institution must have free and easy access to the relevant records.
+• The records must be readily available to the Centre and the relevant supervisory
+body when required.
+• The records must be capable of being reproduced in a legible format and
+• If the records are stored off-site, the Centre and the relevant supervisory body must
+be provided with the details of the third party storing the records.
+15. WHAT TRAINING OF EMPLOYEES DO ACCOUNTABLE INSTITUTIONS NEED
+TO IMPLEMENT
+The FIC Act does not specify the format of the required training, but it is the Centre’s
+view that training provided by the accountable institution should enable its employees
+to comply with the provisions of the FIC Act and the accountable institution’s RMCP.
+Reference Guide for all accountable institutions
+Page 11 of 25
+
+16. WHAT IS THE COMPLIANCE FUNCTION FOR ACCOUNTABLE INSTITUTIONS?
+The accountable institution must have a compliance function to assist the board of
+directors or the senior management of the accountable institution in discharging their
+obligations and assign a person with sufficient competence and seniority to ensure
+the effectiveness of the compliance function contemplated above.
+Refer to Draft Directive 6 and Draft PCC 116 which details the obligation relating to
+employee screening.
+17. CAN ACCOUNTABLE INSTITUTIONS OUTSOURCE THEIR OBLIGATIONS?
+Accountable institutions remain responsible for their compliance obligations in terms
+of the FIC Act. They may, however, seek assistance in certain instances but cannot
+share passwords or information relating to suspicious and unusual transaction
+reports.
+For further information on outsourcing of compliance obligation to third parties
+service providers refer to PCC 12A
+18. WHAT SOURCES OF INFORMATION CAN ACCOUNTABLE INSTITUTIONS
+USE?
+Financial Intelligence Centre Act, 2001 (Act 38 of 2001) (FIC Act)
+The FIC Act is the prevailing legislation for anti-money laundering and counter terrorist
+financing in South Africa. All obligations that accountable institutions must adhere to,
+are contained in the FIC Act.
+Money Laundering and Terrorist Financing Control Regulations
+Reference Guide for all accountable institutions
+Page 12 of 25
+
+The Regulations should be read alongside the FIC Act, as they provide prescribed
+information that is not specified in the FIC Act.
+Other legislation forming part of the anti-money laundering and counter
+terrorist financing or terrorism regime
+The FIC Act works in conjunction with the Prevention of Organised Crime Act, 1998
+(Act 121 of 1998) (POCA.) which criminalises the act of money laundering and other
+offenses.
+ThePOCDATARA Act criminalises the offence of terrorist financing, and other
+offences involving terrorist acts and similar offences.
+Directives issued by the Centre
+The Centre has issued seven Directives:
+Number Topic Link to access
+Directive 1 Updating of registration information of Link
+accountable and reporting institutions
+Directive 2 Use of login credentials following Link
+registration with the Centre
+Directive 3 Notification of failure to report as required by Link
+the FIC Act
+Directive 4 Notification to Accountable Institutions Link
+registered prior to 7 March 2016 to update
+their registration details on goAML
+Directive 5 Prescribe the requirements for the usage of Link
+an automated transaction monitoring
+system (ATMS) for the detection and
+submission of regulatory reports to the
+Centre
+Draft Requires accountable institutions to screen Link
+Directive 6 employees
+Directive 7 The risk and compliance return Link
+Table 2: Directives issued by the Centre
+Reference Guide for all accountable institutions
+Page 13 of 25
+
+Guidance issued by the Centre
+The Centre issues guidance to the public onits statutory function in terms of section 4(c)
+of the FIC Act read together with Regulation 28 of the Money Laundering and Terrorist
+Financing Control Regulations issued in terms of the FIC Act. The different types of
+guidance include, but are not limited to:
+• Guidance notes
+• Public compliance communications (PCCs)
+• User guides
+• Webinars.
+All guidance notes, PCCs, user guides and notices are available on the Centre’s website.
+Reference Guide for all accountable institutions
+Page 14 of 25
+
+Below are the active guidance products that can be consulted for further assistance. Also shown are guidance products that have been
+withdrawn and the products that have replaced them.
+Guidance Note Topic Link to access
+Guidance Note 1 Guidance concerning identification of clients Replaced by Guidance Note 7
+(30 April 2004)
+Guidance Note 2 Guidance to financial services industries regulated by the Financial Replaced by Guidance Note 7
+(18 June 2004)
+Services Board concerning the meaning of the word “transaction”
+Guidance Note 3 Guidance to banks on customer identification and verification and Replaced by Guidance Note 7
+(GN 27803; 18 July 2005)
+related matters
+Guidance Note 4B Guidance on suspicious transaction reporting Link
+(26 March 2019)
+Guidance Note 5C Guidance on Cash Threshold Reporting Link
+(21 October 2022)
+Guidance Note 6A Guidance on terrorist property reporting Link
+(27 March 2019)
+Guidance Note 7 Implementation of the FIC Act Link
+(2 October 2017)
+Draft Guidance note 7A Chapter 4: Updates to RMCP In consultation, Link
+(30 September 2022)
+Table 3 Guidance Notes issued by the Centre
+
+The below table lists all PCCs issued by the Centre
+Number Topic Link to access
+PCC01 Establishment of the PCC series Link
+PCC02 Period for record-keeping of matters reported to the Centre Replaced with Guidance Note 7
+Revised Supplementary information applicable to PCC03 electronic verification Replaced with Guidance Note 7
+PCC03A systems of asylum seeker and refugee permits
+PCC04 Obligations arising from the FIC Act pertaining to the voluntary Withdrawn
+disclosure programme
+PCC05C Registration with the Centre by accountable and reporting institutions Link
+and acquisition of login credentials by any other business with a
+(9 May 2018)
+reporting obligation under the FIC Act
+PCC06 Clarity on Item 2 of Schedule 1 of the FIC Act
+Revised The definition of a motor vehicle dealer for the purposes of Schedule 3
+PCC07 of the FIC Act
+PCC08 Duties of estate agents including provisions of exemption 11 in terms Replaced with Guidance Note 7
+of the FIC Act
+PCC09 Identification and verification of loyalty programme members in the Replaced with Guidance Note 7
+casino industry in terms of the FIC Act.
+PCC10 The client of an estate agent Replaced with Guidance Note 7
+PCC11 The closing of a client’s account by an accountable institution amounts Replaced with Guidance Note 7
+to a transaction in terms of the FIC Act.
+PCC12 Outsourcing of compliance activities to third parties Link
+Reference Guide for all accountable institutions
+Page 16 of 25
+
+Number Topic Link to access
+PCC12A Outsourcing of compliance activities to third parties
+PCC13 Scope of item 12, Schedule 1 to the FIC Act. Link
+PCC14 Client identification and verification requirements when a person acts Replaced with Guidance Note 7
+on the authority of another.
+PCC15 The acceptance of a smart card document issued by the department of Replaced with Guidance Note 7
+Home Affairs for client identification and verification purposes.
+PCC16 Interpretation of the term “readily available information” for the Replaced with Guidance Note 5C
+purposes of cash threshold reporting in terms of the FIC Act.
+PCC17 Definition of Kruger rand dealer for purposes of the FIC Act. Link, to be withdrawn
+PCC18 Training and appointment of a compliance officer by accountable Replaced with Guidance Note 7
+institutions in terms of Section 43 of the FIC Act.
+PCC19 Formulation and implementation of internal rules for different Replaced with Guidance Note 7
+accountable institutions within a complex group structure.
+Revised Client identification and verification requirements for non-face-to-face Replaced with Guidance Note 7
+PCC20 transactions online betting transactions.
+PCC21 Scope and application of exemption 17 in terms of the FIC Act. Replaced with Guidance Note 7
+PCC22 Client identification and verification requirements in relation to Replaced with PCC 22A
+international or foreign data protection laws
+PCC23 The scope and meaning of Item 11 of Schedule 1 to the FIC Act. Link
+Revised Verification requirements of South African companies and close Replaced with Guidance Note 7
+PCC24 corporations in terms of the FIC Act.
+Reference Guide for all accountable institutions
+Page 17 of 25
+
+Number Topic Link to access
+PCC25 Scope of Item 12 to the FIC Act Link
+PCC26 Single client view Replaced with Guidance Note 7
+PCC27 Status of expired documents relating to client identification and Replaced with Guidance Note 7
+verification requirements for asylum seeker and refugees in terms of
+the FIC Act.
+PCC28 Terrorist property reporting obligations for accountable institutions. Replaced with Guidance Note 6A
+PCC29 Clarity on the application and use of exemption 4 Replaced with Guidance Note 7
+PCC30 Customer identification and verification of casino junket agents and Link
+their underlying clients in terms of the FIC Act.
+PCC31A The acceptance of funds by an accountable institution prior to the Link
+completion of the prescribed client identification and verification
+requirements.
+PCC32 The scope of cross-border remittance exemption to the FIC Act Replaced with Guidance Note 7
+PCC33 Use of the Department of Home Affairs HANIS verification service for Replaced with Guidance Note 7
+SABRIC member banks to establish and verify the identity of a client in
+terms of the FIC Act.
+PCC34 Facilitation of reporting to the FIC for institutions from 8 March to 22 Replaced with Guidance Notes 4C, 5B
+April 2016 and 6A
+PCC35 Failure of the control, processes and working methods of an Replaced with Guidance Note 7
+accountable institution in relation to formulation and implementation of
+internal rules in terms of Section 42 of the FIC Act.
+Reference Guide for all accountable institutions
+Page 18 of 25
+
+Number Topic Link to access
+PCC36 Obligations arising from the FIC Act pertaining to the 2016 Special Link
+Voluntary Disclosure Programme
+PCC37 Obligations of reporting institutions in terms of the FIC Act. Link
+PCC 38A The mode of communication regarding sections 27, 32, 34 and 35 of Link
+the FIC Act.
+PCC 39 To mandated entities in relation to access by authorised officers to Link
+information held by the Financial Intelligence Centre
+(07 August 2018)
+PCC 40 Licensing, registration, approval or authorisation conditions issued by Link
+supervisory bodies to accountable institutions,
+(05 February 2019)
+PCC 41 Guidance on combating the financing of terrorism and anti-money Link
+laundering measures relating to non-profit organisations
+(20 December 2019)
+PCC 42 Guidance on the disclosure of facts or information contained in section Link
+29 reports, or providing a copy of such a report to a supervisory body
+(28 February 2020)
+in terms of section 29(3) and section 45(b)(2b) of the Financial
+Intelligence Centre Act, 2001 (Act 38 of 2001)
+PCC 43 Guidance on customer due diligence in relation to shared clients of Link
+accountable institutions
+(27 February 2020)
+PCC 44 Guidance on the application of the targeted financial sanctions regime Link
+within South Africa
+(20 March 2020)
+PCC 45 Guidance on Directive 5 of 2019 in relation to the use of automated Link
+transaction monitoring systems
+(20 March 2020)
+Reference Guide for all accountable institutions
+Page 19 of 25
+
+Number Topic Link to access
+PCC 46 Guidance on the commencement and enforcement of the Financial Link
+Intelligence Centre Act, 2001 (Act 38 of 2001) as amended by the
+(30 March 2020)
+Financial Intelligence Centre Amendment Act, 2017 (Act 1 of 2017)
+PCC 47 Guidance on the interpretation of item 1 of Schedule 1 to the Financial Link
+Intelligence Centre Act, 2001 (Act 38 of 2001)
+(25 March 2020)
+PCC 48 Guidance on certain life insurance business issues including customer Link
+due diligence and understanding of risk in relation to their client in terms
+(21 July 2020)
+of the FIC Act.
+PCC49 Guidance on money laundering, terrorist financing risk and proliferation Link
+financing considerations relating to geographic areas
+(29 March 2021)
+PCC 50 Guidance on the measures required for the mitigation of loss of Link
+intelligence data due to reporting failures
+(31 March 2021)
+PCC 51 Guidance on measures relating to foreign prominent public officials and Link
+domestic prominent influential persons, their immediate family
+(3 December 2022)
+members and known close associates.
+PCC 52 Guidance on the identification of money laundering and terrorist Link
+financing risks and associated customer due diligence for clients of
+(25 March 2022)
+authorised users of an exchange in terms of the FIC Act.
+PCC 53 Guidance on the RMCP for DNFBPs Link
+(August 2022)
+PCC 54 Guidance on the combatting of proliferation financing. Raising of risk Link
+awareness regarding proliferation financing.
+(30 September 2022)
+Reference Guide for all accountable institutions
+Page 20 of 25
+
+Number Topic Link to access
+PCC 56 Guidance to property practitioners on which persons are regarded as Link
+estate agents for purposes of the schedule 1 to the FIC Act.
+(14 November 2022)
+PCC 22A Guidance on information processing in terms of the FIC Act in relation Link
+to the Protection of Personal Information Act 2013 (Act 4 of 2013)
+(30 November 2022)
+Table 4: Guidance Notes issued by the Centre
+Risk assessments conducted by the Centre
+An aspect of the risk-based approach is for the institutions to be able to identify and assess the ML/TF/PF risks they face. The first
+step in this process is to determine the risk at a national and sectoral level for the industry that the institution is situated in.
+The Centre has identified the inherent ML risks and vulnerabilities facing seven sectors in South Africa, at a national level and a sectoral
+level. The national risk assessment is currently in process, while the several sector risk assessments are available on the Centre’s
+website.
+Risk title Short description Link to access
+South African National Terrorism Financing The assessment identifies the terrorism financing risks and Link
+Risk Assessment vulnerabilities currently facing South Africa.
+(12 April 2022)
+Gambling sector This assessment identifies the inherent money laundering and Link
+(31 March 2022) terrorist financing risks currently facing the gambling sector in
+South Africa.
+Reference Guide for all accountable institutions
+Page 21 of 25
+
+Motor vehicle dealers’ sector This assessment identifies the inherent money laundering and Link
+(31 March 2022) terrorist financing risks currently facing the motor vehicle
+dealers’ sector in South Africa.
+Lender of money against the security of This assessment identifies the inherent money laundering and Link
+securities sector terrorist financing risks currently facing the lender of money
+(31 March 2022) against the security of securities sector in South Africa.
+Trust services providers’ sector This assessment identifies the inherent money laundering and Link
+(31 March 2022) terrorist financing risks currently facing the trust services
+providers’ sector in South Africa.
+Real estate sector This assessment identifies the inherent money laundering and Link
+(17 March 2022) terrorist financing risks currently facing the real estate sector in
+South Africa.
+Kruger rand dealers This assessment identifies the inherent money laundering and Link
+(17 March 2022) terrorist financing risks currently facing the Kruger rand dealers
+sector in South Africa.
+Legal practitioners This assessment identifies the inherent money laundering and Link
+(17 March 2022) terrorist financing risks currently facing the legal practitioners
+sector in South Africa.
+Table 5 Sector Risk Assessments issued by the Centre
+Reference Guide for all accountable institutions
+Page 22 of 25
+
+Below is a summary of various sections in the FIC Act, and associated regulations and penalties for non-compliance.
+Directives, guidance notes and
+Compliance duty Section Regulations Administrative sanction Criminal sanction
+PCCs
+20A, 21, Natural person = R10 million
+Customer due
+21A to N/A GN 7 N/A
+diligence
+21H Legal person = R50 million
+Natural person = R10 million N/A
+22, 22A
+Record-keeping 20 GN 7
+23 & 24
+Legal person = R50 million
+22, 22B &
+CTR 28 GN 5C Natural person = R10 million 15 years
+22C, 24
+Dir 3
+22, 22A, 23B,
+Reporting TPR 28A GN 6A Legal person = R50 million or
+23C, 24
+Dir 5
+22, 23, 23A, R100 million
+STR 29 GN 4B N/A
+24
+Risk management Natural person = R10 million
+and compliance 42 N/A GN 7 N/A
+programme Legal person = R50 million
+Natural person = R10 million
+Training 43 N/A GN 7 N/A
+Legal person = R50 million
+Natural person = R10 million
+Governance of AML
+42A N/A GN 7 N/A
+and CFT
+Legal person = R50 million
+Natural person = R10 million
+Registration 43B 27A Dir 2, PCC 5D N/A
+Legal person = R50 million
+Table 6 Summary of sections, regulations and associated guidance
+Reference Guide for all accountable institutions
+Page 23 of 25
+
+Case studies
+The Centre publishes on their website identified cases of criminals using different types of
+crimes to accumulate or gather their proceeds. The Centre publishes case studies and
+indicators to raise awareness on some of the methods criminals use. The page for this can
+be accessed here.
+Scams awareness
+The Centre publishes samples of some of the notices and messages that scammers send to
+the public. If you think you may have been the subject of a scam, please access the scam
+awareness page here.
+The Centre also publishes scams awareness provided my money remitters. This page can
+be accessed here.
+Financial Action Task Force Guidance
+The Financial Action Task Force (FATF) is an intergovernmental standard setting body for
+AML/CFT. The FATF standards include 40 Recommendations that all its member countries
+and members of FATF Style Regional Bodies (FSRBs) need to comply with. Members
+conduct peer reviews – that is, members assess other members’ adherence to the
+Recommendations. South Africa was recently assessed, and the mutual evaluation report
+following this assessment was published in October 2021.
+FATF also issues guidance to its member countries through its publications. FATF guidance
+is not directly binding on accountable institutions in South Africa, as the country needs to
+consider and apply their own economic characteristics. However, FATF guidance principles
+are highly informative and useful.
+
+19. COMMUNICATION WITH THE CENTRE
+The Centre has a dedicated compliance contact centre geared to assist accountable
+institutions to understand their registration obligations in terms of the FIC Act. Please call the
+compliance contact centre on 012 641 6000 and select option 1.
+Compliance queries may also be submitted online by clicking on:
+http://www.fic.gov.za/ContactUs/Pages/ComplianceQueries.aspx or visiting the Centre’s
+website and submitting an online compliance query.
+To submit an online compliance query:
+• Go to the Centre’s website, www.fic.gov.za.
+• Select “Contact the FIC” banner in the middle of the webpage.
+• Select “Log a compliance query.” using the drop-down list.
+• Complete the information requested in as much detail as you can. The more
+detailed the query the easier it is for the Centre to provide a response.
+Issued By:
+The Director
+Financial Intelligence Centre
+15 December 2022
+Reference Guide for all accountable institutions
+Page 25 of 25

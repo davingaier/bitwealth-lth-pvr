@@ -1,0 +1,602 @@
+goAML EE V5.4
+CASH THRESHOLD REPORT
+USER GUIDE
+7 August 2025
+
+CONTENTS
+1. EXECUTIVE SUMMARY .......................................................................................... 3
+2. OBJECTIVE OF THIS USER GUIDE ....................................................................... 3
+3. DEFINITIONS ........................................................................................................... 4
+4. INTRODUCTION ...................................................................................................... 5
+5. goAML WEB ICONS ................................................................................................ 6
+7. ACCESSING GOAML ............................................................................................ 16
+8. goAML PLATFORM LANDING PAGE .................................................................. 18
+9. CAPTURING A CASH THRESHOLD REPORT .................................................... 18
+10. SUBMITTING A CASH THRESHOLD REPORT TO THE FIC ........................... 30
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 2 of 30
+
+1. EXECUTIVE SUMMARY
+This document outlines the enhancements introduced with the goAML V5.4 system
+upgrade reflecting the recent system enhancements and new features introduced. The
+upgrade is necessary as the supplier of the platform, the United Nations Office on Drugs
+and Crime (UNODC) will only be able to provide support on their upgraded system and
+not the older version that the FIC is currently using. This transition is essential to ensure
+continued technical support and system reliability. Version 5.4 introduces several
+enhancements aimed at improving user experience and system functionality. These
+include an updated user interface with a new look and feel, replacement of certain free
+text fields with dropdown menus to enhance data consistency, and optimisation of
+dropdown lists for greater efficiency. These improvements are expected to streamline
+operations and align the system with current support standards
+2. OBJECTIVE OF THIS USER GUIDE
+The objective of this user guide is to define and outline the steps to be followed when an
+accountable institution submits a Cash Threshold Report (CTR) to the Financial
+Intelligence Centre (the FIC) in terms of section 28 of the Financial Intelligence Centre
+Act, 2001 (Act 38 of 2001) (FIC Act). Please note that the reporter must be registered
+with the FIC in order to access the FIC’s registration and reporting platform. To register,
+accountable institutions can refer to public compliance communication (PCC) 05D
+(PCC05D) for further guidance. This user guide is applicable to:
+• Accountable institutions listed in Schedule 1 to the FIC Act
+This user guide is not issued in terms of section 4(c) of the FIC Act and is therefore not
+formal guidance issued by the FIC.
+Access to the registration platform
+In order to submit a TFAR to the FIC, the accountable institution must access the
+registration and reporting platform provided by the FIC for this purpose on the FIC’s
+website at www.fic.gov.za
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 3 of 30
+
+3. DEFINITIONS
+Administrator/ Refers to the Compliance Officer and Money Laundering Reporting
+CO/ MLRO Officer obliged to register and submit a report on behalf of the
+entity.
+Authorised Refers to authorised dealers in foreign exchange (Item 19 of
+dealers Schedule 1 to the FIC Act).
+Authorised Refers to authorised dealers in foreign exchange with limited
+dealers with authority (Item 19 of Schedule 1 to the FIC Act).
+limited authority
+Business Refers to an organisation, institution, or entity (ies) and can be used
+interchangeably.
+Financial Refers to the Financial Intelligence Centre Act, 2001 (Act No 38 of
+Intelligence 2001).
+Centre Act
+Financial Service Refers to the entities authorised under the Financial Advisory and
+Providers Intermediary Services (FAIS) Act to offer financial advice or
+intermediary services.
+In terms of regulatory compliance:
+All FSPs are subject to the provisions of the FAIS Act.
+FSPs are listed as accountable institutions under Schedule 1, Item
+12 of the Financial Intelligence Centre Act (FIC Act). Only a specific
+subset of FSPs, those involved in cross-border financial
+transactions, have a direct reporting dispensation under the
+Exchange Control Regulations.
+goAML Refers to the integrated software solution implemented by the FIC
+as its preferred ICT platform for registration, reporting, data
+collection, analysis, case management and secure
+communications required for the FIC’s daily operational functions
+and requirements.
+Individual Refers to a natural person who acquires user credentials in order
+reporter to file a report in terms of Section 29 of the FIC Act in their own
+personal capacity.
+My Client Client of the accountable institution
+Not My Client Not the Client of the accountable institution
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 4 of 30
+
+Party type Refers to the source and destination party in relation to the report
+(Cash Threshold) being reported to the FIC.
+Postbank Refers to Item 14 of Schedule 1 to the Financial Intelligence Centre
+Act, 2001 (Act 38 of 2001) (FIC Act).
+Regulations Refer to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+Important information to remember when reporting on the FIC’s reporting
+platform:
+1. Please refer to the registration guideline for accountable institutions and
+PCC05D for registration-related information.
+2. It is mandatory on the goAML system, that all fields marked with an asterisk (*),
+be completed.
+3. All first letters must be capitalised.
+4. All fields on the regulatory report, that are not obtained during the course of
+establishing a particular person’s identity or conducting a particular transaction,
+but should be obtained as part of commercial practice, should be completed with
+as much of the information as readily available. In an instance where the
+reporting institution does not have information readily available, they are to
+populate mandatory fields with “not obtained”.
+5. The FIC does not accept any regulatory reports submitted unless if it was
+submitted on the goAML system. Regulatory reports must accordingly be
+submitted in the prescribed format and timeframes. Failure to submit regulatory
+reports within the prescribed timeframes constitutes a finding of non-compliance
+in terms of the Financial Intelligence, 2001 (Act 38 of 2001) (FIC Act).
+4. INTRODUCTION
+Accountable institutions have an obligation to submit cash threshold reports to the FIC in
+terms of section 28 of the Financial Intelligence Centre Act, 2001 (Act 38 of 2001) (FIC
+Act) and must utilise the goAML platform to do so.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 5 of 30
+
+The obligation to report in terms of section 28 of the FIC Act arises when a transaction is
+concluded in cash and that transaction amount exceeds the prescribed threshold of R49
+999, 99, in the following instances:
+• is paid by the accountable institution to the client, or to a person acting on behalf of
+the client, or to a person on whose behalf the client is acting; or
+• is received by the accountable institution from the client, or from a person acting on
+behalf of the client, or to a person on whose behalf the client is acting
+Cash is defined in Section 1 of the FIC Act as:
+coin and paper money of the Republic or of another country that is designated as legal
+tender and that circulates as, and is customarily used and accepted as, a medium of
+exchange in the country of issue, and travellers’ cheques.
+The goAML platform may be accessed via the FIC website, www.fic.gov.za under the
+“Register or Report” functionality.
+5. goAML WEB ICONS
+Icons Description
+Cancel - Directs the
+system to disregard the
+entered details and not
+save them
+Preview - Verify content
+before taking action e.g
+downloading or approving
+Print - To produce
+physical copies of digital
+content
+Print Single Page - This
+focuses on printing only
+the currently viewed page
+Export PDF – Export the
+data into PDF format
+Refresh - update or
+reload the content on a
+screen
+Delete – Delete the
+uploaded document
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 6 of 30
+
+Add File Attachment –
+Allows users to upload or
+link a file to a form
+Save - Allows users to
+save the captured report
+details
+Submit – Submit the
+captured details of the
+report
+Shows the number of
+attached documents
+Upload XML and web
+reports
+Access drafted and
+submitted reports
+View submitted reports
+Access mail messages
+on goAML
+Change password and
+user details
+Access statistics
+Logout of goAML
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 7 of 30
+
+6. CASH THRESHOLD REPORT BASELINE SCENARIO
+The process flow diagram below demonstrates the end-to-end process for uploading a
+CTR. This diagram is given in greater detail in the content below. Fields in the flow
+diagram are labelled A to G.
+Example used for this process flow:
+Baseline scenario refers to how a CTR should be uploaded for a cash withdrawal of
+R50 000 at Bank A, branch Y on the goAML platform 3.1 Field Definitions
+• Report type (A) – The type of report (i.e. CTR)
+• Reporting Person and Location (B)
+o Reporting Person - Linked to the logged in user details, this is the person
+uploading the CTR. The Reporting person’s information are hidden from view
+o Location - Describes the actual geographical area / branch where the transaction
+or series of transactions occurred. The address of the logged in user is populated
+in the selected report for capturing. The logged in user must edit or delete the
+address, if the populated address is not the actual location of where the
+transaction (series of transactions) occurred.
+• Indicators (C) – Indicators are used to specify the nature or type of report that the
+institution is submitting to the FIC. The institution is required to review the list of
+predetermined indicators and select the most appropriate explanation(s).
+• Transactions (D) - Transaction refers to a transaction concluded between a client
+and an accountable institution or reporting institution in accordance with the type of
+business carried on by that institution. In the event of a series of transactions, each
+transaction needs to be listed separately on the CTR form.
+• From Type / To Type (E) –This indicates where the funds originated (From), and to
+where the funds were placed (To). Both fields are required to be completed
+• My client / Not my client and Conductor (F) – Denotes if the ‘From/ To’ type
+selected, is the institution’s client, or not the institution’s client. i.e. The person/entity
+who paid the cash is not the client of the institution, and the person/entity receiving
+the cash is the client of the institution
+• Person / Entity / Account (G)
+o Person - Refers to a natural person. If a person physically receives or pays cash,
+‘person’ is selected
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 8 of 30
+
+o Entity- Refers to a legal person. Note that there is a natural person that will always
+be linked to an entity (i.e. the director). If an entity physically receives or pays cash,
+‘entity’ is selected
+o Account - Refers to an account held with an accountable institution (e.g. Cheque
+account held with a bank) Note that there is a natural person that will always be
+linked to an account (i.e. the signatory) and there may be a legal person (including
+at least one director) linked to an account. When cash is deposited or withdrawn
+To/From an account, then ‘account’ will be selected
+• Mandatory Fields (H) – Refers to the fields that are compulsory to be completed.
+The information that is required is dependent on the fields selected in field G (i.e.
+Person / Entity / Account).
+6.1 Baseline scenario for submitting cash threshold reports to the FIC –
+displaying fields A-G to be completed
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 9 of 30
+
+6.2 Baseline scenario example for submitting cash threshold reports to the FIC
+6.3 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 10 of 30
+
+6.4 Baseline scenario example for submitting cash threshold reports to the FIC
+6.5 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 11 of 30
+
+6.6 Baseline scenario example for submitting cash threshold reports to the FIC
+6.7 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 12 of 30
+
+6.8 Baseline scenario example for submitting cash threshold reports to the FIC
+6.9 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 13 of 30
+
+6.10 Baseline scenario example for submitting cash threshold reports to the FIC
+6.11 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 14 of 30
+
+6.12 Baseline scenario example for submitting cash threshold reports to the FIC
+6.13 Baseline scenario example for submitting cash threshold reports to the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 15 of 30
+
+7. ACCESSING GOAML
+Accountable institutions can access the goAML platform by utilising the username and
+password captured during the registration process. Authentication will always be required
+before gaining access to goAML.
+Access goAML EE page by clicking the link: https://goweb.fic.gov.za/goAMLWeb_PRD.
+• Click on the Login button
+• Enter your username in the standard format captured during registration
+Authenticating with two factor authentication
+• Step 1: Download the Microsoft / Google Authenticator application on your mobile
+device
+• Step 2: Click on goAML login page
+• Step 3: Enter your username and password in the standard format captured during
+registration and click ‘LOGIN’.
+Login Window
+Figure 1: Login page
+A QR code authentication page will be displayed as shown in figure 2 below.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 16 of 30
+
+Figure 2: QR Authentication page
+• Step 4 (Option 1): Open the authenticator app on your mobile device and scan the
+QR code
+• Step 5: Enter the time-based code displayed from the goAML shortcut in the code
+field
+• (Option 2): Or use fallback authentication:
+• Click on ‘Use Fall back authentication’ option in figure 2 to receive a code via e-
+mail, enter the code and login. Please note that the code remains valid for five
+minutes. Once the time elapses, select ‘Use fallback authentication’ to generate a
+new code.
+Figure 3: Authentication screen
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 17 of 30
+
+8. goAML PLATFORM LANDING PAGE
+Figure 4: goAML landing page
+The landing page has the following visible items
+• Menu Bar - Contains New Reports / Submitted Reports / Message Board / Statistics
+/ Admin / Help. Clicking any of the link items will give a user access to the functionality
+required. ( a)
+• Logged in user details - Displays the details of the authenticated user e.g. username
+and associated entity name. The user profile allows you to change Password, My User
+Details, My Org Details and Logout as a user. (b, c)
+• Information Bar - Contains the FIC information with links to download goAML
+documentation. (d)
+BASELINE SCENARIO FIELD A – REPORT TYPE
+9. CAPTURING A CASH THRESHOLD REPORT
+To capture a CTR, select New Reports in the menu bar, and click on Web Reports
+Figure 5: goAML menu bar
+The types of report selection will display all the report types. Select Cash Threshold
+Report (CTR) and click ‘Create Report’ button as shown below in figure 6. Each report
+contains distinct fields, for example, transactional reports will have different fields
+compared to activity reports.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 18 of 30
+
+Figure 6: Report type selection interface
+After selection, the Cash Threshold Report window will populate with the following fields:
+9.1 Report headers
+Figure 7: Cash Threshold Report
+Click on each tab on the left to complete its section. When all sections are completed, the
+red indicator bar will turn green, allowing user to submit the registration form.
+BASELINE SCENARIO FIELD B – REPORTING PERSON AND LOCATION
+9.1.1 Reporting Person
+The Reporting Person’s details are linked to the current logged-in user’s details
+• Reporting entity branch: Branch that is submitting the report to the FIC
+• Reporting entity reference: A unique code or identifier for the reporting entity
+• Report Date: Automatically generated with the (current) date that the report has been
+submitted
+• FIC Ref Number: This field is for resubmitting/ remediating previously failed reports
+and needs to reference the original report number issued by the FIC
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 19 of 30
+
+• Previously Rejected Report Ref Number: This field is for resubmitting/ remediating
+previously rejected reports and needs to reference the original report number issued
+by the FIC.
+9.1.2 Location
+Refers to the physical address of the reporting entity (e.g., branch or office) / person
+submitting the report.
+Editing the location
+The address of the logged in user is populated in the selected report for capturing. The
+logged in user must edit or delete the address, if the populated address is not the actual
+location of the reporting entity/individual.
+Figure 8: Location screen
+The user can delete the address details by clicking the delete icon in figure 8 and then
+enter the reporting individual’s current location at the time of reporting.
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a
+building within a street or complex. This field helps pinpoint the exact location of the
+property where the reporting entity/individual is situated.
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the reporting entity/individual. This is essential for identifying the
+precise sub-location within a larger property.
+• Address: Represents the full physical location of the reporting entity/individual. This
+may include street name, house number, apartment number, and other relevant
+details.
+• Address 1: Primary line of the address, including the street name and house number.
+• Address 2: Secondary line of the address, used for additional location details such as
+building name, floor number, or complex name.
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address.
+• Town: Specifies the town or municipality of the reporting entity/individual.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 20 of 30
+
+• City / Zip: Indicates the city and corresponding postal code relevant to the reporting
+entity/individual.
+9.2 Attachments
+This section allows the user to upload supporting documents related to the report. While
+document attachment is available, it is not mandatory.
+Figure 9: Attachments screen
+To upload a document: Click the ‘add’ icon , then choose the appropriate document
+category from the dropdown menu. Complete the identification and description fields,
+select the files you wish to attach from their location, and click ‘open’ to upload.
+The document will be attached under the ‘Attachments’ tab.
+BASELINE SCENARIO FIELD C – INDICATORS
+9.3 Indicators
+Report indicators classify the type of report being submitted.
+Figure 10: Indicators screen
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 21 of 30
+
+For the Cash Threshold Report (CTR), only one indicator is displayed. To apply the
+indicator, tick the checkbox for the indicator applicable to the CTR report.
+9.4 Transactions landing screen
+Figure 11: Transactions landing screen
+To add the parties involved in the transactions click the ‘Add BiParty’ icon as shown
+in figure 11 above. The Transactions screen will load as shown below in figure 12.
+BASELINE SCENARIO FIELD D – TRANSACTIONS
+9.4.1 Transactions
+Transactions means a transaction concluded between a client and an accountable
+institution in accordance with the type of business carried on by that institution.
+Figure 12: Transactions screen
+Transactions form has the following fields:
+• Number: Unique transaction number (e.g. bank transaction will be an Account
+Number) / in an event of no transaction numbers being available, users can generate
+a unique reference number from the system by clicking the icon
+• Internal reference number: Reporting entity internal transaction reference number
+• Transmode code: Indicate how the transaction was carried out by selecting the relevant
+code from the drop-down list
+• Local amount: The value of the transaction in local currency
+• Date: This refers to the date of transaction
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 22 of 30
+
+• Late Deposit: This field is applicable in cases where the customer drops cash in a box
+at a bank after the bank's working hours. In all such cases, the "Value Date" will be
+different from transaction date as the bank will process this transaction the next day
+• Teller: The teller who conducted the transaction. This is only applicable where a
+transaction is conducted in-branch
+• Authorised: The person who authorised the transaction
+• Location: Refers to the branch or geographical area where the transaction occurred.
+Please note that this free-text field is currently used to capture transaction location but
+will be removed in future updates. Reporters are encouraged to start using the
+structured address fields by clicking the Reporters are encouraged to start using the
+structured address fields by clicking the “ ” icon next to Address to ensure accurate
+and standardised location reporting
+• Description: List additional information in relation to the transaction if available
+To capture the details of the involved parties, click report parties (From party, Person My
+Client). The Person My Client form will populate. Complete the Person details as shown
+in figure 13 below.
+BASELINE SCENARIO FIELD E – FROM TYPE / TO TYPE
+9.4.2 From type ‘Person My Client’ Form
+Transactional reports on goAML are structured as bi-party transactions with a ‘From’ and
+‘To’ part to every transaction. A transaction report will always have a ‘From’ (Payee) and
+‘To’ (Receiver) side which will need to be completed by the reporter.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 23 of 30
+
+Figure 13: Person My Client form
+• All fields marked with an asterisk (*) needs to be completed
+• Click on use existing person icon to quickly select a previously saved person’s
+details
+• Clicking on delete icon , will delete all captured person details in the current
+form
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required.
+The Person “My Client” form has the following fields:
+• First name: A legal name as reflecting in the identification document
+• Surname/Last name: A legal surname as reflecting in the identification document
+• Middle name: This is the name that appears between a person's first name and last
+name.
+• Birth date: Date of birth/ can be typed in from calendar in ccyy/mm/dd format (e.g.
+1999/02/25)
+• RSA ID: 13-digit South African ID Number (e.g. 9902251109876)
+• RSA passport number: South African passport number
+• Nationality 1: Refers to the first nationality in cases where an individual holds multiple
+nationalities. It may or may not be the same as the primary nationality.
+• Nationality 2: Refers to an additional nationality for individuals who are legally
+recognised as citizens of more than one country
+• Country of origin: The country in which a person is deemed to have originated
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 24 of 30
+
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the individual whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific transaction
+• Passport/Foreign ID/Permit/Refugee/Residence number: The identification number
+that is associated with a non-South African natural person
+• Issuing country: The country which issued the respective Passport/Foreign
+ID/Permit/Residence number.
+BASELINE SCENARIO FIELD F, G– MY CLIENT / NOT MY CLIENT AND
+CONDUCTOR
+9.4.3 To type ‘Entity Not My Client’ Form
+The Entity Not My Client will populate the form to be completed as shown below in figure
+14.
+Figure 14: Entity Not My Client form
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 25 of 30
+
+• South Africa is pre-selected as the default country; users can update this field if the country
+is not South Africa
+• The form populates with a single required ‘funds code’ field, indicated by an asterisk (*)
+• Click append icon to open additional fields and enter any further transaction-related
+information that may be required
+• An account could belong to an entity, and when capturing an entity as 'My Client', it is
+mandatory to capture at least one director associated with the entity.
+The “Entity Not My Client” has the following fields:
+• Funds code: Type of funds used in initiating transaction (e.g., Cash)
+• Funds comment: Description of the funds code
+• Country: Country where the transaction was initiated
+• Entity name: Name of the entity involved
+• Registered name: The Registered name of the institution (CIPC)
+• Incorporation Legal form: The legal form of the entity
+• Business: Business area of the entity
+• Incorp./Reg.Number: The registration number of the entity / company in the relevant
+authority (e.g. Chamber of Commerce/ CIPC etc.)
+• Incorporation date: Incorporation registration date in ccyy/mm/dd format
+• Incorporation province/state: Name of the province/state involved
+• Incorporation country code: Incorporation registration country code, select from a list
+• Tax number: The entity tax number
+• Comments: Any comments related to the transaction
+• Business closed: Select the checkbox if the business is closed; leave it blank if the
+business remains open
+• Date closed: If entity is closed, specify the date of closure in ccyy/mm/dd format.
+Capturing address fields
+To enter address information associated with the transaction, select the append icon to
+display additional address fields. The address form will populate as shown below in figure
+15.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 26 of 30
+
+Figure 15: Address form
+The “Address” form has the following fields:
+• House number: House number associated with the transaction
+• Apartment number: Apartment number associated with the transaction
+• Address 1: Refers to the location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+• Address 2: Refers to the location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+• Type: Refers to the type of address. Select the type of address from the list
+• Address: Physical address associated with the transaction
+• City: Name of the city associated with the transaction
+• Postal/Zip: Postal code of the city
+• Country: Name of the country associated with the transaction
+• Province/State: Name of the province where the transaction occurred.
+Capturing phone number fields
+To enter phones information associated with the transaction, select the append icon to
+display additional phone fields. The phone form will populate as shown below in figure
+16.
+Figure 16: Phones form
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 27 of 30
+
+The “phone number” form has the following fields:
+• Contact type: Type of contact associated with the transaction.
+• Comm.Type: The method of communication linked to the transaction
+• Country prefix: Country prefix linked to the transaction
+• Number: Contact number linked to the transaction
+• Extension: Phone number extension linked to the transaction
+• Comments: Any comments related to the transaction
+9.4.4 From type Account My Client
+Account my client will populate the form to be completed as shown below in figure 17.
+Figure 17: Account form
+• Details of related persons must be recorded when the account holder is a client
+of the accountable institution
+• Whenever the involved Account / Person / Entity is the client of the reporting
+entity, more details may be demanded from the client, and the reporting entity
+must have the information as part of the adherence to the “Know Your
+Customer” (KYC) requirements of the FIC Act
+• In the instance of an account of a minor both the details of the minor and
+guardian authorised to transact on his/her behalf should be captured
+• For an ‘account my client’, the account must have a signatory.
+The “Account” form has the following fields:
+• Funds code: Type of funds used in initiating transaction (e.g., Cash)
+• Funds comment: Comments if funds code is known
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 28 of 30
+
+• Country: Country where the account is held
+• Institution country: Country where an institution is based or registered.
+• Account type: Type of account (e.g. Trust or Client)
+• Account number: the bank Account number (for Non-Banking institutions the account
+number can refer to the client number/profile number assigned by the institution)
+• Account name: The official name associated with the account, used to identify the
+account holder or entity
+• Institution registration name: Name of the institution where account is held
+• Branch code: Branch where the account is held
+• Swift: Bank identifier code used to specify a particular bank
+• Institution code: Institution identifier code if a Swift code is not available
+• Status code: Account status when transaction was initiated (e.g. Active/Closed)
+• Currency code: Currency the account is kept in
+• Closed: Date account closed if applicable
+• Balance: The account balance at the time of reporting
+• Date of balance: Date of account balance
+• Beneficiary comment: Any remarks or notes regarding the beneficiary
+• Comments: Any other comments, if applicable
+Related person form
+Figure 18: Related person form
+The “Related person” form has the following fields:
+• Account relation role: The role of the person is in relation to the account
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 29 of 30
+
+• Comments: Any comments in respect of the related person
+• Title: Title of the related person
+• Gender: Gender of the related person
+• First name: First name of the related person
+• Surname/Last name: Surname/Last name of the related person
+• Birthdate: Birth date of the related person
+• RSA ID: RSA ID of the related person
+• RSA passport number: RSA passport number of the related person
+• Passport/Foreign ID/Permit/Residence number: Identification number from the related
+person’s official non-South African document
+• Issuing country: The country that issued the respective Passport/Foreign
+ID/Permit/Residence number of the related person
+• Occupation: The related person’s current occupation or job title
+• Tax number: The related person’s South African Revenue Service (SARS) tax
+reference number
+• Source of funds: Specifies the origin of the funds used
+10. SUBMITTING A CASH THRESHOLD REPORT TO THE FIC
+Once all the required details have been provided, the bar on the left of the tabs will turn
+green, to enable the user to submit the form as shown in figure 19.
+Figure 19: Cash Threshold Report
+Click on the submit report button. Once the form has been submitted, the pop-up screen
+will display with the report reference number. The reference number is used for any report
+related enquiries. A notification e-mail with the refence number will be sent to the user’s
+e-mail address which was entered during the registration process.
+goAML EE Upgrade V5.4_Cash Threshold Report User Guide | Version 1.4, 7 August 2025
+Page 30 of 30

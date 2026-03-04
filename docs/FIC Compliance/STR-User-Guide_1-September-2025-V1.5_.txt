@@ -1,0 +1,669 @@
+depo
+goAML EE V5.4 UPGRADE
+PROJECT
+SUSPICIOUS AND UNUSUAL TRANSACTION
+REPORT USER GUIDE
+VERSION 1.5
+
+CONTENTS
+1. EXECUTIVE SUMMARY .......................................................................................... 4
+2. OBJECTIVE OF THIS USER GUIDE ....................................................................... 4
+3. DEFINITIONS ........................................................................................................... 5
+4. INTRODUCTION ...................................................................................................... 6
+5. goAML WEB ICONS ................................................................................................ 7
+6. SUSPICIOUS AND UNUSUAL TRANSACTION REPORT BASELINE SCENARIO
+……………………………………………………………………………………………….7
+7. ACCESSING goAML ............................................................................................. 11
+8. goAML PLATFORM LANDING PAGE .................................................................. 13
+9. CAPTURING A SUSPICIOUS AND UNUSUAL TRANSACTION REPORT ......... 13
+10. SUBMITTING A SUSPICIOUS AND UNUSUAL TRANSACTION REPORT TO
+THE FIC......................................................................................................................... 28
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 2 of 29
+
+TABLE OF FIGURES
+Figure 1: Login page ...................................................................................................... 11
+Figure 2: QR Authentication page ................................................................................. 12
+Figure 3: Authentication screen ..................................................................................... 12
+Figure 4: goAML landing page ....................................................................................... 13
+Figure 5: goAML menu bar ............................................................................................ 13
+Figure 6: Report type selection interface ....................................................................... 14
+Figure 7: Suspicious and Unusual Transaction Report .................................................. 14
+Figure 8: Location screen .............................................................................................. 15
+Figure 9: Attachments screen ........................................................................................ 16
+Figure 10: Attachments selection screen ....................................................................... 16
+Figure 11: Indicators screen .......................................................................................... 17
+Figure 12: Transactions landing screen ......................................................................... 17
+Figure 13: Transactions ‘add Biparty’ screen................................................................. 18
+Figure 14: New transaction screen ................................................................................ 18
+Figure 15: Address form ................................................................................................ 19
+Figure 16: Search function............................................................................................. 20
+Figure 17: Person My Client form .................................................................................. 20
+Figure 18: Entity Not My Client form .............................................................................. 22
+Figure 19: Entity my client form ..................................................................................... 22
+Figure 20: Address form ................................................................................................ 23
+Figure 21: Phone form ................................................................................................... 24
+Figure 22: Account form ................................................................................................ 25
+Figure 23: Account form ................................................................................................ 26
+Figure 24: Related person form ..................................................................................... 27
+Figure 25: STR submission ........................................................................................... 28
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 3 of 29
+
+1. EXECUTIVE SUMMARY
+This document outlines the enhancements introduced with the goAML V5.4 system
+upgrade reflecting the recent system enhancements and new features introduced. This
+transition is essential to ensure continued technical support and system reliability. Version
+5.4 introduces several enhancements aimed at improving user experience and system
+functionality. These include an updated user interface with a new look and feel,
+replacement of certain free text fields with dropdown menus to enhance data consistency
+and efficiency. These improvements are expected to streamline operations and align the
+system with current support standards.
+2. OBJECTIVE OF THIS USER GUIDE
+The objective of this user guide is to define and outline the steps to be followed when an
+accountable institution submits a Suspicious and Unusual Transaction report (STR) to
+the Financial Intelligence Centre (FIC) in terms of section 29(1) of the Financial
+Intelligence Centre Act, 2001 (Act 38 of 2001) (FIC Act). Please note that the reporter
+must be registered with the FIC in terms of the FIC Act to access the FIC’s registration
+and reporting platform. To register, accountable institutions can refer to public compliance
+communication (PCC) 05D (PCC05D) for further guidance.
+Access to the reporting platform
+In order to submit a STR to the FIC, the accountable institution must access the
+registration and reporting platform provided by the FIC for this purpose on the FIC’s
+website at www.fic.gov.za
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 4 of 29
+
+3. DEFINITIONS
+Administrator/ CO/ Refers to the Compliance Officer and Money Laundering Reporting
+MLRO Officer obliged to register and submit a report on behalf of the entity.
+Business Refers to an organisation, institution, or entity (ies) and can be used
+interchangeably.
+Financial Refers to the Financial Intelligence Centre Act, 2001 (Act No 38 of
+Intelligence Centre 2001).
+Act
+goAML Refers to the integrated software solution implemented by the FIC as
+its preferred ICT platform for registration, reporting, data collection,
+analysis, case management and secure communications required for
+the FIC’s daily operational functions and requirements.
+Individual reporter Refers to a natural person who acquires user credentials in order to file
+a report in terms of Section 29 of the FIC Act in their own personal
+capacity.
+Regulations Refers to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+Suspicious and Refers to a suspicious or unusual transaction report submitted in terms
+Unusual of section 29 of the FIC Act.
+Transaction
+Report (STR)
+Targeted Financial Refers to the measures to restrict sanctioned persons and entities from
+Sanctions (TFS) having access to funds and property under their control and from
+receiving financial services in relation to such funds and property by
+requiring accountable institutions, reporting institutions and other
+persons to freeze property and transactions pursuant to financial
+sanctions imposed in the United Nations Security Council (UNSC)
+Resolutions
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 5 of 29
+
+Important information to remember when reporting on the FIC’s reporting
+platform:
+1. Please refer to the registration guideline for accountable institutions and PCC05D
+for registration-related information
+2. It is mandatory on the goAML system, that all fields marked with an asterisk (*),
+be completed
+3. All first letters must be capitalised
+4. All fields on the regulatory report, that are not obtained during the course of
+establishing a particular person’s identity or conducting a particular transaction,
+but should be obtained as part of commercial practice, should be completed with
+as much of the information as readily available. In an instance where the reporting
+institution does not have information readily available, they are to populate
+mandatory fields with “not obtained”
+5. The FIC does not accept any regulatory reports submitted by any means other
+than via the goAML system. Regulatory reports must accordingly be submitted in
+the prescribed format and timeframes. Failure to submit regulatory reports within
+the prescribed timeframes constitutes a finding of non-compliance in terms of the
+Financial Intelligence, 2001 (Act 38 of 2001) (FIC Act).
+4. INTRODUCTION
+A person who carries out the business or is in charge of or manages a business or is
+employed by a business, including all accountable institutions listed in Schedule 1 to the
+FIC Act have an obligation to submit suspicious or unusual transaction reports (STR) to
+the FIC in terms of section 29(1) of the FIC Act and must utilise the FIC’s registration and
+reporting platform, goAML.
+It is important to note that section 29(1) of the FIC Act refers to reports of suspicious or
+unusual transactions concerning the proceeds of unlawful activities, money laundering,
+terrorist financing and financial sanctions offences as opposed to criminal activity in
+general.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 6 of 29
+
+5. goAML WEB ICONS
+Icons Description
+Cancel - Directs the system to disregard the entered details and not
+save them
+Preview - Verify content before taking action, e.g. downloading or
+approving
+Print - To produce physical copies of digital content
+Print Single Page - This ensures that only the page currently being
+viewed is printed
+Export PDF - Export the data into PDF format
+Refresh - update or reload the content on a screen
+Delete - Delete the uploaded document
+Add File Attachment - Allows users to upload or link a file to a form
+Save - Allows users to save the captured report details
+Submit – Submit the captured details of the report
+6. SUSPICIOUS AND UNUSUAL TRANSACTION REPORT BASELINE SCENARIO
+The process flow diagram below demonstrates the end-to-end process for uploading a
+Suspicious and Unusual Transaction Report (STR). This diagram is given greater detail
+in the content below. Fields in the flow diagram are labelled A to G.
+Field definitions
+• Report type (A) - The type of report (i.e. STR)
+• Reporting Person and Location (B)
+o Reporting person - Linked to the logged in user details, this is the person
+uploading the STR
+• Location - Describes the physical address of the reporting person or entity, such as
+the branch or office from which the report is being submitted. The address of the
+logged in user, is populated with selected report for capturing. If this address does not
+accurately reflect the location of the reporting person or entity, the user must edit or
+delete the pre-populated address to ensure the report reflects the correct reporting
+origin
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 7 of 29
+
+• Indicators (C) - Indicators are used to specify the nature or type of suspicious or
+unusual transaction, series of transactions and/or reportable event that the institution
+is reporting to the FIC. The institution is required to review the list of predetermined
+indicators and select the most appropriate explanation(s)
+• Transactions (D) - Transaction refers to a transaction concluded between a client
+and an accountable institution in accordance with the type of business carried on by
+that institution. In the event of a series of transactions, each transaction needs to be
+listed separately on the STR form
+• From Type / To Type (E) - This indicates from where the funds originated (from), and
+to where the funds were placed (to). Both fields are required to be completed
+• My Client / Not My Client and Conductor (F) - My Client is the client of the
+Accountable Institution that is reporting, and Not My Client is not their client (i.e. it can
+be a Person, Entity or an Account that is held at another Accountable Institution)
+• Person / Entity / Account (G)
+o Person - this refers to a natural person
+o Entity - this refers to a legal person / an organisation or a business entity. Note
+that there is a natural person that will always be linked to an entity (i.e. the director)
+o Account - this refers to an account that is held with an accountable institution (e.g.
+Cheque account or Savings account which is held with a bank). Note that there is
+a natural person that will always be linked to an account (i.e. the signatory).
+• Mandatory Fields (H) - this refers to the fields that are compulsory to be completed.
+The information that is required is dependent on the fields selected in field G (i.e.
+Person / Entity / Account).
+• Goods and services - this information is required to further describe the physical
+assets that are linked to the funds. This is only compulsory should this be a physical
+asset (i.e. where there is more to the transaction than just the flow of funds) and is
+captured as the last step of the report capturing prior to ‘saving and submitting’ to the
+FIC. The following information is mandatory when completing this section:
+o Item type - if this is a moveable or immovable property within or outside the
+Republic of South Africa
+o Description - brief description of the property involved (e.g. luxury vehicle)
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 8 of 29
+
+Baseline scenario for submitting a single suspicious transaction report to the FIC
+with NO goods or services - displaying fields A to G to be completed
+Baseline scenario for submitting a single suspicious transaction report to the FIC
+WITH goods or services – displaying fields A to G to be completed
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 9 of 29
+
+Baseline scenario for submitting a multiple suspicious transaction report to the
+FIC with NO goods or services – displaying fields A to G to be completed
+Baseline scenario for submitting a multiple suspicious transaction report to the
+FIC with NO goods or services – displaying fields A to G to be completed
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 10 of 29
+
+7. ACCESSING goAML
+Accountable institutions can access the goAML platform by utilising the username and
+password created during the registration process. Authentication will always be required
+before gaining access to goAML.
+Access the goAML page by clicking the link:
+https://goweb.fic.gov.za/goAMLWeb_PRD
+• Click on the Login button
+• Enter your username in the standard format created during registration
+Authenticating with Two Factor Authentication
+Step 1: Download the Microsoft / Google Authenticator application on your mobile
+device
+Step 2: Click on goAML login page
+Step 3: Enter your username and password in the standard format captured during
+registration and click ‘LOGIN’
+• Enter your password in the standard format of Case sensitive, Alpha Caps,
+Alphanumeric, numeric & Char e.g. Test12345@ and click Log In button to proceed.
+Figure 1: Login page
+Caution: Remember to keep your username and password safe.
+A QR code authentication page will be displayed as shown in figure 2 below.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 11 of 29
+
+Figure 2: QR Authentication page
+• Step 4 (Option 1): Open the authenticator app on your mobile device and scan
+the QR code
+• Step 5: Enter the time-based code displayed from the goAML shortcut in the
+code field
+• (Option 2): Or use fallback authentication: Click on ‘Use Fall back authentication’
+option in figure 2 to receive a code via e-mail, enter the code and login. Please
+note that the code remains valid for five minutes. Once the time elapses, select
+‘Use fallback authentication’ to generate a new code.
+Figure 3: Authentication screen
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 12 of 29
+
+8. goAML PLATFORM LANDING PAGE
+Figure 4: goAML landing page
+• Menu Bar - Contains New Reports / Submitted Reports / Message Board / Statistics /
+Admin / Help. Clicking any of the link items will give a user access to the functionality
+required (a)
+• Logged in user details - Displays the details of the authenticated user e.g. username
+and associated entity name. The user profile allows you to change Password, My User
+Details, My Org Details and Logout as a user (b, c)
+• Information Bar - Contains the FIC information with links to download goAML
+documentation (d)
+9. CAPTURING A SUSPICIOUS AND UNUSUAL TRANSACTION REPORT
+BASELINE SCENARIO FIELD A – REPORT TYPE
+To capture a STR, select New Reports in the menu bar, and click on Web Reports.
+Figure 5: goAML menu bar
+The types of report selection will display all the report types. Select “Suspicious and
+Unusual Transaction Report (STR)” and click the ‘Create Report’ button as shown
+below in figure 6. Each report contains distinct fields, for example, transactional reports
+will have different fields compared to activity reports.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 13 of 29
+
+Figure 6: Report type selection interface
+After selection, the suspicious and unusual transaction report window will populate with
+the following fields:
+9.1 Report Headers
+Figure 7: Suspicious and Unusual Transaction Report
+Click on each tab on the left to complete its section. When all the sections are completed,
+the red indicator bar on the left will turn green, allowing the user to submit the report.
+BASELINE SCENARIO FIELD B – REPORTING PERSON AND LOCATION
+9.1.1 Reporting Person
+The Reporting Person’s details are linked to the current logged-in user’s details
+• Reporting entity branch: Branch that is submitting the report to the FIC
+• Reporting entity reference: A unique code or identifier for the reporting entity
+• Report Date: Automatically generated with the (current) date that the report has been
+submitted (mandatory)
+• FIC Ref Number: This field is for resubmitting/ remediating previously failed reports
+and needs to reference the original report number issued by the FIC
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 14 of 29
+
+• Previously Rejected Report Ref Number: This field is for resubmitting/ remediating
+previously rejected reports and needs to reference the original report number issued
+by the FIC
+• Reason for Reporting: A description of why the transaction is considered suspicious or
+unusual (mandatory)
+• Action: Details of any action taken by the reporting entity in response to the transaction
+(mandatory).
+9.1.2 Location
+The Location refers to the physical address of the reporting person or entity, for example,
+the branch or office where the report is being submitted from.
+Editing the location
+When a report is opened for capturing, the system automatically populates the address
+of the logged-in user. If this address does not represent the actual location of the reporting
+person or entity, the user must update or remove it accordingly.
+Figure 8: Location screen
+The logged-in user can delete the address details by clicking the delete icon in figure 8
+and then enter the reporting individual’s current location at the time of reporting
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a building
+within a street or complex. This field helps pinpoint the exact location of the reporting
+person or entity
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the reporting entity/individual. This is essential for identifying the
+precise sub-location within a larger property
+• Address: Represents the full physical location where the reporting entity/individual is
+located. This may include street name, house number, apartment number, and other
+relevant details
+• Address 1: Primary line of the address, including the street name and house number
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 15 of 29
+
+• Address 2: Secondary line of the address, used for additional location details such as
+building name, floor number, or complex name
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address
+• Town: Specifies the town or municipality where the reporting entity/individual is located
+• City / Zip: Indicates the city and corresponding postal code relevant to the reporting
+entity/individual
+• Country: Name of the country associated with the reporting entity/individual
+• Province/State: Name of the province associated with the reporting entity/individual.
+9.2 Attachments
+This section allows the user to upload supporting documents related to the report. While
+document attachment is available, it is not mandatory.
+Figure 9: Attachments screen
+To upload a document: Click the ‘add’ icon , then choose the appropriate document
+category from the dropdown menu. Complete the identification and description fields,
+select the files you wish to attach from their location, and click ‘open’ to upload.
+Figure 10: Attachments selection screen
+The document will be attached under the ‘Attachments’ tab.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 16 of 29
+
+BASELINE SCENARIO FIELD C – INDICATORS
+9.3 Indicators
+Report indicators stipulate the circumstances that gave rise to the submission of the
+report.
+Figure 11: Indicators screen
+The reporting entity or individual is required to review the list of pre-determined indicators
+on the scroll down list and select the most appropriate explanation(s). More than one
+“Report Indicator” may be selected, if appropriate. To apply the indicator, tick the
+checkbox for the indicator applicable to the report as in figure 11.
+Note: the above selection of indicator is for demonstration purposes only. The
+institution is required to review the list and select the most appropriate indicator for the
+transaction, series of transactions and/or reportable event being reported.
+BASELINE SCENARIO FIELD D – TRANSACTIONS
+9.4 Transactions
+Transactions refer to transactions concluded between a client and an accountable
+institution in accordance with the type of business carried on by that institution.
+Figure 12: Transactions landing screen
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 17 of 29
+
+To add the parties involved in the transactions click the ‘Add Biparty’ icon. The
+Transactions screen will load as shown below in figure 13.
+Figure 13: Transactions ‘add Biparty’ screen
+• Add biparty will expand to transactional information. New transactional information
+will have to be captured; and the mandatory fields are highlighted.
+Figure 14: New transaction screen
+• Number: Unique transaction number (e.g. bank transaction will be a Transaction
+Number) / in an event of no transaction numbers being available, users can generate
+a unique reference number from the system by clicking the icon
+• Internal reference number: Reporting entity internal transaction reference number
+• Transmode code: Indicate how the transaction was carried out by selecting the
+relevant code from the drop-down list
+• Local amount: The value of the transaction in local currency. In the event that a
+reportable STR transaction is conducted in foreign currency only, the institution would
+need to provide the FIC with the Rand amount as per the conversion rate applied by
+the entity on the date of the transaction
+• Date: This refers to the date of the transaction
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 18 of 29
+
+• Late Deposit: This field is applicable in cases where the customer drops cash in a box
+at a bank after the bank's working hours. In all such cases, the "Value Date" will be
+different from transaction date as the bank will process this transaction the next day
+• Teller: The teller who conducted the transaction. This is only applicable where a
+transaction is conducted in-branch
+• Authorised: The person who authorised the transaction
+• Location: Refers to the branch or geographical area (merchant location / transaction
+location) where the transaction occurred. Please note that this free-text field is
+currently used to capture transaction location but will be removed in future updates.
+Reporters are encouraged to start using the structured address fields by clicking the “
+” icon next to Address to ensure accurate and standardised location reporting
+• Description: List appropriate narrative describing the transaction being reported.
+9.4.1 Address
+The user can delete the address details by clicking the delete icon in figure 15 and then
+enter the reporting individual’s current address at the time of reporting.
+Figure 15: Address form
+The Address form has the following fields:
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a
+building within a street or complex. This field helps pinpoint the exact location of the
+property where the transaction occurred
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the transaction. This is essential for identifying the precise sub-
+location within a larger property
+• Address: Represents the full physical location where the transaction took place. This
+may include street name, house number, apartment number, and other relevant
+details
+• Address 1: Primary line of the address, including the street name and house number
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 19 of 29
+
+• Address 2: Secondary line of the address, used for additional location details such as
+building name, floor number, or complex name
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address
+• Town: Specifies the town or municipality where the unusual/suspicious
+activity/transaction(s) occurred
+• City / Zip: Indicates the city and corresponding postal code relevant to the transaction
+location
+• Country: Name of the country relevant to the transaction
+• Province/State: Name of the province associated with the transaction.
+Figure 16: Search function
+The search function in the Transactions section of the STR interface is designed to help
+users quickly locate specific transactions within the report.
+BASELINE SCENARIO FIELD E – FROM TYPE / TO TYPE
+9.4.1 From type ‘Person My Client’ Form
+Transactional reports on goAML are structured as bi-party transactions with a ‘From’ and
+‘To’ part to every transaction. A transaction report will always have a ‘From’
+(Payor/Source) and ‘To’ (Payee/Receiver) side which will need to be completed by the
+reporting person /entity.
+Figure 17: Person My Client form
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 20 of 29
+
+• All fields marked with an asterisk (*) needs to be completed
+• South Africa is pre-selected as the default country; reporters can update
+this field if the country is not South Africa
+• Click on use existing person icon to quickly select a previously saved
+person’s details
+• Clicking on delete icon , will delete all captured person details in the
+current form
+• Click append icon to open additional fields and enter any further
+transaction-related information that may be required.
+The Person “My Client” form has the following fields:
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Foreign Currency: If transactions were conducted in foreign currency on the date of
+the transaction, provide the foreign currency code, foreign currency amount and
+conversion/exchange rate applicable to institution for said transaction.
+• First name: A legal name as reflecting in the identification document
+• Surname/Last name: A legal surname as reflecting in the identification document
+• Middle name: This is the name that appears between a person's first name and last
+name
+• Birth date: Date of birth/ can be typed in from calendar in ccyy/mm/dd format (e.g.
+1999/02/25)
+• RSA ID: 13-digit South African ID Number (e.g. 9902251109876)
+• RSA passport number: South African passport number
+• Nationality 1: Refers to the first nationality in cases where an individual holds multiple
+nationalities. It may or may not be the same as the primary nationality
+• Nationality 2: Refers to an additional nationality for individuals who are legally
+recognised as citizens of more than one country
+• Country of origin: The country in which a person is deemed to have originated
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the individual whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific transaction
+• Passport/Foreign ID/Permit/Refugee/Residence number: The identification number
+that is associated with a non-South African natural person
+• Issuing country: The country which issued the respective Passport/Foreign
+ID/Permit/Residence number.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 21 of 29
+
+BASELINE SCENARIO FIELD F, G– MY CLIENT / NOT MY CLIENT AND
+CONDUCTOR
+9.4.2 To type ‘Entity Not My Client’ Form
+The Entity Not My Client will populate the form to be completed as shown below in
+figure 18.
+Figure 18: Entity Not My Client form
+• South Africa is pre-selected as the default country; reporters can update this
+field if the country is not South Africa
+• The form populates with a single required ‘funds code’ field, indicated by an
+asterisk (*)
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required
+• An account could belong to an entity, and when capturing an entity as 'My
+Client', it is mandatory to capture at least one director associated with the
+entity.
+The “Entity Not My Client” and “Entity My Client” form has the following fields:
+• Foreign Currency: If transactions were conducted in foreign currency on the date of the
+transaction, provide the foreign currency code, foreign currency amount and
+conversion/exchange rate applicable to institution for said transaction.
+Figure 19: Entity my client form
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 22 of 29
+
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Funds comment: Description of the funds code
+• Country: Country where the transaction was conducted
+• Entity name: Name of the entity involved
+• Registered name: The Registered name of the institution (CIPC)
+• Incorporation Legal form: The legal form of the entity
+• Business: Business activities of the entity
+• Incorp./Reg.Number: The registration number of the entity / company issued by the
+relevant authority (e.g. Chamber of Commerce/ CIPC etc.)
+• Incorporation date: Incorporation registration date in ccyy/mm/dd format
+• Incorporation province/state: Name of the province/state involved
+• Incorporation country code: Incorporation registration country code, select from a list
+• Tax number: The entity tax number
+• Comments: Any comments related to the transaction
+• Business closed: Select the checkbox if the business is closed; leave it blank if the
+business remains open
+• Date closed: If entity is closed, specify the date of closure in ccyy/mm/dd format
+Capturing Address Fields
+To enter address information associated with the transaction, select the append icon to
+display additional address fields. The address form will populate as shown below in figure
+20.
+Figure 20: Address form
+The “Address” form has the following fields:
+• House number: House number associated with the transaction
+• Apartment number: Apartment number associated with the transaction
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 23 of 29
+
+• Address 1: The location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+• Address 2: The location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+• Type: Refers to the type of address. Select the type of address from the list
+• Address: Physical address associated with the transaction
+• City: Name of the city associated with the transaction
+• Postal/Zip: Postal code of the city
+• Country: Name of the country associated with the transaction
+• Province/State: Name of the province where the transaction occurred
+Capturing Phone Number Fields
+To enter phones information associated with the transaction, select the append icon to
+display additional phone fields. The phone form will populate as shown below in figure
+21.
+Figure 21: Phone form
+The “phone number” form has the following fields:
+• Contact type: Type of contact associated with the transaction.
+• Comm. Type: The method of communication linked to the transaction
+• Country prefix: Country prefix linked to the transaction
+• Number: Contact number linked to the transaction
+• Extension: Phone number extension linked to the transaction
+• Comments: Any comments related to the transaction
+9.4.3 From type Account My Client
+Account my client will populate the form to be completed as shown below in figure 22.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 24 of 29
+
+Figure 22: Account form
+• Details of related persons must be recorded when the account holder is a client
+of the accountable institution
+• Whenever the involved Account / Person / Entity is the client of the reporting
+entity, more details may be demanded from the client, and the reporting entity
+must have the information as part of the adherence to the “Know Your Customer”
+(KYC) requirements of the FIC Act
+• In the instance of an account of a minor both the details of the minor and
+guardian authorised to transact on his/her behalf should be captured
+• For an ‘account my client’ transaction, the account must have a signatory
+• South Africa is pre-selected as the default country; users can update this field
+if the country is not South Africa.
+The “Account” form has the following fields:
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Foreign Currency: If transactions were conducted in foreign currency on the date of
+the transaction, provide the foreign currency code, foreign currency amount and
+conversion/exchange rate applicable to institution for said transaction.
+• Funds comment: Comments if funds code is known
+• Country: Country where the transaction took place
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 25 of 29
+
+• Institution country: Country where an institution holding the account is based or
+registered
+• Account type: Type of account (e.g. Trust or Client)
+• Account number: the bank Account number (for non-banking institutions the account
+number can refer to the client number/profile number assigned by the institution)
+• Account name: The official name associated with the account, used to identify the
+account holder or entity
+• Institution registration name: Name of the institution where account is held
+• Branch code: Branch where the account is held
+• Swift: Bank identifier code used to specify a particular bank
+• Institution code: Institution identifier code if a Swift code is not available
+• Status code: Account status when transaction was initiated (e.g. Active/Closed)
+• Currency code: Currency the account is kept in
+• Closed: Date account closed if applicable
+• Balance: The account balance at the time of reporting
+• Date of balance: Date of account balance
+• Beneficiary comment: Any remarks or notes regarding the beneficiary
+• Comments: Any other comments, if applicable
+• Capturing “IP Address”
+To access the IP Address field, click the “ ” icon next to Additional Info. If the Internet
+Protocol Address (IP Address) pertaining to the device by means of which the transaction
+was conducted by means of an internet transaction facility, it must be provided where
+readily available.
+Figure 23: Account form
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 26 of 29
+
+The “Account” form has the following fields:
+• Comments: Any comments, if applicable
+• Funds code: Type of funds used in conducting transaction (e.g., Cash) (required)
+• Funds comments: Description of the funds code
+• Country: Country where the transaction was conducted (required)
+• Block address: Unique identifier that specifies the location of a fixed-size block of
+data in memory or storage
+• Virtual address: Refers to the computer’s way of showing where data is stored in
+memory, which the system later translates to a real location
+• Device number: The number or ID of the device being used
+• Operating System: The system that the device uses, e.g. Windows or Android
+• Service provider: The name of the company that provides the accountable institution
+with internet or phone service
+• IPv4: To be selected if the entity or user is using an older type of internet address
+(required)
+• Cgn Port: The port number used for shared internet connections
+• IPv6: To be selected if entity or person is using a newer type of internet address
+• Nationality: To be ticked if the internet connection uses a shared address
+• City: Name of the city
+• Country: Name of the country
+• First Seen / Last Seen: Pick the dates when the address was first and last noticed
+• Using Proxy: Tick this box if a proxy (a middleman server) is used
+• Comments: Add any extra comments, if applicable
+Capturing “Related Person” Form
+Figure 24: Related person form
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 27 of 29
+
+The “Related person” form has the following fields:
+• Account relation role: The role of the person is in relation to the account
+• Comments: Any comments in respect of the related person
+• Title: Title of the related person
+• Gender: Gender of the related person
+• First name: First name of the related person
+• Surname/Last name: Surname/Last name of the related person
+• Birthdate: Birth date of the related person
+• RSA ID: RSA ID of the related person
+• RSA passport number: RSA passport number of the related person
+• Passport/Foreign ID/Permit/Residence number: Identification number from the
+related person’s official non-South African document
+• Issuing country: The country that issued the respective Passport/Foreign
+ID/Permit/Residence number of the related person
+• Occupation: The related person’s current occupation or job title
+• Tax number: The related person’s South African Revenue Service (SARS) tax
+reference number
+• Source of funds: Specifies the origin of the funds used
+10. SUBMITTING A SUSPICIOUS AND UNUSUAL TRANSACTION REPORT TO THE
+FIC
+Once all the required details have been provided, the bar on the left of the tabs will turn
+green, to enable the user to submit the form. Kindly note that once submitted, the report
+will be locked from being editing by the user.
+Figure 25: STR submission
+• Once the form is submitted, the pop-up screen will display with the report reference
+number. The reference number is used for any report related enquiries.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 28 of 29
+
+• A notification e-mail with the refence number will be sent to the user’s e-mail address
+which was entered during the registration process.
+• The report receipt will be accessible via the goAML message board. This receipt will
+indicate whether the submission was accepted or rejected, helping ensure
+transparency and tracking.
+goAML EE V5.4 upgrade project Suspicious and Unusual transaction report user guide, 1 September 2025, version 1.5
+Page 29 of 29

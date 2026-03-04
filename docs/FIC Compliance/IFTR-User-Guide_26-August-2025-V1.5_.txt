@@ -1,0 +1,664 @@
+goAML EE V5.4
+INTERNATIONAL FUNDS TRANSFER REPORT
+USER GUIDE
+VERSION 1.5
+
+CONTENTS
+1. EXECUTIVE SUMMARY .......................................................................................... 4
+2. OBJECTIVE OF THIS USER GUIDE ....................................................................... 4
+3. DEFINITIONS ........................................................................................................... 5
+4. INTRODUCTION ...................................................................................................... 7
+5. goAML WEB ICONS ................................................................................................ 8
+6. INTERNATIONAL FUNDS TRANSFER REPORT BASELINE SCENARIO ............ 8
+7. ACCESSING goAML ............................................................................................. 11
+8. goAML PLATFORM LANDING PAGE .................................................................. 13
+9. CAPTURING AN INTERNATIONAL FUND TRANSFER REPORT....................... 13
+10. SUBMITTING AN INTERNATIONAL FUND TRANSFER REPORT TO THE FIC 28
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 2 of 28
+
+Table of Figures
+Figure 1: Login page ...................................................................................................... 11
+Figure 2: QR Authentication page ................................................................................. 12
+Figure 3: Authentication screen ..................................................................................... 12
+Figure 4: goAML landing page ....................................................................................... 13
+Figure 5: goAML menu bar ............................................................................................ 13
+Figure 6: Report type selection interface ....................................................................... 14
+Figure 7: International Fund Transfer Report................................................................. 14
+Figure 8: Location screen .............................................................................................. 15
+Figure 9: Comments screen .......................................................................................... 16
+Figure 10: Additional information screen ....................................................................... 16
+Figure 11: Attachments screen ...................................................................................... 17
+Figure 12: Attachments selection screen ....................................................................... 17
+Figure 13: Indicators screen .......................................................................................... 17
+Figure 14: Transactions landing screen ......................................................................... 18
+Figure 15: Transactions screen ..................................................................................... 18
+Figure 16: Search function............................................................................................. 19
+Figure 17: From my client - Person form ....................................................................... 20
+Figure 18: From my client - additional Person form ....................................................... 20
+Figure 19: Entity form .................................................................................................... 22
+Figure 20: From my client - entity form .......................................................................... 22
+Figure 21: Address form ................................................................................................ 23
+Figure 22: Phones form ................................................................................................. 24
+Figure 23: From my client Account form ........................................................................ 25
+Figure 24: From my client - additional Account form ..................................................... 26
+Figure 25: From - Account form ..................................................................................... 27
+Figure 26: Related person form ..................................................................................... 27
+Figure 27: IFTR submission ........................................................................................... 28
+Figure 28: IFTR submission confirmation screen .......................................................... 28
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 3 of 28
+
+1. EXECUTIVE SUMMARY
+This document outlines the enhancements introduced with the goAML V5.4 system
+upgrade reflecting the recent system enhancements and new features introduced. This
+transition is essential to ensure continued technical support and system reliability.
+Version 5.4 introduces several enhancements aimed at improving user experience and
+system functionality. These include an updated user interface with a new look and feel,
+replacement of certain free text fields with dropdown menus to enhance data
+consistency, and optimisation of dropdown lists for greater efficiency. These
+improvements are expected to streamline operations and align the system with current
+support standards.
+2. OBJECTIVE OF THIS USER GUIDE
+The objective of this user guide is to define and outline the steps to be followed when an
+accountable institution submits an international funds transfer report (IFTR) to the
+Financial Intelligence Centre (FIC) in terms of section 31 of the Financial Intelligence
+Centre Act, 2001 (Act 38 of 2001) (FIC Act). Please note that the reporter must be
+registered with the FIC in terms of the FIC Act to access the FIC’s registration and
+reporting platform. To register, accountable institutions can refer to public compliance
+communication (PCC) 05D (PCC05D) for further guidance.
+It is important to note that only some categories of accountable institutions are authorised
+to conduct the business of cross-border funds transfers. These are institutions that are
+authorised in terms of the regulations under the currency and exchanges Act, 1933 (Act
+9 of 1933) (exchange control regulations) to conduct authorised transactions under the
+regulations. Institutions with this authorisation are authorised dealers (ADs) and
+authorised dealers with limited authority (ADLAs) as well as a category of financial
+services providers that have a direct reporting dispensation under the exchange control
+regulations. In addition to ADs, ADLAs and financial services providers with a direct
+reporting dispensation under the exchange control regulations, the Post Office is also
+allowed to conduct transactions to transfer funds out of South Africa and to receive funds
+from outside South Africa and does so using postal orders and money orders.
+It is only these accountable institutions that have a reporting obligation in terms of section
+31 of the FIC Act.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 4 of 28
+
+Access to the registration platform
+In order to submit an IFTR to the FIC, the accountable institution must access the
+registration and reporting platform provided by the FIC for this purpose on the FIC’s
+website at www.fic.gov.za
+3. DEFINITIONS
+Administrator/ CO/ Refers to the Compliance Officer and Money Laundering Reporting
+MLRO Officer obliged to register and submit a report on behalf of the entity.
+Authorised Refers to authorised dealers in foreign exchange (Item 19 of
+dealers Schedule 1 to the FIC Act)
+Authorised dealers Refers to authorised dealers in foreign exchange with limited authority
+with limited (Item 19 of Schedule 1 to the FIC Act)
+authority
+Business Refers to an organisation, institution, or entity (ies) and can be used
+interchangeably.
+Financial Refers to the Financial Intelligence Centre Act, 2001 (Act No 38 of
+Intelligence Centre 2001).
+Act
+Financial Service Refers to the entities authorised under the Financial Advisory and
+Providers Intermediary Services (FAIS) Act to offer financial advice or
+intermediary services.
+In terms of regulatory compliance:
+• All FSPs are subject to the provisions of the FAIS Act.
+• FSPs are listed as accountable institutions under Schedule 1,
+Item 12 of the Financial Intelligence Centre Act (FIC Act).
+• Only a specific subset of FSPs, those involved in cross-border
+financial transactions, have a direct reporting dispensation
+under the Exchange Control Regulations.
+goAML Refers to the integrated software solution implemented by the FIC as
+its preferred ICT platform for registration, reporting, data collection,
+analysis, case management and secure communications required for
+the FIC’s daily operational functions and requirements.
+Individual reporter Refers to a natural person who acquires user credentials in order to
+file a report in terms of Section 29 of the FIC Act in their own personal
+capacity.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 5 of 28
+
+Postbank Refers to Item 14 of Schedule 1 to the Financial Intelligence Centre
+Act, 2001 (Act 38 of 2001) (FIC Act).
+Regulations Refer to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+Important information to remember when reporting on the FIC’s reporting
+platform:
+• Please refer to the registration guideline for accountable institutions and PCC05D for
+registration-related information
+• It is mandatory on the goAML system, that all fields marked with an asterisk (*), be
+completed
+• All first letters must be capitalised
+• All fields on the regulatory report, that are not obtained during the course of
+establishing a particular person’s identity or conducting a particular transaction, but
+should be obtained as part of commercial practice, should be completed with as much
+of the information as readily available. In an instance where the reporting institution
+does not have information readily available, they are to populate mandatory fields
+with “not obtained”
+• The FIC does not accept any regulatory reports submitted by any means other than
+via the goAML system. Regulatory reports must accordingly be submitted in the
+prescribed format and timeframes. Failure to submit regulatory reports within the
+prescribed timeframes constitutes a finding of non-compliance in terms of the
+Financial Intelligence, 2001 (Act 38 of 2001) (FIC Act).
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 6 of 28
+
+4. INTRODUCTION
+Accountable institutions that have an obligation to submit international funds transfer
+reports (IFTRs) to the FIC in terms of section 31 of the Financial Intelligence Centre Act,
+2001 (Act 38 of 2001) (FIC Act) and must utilise the goAML platform to do so.
+The FIC Act requires certain accountable institutions (ADs; ADLAs; those FSP’s that have
+a direct reporting dispensation under the Exchange Control Regulations and the South
+African Postbank) to submit IFTRs to the FIC. IFTR refers to any transaction, or series of
+transactions, which have an electronic message and funds/values which are moved on
+behalf of, or on the instruction of another person either inbound and/or outbound from the
+borders of the Republic of South Africa. This means that all electronic financial
+transactions/transfers moved on behalf of, or on the instruction, of another person, across
+South African borders must be reported to the FIC.
+All electronic cross-border transactions, whether the funds are sent from South Africa or
+received from abroad, must be reported to the Financial Intelligence Centre (FIC) if the
+transaction value is more than R19 999.99.
+The goAML platform may be accessed via the FIC website, www.fic.gov.za under the
+“Register or Report” functionality.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 7 of 28
+
+5. goAML WEB ICONS
+Icons Description
+Cancel - Directs the system to disregard the entered details and not
+save them
+Preview - Verify content before taking action e.g downloading or
+approving
+Print - To produce physical copies of digital content
+Print Single Page - This focuses on printing only the currently viewed
+page
+Export PDF – Export the data into PDF format
+Refresh - update or reload the content on a screen
+Delete – Delete the uploaded document
+Add File Attachment – Allows users to upload or link a file to a form
+Save - Allows users to save the captured report details
+Submit – Submit the captured details of the report
+6. INTERNATIONAL FUNDS TRANSFER REPORT BASELINE SCENARIO
+The process flow diagram below demonstrates the end-to-end process for uploading an
+IFTR. This diagram is given in greater detail below. Fields in the flow diagram are labelled
+A to G.
+Example used for this process flow:
+The baseline scenario outlines how an International Funds Transfer Report (IFTR) should
+be uploaded on the goAML platform and includes:
+• Outbound transactions: When a client of Bank A transfers money out of the Republic
+through Bank A, this must be reported on the goAML platform as an outbound
+transaction.
+• Inbound transactions: When Bank A receives funds into a client’s account in South
+Africa from Bank B in Country C (where Bank B is not a client of the reporting
+institution), this must be reported on the goAML platform as an inbound transaction.
+Field definitions
+• Report type (A) - The type of report (i.e. IFTR)
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 8 of 28
+
+• Reporting Person and Location (B)
+o Reporting person - Linked to the logged in user’s details, this is the person
+uploading the IFTR
+o Location - Describes the actual geographical area or branch where the transaction
+or series of transactions occurred. The address of the logged in user, is populated
+with selected report for capturing. The logged in user must edit or delete the
+address, if the populated address is not the actual location of where the transaction
+(series of transactions) occurred
+• Indicators (C) - Indicators are used to specify the nature or type of report that the
+institution is submitting to the FIC. The institution is required to review the list of
+predetermined indicators and select the most appropriate explanation(s)
+• Transactions (D) - Transaction refers to a transaction concluded between a client
+and an accountable institution in accordance with the type of business carried on by
+that institution. In the event of a series of transactions, each transaction needs to be
+listed separately on the IFTR form
+• From Type / To Type (E) - This indicates from where the funds originated (from), and
+to where the funds were placed (to). Both fields are required to be completed
+• My Client / Not My Client and Conductor (F) - My Client is the client of the
+Accountable Institution that is reporting, and Not My Client is not their client (i.e. it can
+be a Person, Entity or an Account that is held at another Accountable Institution)
+• Person / Entity / Account (G)
+o Person - this refers to a natural person
+o Entity - this refers to a legal person / an organisation or a business entity. Note
+that there is a natural person that will always be linked to an entity (i.e. the director)
+o Account - this refers to an account that is held with an accountable institution (e.g.
+Cheque account or Savings account which is held with a bank). Note that there is
+a natural person that will always be linked to an account (i.e. the signatory).
+• Mandatory Fields (H) - this refers to the fields that are compulsory to be completed.
+The information that is required is dependent on the fields selected in field G (i.e.
+Person / Entity / Account).
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 9 of 28
+
+Baseline scenario for submitting international funds transfer report (outbound) to
+the FIC displaying fields A to G to be completed
+Baseline scenario for submitting international funds transfer report (inbound) to
+the FIC – displaying fields A to G to be completed
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 10 of 28
+
+7. ACCESSING goAML
+Accountable institutions can access the goAML platform by utilising the username and
+password created during the registration process. Authentication will always be required
+before gaining access to goAML.
+Access goAML EE page by clicking the link:
+https://goweb.fic.gov.za/goAMLWeb_PRD
+• Click on the Login button
+• Enter your username in the standard format created during registration
+Authenticating with Two Factor Authentication
+Step 1: Download the Microsoft / Google Authenticator application on your mobile
+device
+Step 2: Click on goAML login page
+Step 3: Enter your username and password in the standard format captured during
+registration and click ‘LOGIN’
+• Enter your password in the standard format of Case sensitive, Alpha Caps,
+Alphanumeric, numeric & Char e.g. Test12345@ and click Log In button to proceed.
+Figure 1: Login page
+Caution: Remember to keep your username and password safe.
+A QR code authentication page will be displayed as shown in figure 2 below.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 11 of 28
+
+Figure 2: QR Authentication page
+• Step 4 (Option 1): Open the authenticator app on your mobile device and scan the
+QR code
+• Step 5: Enter the time-based code displayed from the goAML shortcut in the code
+field
+• (Option 2): Or use fallback authentication: Click on ‘Use Fall back authentication’
+option in figure 2 to receive a code via e-mail, enter the code and login. Please
+note that the code remains valid for five minutes. Once the time elapses, select
+‘Use fallback authentication’ to generate a new code.
+Figure 3: Authentication screen
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 12 of 28
+
+8. goAML PLATFORM LANDING PAGE
+Figure 4: goAML landing page
+• Menu Bar - Contains New Reports / Submitted Reports / Message Board / Statistics /
+Admin / Help. Clicking any of the link items will give a user access to the functionality
+required (a)
+• Logged in user details - Displays the details of the authenticated user e.g. username
+and associated entity name. The user profile allows you to change Password, My User
+Details, My Org Details and Logout as a user (b, c)
+• Information Bar - Contains the FIC information with links to download goAML
+documentation (d)
+9. CAPTURING AN INTERNATIONAL FUND TRANSFER REPORT
+BASELINE SCENARIO FIELD A – REPORT TYPE
+To capture an IFTR, select New Reports in the menu bar, and click on Web Reports
+Figure 5: goAML menu bar
+The types of report selection will display all the report types. Select “International Fund
+Transfer Report (IFTR)” and click ‘Create Report’ button as shown below in figure 6.
+Each report contains distinct fields, for example, transactional reports will have different
+fields compared to activity reports. Each report contains distinct fields, for example,
+transactional reports will have different fields compared to activity reports.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 13 of 28
+
+Figure 6: Report type selection interface
+After selection, the international fund transfer report window will populate with the
+following fields:
+9.1 Report Headers
+Figure 7: International Fund Transfer Report
+Click on each tab on the left to complete its section. When all sections are completed,
+the red indicator bar on the left will turn green, allowing user to submit the registration
+form.
+BASELINE SCENARIO FIELD B – REPORTING PERSON AND LOCATION
+9.1.1 Reporting Person
+The Reporting Person’s details are linked to the current logged-in user’s details
+• Reporting entity branch: Branch that is submitting the report to the FIC
+• Reporting entity reference: A unique code or identifier for the reporting entity
+• Report Date: Automatically generated with the (current) date that the report has been
+submitted
+• FIC Ref Number: This field is for resubmitting/ remediating previously failed reports
+and needs to reference the original report number issued by the FIC
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 14 of 28
+
+• Previously Rejected Report Ref Number: This field is for resubmitting/ remediating
+previously rejected reports and needs to reference the original report number issued
+by the FIC.
+9.1.2 Location
+The location refers to the physical address of the reporting entity (e.g., branch or office) /
+person submitting the report.
+Editing the location
+The address of the logged in user is populated in the selected report for capturing. The
+logged in user must edit or delete the address, if the populated address is not the actual
+location of where the transaction (series of transactions) occurred.
+Figure 8: Location screen
+The user can delete the address details by clicking the delete icon in figure 8 and then
+enter the reporting individual’s current location at the time of reporting.
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a
+building within a street or complex. This field helps pinpoint the exact location of the
+property where the transaction occurred
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the transaction. This is essential for identifying the precise sub-
+location within a larger property
+• Address: Represents the full physical location where the transaction took place. This
+may include street name, house number, apartment number, and other relevant
+details
+• Address 1: Primary line of the address, including the street name and house number
+• Address 2: Secondary line of the address, used for additional location details such as
+building name, floor number, or complex name
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address
+• Town: Specifies the town or municipality where the transaction occurred
+• City / Zip: Indicates the city and corresponding postal code relevant to the transaction
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 15 of 28
+
+location
+• Country: Name of the country associated with the reporting entity
+• Province/State: Name of the province associated with the reporting entity
+9.1.3 Comments
+Please note that this free-text field is currently used to capture the client instruction / swift
+message / electronic message of the IFTR transaction but will be removed in future
+updates. Reporters are encouraged to start using the dedicated Client Instruction/Swift
+Message/Electronic Message field by clicking the “+” icon next to Additional Information
+to ensure accurate and standardised client instruction / swift message / electronic
+message.
+Figure 9: Comments screen
+9.1.4 Additional Information
+When expanding the additional information fields, the option becomes available to select
+the BOP Category/Subcategory and Client Instruction/Swift Message/Electronic Message
+fields.
+Figure 10: Additional information screen
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 16 of 28
+
+• BOP Category/Subcategory: If the reported transaction was reported to Balance of
+Payment (BOP) System of the Financial Surveillance Department of the South African
+Reserve Bank, the selected BOP Category/Subcategory needs to be selected.
+• Client Instruction/Swift Message/Electronic Message: The client instruction/swift
+message/electronic message must be captured in the appropriate fields and is
+mandatory for every transaction reported as an IFTR.
+9.2 Attachments
+This section allows the user to upload supporting documents related to the report. While
+document attachment is available, it is not mandatory.
+Figure 11: Attachments screen
+To upload a document: Click the ‘add’ icon , then choose the appropriate document
+category from the dropdown menu. Complete the identification and description fields,
+select the files you wish to attach from their location, and click ‘open’ to upload.
+Figure 12: Attachments selection screen
+The document will be attached under the ‘Attachments’ tab.
+BASELINE SCENARIO FIELD C – INDICATORS
+9.3 Indicators
+Report indicators classify the type of report being submitted.
+Figure 13: Indicators screen
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 17 of 28
+
+For the IFTR, only one indicator is displayed. To apply the indicator, tick the checkbox for
+the indicator applicable to the report.
+BASELINE SCENARIO FIELD D – TRANSACTIONS
+9.4 Transactions
+Transactions means a transaction concluded between a client and an accountable
+institution in accordance with the type of business carried on by that institution.
+Figure 14: Transactions landing screen
+To add the parties involved in the transactions click the ‘Add Biparty’ icon. The
+Transactions screen will load as shown below in figure 15.
+• Add biparty will expand to transactional information. New transactional
+information will have to be captured; mandatory fields are highlighted.
+Figure 15: Transactions screen
+Transactions form has the following fields:
+• Number: Unique transaction number (e.g. bank transaction will be a Transaction
+Number) / in an event of no transaction numbers being available, users can generate
+a unique reference number from the system by clicking the icon
+• Internal reference number: Reporting entity internal transaction reference number
+• Transmode code: Indicate how the transaction was carried out by selecting the
+relevant code from the drop-down list
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 18 of 28
+
+• Local amount: The value of the transaction in local currency. In the event that a
+reportable IFTR transaction is conducted in foreign currency only, the accountable
+institution would need to provide the FIC with the Rand amount as per the conversion
+rate applied by the entity on the date of the transaction
+• Date: This refers to the date of transaction
+• Late Deposit: This field is applicable in cases where the customer drops cash in a box
+at a bank after the bank's working hours. In all such cases, the "Value Date" will be
+different from transaction date as the bank will process this transaction the next day
+• Teller: The teller who conducted the transaction. This is only applicable where a
+transaction is conducted in-branch
+• Authorised: The person who authorised the transaction
+• Location: Refers to the branch or geographical area (merchant location / transaction
+location) where the transaction occurred. Please note that this free-text field is
+currently used to capture transaction location but will be removed in future updates.
+Reporters are encouraged to start using the structured address fields by clicking the “
+” icon next to Address to ensure accurate and standardised location reporting.
+• Description: List appropriate narrative describing the transaction being reported
+Figure 16: Search function
+The search function in the ‘Transactions’ section of the IFTR interface is designed to
+help users quickly locate specific transactions within the report.
+BASELINE SCENARIO FIELD E – FROM TYPE / TO TYPE
+9.4.1 From type ‘Person My Client’ Form
+Transactional reports on goAML are structured as bi-party transactions with a ‘From’
+and ‘To’ part to every transaction. A transaction report will always have a ‘From’
+(Payee) and ‘To’ (Receiver) side which will need to be completed by the reporter.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 19 of 28
+
+Figure 17: From my client - Person form
+• All fields marked with an asterisk (*) needs to be completed
+• South Africa is pre-selected as the default country; users can update this field if
+the country is not South Africa
+• Note: When reporting an IFTR, one of the reported countries (source or
+destination country) must be a foreign country, and the other country must be
+South Africa.
+• Click on use existing person icon to quickly select a previously saved person’s
+details
+• Clicking on delete icon , will delete all captured person details in the current
+form
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required.
+The Person “My Client” form has the following fields:
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Foreign Currency: Transactions must be recorded in the foreign currency on the
+date of the transaction (except for Rand-to-Rand payments). The institution needs
+to provide the foreign currency code, foreign currency amount and
+conversion/exchange rate applicable to institution for said transaction
+Figure 18: From my client - additional Person form
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 20 of 28
+
+• First name: A legal name as reflecting in the identification document
+• Surname/Last name: A legal surname as reflecting in the identification document
+• Middle name: This is the name that appears between a person's first name and last
+name
+• Birth date: Date of birth/ can be typed in from calendar in ccyy/mm/dd format (e.g.
+1999/02/25)
+• RSA ID: 13-digit South African ID Number (e.g. 9902251109876)
+• RSA passport number: South African passport number
+• Nationality 1: Refers to the first nationality in cases where an individual holds
+multiple nationalities. It may or may not be the same as the primary nationality
+• Nationality 2: Refers to an additional nationality for individuals who are legally
+recognised as citizens of more than one country
+• Country of origin: The country in which a person is deemed to have originated
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the individual whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific transaction
+• Passport/Foreign ID/Permit/Refugee/Residence number: The identification number
+that is associated with a non-South African natural person
+• Issuing country: The country which issued the respective Passport/Foreign
+ID/Permit/Residence number.
+BASELINE SCENARIO FIELD F, G– MY CLIENT / NOT MY CLIENT AND
+CONDUCTOR
+9.4.2 To type ‘Entity Not My Client’ Form
+The Entity Not My Client will populate the form to be completed as shown below in
+figure 19.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 21 of 28
+
+Figure 19: Entity form
+• South Africa is pre-selected as the default country; users can update this field if
+the country is not South Africa
+• Note: When reporting an IFTR, one of the reported countries (source or destination
+country) must be a foreign country, and the other country must be South Africa
+• The form populates with a single required ‘funds code’ field, indicated by an
+asterisk (*)
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required
+• An account could belong to an entity, and when capturing an entity as 'My Client', it
+is mandatory to capture at least one director associated with the entity.
+The “Entity Not My Client” form has the following fields:
+• Foreign Currency: Transactions must be recorded in the foreign currency on the date
+of the transaction (except for Rand-to-Rand payments). The needs to provide the
+foreign currency code, foreign currency amount and conversion/exchange rate
+applicable to the institution for said transaction
+Figure 20: From my client - entity form
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Funds comment: Description of the funds code
+• Country: Country where the transaction was initiated
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 22 of 28
+
+• Entity name: Name of the entity involved
+• Registered name: The Registered name of the institution (CIPC)
+• Incorporation Legal form: The legal form of the entity
+• Business: Business area of the entity
+• Incorp./Reg.Number: The registration number of the entity / company in the relevant
+authority (e.g. Chamber of Commerce/ CIPC etc.)
+• Incorporation date: Incorporation registration date in ccyy/mm/dd format
+• Incorporation province/state: Name of the province/state involved
+• Incorporation country code: Incorporation registration country code, select from a
+list
+• Tax number: The entity tax number
+• Comments: Any comments related to the transaction
+• Business closed: Select the checkbox if the business is closed; leave it blank if the
+business remains open
+• Date closed: If entity is closed, specify the date of closure in ccyy/mm/dd format
+Capturing Address Fields
+To enter address information associated with the transaction, select the append icon to
+display additional address fields. The address form will populate as shown below in figure
+21.
+Figure 21: Address form
+The “Address” form has the following fields:
+• House number: House number associated with the transaction
+• Apartment number: Apartment number associated with the transaction
+• Address 1: The location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+• Address 2: The location where the transaction occurred, if applicable. Provide
+Address 1 only if the transaction took place at that address
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 23 of 28
+
+• Type: Refers to the type of address. Select the type of address from the list
+• Address: Physical address associated with the transaction
+• City: Name of the city associated with the transaction
+• Postal/Zip: Postal code of the city
+• Country: Name of the country associated with the transaction
+• Province/State: Name of the province where the transaction occurred
+Capturing Phone Number Fields
+To enter phones information associated with the transaction, select the append icon to
+display additional phone fields. The phone form will populate as shown below in figure
+22.
+Figure 22: Phones form
+The “phone number” form has the following fields:
+• Contact type: Type of contact associated with the transaction
+• Comm. Type: The method of communication linked to the transaction
+• Country prefix: Country prefix linked to the transaction
+• Number: Contact number linked to the transaction
+• Extension: Phone number extension linked to the transaction
+• Comments: Any comments related to the transaction
+9.4.3 From type Account My Client
+Account my client will populate the form to be completed as shown below in figure 23.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 24 of 28
+
+Figure 23: From my client Account form
+• Details of related persons must be recorded when the account holder is a client of
+the accountable institution
+• Whenever the involved Account / Person / Entity is the client of the reporting entity,
+more details may be demanded from the client, and the reporting entity must have
+the information as part of the adherence to the “Know Your Customer” (KYC)
+requirements of the FIC Act
+• In the instance of an account of a minor both the details of the minor and guardian
+authorised to transact on his/her behalf should be captured
+• For an ‘account my client’ transaction, the account must have a signatory
+• For an ‘account not my client’ transaction, the account number, institution name and
+institution code or swift code must be included
+• South Africa is pre-selected as the default country; users can update this field if
+the country is not South Africa
+• Note: When reporting an IFTR, one of the reported countries (source or destination
+country) must be a foreign country, and the other country must be South Africa.
+The “Account” form has the following fields:
+• Funds code: Type of funds used in conducting transaction (e.g., Cash)
+• Foreign Currency: Transactions must be recorded in the foreign currency on the
+date of the transaction (except for Rand-to-Rand payments). The accountable
+institution needs to provide the foreign currency code, foreign currency amount and
+conversion/exchange rate applicable to the accountable institution for said
+transaction
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 25 of 28
+
+Figure 24: From my client - additional Account form
+• Funds comment: Comments if funds code is known
+• Country: Country where the transaction took place
+• Institution country: Country where an institution holding the account is based or
+registered
+• Account type: Type of account (e.g. Trust or Client)
+• Account number: the bank Account number (for non-banking institutions the
+account number can refer to the client number/profile number assigned by the
+institution)
+• Account name: The official name associated with the account, used to identify the
+account holder or entity
+• Institution registration name: Name of the institution where account is held
+• Branch code: Branch where the account is held
+• Swift: Bank identifier code used to specify a particular bank
+• Institution code: Institution identifier code if a Swift code is not available
+• Status code: Account status when transaction was initiated (e.g. Active/Closed)
+• Currency code: Currency the account is kept in
+• Closed: Date account closed if applicable
+• Balance: The account balance at the time of reporting
+• Date of balance: Date of account balance
+• Beneficiary comment: Any remarks or notes regarding the beneficiary
+• Comments: Any other comments, if applicable
+Capturing “IP Address”
+To access the IP Address field, click the “ ” icon next to Additional Info.
+If the Internet Protocol Address (IP Address) pertaining to the device by means of which
+the transaction was conducted by means of an internet transaction facility, it must be
+provided where readily available.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 26 of 28
+
+Figure 25: From - Account form
+Capturing “Related Person” Form
+Figure 26: Related person form
+The “Related persons” form has the following fields:
+• Account relation role: The role of the person is in relation to the account
+• Comments: Any comments in respect of the related person
+• Title: Title of the related person
+• Gender: Gender of the related person
+• First name: First name of the related person
+• Surname/Last name: Surname/Last name of the related person
+• Birthdate: Birth date of the related person
+• RSA ID: RSA ID of the related person
+• RSA passport number: RSA passport number of the related person
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 27 of 28
+
+• Passport/Foreign ID/Permit/Residence number: Identification number from the
+related person’s official non-South African document
+• Issuing country: The country that issued the respective Passport/Foreign
+ID/Permit/Residence number of the related person
+• Occupation: The related person’s current occupation or job title
+• Tax number: The related person’s South African Revenue Service (SARS) tax
+reference number
+• Source of funds: Specifies the origin of the funds used.
+10. SUBMITTING AN INTERNATIONAL FUND TRANSFER REPORT TO THE FIC
+Once all the required details have been provided, the bar on the left of the tabs will turn
+green, to enable the user to submit the form.
+Figure 27: IFTR submission
+Kindly note that once submitted, the report will be locked from being editing by the user.
+Figure 28: IFTR submission confirmation screen
+Once the form has been submitted, a pop-up screen will display with the report reference
+number. The reference number is used for any report related enquiries. A notification e-
+mail with the refence number will be sent to the user’s e-mail address which was entered
+during the registration process. The report receipt will be accessible via the goAML
+message board. This receipt will indicate whether the submission was accepted or
+rejected, helping ensure transparency and tracking.
+goAML EE V5.4 upgrade project international funds transfer report user guide, 26 August 2025 version 1.5
+Page 28 of 28

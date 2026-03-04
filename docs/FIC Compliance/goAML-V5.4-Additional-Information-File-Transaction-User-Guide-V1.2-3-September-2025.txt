@@ -1,0 +1,618 @@
+goAML V5.4
+ADDITIONAL INFORMATION
+FILE TRANSACTION
+USER GUIDE
+3 September 2025
+
+CONTENTS
+TABLE OF FIGURES ...................................................................................................... 3
+1. DEFINITIONS ........................................................................................................... 4
+2. EXECUTIVE SUMMARY .......................................................................................... 4
+3. OBJECTIVES OF THIS GUIDELINE ....................................................................... 5
+4. INTRODUCTION ...................................................................................................... 5
+5. goAML WEB ICONS ................................................................................................ 5
+6. ACCESSING goAML ............................................................................................... 6
+7. goAML PLATFORM LANDING PAGE .................................................................... 8
+8. CAPTURING AN ADDITIONAL INFORMATION FILE TRANSACTION REPORT . 9
+9. GOODS AND SERVICES ...................................................................................... 26
+10. SUBMITTING AN ADDITIONAL INFORMATION FILE TRANSACTION
+REPORT TO THE FIC ................................................................................................... 27
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 2 of 27
+
+TABLE OF FIGURES
+Figure 1: Login page ........................................................................................................ 7
+Figure 2: QR Authentication page ................................................................................... 7
+Figure 3: Authentication screen ....................................................................................... 8
+Figure 4: goAML landing page ......................................................................................... 8
+Figure 5: goAML menu bar .............................................................................................. 9
+Figure 6: Report type selection interface ......................................................................... 9
+Figure 7: Report Headers form ...................................................................................... 10
+Figure 8: Location form .................................................................................................. 11
+Figure 9: Attachments form ........................................................................................... 12
+Figure 10: Uploaded document ..................................................................................... 12
+Figure 11: Indicators screen .......................................................................................... 13
+Figure 12: Transaction landing screen .......................................................................... 13
+Figure 13: Transaction form........................................................................................... 13
+Figure 14: Person My Client form .................................................................................. 16
+Figure 15: Address form ................................................................................................ 18
+Figure 16: Phones form ................................................................................................. 19
+Figure 17: Identification form ......................................................................................... 19
+Figure 18: Related person form ..................................................................................... 20
+Figure 19: Additional Information fields ......................................................................... 22
+Figure 20: Account My Client form ................................................................................ 22
+Figure 21: Entity form .................................................................................................... 24
+Figure 22: Goods and Services transaction form ........................................................... 26
+Figure 23: Additional information file transaction report ................................................. 27
+Figure 24: AIFT submission confirmation screen ........................................................... 27
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 3 of 27
+
+1. DEFINITIONS
+Accountable Refers to an Accountable Institution (listed in Schedule 1 to the FIC
+Institutions Act)
+Business Refers to an organisation, institution, or entity (ies) and can be used
+interchangeably.
+Financial Refers to the Financial Intelligence Centre Act, 2001 (Act No 38 of
+Intelligence Centre 2001).
+Act
+goAML Refers to the integrated software solution implemented by the FIC
+as its preferred ICT platform for registration, reporting, data
+collection, analysis, case management and secure communications
+required for the FIC’s daily operational functions and requirements.
+Regulations Refer to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+Compliance Officer Refers to person who is tasked to submit reports to the Centre.
+Important information to remember when reporting on the FIC reporting
+platform:
+• Accountable institutions must be registered on the registration and reporting
+platform before an AIFT can be submitted. Please refer to registration guideline
+for accountable institutions and PCC05D for registration related information.
+• All fields with an asterisk (*) are mandatory and should be completed.
+• The user needs to consider business rules applicable to the various reports
+when reporting and apply them along with the applicable regulations and
+sections of the FIC Act.
+• All First Letters must be in Capital Letter
+• Words typed in ALL Capital Letters are not allowed.
+2. EXECUTIVE SUMMARY
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 4 of 27
+
+This document outlines the enhancements introduced with the goAML V5.4 system
+upgrade reflecting the recent system enhancements and new features introduced. This
+transition is essential to ensure continued technical support and system reliability. Version
+5.4 introduces several enhancements aimed at improving user experience and system
+functionality. These include an updated user interface with a new look and feel,
+replacement of certain free text fields with dropdown menus to enhance data consistency,
+and optimisation of dropdown lists for greater efficiency. These improvements are
+expected to streamline operations and align the system with current support standards
+3. OBJECTIVES OF THIS GUIDELINE
+The objective of this user guide is to define and outline the steps to be followed when an
+accountable institution or any other person that has made a report to the Financial
+Intelligence Centre are required to submit additional information to the FIC in terms of
+section 32 of the Financial Intelligence Centre Act No. 38 of 2001 (FIC Act). Section 32
+of the FIC Act 38 of 2001 authorises the FIC to request additional information from
+accountable institutions or any other person that has made a report in terms of section
+28, 29 or 31 of the FIC Act to furnish the FIC with additional information concerning the
+report. The additional information file transaction (AIFT) will be used to capture
+transactional information as defined in the FIC Act on the reporting platform.
+4. INTRODUCTION
+The FIC has implemented an integrated software solution as its preferred platform for
+registration, reporting, data collection, analysis, case management and secure
+communications required for the FIC’s daily operational functions and requirements. The
+registration and reporting platform is called goAML. Section 32 FIC Act 38 of 2001
+authorises the FIC or an investigating authority acting with the permission of the FIC or
+under the authority of an authorised officer, to request additional information from
+accountable institutions or any other person that has made a report in terms of section
+28, 29 or 31 of the FIC Act to furnish the FIC with additional information concerning the
+report. The additional information file transaction (AIFT) will be used to capture
+transactional information as defined in the FIC Act.
+5. goAML WEB ICONS
+Icons Description
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 5 of 27
+
+Cancel - Directs the system to disregard the entered details and
+not save them
+Preview - Verify content before taking action e.g downloading or
+approving
+Print - To produce physical copies of digital content
+Print Single Page - This focuses on printing only the currently
+viewed page
+Export PDF – Export the data into PDF format
+Refresh - update or reload the content on a screen
+Delete – Delete the uploaded document
+Add File Attachment – Allows users to upload or link a file to a
+form
+Save - Allows users to save the captured report details
+Submit – Submit the captured details of the report
+6. ACCESSING goAML
+Accountable institutions can access the goAML platform by utilising the username and
+password captured during the registration process. Authentication will always be required
+before gaining access to goAML.
+Access goAML EE page by clicking the link: https://goweb.fic.gov.za/goAMLWeb_PRD.
+• Click on the Login button
+• Enter your username in the standard format captured during registration
+Authenticating with two factor authentication
+• Step 1: Click on goAML login page
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 6 of 27
+
+• Step 2: Enter your username and password in the standard format captured
+during registration and click ‘LOGIN’
+Login Window
+Figure 1: Login page
+A QR code authentication page will be displayed as shown in figure 2
+Figure 2: QR Authentication page
+• Step 3 (Option 1): Open the authenticator app on your mobile device and scan
+the QR code
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 7 of 27
+
+• Step 4: Enter the time-based code displayed from the goAML shortcut in the
+code field
+• (Option 2): Or use fallback authentication:
+• Click on ‘Use Fall back authentication’ option in figure 2 to receive a code via
+e-mail, enter the code and login. Please note that the code remains valid for five
+minutes. Once the time elapses, select ‘Use fallback authentication’ to
+generate a new code.
+Figure 3: Authentication screen
+7. goAML PLATFORM LANDING PAGE
+Figure 4: goAML landing page
+The landing page has the following visible items
+• Menu Bar - Contains New Reports / Submitted Reports / Message Board /
+Statistics / Admin / Help. Clicking any of the link items will give a user access to
+goAML V5.4 additional information file transaction(a u)s er guide, version 1.2 3 September 2025
+Page 8 of 27
+
+the functionality required.
+• Logged in user details - Displays the details of the authenticated user e.g.
+username and associated entity name. The user profile allows you to change
+Password, My User Details, My Org Details and Logout as a user. (b, c)
+• Information Bar - Contains the FIC information with links to download goAML
+documentation.( d)
+8. CAPTURING AN ADDITIONAL INFORMATION FILE TRANSACTION REPORT
+To capture an additional information file transaction report (AIFT), select New Reports
+drop down in the menu bar, and click Web Reports
+Figure 5: goAML menu bar
+The types of report selection will display all the report types. Select Additional
+Information File Transaction Report (AIFT) and click ‘Create Report’ button as shown
+below in figure 6.
+Figure 6: Report type selection interface
+After selection, the additional information file transaction report window will populate
+with the following fields:
+8.1. Report Headers
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 9 of 27
+
+Figure 7: Report Headers form
+• The Reporting Person’s details are linked to the current logged-in user’s details
+• Click on each tab on the left to complete its section. When all sections are
+completed, the red indicator bar will turn green, allowing the user to submit the
+report
+8.1.2 Reporting person
+The Reporting Person’s details are linked to the current logged-in user’s details
+• Reporting entity branch: Branch that is submitting the report to the FIC
+• Reporting entity reference: A unique code or identifier for the reporting entity
+• Report Date: Automatically generated with the (current) date that the report has
+been submitted
+• FIC Ref Number: This field is for resubmitting/ remediating previously failed
+reports and needs to reference the original report number issued by the FIC
+• Previously Rejected Report Ref Number: This field is for resubmitting/
+remediating previously rejected reports and needs to reference the original report
+number issued by the FIC.
+• Reason for Reporting (mandatory): Reason for reporting information, e.g.
+Individual/entity/account is subject to an investigation.
+• Action (mandatory): Action taken to enhance the investigation / financial profile. If
+the request for information is urgent, kindly specify this in the Action field.
+8.1.3 Location
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 10 of 27
+
+Location describes the actual geographical area / branch where compliance officer (CO)
+/money laundering reporting officer (MLRO) office / physical address is situated, which
+has been provided upon registration. The physical address of the logged in user is pre-
+populated on the registered profile. The logged in user must edit or delete the physical
+address if the pre-populated address has changed
+Figure 8: Location form
+The user can delete the address details by clicking the delete icon in figure 8 and then
+enter the reporting individual’s current location at the time of reporting.
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a
+building within a street or complex. This field helps pinpoint the exact location of
+the property where the transaction occurred.
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the transaction. This is essential for identifying the precise sub-
+location within a larger property.
+• Address: Represents the full physical location where the transaction took place.
+This may include street name, house number, apartment number, and other
+relevant details.
+• Address 1: Primary line of the address, including the street name and house
+number.
+• Address 2: Secondary line of the address, used for additional location details
+such as building name, floor number, or complex name.
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address.
+• Town: Specifies the town or municipality where the transaction occurred.
+• City / Zip: Indicates the city and corresponding postal code relevant to the
+transaction location.
+• Country: Specifies the country where the transaction occurred.
+• Province: Specifies the province where the transaction occurred.
+8.2. Attachments
+This section requires the user to attach any document related to the reporting.
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 11 of 27
+
+Figure 9: Attachments form
+To upload a document: Click the ‘add’ icon , then choose the appropriate document
+category from the dropdown menu. Complete the identification and description
+fields, select the files you wish to attach from their location, and click ‘open’ to upload
+The document will be attached under the ‘Attachments’ tab as shown below in figure
+10. The user has an option to download, edit and delete the uploaded document
+Figure 10: Uploaded document
+8.3. Indicators
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 12 of 27
+
+Report indicators classify the type of report being submitted. To select the appropriate
+Indicator, click the indicators tab as shown below in figure 12
+Figure 11: Indicators screen
+For the additional information file transaction report (AIFT), only one indicator is
+displayed. To apply the indicator, tick the checkbox for the indicator applicable to the
+AIFT report.
+8.4. Transactions
+Transactions means a transaction concluded between a client and an accountable
+institution in accordance with the type of business carried on by that institution
+• Transaction landing screen
+Figure 12: Transaction landing screen
+To add the parties involved in the transactions click the ‘Add BiParty’ icon. The
+Transactions screen will load as shown below in figure 13
+Figure 13: Transaction form
+Transactions form has the following fields:
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 13 of 27
+
+• Value date: The date on which the funds from a transaction become available or
+start accruing interest. Example: If a deposit is made on August 25 but the value
+date is August 27, interest will start accruing from August 27.
+• Status: Status of the transaction on the day of reporting. It can be complete,
+incomplete unknown and uploaded
+• Number: Unique transaction number (e.g. bank transaction will be a
+Transaction Number) / in an event of no transaction numbers being available,
+users can generate a unique reference number from the system by clicking the
+icon
+• Internal reference number: Reporting entity internal transaction reference number
+• Transmode code: Indicate how the transaction was carried out by selecting the
+relevant code from the drop-down list
+• Transmode comment: Refers to the description if the transmode code is unknown
+• Local amount: The value of the transaction in local currency
+• Date: This refers to the date of transaction
+• Location: Refers to the branch or geographical area where the transaction
+occurred.
+• Posting date: The date on which the transaction is recorded in the account.
+Example: A transaction made on a weekend might be posted on the next
+business day.
+• Teller: The teller who conducted the transaction. This is only applicable where a
+transaction is conducted in-branch
+• Authorised: The person who authorised the transaction
+• Description: List additional information in relation to the transaction if available
+• Comments: List any other comments in relation to the transaction if available
+8.4.1 From Type / To Type
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 14 of 27
+
+Transactional reports on goAML are structured as bi-party transactions with a ‘From’
+and ‘To’ part to every transaction. A transaction report will always have a ‘From’
+(Payor/Source) and ‘To’ (Payee/Receiver) side which will need to be completed by the
+reporter.
+One side of the transaction, either the From Type or the To Type, have to be “my
+client” or else the report will be rejected by the system. A reported subject, whether
+"my client" or "not my client" will always be, either an account, entity and/or person. The
+mandatory information fields that need to be completed will differ as per the FIC
+requirements.
+Party type
+The Party Type refers to the source and destination party in relation to the AIFT being
+reported to the FIC. This means the party to the ‘party type’ can be either a person,
+account or entity. This means the source can be either a person, account or entity. This
+also means that the destination can be either a person, account or entity.
+8.4.2 From type ‘Person My Client’ Form
+The Person My Client form will display the following fields that need to be completed
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 15 of 27
+
+Figure 14: Person My Client form
+• All fields marked with an asterisk (*) needs to be completed
+• Click on use existing person icon to quickly select a previously saved
+person’s detail
+• Clicking on delete icon , will delete all captured person details in the
+current form
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required.
+The Person “My Client” form has the following fields:
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 16 of 27
+
+• Funds code: Type of funds used in conducting the transaction (e.g. cash). This
+can be selected from a predefined drop-down list
+• Funds comment: Description, if funds code is other.
+• Country: The country from where the transaction occurred. South Africa is pre-
+populated in the fields. If the transaction occurred in another country, this can be
+updated by selecting the appropriate country from the predefined drop-down list
+• Title: Refers to the person’s professional or official title
+• Gender: Refers to the person’s gender identity
+• First name: A legal name as reflecting in the identification document
+• Surname/Last name: A legal surname as reflecting in the identification document
+• Middle name: This is the name that appears between a person's first name and
+last name
+• Birth date: Date of birth/ can be typed in from calendar in ccyy/mm/dd format
+(e.g. 1999/02/25)
+• Mothers name: Refers to the person mother’s name
+• Alias/Known As: Refers to the name or other aliases
+• RSA ID: 13-digit South African ID Number (e.g. 9902251109876)
+• RSA passport number: South African passport number
+• Nationality 1: Refers to the first nationality in cases where an individual holds
+multiple nationalities. It may or may not be the same as the primary nationality.
+• Nationality 2: Refers to an additional nationality for individuals who are legally
+recognised as citizens of more than one country
+• Country of origin: The country in which a person is deemed to have originated
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the individual whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific transaction
+• Passport/Foreign ID/Permit/Refugee/Residence number: The identification
+number that is associated with a non-South African natural person
+• Issuing country: The country which issued the respective Passport/Foreign
+ID/Permit/Residence number
+8.4.3 Capturing address fields
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 17 of 27
+
+To enter address information associated with the transaction, select the append icon to
+display additional address fields. The address form will populate as shown below in
+figure 15
+Figure 15: Address form
+The “Address” form has the following fields:
+• House number: House number associated with the transaction.
+• Apartment number: Apartment number associated with the transaction.
+• Add.Address 1: Refers to the physical address of the transaction
+• Add.Address 2: Refers to the physical address of the transaction
+• Type: Refers to the type of address. Select the type of address from the list
+• Address: Physical address associated with the transaction.
+• Town: Name of the town associated with the transaction.
+• City: Name of the city associated with the transaction.
+• Postal/Zip: Postal code of the city
+• Country: Name of the country associated with the transaction. South Africa is
+pre- populated in the fields. If the transaction happened in another country,
+this can be updated by selecting the appropriate country from the predefined
+drop-down list
+• Province/State: Name of the province associated with the transaction.
+• Comments: Any other comments related to the address if applicable
+8.4.4 Capturing phone number fields
+To enter phones information associated with the transaction, select the append icon to
+display additional phone fields. The phone form will populates as shown below in figure
+16
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 18 of 27
+
+Figure 16: Phones form
+The “phone number” form has the following fields:
+• Contact type: Type of contact associated with the transaction.
+• Comm.Type: The method of communication linked to the transaction.
+• Country prefix: Country prefix linked to the transaction.
+• Number: Contact number linked to the transaction.
+• Extension: Phone number extension linked to the transaction.
+• Comments: Any comments related to the transaction.
+8.4.5 Capturing E-mails field
+To enter e-mail address associated with the transaction, select the append icon to
+display additional e-mail fields. The e-mail field will populates as shown below
+This section is used to capture the email address linked to the transaction.
+8.4.6 Capturing Identification fields
+To enter ‘Identification’ details associated with the transaction, select the append icon
+to display additional Identification fields. The Identification fields will populates as shown
+below in figure 17
+Figure 17: Identification form
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 19 of 27
+
+The “Identification” form has the following fields:
+• Type: Refers to the identification document/travel document/permit/passport
+number and can be selected from the list
+• Number: Refers to the alphanumeric value of the ID document (e.g. AT08154711
+or 8101014321080)
+• Issue Date: Refers to the dentification document issue date
+• Expiry Date: Refers to the last date of validity of the Identification document
+• Issued by: Refers to the name of authority that issued the document (e.g.
+Department of Home Affairs)
+• Issue country: Refers to the country where the document was issued
+• Comments: Any other comments related to the Identification
+8.4.7 Capturing Related person fields
+To enter related person information associated with the transaction, select the append
+icon to display additional related person fields. The related person form will populate as
+shown below in figure 18
+Figure 18: Related person form
+The “Related person” form has the following fields:
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 20 of 27
+
+• Person Relation: Refers to the nature of the connection between the reported
+person, and a related person, and how they are related or associated. This can
+be selected from a predefined drop-down list
+• Comments: Any comments in respect of the related person
+• Title: Title of the related person
+• Gender: Gender of the related person
+• First name: First name of the related person
+• Surname/Last name: Surname/Last name of the related person
+• Middle name: Refers to the name that appears between a person's first name
+and last name.
+• Birthdate: Birth date of the related person
+• Mothers name: Refers to the person mother’s name
+• Alias/Known As: Refers to the name or other aliases
+• RSA ID: RSA ID of the related person
+• RSA passport number: RSA passport number of the related person
+• Nationality 1: Refers to the first nationality in cases where a person holds multiple
+nationalities. It may or may not be the same as the primary nationality.
+• Nationality 2: Refers to an additional nationality for person who is legally
+recognised as citizens of more than one country.
+• Country of origin: The country in which a person is deemed to have originated.
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the person whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific transaction
+• Passport/Foreign ID/Permit/Refugee/Residence Number: If subject is not a South
+African citizen/resident (thus no SA ID Number and/or SA Passport Number) the
+completion of a Passport / Foreign ID / Permit/Refugee / Residence number is
+mandatory
+• Issuing Country: The country which issued the respective Foreign Passport /
+Foreign ID / Permit / Refugee / Residence Number
+8.4.8 Capturing Additional Information fields
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 21 of 27
+
+If there is any additional information related to the transaction, select the append icon
+and fill in the required fields. The additional information form will appear as illustrated in
+Figure 19
+Figure 19: Additional Information fields
+The “Additional Information” has the following fields:
+• Bob Category/Subcategory: Choose a type from the predefined dropdown menu
+and enter the relevant information in the corresponding text field
+• Client instruction/Swift Message/Electronic Message: Refers to any client
+instruction or swift message related to the request
+8.4.9 From type Account My Client
+The Account my client form will display the following fields that need to be completed
+Figure 20: Account My Client form
+• Details of related persons must be recorded when the account holder is a client
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 22 of 27
+
+of the accountable institution
+• Whenever the involved Account / Person / Entity is the client of the reporting
+entity, more details may be demanded from the client, and the reporting entity
+must have the information as part of the adherence to the “Know Your
+Customer” (KYC) requirements of the FIC Act
+• In the instance of an account of a minor both the details of the minor and
+guardian authorised to transact on his/her behalf should be captured
+• For an ‘account my client’, the account must have a signatory
+• Not all accounts will belong to an entity. Where the information is available,
+provide the entity details.
+The “Account” form has the following fields:
+• Funds code: Type of funds used in conducting the transaction (e.g., Cash)
+• Funds comment: Comments if funds code is known
+• Country: Country where the transaction occurred. Institution country: Country
+where an institution is based or registered.
+• Account type: Type of account (e.g. Trust or Client)
+• Account number: the bank Account number (for Non-Banking institutions the
+account number can refer to the client number/profile number assigned by the
+institution)
+• Account name: The official name associated with the account, used to identify
+the account holder or entity
+• Institution registration name: Name of the institution where account is held
+• Branch code: Branch where the account is held
+• Swift: Bank identifier code used to specify a particular bank
+• Institution code: Institution identifier code if a Swift code is not available
+• Status code: Account status when transaction was initiated (e.g. Active/Closed)
+• Currency code: Currency the account is kept in
+• Closed: Date account closed if applicable
+• Balance: The account balance at the time of reporting
+• Date of balance: Date of account balance
+• Beneficiary comment: Any remarks or notes regarding the beneficiary
+• Comments: Any other comments, if applicable
+8.4.10 To type ‘Entity’ Form
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 23 of 27
+
+The Entity form will display the following fields that need to be completed
+Figure 21: Entity form
+• South Africa is pre-selected as the default country; users can update this field
+if the country is not South Africa
+• The form populates with a single required ‘funds code’ field, indicated by an
+asterisk (*)
+• Click append icon to open additional fields and enter any further transaction-
+related information that may be required
+• When capturing an entity as 'My Client', it is mandatory to capture at least one
+director associated with the entity.
+• If there are any entity related details or director details, enter the details under
+‘Related Person’ node. Refer to 8.4.7 for Related Person fields
+The “Entity” has the following fields:
+• Funds code: Type of funds used in conducting the transaction (e.g., Cash)
+• Funds comment: Description of the funds code
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 24 of 27
+
+• Country: Country where the transaction was conducted
+• Entity name: Name of the entity involved
+• Registered name: The Registered name of the institution (CIPC)
+• Incorporation Legal form: The legal form of the entity
+• Business: Business activities of the entity
+• Incorp./Reg.Number: The registration number of the entity / company in the
+relevant authority (e.g. Chamber of Commerce/ CIPC etc.)
+• Incorporation date: Incorporation registration date in ccyy/mm/dd format
+• Incorporation province/state: Name of the province/state involved
+• Incorporation country code: Incorporation registration country code, select from a
+list
+• Tax number: The entity tax number
+• Comments: Any comments related to the transaction
+• Business closed: Select the checkbox if the business is closed; leave it blank if
+the business remains open
+• Date closed: If entity is closed, specify the date of closure in ccyy/mm/dd format
+8.4.11 Capturing E-mails fields
+To enter the e-mail, select the append icon to display additional e-mail fields. Refer
+to 8.4.5 for e-mail fields
+8.4.12 Capturing Urls fields
+To enter the entity urls, select the append icon to display additional urls fields. The
+urls field will populates as shown below
+This section is used to capture the entity urls
+8.4.13 Capturing address fields
+To enter the entity address, select the append icon to display additional address
+fields. Refer to 8.4.3 for Address fields
+8.4.14 Capturing phones fields
+To enter the entity phone numbers, select the append icon to display additional
+phone fields. Refer to 8.4.4 for phone fields
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 25 of 27
+
+8.4.15 Capturing Related person fields
+To enter the related person details, select the append icon to display additional
+related person fields. Refer to 8.4.7 for related person fields
+9. GOODS AND SERVICES
+Clicking the Goods and Services append icon generates the transaction form, which
+is used to record the transaction item details.
+Figure 22: Goods and Services transaction form
+The “Goods and Services” has the following fields:
+• Item type: The type of item (e.g vehicle)
+• Item make: Item maker (e.g. if the item is a car - BMW)
+• Description: Description of the item (e.g. Luxury Car)
+• Previously registered to: Name of previous owner
+• Presently registered to: Name of current owner
+• Estimated value: Estimated value of the item
+• Status code: The status can be selected from the predefined drop-down list (e.g
+hired, bought)
+• Disposed value: Refers to the effective value for property transfer (e.g. R500
+000.00)
+• Currency code: Currency in which the transaction was conducted.
+• Size: Size of the property
+• Size UOM: Unit of measurement (e.g square meters)
+• Registration date: Official registration date of the item
+• Registration number: Official registration number of the item (car VIN number)
+• Identification number: Any number that can identify the item (e.g. Car Plate
+Number)
+• Comments: Any other comments related to the item
+• Status comments: Any other comments related to the status
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 26 of 27
+
+10. SUBMITTING AN ADDITIONAL INFORMATION FILE TRANSACTION REPORT
+TO THE FIC
+Once all the required details have been provided, the bar on the left of the tabs will turn
+green, to enable the user to submit the form.
+Figure 23: Additional information file transaction report
+Kindly note that once submitted, the report will be locked from being edited by the user.
+Figure 24: AIFT submission confirmation screen
+Once the form was submitted, the pop-up screen will display with the report reference
+number. The reference number is used for any report related enquiries. A notification e-
+mail with the refence number will be sent to the user’s e-mail address which was entered
+during the registration process. The report receipt will be accessible via the goAML
+message board. This receipt will indicate whether the submission was accepted or
+rejected, helping ensure transparency and tracking.
+goAML V5.4 additional information file transaction user guide, version 1.2 3 September 2025
+Page 27 of 27

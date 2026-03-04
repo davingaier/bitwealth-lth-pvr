@@ -1,0 +1,298 @@
+goAML EE V5.4
+REPORTING ENTITY
+REGISTRATION USER GUIDE
+04 JULY 2025
+
+Legal disclaimer
+Unless specific written consent is obtained from the Financial Intelligence Centre (FIC) the
+information contained in this document may not be shared with any third parties.
+By reading this document you acknowledge the confidentiality of such and agree to be bound
+by the copyright that subsists in Financial Intelligence Centre’s intellectual ideas, views and
+their representation as expressed in this material.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 2 of 16
+
+CONTENTS
+1. ABBREVIATIONS ............................................................................................................ 4
+2. OBJECTIVE OF THIS DOCUMENT ................................................................................. 4
+3. INTRODUCTION .............................................................................................................. 6
+4. goAML WEB .................................................................................................................... 6
+5. goAML LANDING PAGE ................................................................................................. 7
+6. goAML REGISTRATION TILES....................................................................................... 7
+7. REGISTER THE REPORTING ENTITY ON goAML ........................................................ 8
+8. LOGGING ONTO goAML WEB ..................................................................................... 13
+9. UPDATING USER DETAILS OR ACCOUNT DETAILS ................................................ 15
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 3 of 16
+
+1. ABBREVIATIONS
+Abbreviation Definition
+C&P Compliance and Prevention
+FIC Financial Intelligence Centre
+FIC Act Financial Intelligence Centre Act, 2001 (Act 38 of 2001)
+ID Identity document
+Org Organisation
+QR Quick response
+2. OBJECTIVE OF THIS DOCUMENT
+This guideline aims to define and describe the process to be followed when an accountable
+institution or any other person or any other entity with an obligation to submit the report in
+terms of the section 29 of the the Financial Intelligence Centre Act, 2001 (Act 38 of 2001)
+(FIC Act). The accountable institution must have login credentials in order to submit
+reportable transaction and/or series of transactions to the FIC in terms of section 28, 28A, 29,
+31 of the FIC Act.
+To access the registration platform and to acquire user credentials, the reporting person must
+access the portal provided by the FIC on the FIC’s website at www.fic.gov.za.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 4 of 16
+
+Definitions
+The guideline must be read in conjunction with the Financial Intelligence Centre Act, 2001
+(Act 38 of 2001) (FIC Act) and the Regulations for definitions of terms used in the guideline.
+Individual Refers to a natural person who acquires user credentials in order to file
+reporter a report in terms of Section 29 of the FIC Act in their own personal
+capacity.
+Regulations Refer to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+goAML Refers to the integrated software solution implemented by the FIC as
+its preferred ICT platform for registration, reporting, data collection,
+analysis, case management and secure communications required for
+the FIC’s daily operational functions and requirements.
+Administrator/ Refers to the Compliance Officer and Money laundering reporting
+Compliance officer who is obliged to register and submit a report on behalf of the
+Officer/ MLRO entity.
+Important information to be taken into account when registering on the goAML
+system:
+• All fields with an asterisk (*) are mandatory and must be completed as part of the
+registration process
+• All registrations must be approved by the FIC prior to activation
+• Supporting documents such as an identity document (ID) and authorisation letter must
+be attached as part of the registration process to the FIC
+• All First Letters must be in Caps
+• Words typed in ALL Caps are not allowed.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 5 of 16
+
+3. INTRODUCTION
+As South Africa’s national centre for the gathering and analysis of financial transaction data,
+the role of the Financial Intelligence Centre (FIC) is to safeguard the integrity of the country’s
+financial system and its institutions. In pursuit of this, the Financial Intelligence Centre Act,
+2001 (Act 38 of 2001), mandates the FIC to identify the proceeds of crime, combat money
+laundering and the financing of terrorism, facilitate effective supervision and enforcement of
+the Act.
+Under this legislation, financial and non-financial institutions are required to fulfil certain
+compliance obligations, including filing of transactions reports to the FIC. The information
+provided in these reports form the basis upon which analysis is conducted to develop financial
+intelligence reports for use by a wide range of law enforcement agencies and other government
+institutions to facilitate the administration and enforcement of the laws of the Republic. The FIC
+Act also sets out the enforcement and penalty regime for non-compliance with the FIC Act.
+Financial Intelligence Centre has implemented an integrated software solution as its preferred
+platform for registration, reporting, data collection, analysis, case management and secure
+communications required for the FIC’s daily operational functions and requirements.
+Accountable institutions wishing to file reportable transactions with the FIC electronically in
+terms of section 28, 28A, 29, 31 of the FIC Act must obtain user credentials on the goAML
+platform to file the report in the prescribed manner.
+4. goAML WEB
+The URL for accessing goAML is goAML.
+When a user types in the URL into the web browser window, the goAML landing page is
+launched. The goAML landing page will display with the Register and Login links as illustrated
+in figure 1.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 6 of 16
+
+5. goAML LANDING PAGE
+Figure 1: goAML landing page
+If the user has registered and has therefore already obtained user credentials, the user can log
+in with such credentials.
+If the user has not yet registered, they must click on the registration link located at the bottom
+left of the page to obtain their credentials and gain access to the application as illustrated in
+figure 2.
+6. goAML REGISTRATION TILES
+Figure 2: goAML registration tiles
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 7 of 16
+
+Note:
+• South Africa will be preselected in the ‘Country field’; users can modify their selection by
+using the drop-down menu.
+• The entity's e-mail address must be valid, as it will be used for the login code delivery and
+official correspondence with the organisation.
+Registration tiles contain the ‘Register an organisation’ and ‘Register a user’ sections.
+• All users are required to register on the goAML platform before submitting reports
+• A copy of the reporter/user’s identity document (SA ID or certified Passport copy if user is
+non-South African) and an authorisation letter must be attached and submitted to the FIC
+for approval in order to gain access to goAML.
+7. REGISTER THE REPORTING ENTITY ON goAML
+The registration details of the entity must be provided in this section. This section registers the
+reporting entity on the goAML system. To register the entity, click the ‘Reporting entity’ tile in
+figure 2, The registration screen will be loaded and display as illustrated in figure 3.
+Figure 3: Reporting entity window
+Fill in each tab on the left by clicking on one of them. Once all tabs are completed, the red
+bar on the left will turn green, enabling the user to submit the registration.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 8 of 16
+
+7.1. Reporting entity details
+All fields marked with an asterisk (*) are required to be completed before submitting the
+registration form.
+• Organisation business type: The classification of an entity based on the type of
+organisation it is associated with
+• Name: Name of the entity registering
+• Trading as: A trading as name refers to the name under which an entity conducts
+business, which may be either identical to or different from its officially registered name
+• E-mail: A valid e-mail address of the entity registering.
+7.1.1. Address
+• Type: The type of address associated with the entity. This can be business,
+physical, postal or private contact details
+• Address: This is the location details specifying where the entity is situated
+• City: The name of the place where the entity operates
+• Country: This is the country where the entity is registered
+• Postal/Zip code: Postal or zip code of the area (e.g. Centurion, 0062)
+7.1.2. Phones
+• Contact type: The preferred method of communication for reaching the entity.
+This can be business or private contact details
+• Comm.type: Type of communication to be utilised
+• Country prefix: This is the unique set number added before a phone number to
+indicate the country the number belongs e.g. +27
+• Number: Contact number to be utilised. Numeric, digits (e.g. 0126416000)
+7.2. Administrator tab
+This section requires the administrator's details, specifically the individual authorised to submit
+the report on behalf of the entity. To enter the required information, click the ‘Administrator
+tab’. The next screen will display as shown in Figure 4.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 9 of 16
+
+Figure 4: Administrator form
+To submit the registration, make sure to fill in all the required fields on the left by clicking
+through the tabs. Once all mandatory fields are completed, the red bar will turn green, and
+the user will be able to complete the registration process.
+All fields marked with an asterisk (*) are required to be completed before submitting the
+registration form.
+7.2.1. Administrator details
+• First Name: A legal name as reflecting in the identification document
+• Surname / Last Name: Legal surname as reflecting in the identification document
+• Birth Date: Date of birth/ can be typed in from calendar in ccyy/mm/dd format (e.g.
+1999/02/25)
+• RSA ID Number: 13-digit South African ID Number (e.g. 9902251109876)
+• Username: Must include a minimum of four characters, can be in a format of
+numbers and / or letters. No white space and special characters allowed.
+• Nationality: The status of belonging to a particular nation, whether by birth or
+naturalisation (If nationality is SA, RSA ID field becomes mandatory. If non-RSA
+residence, passport/foreign ID/permit number/refugee number/Asylum seeker)
+• Password: Must be between 5-10 characters, a combination of uppercase and
+lowercase letters, numbers, and special characters. Do not base the password on
+personal information or common words.
+• Confirm Password: Retype the created unique password
+• E-mail: Valid unique e-mail of the person.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 10 of 16
+
+7.2.2. Address
+• Type: The type of address associated with the entity. This can be business,
+physical, postal or private contact details
+• Address: This is the location details specifying where the entity is situated
+• City: The name of the place where the entity operates
+• Country: This is the country where the entity is registered
+• Postal/Zip code: Postal or zip code of the area (e.g. Centurion, 0062).
+7.2.3. Phones
+• Contact type: The preferred method of communication for reaching the entity. This
+can be business or private contact details
+• Comm.type: Type of communication to be utilised
+• Country prefix: This is the unique set number added before a phone number to
+indicate the country the number belongs e.g +27
+• Number: Contact number to be utilised. Numeric, digits (e.g. 0126416000).
+7.3. Attachments
+This section requires the user to attach copy of the ID or certified passport if user is non-SA
+and an authorisation letter that includes the individual's first name, last name, ID, and role of
+the registrant. This action will load the screen as shown in figure 5
+Figure 5: Attachment window
+To upload a document: Click on ‘Select files’ or ‘drop files here to upload’ options.
+Select the document to attach from the desired location and click ‘Open’.
+The document will be attached under the ‘Attachments’ tab.
+7.4. Preview and submit
+Once all the required details are provided, the ‘Preview and submit’ tab will turn green, to
+enable the user to review and submit the form as shown in figure 6.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 11 of 16
+
+Figure 6: Form preview
+Click the ‘Preview and submit’ tab to finalise registration. The final screen will display with the
+green bar on the left to confirm that all required information is completed.
+Enter the Captcha code before submitting the form.
+Click on the ‘Submit organisation’ button or ‘Cancel’ to revoke the registration.
+Figure 7: goAML registration final screen
+Once the registration form has been submitted, the pop-up screen will display with the
+registration reference number. The reference number is used for any registration related
+enquiries. A notification e-mail with the refence number will be sent to the registering user’s
+e-mail address entered during the registration process.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 12 of 16
+
+7.5. Notification screen
+Figure 8: Notification screen
+• When the FIC is satisfied with the captured registration details and attached
+documents, the user will be notified by e-mail about the acceptance of the registration.
+• When the FIC is not satisfied with the captured registration details and attached
+documents, the user will be notified by e-mail about the rejected registration.
+Registrations will be rejected on goAML for the following reasons:
+• If the user registers with an incorrect org ID or invalid org ID (e.g. org ID 2) of the
+existing accountable institution
+• If the user provided an incomplete registration forms or completed the forms with
+inaccurate information
+• If a sole proprietary registers as an individual user.
+_________________________________________________________________________
+8. LOGGING ONTO goAML WEB
+Once registration is approved, the user will gain access to the system by using the username
+and password captured during registration. Second authentication will always be required
+before gaining access to goAML.
+• Step 1: Download the Microsoft/Google Authenticator application on your mobile device
+• Step 2: Click on goAML login page
+• Step 3: Enter your username and password in the standard format captured during
+registration and click on ’LOGIN’.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 13 of 16
+
+Figure 9: Login page
+A QR code authentication page will be displayed as shown in figure 10.
+Figure 10: QR Authentication page
+• Step 4 (Option 1): Open the authenticator app on your mobile device and scan the QR
+code
+• Step 5: Enter the time-based code displayed from the goAML shortcut in the code field
+• (Option 2): Or use fallback authentication: Click on ‘Use fall back authentication’
+option in figure 10 to receive a code via e-mail >enter the code and login.
+Please note that the code remains valid for five minutes. Once the time elapses, select
+‘Use fallback authentication’ to generate a new code.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 14 of 16
+
+Figure 11: Authentication screen
+9. UPDATING USER DETAILS OR ACCOUNT DETAILS
+10.1 Change password
+Figure 12: goAML langing page
+The goAML system gives users the ability to update details, including password, user details,
+and org details.
+• On the goAML landing page, hover the mouse curser over the username (JMMJ) and
+select ‘Change Password’ as illustrated in figure 12. This will open the Change
+Password dialog box, where users can enter their current password, set a new password,
+and confirm the new password as illustrated in figure 13
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 15 of 16
+
+Figure 13: Change password dialog
+10.2 My user details
+On the goAML landing page, hover the mouse curser over the username (JMMJ) and select
+‘My user details’ as illustrated in figure 12. This will open the user details form, where users
+can update the details and submit request as illustrated in figure 14.
+Figure 14: User details
+10.3 My Org details
+On the goAML landing page, hover the mouse curser over the username (JMMJ) and select
+my org details as illustrated in figure 12. This will open the ‘My Org Details’ form, where
+users can update the details and submit request as illustrated in figure 15.
+Figure 15: Organisation details
+Note:
+Changes to ‘My User Details’ and ‘My Org Details’ will be effective upon approval from
+FIC. When amending the entity name and /or CIPC number, the entity name and/or CIPC
+number, CIPC documents are required.
+goAML V5.4 upgrade_reporting entity registration user guide | Version 1.00, 04 July 2025
+Page 16 of 16

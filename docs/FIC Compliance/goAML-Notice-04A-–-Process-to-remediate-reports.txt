@@ -1,0 +1,154 @@
+goAML NOTICE 04A
+PROCESS TO REMEDIATE REPORTS ON THE FIC’S REGISTRATION AND
+REPORTING SYSTEM
+Tuesday, 10 November 2020: This notice applies to accountable institutions, reporting
+institutions and other businesses (reporting entities) who submit web and batch reports
+to the Financial Intelligence Centre (FIC) on its registration and reporting system, goAML.
+This notice explains the process to be applied by reporting entities when remediating or
+fixing failed and/or rejected reports on goAML. This notice also explains the process to
+be applied by reporting entities when they discover that the report they submitted to the
+FIC and was accepted by the FIC system contains incorrect/inaccurate information. This
+notice replaces goAML Notice 4 which was previously issued by the FIC.
+Pre-Validation
+1. Reports submitted to the FIC on goAML cannot be changed after being submitted. The
+reporter must check the report before submitting it to the FIC to ensure that all the
+information captured in the report is correct and accurate.
+2. Reporters should ensure that the reports they submit to the FIC adhere to the Money
+Laundering and Terrorist Financing Control Regulations (Regulations), the goAML
+schema and business rules.
+3. In order to prevent failures and/or rejections, pre-validation of batch reports or XML files
+should be conducted before uploading of batch reports or XML files. This will ensure that
+accurate information is reported to the FIC within the prescribed format and time period.
+4. Reporting entities should pre-validate their batches in-house and may not utilise goAML
+as a pre-validation tool.
+Page 1 of 6
+
+5. The FIC has a testing environment (Staging UAT environment) which can be used by
+reporters to test their reports before they start submitting reports on the FIC’s Production
+environment.
+Quality reviews and assurance processes
+6. Reporting entities should follow a multi-disciplinary approach that will enable them to
+apply adequate quality control measures and implement assurance processes in order to
+identify potential issues relating to submission of reports to the FIC. This will ensure that
+issues are identified and rectified timeously in accordance with the FIC defined
+processes.
+7. Reporting entities should also conduct post submission quality reviews on an ongoing
+basis to ensure that their submitted reports have indeed been processed/accepted, and
+the client information and transactional data reported meets the requirements outlined in
+the regulations, and (correlates with the information held by the entity).
+Process to remediate rejected reports on goAML
+8. All the reports submitted to the FIC through the goAML system must adhere to the Money
+Laundering and Terrorist Financing Control Regulations (Regulations), the goAML
+schema and business rules. If the report does not meet these requirements, it might be
+rejected by the FIC system (goAML). If a report is rejected by goAML then the reporter
+has an obligation to remediate that report. There is no additional period given to reporters
+for remediation. A report is only considered reported to FIC once it is successfully
+processed by the FIC system and contains correct and accurate information.
+9. Once a report is submitted on goAML, the reporter will receive a notification through the
+message board whether that report was successful or rejected. If the report is rejected,
+the reporter has an obligation to remediate it.
+Process to remediate rejected reports submitted on goAML web
+10. If the rejected report was submitted as a web report the reporter must follow these steps
+to remediate:
+• Login to goAML
+Page 2 of 6
+
+• Access the rejected report through the Submitted Reports menu on goAML
+• Select revert on the report, which will move the report to the Drafted Reports
+menu on goAML.
+• The reporter must then access the report on the Drafted Reports menu and then
+edit and correct the relevant information as per the reasons and specifications
+provided by the FIC through the message board and re-submit the report to the
+FIC.
+11. If a web report is rejected, the reporter must remediate that rejected report and not submit
+a new report as this will create a duplicate on the FIC system.
+Process to remediate rejected batch reports
+12. If the rejected report was submitted as a batch report, the reporter must follow these
+steps to remediate:
+• The reporter must correct the relevant information in the XML file they originally
+submitted as per the reasons and specifications provided by the FIC through the
+message board.
+• The reporter must ensure that they list the “Report ID” allocated to the
+rejected/failed batch report in the “fiu_ref_number/FIC Ref Number” field.
+• The reporter must also ensure that they complete the “comments” field per
+transaction to describe the reason for remediation and the action taken
+• The reporter must then re-submit the report as a new report to the Centre.
+Process to remediate successfully processed reports with incorrect information
+13. The FIC considers a report to be successfully received by the FIC, if it is accepted by the
+FIC system, adheres to the Money Laundering and Terrorist Financing Control
+Regulations (Regulations), the goAML schema and business rules and it contains correct
+and accurate information.
+14. It is very important that before a reporter submits any report to FIC to check it for
+correctness and accuracy.
+15. Sometimes after a reporter submits a report and it is successfully processed by the FIC
+system, the reporter might find that the information reported is not correct or accurate.
+Page 3 of 6
+
+16. This section explains the process to remediate different scenarios of reports successfully
+submitted and processed by the FIC system but contain incorrect or inaccurate
+information.
+A. Overstated
+transaction value
+B. Understated
+transaction or
+other value
+REMEDIATION
+SCENARIOS
+C. Incorrect
+client / branch /
+location details
+D. Duplicated
+reports
+A. Report submitted with an overstated transaction value
+This applies where a report was submitted with an overstated value. The reporting entity
+must correct the report by submitting a new report with the correct transaction amount
+and in the ‟Comments” field of the report, the reporting entity must state the previously
+overstated transaction amount and describe the reason for the correction being made. If
+the correct transaction amount is less than the threshold amount, and the report was not
+supposed to be reported, then the reporting entity must send formal correspondence to
+the FIC detailing the reference numbers of the report, the transaction date and value, as
+well as the reason for the correction.
+B. Report submitted with an understated transaction or other value
+This applies where a report was submitted with an understated transaction or other value.
+The reporting entity must correct the report by submitting a new report with the correct
+transaction or other value and in the ‟Comments” field of the report, the reporting entity
+must describe the reason for the correction being made. Where a series of transactions
+are being reported such transactions should be aggregated when applicable and
+captured separately.
+Page 4 of 6
+
+C. Report submitted with incorrect client/branch/location details
+This applies where any report was submitted with incorrect client and/or branch and/or
+location details. In this instance, the reporting entity must correct the report by submitting
+a new report with the correct client and/or branch and/or location information and in the
+‟Comments” field the reporting entity must describe the reason for the correction being
+made. Where a series of transactions are being reported such transactions should be
+aggregated when applicable and captured separately.
+D. Duplicated reports
+This applies where a duplicated report was submitted to the FIC. The reporting entity
+must send formal correspondence to the FIC detailing the reference numbers of the
+duplicated reports, the transaction dates and values, as well as the reason for the
+duplication.
+Process to remediate the reports submitted with incorrect/inaccurate information
+17. When remediating reports for all types of remediation scenarios (explained above), the
+reporting entity must specify the previous report number (which is the “Report ID” of
+goAML submitted reports) in the ‟fiu_reference_number” field and include relevant
+descriptions in the ‟Comments” field which describes the reason for remediation and the
+action taken.
+18. The reporting entity must formally confirm when the remediation process has been
+completed, and provide the FIC with the goAML Report ID, report type, the reporter
+entity’s internal reference number, client information (client name and unique
+discriminator), transaction date and amount is listed. Note that each transaction must be
+listed individually and may not be grouped or consolidated with others.
+19. Each reporting entity should consult the Regulations together with the goAML schema
+and business rules to ensure its submissions adhere to the prescribed format and are
+submitted accordingly.
+Page 5 of 6
+
+For any further queries on this process, do not hesitate to contact the FIC, as follows:
+• By using the Compliance Queries link on the FIC website, http://www.fic.gov.za
+• Call the FIC Compliance Contact Centre on 012 641 6000 option 1
+Issued by:
+The Financial Intelligence Centre
+10 November 2020
+Page 6 of 6

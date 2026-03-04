@@ -1,0 +1,602 @@
+goAML V5.4
+TERRORIST FINANCING
+ACTIVITY REPORT USER GUIDE
+10 September 2025
+
+CONTENTS
+1. EXECUTIVE SUMMARY .......................................................................................... 4
+2. OBJECTIVE OF THIS USER GUIDE ....................................................................... 4
+3. DEFINITIONS ........................................................................................................... 5
+4. INTRODUCTION ...................................................................................................... 6
+5. goAML WEB ICONS ................................................................................................ 7
+6. TERRORIST FINANCING ACTIVITY REPORT BASELINE SCENARIO ................ 7
+7. ACCESSING goAML ............................................................................................... 9
+8. goAML PLATFORM LANDING PAGE .................................................................. 11
+9. CAPTURING A TERRORIST FINANCING ACTIVITY REPORT ........................... 11
+10. SUBMITTING A TERRORIST FINANCING ACTIVITY REPORT TO THE FIC ..... 25
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 2 of 26
+
+TABLE OF FIGURES
+Figure 1: Login page ...................................................................................................... 10
+Figure 2: QR Authentication page ................................................................................. 10
+Figure 3: Authentication screen ..................................................................................... 11
+Figure 4: goAML landing page ....................................................................................... 11
+Figure 5: goAML menu bar ............................................................................................ 12
+Figure 6: Report type selection interface ....................................................................... 12
+Figure 7: Terrorist Financing Activity Report.................................................................. 12
+Figure 8: Location screen .............................................................................................. 13
+Figure 9: Attachments screen ........................................................................................ 14
+Figure 10: Attachments selection screen ....................................................................... 14
+Figure 11: Indicators screen .......................................................................................... 15
+Figure 12: Activity landing screen .................................................................................. 15
+Figure 13: Report parties screen ................................................................................... 16
+Figure 14: Report party – person ................................................................................... 16
+Figure 15: Person form .................................................................................................. 17
+Figure 16: Phone form ................................................................................................... 18
+Figure 17: Address form ................................................................................................ 19
+Figure 18: Identification form ......................................................................................... 20
+Figure 19: Related person form ..................................................................................... 20
+Figure 20: Report party – entity ..................................................................................... 21
+Figure 21: Entity form .................................................................................................... 22
+Figure 22: Report party – Account ................................................................................. 23
+Figure 23: Account number form ................................................................................... 23
+Figure 24: Goods and services form .............................................................................. 25
+Figure 25: TFAR submission ......................................................................................... 26
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 3 of 26
+
+1. EXECUTIVE SUMMARY
+This document outlines the enhancements introduced with the goAML V5.4 system
+upgrade reflecting the recent system enhancements and new features introduced. This
+transition is essential to ensure continued technical support and system reliability. Version
+5.4 introduces several enhancements aimed at improving user experience and system
+functionality. These include an updated user interface with a new look and feel,
+replacement of certain free text fields with dropdown menus to enhance data consistency,
+and optimisation of dropdown lists for greater efficiency. These improvements are
+expected to streamline operations and align the system with current support standards.
+2. OBJECTIVE OF THIS USER GUIDE
+The objective of this user guide is to define and outline the steps to be followed when an
+accountable institution submits a Terrorist Financing Activity report (TFAR) to the
+Financial Intelligence Centre (FIC) in terms of section 29(1) of the Financial Intelligence
+Centre Act, 2001 (Act 38 of 2001) (FIC Act). Please note that the reporter must be
+registered with the FIC in terms of the FIC Act to access the FIC’s registration and
+reporting platform. To register, accountable institutions can refer to public compliance
+communication (PCC) 05D (PCC05D) for further guidance.
+Access to the registration platform
+In order to submit a TFAR to the FIC, the accountable institution must access the
+registration and reporting platform provided by the FIC for this purpose on the FIC’s
+website at www.fic.gov.za
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 4 of 26
+
+3. DEFINITIONS
+Administrator/ CO/ Refers to the Compliance Officer and Money Laundering Reporting
+MLRO Officer obliged to register and submit a report on behalf of the entity.
+Business Refers to an organisation, institution, or entity (ies) and can be used
+interchangeably.
+Financial Refers to the Financial Intelligence Centre Act, 2001 (Act No 38 of
+Intelligence Centre 2001).
+Act
+goAML Refers to the integrated software solution implemented by the FIC as
+its preferred ICT platform for registration, reporting, data collection,
+analysis, case management and secure communications required for
+the FIC’s daily operational functions and requirements.
+Individual reporter Refers to a natural person who acquires user credentials in order to file
+a report in terms of Section 29 of the FIC Act in their own personal
+capacity.
+Regulations Refers to the Money Laundering and Terrorist Financing Control
+Regulations made in terms of section 77 of the FIC Act and
+promulgated in Government Notice 1595 of 20 December 2002 as
+amended.
+Suspicious and Refers to a suspicious or unusual activity report submitted in terms of
+Unusual Activity section 29 of the FIC Act.
+Report (SAR)
+Targeted Financial Refers to the measures to restrict sanctioned persons and entities from
+Sanctions (TFS) having access to funds and property under their control and from
+receiving financial services in relation to such funds and property by
+requiring accountable institutions, reporting institutions and other
+persons to freeze property and activities pursuant to financial sanctions
+imposed in the United Nations Security Council (UNSC) Resolutions.
+TFAR Refers to a terrorist financing activity report submitted to the FIC in
+terms of section 29 of the FIC Act.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 5 of 26
+
+Important information to remember when reporting on the FIC’s reporting
+platform:
+1. Please refer to the registration guideline for accountable institutions and PCC05D
+for registration-related information
+2. It is mandatory on the goAML system, that all fields marked with an asterisk (*),
+be completed
+3. All first letters must be capitalised
+4. All fields on the regulatory report, that are not obtained during the course of
+establishing a particular person’s identity or conducting a particular activity, but
+should be obtained as part of commercial practice, should be completed with as
+much of the information as readily available. In an instance where the reporting
+institution does not have information readily available, they are to populate
+mandatory fields with “not obtained”
+5. The FIC does not accept any regulatory reports submitted by any means other
+than via the goAML system. Regulatory reports must accordingly be submitted in
+the prescribed format and timeframes. Failure to submit regulatory reports within
+the prescribed timeframes constitutes a finding of non-compliance in terms of the
+Financial Intelligence Act, 2001 (Act 38 of 2001) (FIC Act).
+4. INTRODUCTION
+A person who carries on a business or is in charge of or manages a business or is
+employed by a business, including all accountable institutions listed in Schedule 1 to the
+FIC Act, has an obligation to submit terrorist financing activity reports (TFARs) to the FIC
+in terms of section 29(1) of the FIC Act and must utilise the FIC’s registration and reporting
+platform, goAML, for submitting TFARs to the FIC.
+It is important to note that section 29(1) of the FIC Act refers to reports of suspicious or
+unusual activities concerning the proceeds of unlawful activities, money laundering,
+terrorist financing and financial sanctions offences as opposed to criminal activity in
+general.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 6 of 26
+
+5. goAML WEB ICONS
+Icons Description
+Cancel - Directs the system to disregard the entered details and not
+save them
+Preview - Verify content before taking action, e.g. downloading or
+approving
+Print - To produce physical copies of digital content
+Print Single Page - This ensures that only the page currently being
+viewed is printed
+Export PDF - Export the data into PDF format
+Refresh - update or reload the content on a screen
+Delete - Delete the uploaded document
+Add File Attachment - Allows users to upload or link a file to a form
+Save - Allows users to save the captured report details
+Submit – Submit the captured details of the report
+6. TERRORIST FINANCING ACTIVITY REPORT BASELINE SCENARIO
+The process flow diagram below demonstrates the end-to-end process for uploading a
+Terrorist Financing Activity Report (TFAR). This diagram is given greater detail in the
+content below. Fields in the flow diagram are labelled A to G.
+Field definitions
+• Report type (A) - The type of report (i.e. TFAR)
+• Reporting Person and Location (B) -
+o Reporting person - Linked to the logged in user details, this is the person
+uploading the TFAR
+o Location - Describes the actual geographical area or branch where the activity or
+series of activities occurred. The address of the logged in user, is populated with
+selected report for capturing. The logged in user must edit or delete the address, if
+the populated address is not the actual location of where the activity (series of
+activities) occurred
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 7 of 26
+
+• Indicators (C) - Indicators are used to specify the nature or type of suspicious or
+unusual activity, series of activities and/or reportable event that the institution is
+reporting to the FIC. The institution is required to review the list of predetermined
+indicators and select the most appropriate explanation(s)
+• Activity (D) - An activity can refer to an abandoned, proposed, cancelled or attempted
+transaction, as well as any other non-transaction-based activity. An activity is based
+on suspicion. In the event of a series of activities, each activity needs to be listed
+separately on the TFAR form. Concluded transactions should not be
+summarised/reported in activity reports. Terrorist Financing Transaction (TFTR)
+should be used for this purpose
+• Report parties (E) and Person / Entity / Account (F) -
+o Person - this refers to a natural person
+o Entity - this refers to a legal person / an organisation or a business entity. Note
+that there is a natural person that will always be linked to an entity (i.e. the director)
+o Account - this refers to an account that is held with an accountable institution (e.g.
+Cheque account or Savings account which is held with a bank). Note that there is
+a natural person that will always be linked to an account (i.e. the signatory)
+• Mandatory Fields (G) - this refers to the fields that are compulsory to be completed.
+The information that is required is dependent on the report parties selected in field G
+(i.e. Person / Entity / Account)
+• Goods and services - this information is required to further describe the physical
+assets that are linked to the funds. This is only compulsory should this be a physical
+asset (i.e. where there is more information to disclose about the activity relating to
+goods and services) and is captured as the last step of the report capturing prior to
+‘saving and submitting’ to the FIC. The following information is mandatory when
+completing this section:
+o Item type - if this is a moveable or immovable property within or outside the
+Republic of South Africa
+o Description - brief description of the property involved (e.g. luxury vehicle)
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 8 of 26
+
+Baseline scenario for submitting a terrorist financing activity report (TFAR) to the
+FIC – displaying fields A to G to be completed
+7. ACCESSING goAML
+Accountable institutions can access the goAML platform by utilising the username and
+password created during the registration process. Authentication will always be required
+before gaining access to goAML.
+Access goAML EE page by clicking the link:
+https://goweb.fic.gov.za/goAMLWeb_PRD
+• Click on the Login button
+• Enter your username in the standard format created during registration
+Authenticating with Two Factor Authentication
+Step 1: Download the Microsoft / Google Authenticator application on your mobile
+device
+Step 2: Click on goAML login page
+Step 3: Enter your username and password in the standard format captured during
+registration and click ‘LOGIN’
+• Enter your password in the standard format of Case sensitive, Alpha Caps,
+Alphanumeric, numeric & Char e.g. Test12345@ and click Log In button to proceed.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 9 of 26
+
+Figure 1: Login page
+Caution: Remember to keep your username and password safe.
+A QR code authentication page will be displayed as shown in figure 2 below.
+Figure 2: QR Authentication page
+• Step 4 (Option 1): Open the authenticator app on your mobile device and scan the
+QR code
+• Step 5: Enter the time-based code displayed from the goAML shortcut in the code
+field
+• (Option 2): Or use fallback authentication: Click on ‘Use Fall back authentication’
+option in figure 2 to receive a code via e-mail, enter the code and login. Please note
+that the code remains valid for five minutes. Once the time elapses, select ‘Use
+fallback authentication’ to generate a new code.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 10 of 26
+
+Figure 3: Authentication screen
+8. goAML PLATFORM LANDING PAGE
+Figure 4: goAML landing page
+• Menu Bar - Contains New Reports / Submitted Reports / Message Board / Statistics /
+Admin / Help. Clicking any of the link items will give a user access to the functionality
+required (a)
+• Logged in user details - Displays the details of the authenticated user e.g. username
+and associated entity name. The user profile allows you to change Password, My User
+Details, My Org Details and Logout as a user (b, c)
+• Information Bar - Contains the FIC information with links to download goAML
+documentation (d)
+9. CAPTURING A TERRORIST FINANCING ACTIVITY REPORT
+BASELINE SCENARIO FIELD A – REPORT TYPE
+To capture a TFAR, select New Reports in the menu bar, and click on Web Reports.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 11 of 26
+
+Figure 5: goAML menu bar
+The types of report selection will display all the report types. Select “Terrorist Financing
+Activity Report (TFAR)” and click the ‘Create Report’ button as shown below in figure
+Each report contains distinct fields, for example, activity reports will have different fields
+compared to transaction reports.
+Figure 6: Report type selection interface
+After selection, the terrorist financing activity report window will populate with the following
+fields:
+9.1 Report Headers
+Figure 7: Terrorist Financing Activity Report
+Click on each tab on the left to complete its section. When all sections are completed,
+the red indicator bar on the left will turn green, allowing the user to submit the registration
+form.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 12 of 26
+
+BASELINE SCENARIO FIELD B – REPORTING PERSON AND LOCATION
+9.1.1 Reporting Person
+The Reporting Person’s details are linked to the current logged-in user’s details
+• Reporting entity branch: Branch that is submitting the report to the FIC
+• Reporting entity reference: A unique code or identifier for the reporting entity
+• Report Date: Automatically generated with the (current) date that the report has been
+submitted
+• FIC Ref Number: This field is for resubmitting/ remediating previously failed reports
+and needs to reference the original report number issued by the FIC
+• Previously Rejected Report Ref Number: This field is for resubmitting/ remediating
+previously rejected reports and needs to reference the original report number issued
+by the FIC.
+9.1.2 Location
+The location refers to the physical address of the reporting entity (e.g., branch or office) /
+person submitting the report.
+Editing the location
+The address of the logged in user is populated in the selected report for capturing. The
+logged in user must edit or delete the address, if the populated address is not the actual
+location of where the activity (series of activities) occurred.
+Figure 8: Location screen
+The user can delete the address details by clicking the delete icon in figure 8 and then
+enter the reporting individual’s current location at the time of reporting.
+• House Number: Specifies the numeric or alphanumeric identifier assigned to a
+building within a street or complex. This field helps pinpoint the exact location where
+the activity occurred
+• Apartment Number: Indicates the specific unit or flat within a multi-unit building
+associated with the activity. This is essential for identifying the precise sub-location
+within a larger property
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 13 of 26
+
+• Address: Represents the full physical location where the activity took place. This may
+include street name, house number, apartment number, and other relevant details
+• Address 1: Primary line of the address, including the street name and house number
+• Address 2: Secondary line of the address, used for additional location details such as
+building name, floor number, or complex name
+• Type: Defines the category of the address provided. It may refer to a business,
+physical, postal, or private address
+• Town: Specifies the town or municipality where the activity occurred
+• City / Zip: Indicates the city and corresponding postal code relevant to the activity
+location
+• Country: Name of the country where the activity occurred
+• Province/State: Name of the province where the activity occurred.
+9.2 Attachments
+This section allows the user to upload supporting documents related to the report. While
+document attachment is available, it is not mandatory.
+Figure 9: Attachments screen
+To upload a document: Click the ‘add’ icon , then choose the appropriate document
+category from the dropdown menu. Complete the identification and description fields,
+select the files you wish to attach from their location, and click ‘open’ to upload.
+Figure 10: Attachments selection screen
+The document will be attached under the ‘Attachments’ tab.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 14 of 26
+
+BASELINE SCENARIO FIELD C – INDICATORS
+9.3 Indicators
+Report indicators relate to the circumstances that gave rise to the submission of the
+report.
+Figure 11: Indicators screen
+The accountable institution is required to review the list of pre-determined indicators on
+the scroll down list and select the most appropriate explanation(s). More than one
+“Report Indicator” may be provided. To apply the indicator, tick the checkbox for the
+indicator applicable to the report as in figure 11.
+Note: the above selection of indicator is for demonstration purposes only. The institution
+is required to review the list and select the most appropriate indicator for the activity,
+series of activities and/or reportable event being reported.
+BASELINE SCENARIO FIELD D – ACTIVITY
+9.4 Activity
+An Activity represents an event where a list of subjects (person / account / entity) and
+goods and services are related directly to the report without the need of a transaction.
+Figure 12: Activity landing screen
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 15 of 26
+
+BASELINE SCENARIO FIELD E – REPORT PARTIES
+9.5 Report Parties
+Report parties refer to the group of subjects involved in an activity report, which may
+include account (s), an entity (ies), or an individual (s). Their details are captured to
+document their roles and relevance to the reported activity. Accountable institutions can
+distinguish between parties that are its clients, and parties that are not its clients.
+Figure 13: Report parties screen
+BASELINE SCENARIO FIELD F – REPORT PARTY TYPE (PERSON / ACCOUNT /
+ENTITY)
+9.6 Report Party Types
+The Party Type field is required when completing an activity report. Unlike transactional
+reports, which have clear "From" (payor/sender) and "To" (payee/receiver) sections,
+activity reports only capture the involved party. To help identify the type of party, users
+must choose one of the available options: Person, Account, or Entity. These options
+are displayed as selectable choices, and each will be explained in the sections that follow.
+9.7 Person Form
+Figure 14: Report party – person
+To add a Person to the activity report, click the Person option button. This will launch the
+Person form, where the required person information can be populated. If the person’s
+information has already been captured during the current web session on goAML, you
+can use the ‘Use an existing Person’ button to automatically populate their details.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 16 of 26
+
+Figure 15: Person form
+Person form has the following fields:
+• Comments: Any comments in respect to the person
+• Title: e.g. Ms / Dr / Mrs
+• Gender: Male / Female / Unspecified
+• First Name: A legal name as reflecting in an identification document
+• Surname / Last Name: A legal surname as reflecting in an identification document
+• Middle Name: This is the name that appears between a person's first name and last
+name
+• Birth Date: Date of birth can be typed in from calendar in ccyy/mm/dd format (e.g.
+1999/02/25)
+• Mother’s name: Maiden name
+• Alias / Known as: An alternative name that a person, entity, or object is known by,
+other than their official or legal name
+• RSA ID: 13-digit South African ID Number (e.g. 9902251109876)
+• RSA passport number: South African passport number
+• Nationality 1: Refers to the first nationality in cases where an individual holds
+multiple nationalities. It may or may not be the same as the primary nationality
+• Nationality 2: Refers to an additional nationality for individuals who are legally
+recognised as citizens of more than one country
+• Country of origin: The country in which a person is deemed to have originated
+• Residence: Refers to the current residence country of the person
+• Occupation: This refers to the job title of the person
+• Tax number: The tax number of the individual whose details are being captured
+• Source of funds: Refers to the origin of the money used in a specific activity
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 17 of 26
+
+• Passport/Foreign ID/Permit/Refugee/Residence number: The identification number
+that is associated with a non-South African natural person
+• Issuing country: The country which issued the respective Passport/Foreign
+ID/Permit/Residence number.
+• Deceased: No / Yes, if the person has passed away
+• Date of Death: The specific calendar date on which the person passed away. This
+information should be entered accurately if the Deceased field is selected
+Capturing Phone Number Fields
+To enter phone information associated with the activity, select the append icon to display
+additional phone fields. The phone form will populate as shown below in figure 16.
+Figure 16: Phone form
+The “phone” form has the following fields:
+• Contact type: Type of contact associated with the activity
+• Comm. Type: The method of communication linked to the activity
+• Country prefix: Country prefix linked to the activity
+• Number: Contact number linked to the activity
+• Extension: Phone number extension linked to the activity
+• Comments: Any comments related to the activity
+Capturing Address Fields
+To enter address information associated with the activity, select the append icon to
+display additional address fields. The address form will populate as shown below in figure
+17.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 18 of 26
+
+Figure 17: Address form
+The “Address” form has the following fields:
+• House number: House number associated with the activity
+• Apartment number: Apartment number associated with the activity
+• Address 1: The location where the activity occurred, if applicable. Provide Address 1
+only if the activity took place at that address
+• Address 2: The location where the activity occurred, if applicable. Provide Address 1
+only if the activity took place at that address
+• Type: Refers to the type of address. Select the type of address from the list
+• Address: Physical address associated with the activity
+• City: Name of the city associated with the activity
+• Postal/Zip: Postal code of the city
+• Country: Name of the country associated with the activity
+• Province/State: Name of the province where the activity occurred
+• Comments: Any comments related to the activity
+Capturing Identification Fields
+To enter the identification information associated with the activity, select the append
+icon to display additional identification fields. The identification form will populate as
+shown below in figure 18.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 19 of 26
+
+Figure 18: Identification form
+The “Identification” form has the following fields:
+• Type: It can be a Travel Document / Permit / Passport, etc
+• Number: Alphanumeric value of the ID document (e.g. AT08154711 or
+8104226008085)
+• Issue Date: Identification document issue date
+• Expiry Date: The last date of validity of the Identification document
+• Issued by: Name of authority that issued the document (e.g. Department of Home
+Affairs)
+• Issue Country: Country where the document was issued
+• Comments: Any comments related to the activity
+Capturing “Related Person” Form
+Figure 19: Related person form
+The “Related person” form has the following fields:
+• Account relation role: The role of the person in relation to the account
+• Comments: Any comments in respect of the related person
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 20 of 26
+
+• Title: Title of the related person
+• Gender: Gender of the related person
+• First name: First name of the related person
+• Surname/Last name: Surname/Last name of the related person
+• Birthdate: Birth date of the related person
+• RSA ID: RSA ID of the related person
+• RSA passport number: RSA passport number of the related person
+• Passport/Foreign ID/Permit/Residence number: Identification number from the related
+person’s official non-South African document
+• Issuing country: The country that issued the respective Passport/Foreign
+ID/Permit/Residence number of the related person
+• Occupation: The related person’s current occupation or job title
+• Tax number: The related person’s South African Revenue Service (SARS) tax
+reference number
+• Source of funds: Specifies the origin of the funds used
+• All fields marked with an asterisk (*) needs to be completed
+• South Africa is pre-selected as the default country; users can update this field if
+the country is not South Africa
+• Click on use existing person icon to quickly select a previously saved person’s
+details
+• Clicking on delete icon , will delete all captured person details in the current
+form
+• Click append icon to open additional fields and enter any further activity-
+related information that may be required.
+9.8 Entity form
+Figure 20: Report party – entity
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 21 of 26
+
+To add an Entity to the activity report, click the Entity option button. This will launch the
+Entity form, where the required entity information can be populated. If the entity’s
+information has already been captured during the current web session on goAML, you
+can use the Use an existing entity button to automatically populate its details.
+Figure 21: Entity form
+Note: When capturing an entity as 'My Client', it is mandatory to capture at least one
+director associated with the entity.
+• Whenever the involved Account / Person / Entity is the client of the reporting
+entity, more details may be demanded from the client, and the reporting entity
+must have the information as part of the adherence to the “Know Your Customer”
+(KYC) requirements of the FIC Act.
+The “Entity” form has the following fields:
+• Comments: Any related comments, if applicable
+• Entity name: Name of the entity involved
+• Registered name: The Registered name of the institution (CIPC)
+• Incorporation Legal form: The legal form of the entity
+• Business: Business activities of the entity
+• Incorp./Reg.Number: The registration number of the entity / company in the relevant
+authority (e.g. Chamber of Commerce/ CIPC etc.)
+• Incorporation date: Incorporation registration date in ccyy/mm/dd format
+• Incorporation province/state: Name of the province/state involved
+• Incorporation country code: Incorporation registration country code, select from a list
+• Tax number: The entity tax number
+• Comments: Any comments related to the entity
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 22 of 26
+
+• Business closed: Select the checkbox if the business is closed; leave it blank if the
+business remains open
+• Date closed: If entity is closed, specify the date of closure in ccyy/mm/dd format
+9.9 Account form
+Figure 22: Report party – Account
+To add an Account to the activity report, click the Account number option button. This
+will launch the Account number form, where the required account information can be
+populated. If the account information has already been captured during the current web
+session on goAML, you can use the Use an existing account button to automatically
+populate the details.
+Figure 23: Account number form
+• Details of a signatory must be recorded when the account holder is a client of the
+accountable institution
+• Whenever the involved Account / Person / Entity is the client of the reporting entity,
+more details may be demanded from the client, and the reporting entity must have
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 23 of 26
+
+the information as part of the adherence to the “Know Your Customer” (KYC)
+requirements of the FIC Act
+• In the instance of an account of a minor both the details of the minor and guardian
+authorised to transact on his/her behalf should be captured
+• For an ‘account my client’ activity, the account must have a signatory.
+The “Account” form has the following fields:
+• Comment: Any applicable comments
+• Institution country: Country where an institution holding the account is based or
+registered
+• Account type: Type of account (e.g. Trust or Client)
+• Account number: the bank Account number (for non-banking institutions the account
+number can refer to the client number/profile number assigned by the institution)
+• Account name: The official name associated with the account, used to identify the
+account holder or entity
+• Institution registration name: Name of the institution where account is held
+• Branch code: Branch where the account is held
+• Swift: Bank identifier code used to specify a particular bank
+• Institution code: Institution identifier code if a Swift code is not available
+• Status code: Account status when transaction was initiated (e.g. Active/Closed)
+• Currency code: Currency the account is kept in
+• Closed: Date account closed if applicable
+• Balance: The account balance at the time of reporting
+• Date of balance: Date of account balance
+• Beneficiary comment: Any remarks or notes regarding the beneficiary
+• Comments: Any other comments, if applicable
+9.10 Goods and services
+To add Goods and Services to the activity report, begin by clicking the Goods and
+services option button. The goods and services form will generate as illustrated below in
+figure 24.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 24 of 26
+
+Figure 24: Goods and services form
+The “goods and services” form has the following fields:
+• Item Type: The type of item (e.g. Vehicle) (required)
+• Item Make: Item make (e.g. if the item is a car - BMW)
+• Description: Description of the item (e.g. Luxury Car) (required)
+• Previously Registered to: Name of previous owner
+• Presently Registered To: Name of current owner
+• Estimated Value: Estimated value of the item
+• Status Code: Status code (e.g. Bought, Hired)
+• Disposed Value: Effective value for property transfer (e.g. R500 000.00)
+• Currency Code: Used to report service conducted in foreign currency
+• Size UOM: Unit of measurement (e.g. square meters)
+• Registration Number: Official registration number (e.g. Car VIN Number)
+• Comments: Any applicable comments
+• Size: Size of the property
+• Registration Date: Official registration date in ccyy/mm/dd format
+• Identification Number: Any number that can identify the item (e.g. Car Plate Number)
+10. SUBMITTING A TERRORIST FINANCING ACTIVITY REPORT TO THE FIC
+Once all the required details have been provided, the bar on the left of the tabs will turn
+green, to enable the user to submit the report. Kindly note that once submitted, the report
+will be locked from being edited by the user.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 25 of 26
+
+Figure 25: TFAR submission
+• Once the form is submitted, the pop-up screen will display with the report reference
+number. The reference number is used for any report related enquiries.
+• A notification e-mail with the refence number will be sent to the user’s e-mail
+address which was entered during the registration process.
+• The report receipt will be accessible via the goAML message board. This receipt
+will indicate whether the submission was accepted or rejected, helping ensure
+transparency and tracking.
+goAML EE V5.4 terrorist financing activity report user guide ӏ Version 1.4, 10 September 2025
+Page 26 of 26
