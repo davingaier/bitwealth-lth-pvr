@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
   const { data: customer, error: custErr } = await sb
     .schema("public")
     .from("customer_details")
-    .select("customer_id, email, first_name, last_name, org_id, account_model, registration_status")
+    .select("customer_id, email, first_names, last_name, org_id, account_model, registration_status")
     .eq("email", callerEmail.toLowerCase())
     .eq("org_id", ORG_ID)
     .single();
@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
   }
 
   const customerId: number = customer.customer_id;
-  const firstName: string = customer.first_name ?? "Customer";
+  const firstName: string = customer.first_names ?? "Customer";
   const customerEmail: string = customer.email;
 
   // ── Step 4: Load exchange_accounts (bank details for ZAR) ─────────────────

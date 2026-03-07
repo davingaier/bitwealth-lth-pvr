@@ -1341,6 +1341,7 @@
         let exchangeAccountData = null;
         let currentWithdrawals = [];
         let withdrawableBalance = { btc: 0, usdt: 0 };
+        let liveUsdtZarRate = 0; // populated when withdrawals section loads
 
         // ── API Key Expiry Banner ─────────────────────────────────────────────
         async function loadApiKeyExpiryBanner(customerId) {
@@ -1392,6 +1393,7 @@
                         if (rate > 0) {
                             const zarEl = document.getElementById('wdZarEquiv');
                             if (zarEl) zarEl.textContent = (withdrawableBalance.usdt * rate).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            liveUsdtZarRate = rate;
                             const rateEl = document.getElementById('wdLiveRate');
                             if (rateEl) rateEl.textContent = rate.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
@@ -1548,6 +1550,13 @@
             if (type === 'ZAR') {
                 const amount = parseFloat(document.getElementById('wdZarAmount').value);
                 if (!amount || amount < 100) { showWdFormMessage('Please enter a valid ZAR amount (minimum R100).', 'error'); return; }
+                if (liveUsdtZarRate > 0) {
+                    const usdtNeeded = amount / liveUsdtZarRate;
+                    if (usdtNeeded > withdrawableBalance.usdt) {
+                        showWdFormMessage(`Insufficient balance. R${amount.toFixed(2)} requires ~${usdtNeeded.toFixed(2)} USDT but only $${withdrawableBalance.usdt.toFixed(2)} USDT is available.`, 'error');
+                        return;
+                    }
+                }
                 payload.amount = amount;
             } else if (type === 'BTC') {
                 const amount = parseFloat(document.getElementById('wdBtcAmount').value);
