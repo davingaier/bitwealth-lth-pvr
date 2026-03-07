@@ -40,7 +40,7 @@ This document is the authoritative step-by-step build plan for adding the **API 
 | `lth_pvr.pending_zar_conversions` | DB table | Add `status`, `order_id`, `order_side`, `pair` columns |
 | `lth_pvr.v_pending_zar_conversions` | DB view | Rebuild after table enhancement |
 | "Pending ZAR Conversions" card | Admin UI | Add "Convert ZAR → USDT" button |
-| `public.withdrawal_requests` | DB table | Add `currency`, `withdrawal_address`, `withdrawable_balance_snapshot`, `interim_performance_fee_btc`, `interim_performance_fee_usdt`, `net_amount`, `source_asset`, `amount_zar`, `valr_conversion_fee_usdt`, `valr_withdrawal_fee_zar`, `is_first_free_withdrawal`, `conversion_order_id`, `conversion_status`, `zar_withdrawal_ref`, `valr_withdrawal_id`, `valr_response`, `processed_at`, `completed_at`; add `'cancelled'` to status enum; add RLS policies and indexes |
+| `lth_pvr.withdrawal_requests` | DB table | Full schema created in `lth_pvr` (moved from `public` in Migration 7). Multi-currency, interim fee columns, indexes, RLS service-role bypass. Status: `pending\|processing\|completed\|failed\|cancelled`. |
 | `lth_pvr.withdrawal_fee_snapshots` | DB table | No change — already tracks pre-withdrawal HWM for reversion |
 | "Withdrawal Completed" email | DB | No change |
 | Customer portal Withdrawals + Settings nav | `website/customer-portal.html` | Build content sections |
@@ -242,21 +242,54 @@ ORDER BY pzc.occurred_at;
 
 ### Migration 6: `20260307_enhance_withdrawal_requests`
 
+> **Note:** This migration was originally applied to `public.withdrawal_requests`. Migration 7 subsequently moved the table to `lth_pvr`. The SQL below reflects the final canonical schema in `lth_pvr`.
+
 ```sql
 -- ─────────────────────────────────────────────────────────────────────────────
--- Step 1: Add 'cancelled' to existing status enum (if not already a CHECK)
+-- Create lth_pvr.withdrawal_requests (full schema)
+-- Strategy-specific table — belongs in lth_pvr, not public.
 -- ─────────────────────────────────────────────────────────────────────────────
--- withdrawal_requests.status currently: pending|approved|rejected|processing|completed|failed
--- Add 'cancelled' for customer self-cancellation
-ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS withdrawal_requests_status_check;
-ALTER TABLE public.withdrawal_requests
+CREATE TABLE lth_pvr.withdrawal_requests (
+  request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL,
+  customer_id BIGINT NOT NULL,
+  portfolio_id UUID NULL,
+  amount_usdt NUMERIC(20,8) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','processing','completed','failed','cancelled')),
+  notes TEXT NULL,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- ... (see Migration 7 for full DDL)
+);
+```
+
+---
+
+### Migration 7: `20260307_move_withdrawal_requests_to_lth_pvr`
+
+Moves `public.withdrawal_requests` → `lth_pvr.withdrawal_requests`. Includes CREATE TABLE with full column/constraint/index/RLS/COMMENT definitions, INSERT INTO … SELECT to migrate existing rows, and DROP TABLE on the old location.
+
+```sql
+-- (Applied — see Supabase migration history)
+```
+
+---
+
+### Migration 6 original SQL (historical — applied to public schema)
+
+```sql
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 1: Status enum
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE lth_pvr.withdrawal_requests DROP CONSTRAINT IF EXISTS withdrawal_requests_status_check;
+ALTER TABLE lth_pvr.withdrawal_requests
   ADD CONSTRAINT withdrawal_requests_status_check
   CHECK (status IN ('pending','processing','completed','failed','cancelled'));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 2: Multi-currency and crypto withdrawal support
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.withdrawal_requests
+ALTER TABLE lth_pvr.withdrawal_requests
   -- Currency selector (BTC, USDT direct crypto; ZAR fiat via conversion)
   ADD COLUMN currency                TEXT        NULL
                                      CHECK (currency IN ('BTC','USDT','ZAR') OR currency IS NULL),
@@ -268,9 +301,12 @@ ALTER TABLE public.withdrawal_requests
 -- ─────────────────────────────────────────────────────────────────────────────
   -- Balance at the moment of request (audit trail + race condition protection)
   ADD COLUMN withdrawable_balance_snapshot NUMERIC(20,8) NULL,
-  -- Interim performance fee charged at withdrawal time (HWM logic, same as month-end)
-  ADD COLUMN interim_performance_fee_btc   NUMERIC(20,8) NOT NULL DEFAULT 0,
+  -- Canonical interim performance fee in USD terms (always USDT regardless of settlement asset)
   ADD COLUMN interim_performance_fee_usdt  NUMERIC(20,8) NOT NULL DEFAULT 0,
+  -- Fee settlement breakdown (invariant: settled_usdt + settled_btc × btc_price = performance_fee_usdt)
+  ADD COLUMN interim_fee_settled_usdt      NUMERIC(20,8) NOT NULL DEFAULT 0,  -- USDT actually deducted
+  ADD COLUMN interim_fee_settled_btc       NUMERIC(20,8) NOT NULL DEFAULT 0,  -- BTC withheld for shortfall; transferred immediately to BitWealth (Option A)
+  ADD COLUMN interim_fee_btc_price         NUMERIC(20,8) NULL,               -- BTC/USD spot price at calculation time
   -- Net amount customer receives after interim fee deducted
   ADD COLUMN net_amount              NUMERIC(20,8) NULL,
 
@@ -300,33 +336,28 @@ ALTER TABLE public.withdrawal_requests
 -- Step 6: Performance indexes
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_wr_customer_date
-  ON public.withdrawal_requests (customer_id, requested_at DESC);
+  ON lth_pvr.withdrawal_requests (customer_id, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wr_active
-  ON public.withdrawal_requests (status, requested_at)
+  ON lth_pvr.withdrawal_requests (status, requested_at)
   WHERE status IN ('pending','processing');
 CREATE INDEX IF NOT EXISTS idx_wr_org_date
-  ON public.withdrawal_requests (org_id, requested_at DESC);
+  ON lth_pvr.withdrawal_requests (org_id, requested_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Step 7: Row Level Security
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lth_pvr.withdrawal_requests ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access
-CREATE POLICY wr_service_role_bypass ON public.withdrawal_requests
+CREATE POLICY wr_service_role_bypass ON lth_pvr.withdrawal_requests
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ⚠️  Customer-facing RLS policies (SELECT / INSERT / UPDATE) are DEFERRED.
 -- Prerequisite: customer_details needs a user_id UUID column linking to auth.users.
--- Neither customer_details nor any other table currently has this link.
 -- These policies are to be added in the portal auth migration (Phase 7 prerequisite)
 -- once Supabase Auth accounts are issued to customers and linked to customer_details.
 --
--- When ready, add:
---   ALTER TABLE public.customer_details ADD COLUMN user_id UUID REFERENCES auth.users(id);
--- Then create the following policies:
---
--- CREATE POLICY wr_customer_select ON public.withdrawal_requests
+-- CREATE POLICY wr_customer_select ON lth_pvr.withdrawal_requests
 --   FOR SELECT TO authenticated
 --   USING (
 --     customer_id IN (
@@ -334,7 +365,7 @@ CREATE POLICY wr_service_role_bypass ON public.withdrawal_requests
 --     )
 --   );
 --
--- CREATE POLICY wr_customer_insert ON public.withdrawal_requests
+-- CREATE POLICY wr_customer_insert ON lth_pvr.withdrawal_requests
 --   FOR INSERT TO authenticated
 --   WITH CHECK (
 --     customer_id IN (
@@ -343,7 +374,7 @@ CREATE POLICY wr_service_role_bypass ON public.withdrawal_requests
 --     AND status = 'pending'
 --   );
 --
--- CREATE POLICY wr_customer_cancel ON public.withdrawal_requests
+-- CREATE POLICY wr_customer_cancel ON lth_pvr.withdrawal_requests
 --   FOR UPDATE TO authenticated
 --   USING (
 --     customer_id IN (
@@ -353,13 +384,19 @@ CREATE POLICY wr_service_role_bypass ON public.withdrawal_requests
 --   )
 --   WITH CHECK (status = 'cancelled');
 
-COMMENT ON TABLE public.withdrawal_requests IS
+COMMENT ON TABLE lth_pvr.withdrawal_requests IS
   'Customer withdrawal requests. Auto-executed on submission — no admin approval step. Supports BTC/USDT direct crypto and ZAR fiat via conversion.';
-COMMENT ON COLUMN public.withdrawal_requests.currency IS
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.currency IS
   'BTC or USDT = crypto withdrawal to customer-provided address. ZAR = fiat to pre-linked bank account via VALR conversion.';
-COMMENT ON COLUMN public.withdrawal_requests.interim_performance_fee_btc IS
-  'Interim HWM performance fee charged at withdrawal time using same logic as month-end. HWM updated atomically. No month-end exemption — double-charging is prevented by HWM update.';
-COMMENT ON COLUMN public.withdrawal_requests.withdrawable_balance_snapshot IS
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.interim_performance_fee_usdt IS
+  'Total interim performance fee in USD terms — canonical amount used for HWM reversion. Always expressed in USDT.';
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.interim_fee_settled_usdt IS
+  'USDT actually deducted as interim fee. May be less than interim_performance_fee_usdt if USDT balance insufficient.';
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.interim_fee_settled_btc IS
+  'BTC withheld to cover any USDT shortfall. Immediately transferred to BitWealth BTC wallet on execution (Option A). Zero when full fee covered by USDT.';
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.interim_fee_btc_price IS
+  'BTC/USD spot price at fee calculation time. Invariant: settled_usdt + (settled_btc × btc_price) = performance_fee_usdt.';
+COMMENT ON COLUMN lth_pvr.withdrawal_requests.withdrawable_balance_snapshot IS
   'Balance at time of request submission. Used for audit trail and race condition detection.';
 ```
 
@@ -495,6 +532,12 @@ export async function withdrawFeeFromCustomerAccount(
 2. Resolve customer credentials via `resolveCustomerCredentials()`
 3. Call VALR `POST /v1/wallet/crypto/{currency}/withdraw` using customer's key
 4. Log to `lth_pvr.valr_transfer_log` with `transfer_type = 'platform_fee'` or `'performance_fee'`
+
+**BTC interim fee settlement (Option A):** When called with `currency = 'BTC'` for an interim fee shortfall, the function behaves identically to a performance fee transfer — it withdraws the BTC amount to the BitWealth BTC wallet (`38ppcqBCz58KENxP9Hi79oCrVFuPTHSdTP`) immediately before the customer's withdrawal is processed. The `withdrawal_requests` row already contains `interim_fee_settled_btc` and `interim_fee_btc_price` for accounting reconciliation.
+
+**Subaccount vs API model routing:**
+- **Subaccount model:** uses existing `transferToMainAccount()` (internal VALR subaccount transfer, no external withdrawal)
+- **API model:** uses VALR `POST /v1/wallet/crypto/{currency}/withdraw` with customer's vault key
 
 **Important:** The withdrawal will only succeed if the customer previously whitelisted BitWealth's wallet address in VALR. The edge function should handle the "address not whitelisted" error gracefully — log a critical alert and do NOT retry automatically (requires customer action).
 
@@ -745,16 +788,23 @@ All conversion functions use the **same limit→5-minutes→0.25% price move→m
    - **No month-end exemption** — the HWM update prevents double-charging at month-end
    - Store pre-withdrawal state in `lth_pvr.withdrawal_fee_snapshots` for reversion if cancellation
    - Update HWM immediately after fee calculation (atomic snapshot)
-   - Fee in same currency as `amount`
+   - Fee is always expressed in USDT (`interim_performance_fee_usdt` = canonical amount)
+   - **BTC fee settlement (Option A):** If the customer's USDT balance is insufficient to cover the full interim fee:
+     - Fetch live BTC/USD spot price from VALR (`/v1/public/BTCUSDT/marketsummary`)
+     - Calculate shortfall in BTC: `shortfall_btc = (fee_usdt - available_usdt) / btc_spot_price`
+     - Record: `interim_fee_settled_usdt` = USDT portion, `interim_fee_settled_btc` = BTC portion, `interim_fee_btc_price` = spot rate used
+     - The BTC shortfall is collected immediately at execution time (step 11) before the customer withdrawal is processed
+   - When USDT balance is sufficient: `interim_fee_settled_usdt = interim_performance_fee_usdt`, `interim_fee_settled_btc = 0`
 8. **Calculate VALR fees** (ZAR withdrawals only):
    - Conversion fee: `amount_usdt * 0.0018` (0.18%)
    - Withdrawal fee: check `bank_name` in `exchange_accounts`; if `bank_name ILIKE '%standard bank%'` → R0 fast OR check free withdrawal count this month:
      - Count `withdrawal_requests WHERE status='completed' AND completed_at >= date_trunc('month', now())`
      - If count < 30: R0 (one of the 30 free normal withdrawals); else: R8.50 (normal) or R30 (fast, non-SB)
 9. **net_amount** = `amount - interim_fee - valr_fees`
-10. Create `public.withdrawal_requests` record with `status = 'pending'`, snapshot, all fee fields
+10. Create `lth_pvr.withdrawal_requests` record with `status = 'pending'`, snapshot, all fee fields
 11. Immediately proceed to execution (do not wait for admin):
     - Mark `status = 'processing'`
+    - **If `interim_fee_settled_btc > 0`:** Call `withdrawFeeFromCustomerAccount(sb, customerId, 'BTC', interim_fee_settled_btc, ledgerId)` to transfer BTC fee portion to BitWealth immediately (before processing the customer's withdrawal). This mirrors the monthly performance fee collection flow for BTC. Log to `lth_pvr.valr_transfer_log`.
     - Call `ef_convert_usdt_to_zar` logic (ZAR), direct VALR crypto withdrawal (BTC/USDT)
 12. Send **"Withdrawal Submitted & Processing"** email to customer (confirmation + VALR order details in one email)
 13. On VALR success: update `status = 'completed'`, `completed_at`, `valr_withdrawal_id`; send **"Withdrawal Outcome"** (Variant A — completed) email to customer
@@ -941,7 +991,7 @@ Add a new card in the Administration module: **"Customer Withdrawals"**
 
 Since withdrawals are auto-executed on submission, this panel is **read-only** — for monitoring and audit purposes only. No approve/reject buttons.
 
-Reads from `public.withdrawal_requests` joined with `customer_details`, ordered by `requested_at DESC`.
+Reads from `lth_pvr.withdrawal_requests` joined with `public.customer_details`, ordered by `requested_at DESC`.
 
 **Filters (dropdowns):**
 - Status: All / Pending / Processing / Completed / Failed / Cancelled

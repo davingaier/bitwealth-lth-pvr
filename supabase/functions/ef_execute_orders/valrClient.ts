@@ -1,10 +1,21 @@
-// valrClient.ts – shared VALR helper with subaccount support for VALR
+// valrClient.ts – shared VALR helper with subaccount + API-model credential support
 // Used by both ef_execute_orders and ef_poll_orders.
 //
 // It is tolerant of currency pair formats:
 //   - "BTCUSDT"  (VALR native)
 //   - "BTC/USDT" (internal / DB format)
 // In all cases we normalise to VALR's "BTCUSDT" when talking to the API.
+//
+// Credential resolution:
+//   - Pass `credentials` (apiKey + apiSecret) for API-model customers whose keys
+//     come from Supabase Vault via resolveCustomerCredentials().
+//   - Omit / pass null to fall back to VALR_API_KEY / VALR_API_SECRET env vars
+//     (existing subaccount-model path — no breaking change).
+
+export interface ValrRequestCredentials {
+  apiKey: string;
+  apiSecret: string;
+}
 
 const VALR_API_URL =
   Deno.env.get("VALR_API_URL") ??
@@ -38,12 +49,13 @@ async function valrPrivateRequest(
   method: string,
   path: string,
   body: unknown,
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
-  const apiKey = Deno.env.get("VALR_API_KEY");
-  const apiSecret = Deno.env.get("VALR_API_SECRET");
+  const apiKey = credentials?.apiKey ?? Deno.env.get("VALR_API_KEY");
+  const apiSecret = credentials?.apiSecret ?? Deno.env.get("VALR_API_SECRET");
   if (!apiKey || !apiSecret) {
-    throw new Error("VALR_API_KEY / VALR_API_SECRET missing in environment");
+    throw new Error("VALR_API_KEY / VALR_API_SECRET missing — not in credentials or environment");
   }
 
   const timestamp = Date.now().toString();
@@ -114,46 +126,50 @@ export async function placeLimitOrder(
     timeInForce?: string;
     postOnly?: boolean;
   },
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
   const pair = normalisePair(payload.pair);
   const body = { ...payload, pair };
-  return await valrPrivateRequest("POST", "/v1/orders/limit", body, subaccountId);
+  return await valrPrivateRequest("POST", "/v1/orders/limit", body, subaccountId, credentials);
 }
 
 // 2) Poll order by VALR customerOrderId (we use intent_id as customerOrderId)
 export async function getOrderSummaryByCustomerOrderId(
   customerOrderId: string,
   pair: string,
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
   const p = normalisePair(pair);
   const path =
     `/v1/orders/history/summary/customerorderid/${customerOrderId}?currencyPair=${p}`;
-  return await valrPrivateRequest("GET", path, undefined, subaccountId);
+  return await valrPrivateRequest("GET", path, undefined, subaccountId, credentials);
 }
 
 // Optional: keep a direct poll by orderId in case other EFs use it
 export async function getOrderSummaryById(
   orderId: string,
   pair: string,
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
   const p = normalisePair(pair);
   const path =
     `/v1/orders/history/summary/orderid/${orderId}?currencyPair=${p}`;
-  return await valrPrivateRequest("GET", path, undefined, subaccountId);
+  return await valrPrivateRequest("GET", path, undefined, subaccountId, credentials);
 }
 
 // 3) Cancel order by VALR orderId
 export async function cancelOrderById(
   orderId: string,
   pair: string,
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
   const p = normalisePair(pair);
   const path = `/v1/orders/orderid/${orderId}?currencyPair=${p}`;
-  return await valrPrivateRequest("DELETE", path, undefined, subaccountId);
+  return await valrPrivateRequest("DELETE", path, undefined, subaccountId, credentials);
 }
 
 // 4) Place MARKET order for fallback logic in ef_poll_orders
@@ -163,7 +179,8 @@ export async function placeMarketOrder(
   side: string,
   amount: string,
   customerOrderId: string,
-  subaccountId?: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
 ) {
   const p = normalisePair(pair);
   const sideLower = side.toLowerCase();
@@ -176,7 +193,7 @@ export async function placeMarketOrder(
     baseAmount: amount,
   };
 
-  return await valrPrivateRequest("POST", "/v1/orders/market", body, subaccountId);
+  return await valrPrivateRequest("POST", "/v1/orders/market", body, subaccountId, credentials);
 }
 
 // 5) Public market price for pair – used for fallback price checks

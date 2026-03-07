@@ -249,3 +249,194 @@ export async function retryTransfer(
     originalTransfer.ledger_id
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// withdrawFeeFromCustomerAccount
+//
+// Withdraws a platform or performance fee from a customer's VALR account to
+// BitWealth's static fee-collection wallet.
+//
+// Routing:
+//   subaccount model → internal VALR subaccount transfer (no external withdrawal)
+//   api model        → VALR crypto withdrawal API using customer's vault key
+//
+// Also used for Option A BTC interim fee settlement: when a customer's USDT
+// balance is insufficient to cover the full interim performance fee at withdrawal
+// time, the BTC shortfall is transferred here immediately before the customer
+// withdrawal is processed.
+//
+// The destination wallet address is read from public.wallet_config to avoid
+// hard-coding addresses in edge function code.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { resolveCustomerCredentials } from "./valrCredentials.ts";
+import { logAlert } from "./alerting.ts";
+
+const VALR_API_URL_TRANSFER =
+  Deno.env.get("VALR_API_URL") ??
+  Deno.env.get("VALR_API_BASE") ??
+  "https://api.valr.com";
+
+export async function withdrawFeeFromCustomerAccount(
+  sb: SupabaseClient,
+  customerId: number,
+  currency: "USDT" | "BTC",
+  amount: number,
+  ledgerId?: string,
+  transferType: "platform_fee" | "performance_fee" = "performance_fee",
+): Promise<TransferResult> {
+  const orgId = Deno.env.get("ORG_ID");
+
+  // ── 1. Resolve destination wallet from wallet_config ──────────────────────
+  const { data: walletRow, error: walletErr } = await sb
+    .schema("public")
+    .from("wallet_config")
+    .select("wallet_address")
+    .eq("currency", currency)
+    .eq("is_active", true)
+    .single();
+
+  if (walletErr || !walletRow?.wallet_address) {
+    return {
+      success: false,
+      errorMessage: `wallet_config missing for currency=${currency}: ${walletErr?.message ?? "no row"}`,
+    };
+  }
+  const destinationAddress: string = walletRow.wallet_address;
+
+  // ── 2. Resolve this customer's VALR credentials ───────────────────────────
+  let creds: Awaited<ReturnType<typeof resolveCustomerCredentials>>;
+  try {
+    creds = await resolveCustomerCredentials(sb, customerId);
+  } catch (e) {
+    return { success: false, errorMessage: e.message };
+  }
+
+  // ── 3. Create pending transfer log entry ──────────────────────────────────
+  const { data: transferLog, error: logError } = await sb
+    .from("valr_transfer_log")
+    .insert({
+      org_id: orgId,
+      customer_id: customerId,
+      transfer_type: transferType,
+      currency,
+      amount,
+      from_subaccount_id: creds.accountModel === "subaccount" ? creds.subaccountId : null,
+      to_account: destinationAddress,
+      ledger_id: ledgerId,
+      status: "pending",
+    })
+    .select("transfer_id")
+    .single();
+
+  if (logError) {
+    return { success: false, errorMessage: `DB log error: ${logError.message}` };
+  }
+  const transferId: string = transferLog.transfer_id;
+
+  // ── 4a. Subaccount model: internal VALR transfer ──────────────────────────
+  if (creds.accountModel === "subaccount") {
+    if (!creds.subaccountId) {
+      await sb.from("valr_transfer_log").update({ status: "failed", error_message: "subaccount_id missing" }).eq("transfer_id", transferId);
+      return { success: false, transferId, errorMessage: "subaccount_id missing for subaccount model customer" };
+    }
+    // Delegate to existing transferToMainAccount logic — re-use the proven subaccount path
+    const result = await transferToMainAccount(
+      sb,
+      {
+        fromSubaccountId: creds.subaccountId,
+        toAccount: "main",
+        currency,
+        amount,
+        transferType,
+      },
+      customerId,
+      ledgerId,
+    );
+    // The inner call wrote its own log row; clean up the extra pending row created above
+    await sb.from("valr_transfer_log").delete().eq("transfer_id", transferId);
+    return result;
+  }
+
+  // ── 4b. API model: VALR crypto withdrawal to BitWealth wallet ─────────────
+  const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
+
+  if (testMode) {
+    await sb.from("valr_transfer_log").update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      valr_api_response: { mock: true, message: "Test mode — withdrawal simulated" },
+    }).eq("transfer_id", transferId);
+    return { success: true, transferId, valrResponse: { mock: true } };
+  }
+
+  try {
+    const { signVALR } = await import("./valr.ts");
+    const path = `/v1/wallet/crypto/${currency}/withdraw`;
+    const body = {
+      amount: amount.toString(),
+      address: destinationAddress,
+    };
+    const bodyString = JSON.stringify(body);
+    const timestamp = Date.now().toString();
+    const signature = await signVALR(timestamp, "POST", path, bodyString, creds.apiSecret);
+
+    const valrResp = await fetch(`${VALR_API_URL_TRANSFER}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VALR-API-KEY": creds.apiKey,
+        "X-VALR-SIGNATURE": signature,
+        "X-VALR-TIMESTAMP": timestamp,
+        // No X-VALR-SUB-ACCOUNT-ID for API model customers
+      },
+      body: bodyString,
+    });
+
+    const responseText = await valrResp.text();
+    let responseData: Record<string, unknown> = {};
+    try { responseData = JSON.parse(responseText); } catch { responseData = { raw: responseText }; }
+
+    if (!valrResp.ok) {
+      const errMsg: string = (responseData.message as string) ?? `HTTP ${valrResp.status}`;
+      const isMissingWhitelist =
+        responseText.toLowerCase().includes("whitelist") ||
+        responseText.toLowerCase().includes("not allowed");
+
+      await sb.from("valr_transfer_log").update({
+        status: "failed",
+        error_message: errMsg,
+        valr_api_response: responseData,
+      }).eq("transfer_id", transferId);
+
+      if (isMissingWhitelist) {
+        await logAlert(
+          sb,
+          "valrTransfer.withdrawFeeFromCustomerAccount",
+          "critical",
+          `Customer ${customerId} withdrawal address not whitelisted on their VALR API key — manual action required`,
+          { customerId, currency, amount, destinationAddress, transferId },
+          orgId,
+          customerId,
+        );
+      }
+
+      return { success: false, transferId, valrResponse: responseData, errorMessage: errMsg };
+    }
+
+    await sb.from("valr_transfer_log").update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      valr_api_response: responseData,
+    }).eq("transfer_id", transferId);
+
+    return { success: true, transferId, valrResponse: responseData };
+
+  } catch (err) {
+    await sb.from("valr_transfer_log").update({
+      status: "failed",
+      error_message: err.message,
+    }).eq("transfer_id", transferId);
+    return { success: false, transferId, errorMessage: err.message };
+  }
+}
