@@ -167,3 +167,283 @@ Customer Portal: https://bitwealth.co.za/customer-portal.html
 
   return { html, text };
 }
+
+/**
+ * Template: Withdrawal Submitted & Processing
+ * Sent immediately when EF10 creates the withdrawal record and starts execution.
+ */
+export function getWithdrawalSubmittedEmail(
+  customerName: string,
+  currency: string,
+  grossAmount: number,
+  netAmount: number,
+  interimFeeUsdt: number,
+  valrFeesDisplay: string,
+  requestId: string,
+): EmailTemplate {
+  const currencySymbol = currency === "ZAR" ? "R" : "";
+  const fmt = (n: number, decimals = 2) =>
+    n.toLocaleString("en-ZA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const grossDisplay = `${currencySymbol}${fmt(grossAmount)} ${currency}`;
+  const netDisplay = `${currencySymbol}${fmt(netAmount)} ${currency}`;
+  const feeDisplay = interimFeeUsdt > 0 ? `$${fmt(interimFeeUsdt)} USDT` : "None";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+      ${getLogoHeader()}
+      <div style="font-size: 48px; margin: 20px 0 10px 0;">⏳</div>
+      <h1 style="margin: 0; font-size: 28px;">Withdrawal Processing</h1>
+      <p style="font-size: 16px; margin-top: 10px; opacity: 0.9;">Your request is being executed</p>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">
+      <p style="font-size: 16px; color: #1e3a8a;">Hi ${customerName},</p>
+      <p style="color: #4b5563; line-height: 1.6;">
+        We have received your withdrawal request and are processing it now. Please allow a few minutes for VALR to process the transfer.
+      </p>
+      <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 6px 0; color: #4b5563;">Requested amount:</td>
+            <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #111827;">${grossDisplay}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #4b5563;">Interim performance fee:</td>
+            <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #b45309;">${feeDisplay}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #4b5563;">VALR fees:</td>
+            <td style="padding: 6px 0; font-weight: 600; text-align: right; color: #4b5563;">${valrFeesDisplay}</td>
+          </tr>
+          <tr style="border-top: 2px solid #d1d5db;">
+            <td style="padding: 10px 0 6px; font-weight: 700; color: #0A2E4D;">Amount you will receive:</td>
+            <td style="padding: 10px 0 6px; font-weight: 700; text-align: right; color: #059669; font-size: 1.1em;">${netDisplay}</td>
+          </tr>
+        </table>
+      </div>
+      <p style="color: #6b7280; font-size: 13px;">
+        Reference: <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">${requestId}</code>
+      </p>
+      <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+        If you did not request this withdrawal or believe there is an error, please contact us immediately.
+      </p>
+      <p style="color: #4b5563; margin-top: 30px;">
+        Best regards,<br>
+        <strong>The BitWealth Team</strong>
+      </p>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+      <p style="margin: 0 0 10px 0;">© ${new Date().getFullYear()} BitWealth. All rights reserved.</p>
+      <p style="margin: 0;">
+        <a href="https://bitwealth.co.za" style="color: #3b82f6; text-decoration: none;">Website</a> ·
+        <a href="https://bitwealth.co.za/customer-portal.html" style="color: #3b82f6; text-decoration: none;">Customer Portal</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `
+WITHDRAWAL PROCESSING - BitWealth
+
+Hi ${customerName},
+
+Your withdrawal request has been received and is now being executed.
+
+WITHDRAWAL SUMMARY:
+  Requested: ${grossDisplay}
+  Interim fee: ${feeDisplay}
+  VALR fees: ${valrFeesDisplay}
+  You receive: ${netDisplay}
+
+Reference: ${requestId}
+
+If you did not request this withdrawal, please contact us immediately.
+
+Best regards,
+The BitWealth Team
+  `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Template: Withdrawal Outcome
+ * Variant A (completed) — sent when VALR confirms the withdrawal.
+ * Variant B (failed)    — sent when VALR rejects the withdrawal.
+ */
+export function getWithdrawalOutcomeEmail(
+  customerName: string,
+  currency: string,
+  netAmount: number,
+  status: "completed" | "failed",
+  completedAt?: string | Date,
+  errorMessage?: string,
+  valrWithdrawalId?: string,
+): EmailTemplate {
+  const currencySymbol = currency === "ZAR" ? "R" : "";
+  const fmt = (n: number, decimals = 2) =>
+    n.toLocaleString("en-ZA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const netDisplay = `${currencySymbol}${fmt(netAmount)} ${currency}`;
+  const isCompleted = status === "completed";
+
+  const formattedDate = completedAt
+    ? (typeof completedAt === "string" ? new Date(completedAt) : completedAt).toLocaleDateString(
+        "en-ZA",
+        { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" },
+      )
+    : "";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: linear-gradient(135deg, ${isCompleted ? "#065f46 0%, #059669" : "#7f1d1d 0%, #dc2626"} 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+      ${getLogoHeader()}
+      <div style="font-size: 48px; margin: 20px 0 10px 0;">${isCompleted ? "✅" : "❌"}</div>
+      <h1 style="margin: 0; font-size: 28px;">${isCompleted ? "Withdrawal Complete" : "Withdrawal Failed"}</h1>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">
+      <p style="font-size: 16px; color: #1e3a8a;">Hi ${customerName},</p>
+      ${isCompleted
+        ? `<div style="background: #d1fae5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; text-align: center;">
+             <div style="font-size: 1.2em; font-weight: 700; color: #059669;">✓ ${netDisplay} Successfully Withdrawn</div>
+             ${formattedDate ? `<div style="color: #065f46; font-size: 0.9em; margin-top: 8px;">Completed: ${formattedDate}</div>` : ""}
+             ${valrWithdrawalId ? `<div style="color: #065f46; font-size: 0.85em; margin-top: 4px;">VALR ID: ${valrWithdrawalId}</div>` : ""}
+           </div>
+           <p style="color: #4b5563; line-height: 1.6;">Your withdrawal has been processed. For ${currency === "ZAR" ? "bank transfers, please allow 1–2 business days for the funds to reflect in your account." : "crypto withdrawals, please allow 10–60 minutes for the blockchain to confirm."}</p>`
+        : `<div style="background: #fee2e2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+             <div style="font-weight: 700; color: #991b1b; margin-bottom: 8px;">❌ Withdrawal of ${netDisplay} could not be processed</div>
+             ${errorMessage ? `<div style="color: #7f1d1d; font-size: 0.9em;">${errorMessage}</div>` : ""}
+           </div>
+           <p style="color: #4b5563; line-height: 1.6;">
+             We were unable to complete your withdrawal. Your funds remain in your BitWealth account and have not been deducted. Please contact BitWealth support so we can assist you.
+           </p>`}
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://bitwealth.co.za/customer-portal.html"
+           style="display: inline-block; background: #3b82f6; color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+          View Your Portfolio →
+        </a>
+      </div>
+      <p style="color: #4b5563; margin-top: 30px;">
+        Best regards,<br>
+        <strong>The BitWealth Team</strong>
+      </p>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+      <p style="margin: 0 0 10px 0;">© ${new Date().getFullYear()} BitWealth. All rights reserved.</p>
+      <p style="margin: 0;">
+        <a href="https://bitwealth.co.za" style="color: #3b82f6; text-decoration: none;">Website</a> ·
+        <a href="https://bitwealth.co.za/customer-portal.html" style="color: #3b82f6; text-decoration: none;">Customer Portal</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = isCompleted
+    ? `
+WITHDRAWAL COMPLETE - BitWealth
+
+Hi ${customerName},
+
+Your withdrawal of ${netDisplay} has been successfully processed.
+${formattedDate ? `Completed: ${formattedDate}` : ""}
+${valrWithdrawalId ? `VALR Reference: ${valrWithdrawalId}` : ""}
+
+For ZAR bank transfers, allow 1–2 business days. For crypto, allow 10–60 minutes for blockchain confirmation.
+
+Best regards,
+The BitWealth Team
+    `.trim()
+    : `
+WITHDRAWAL FAILED - BitWealth
+
+Hi ${customerName},
+
+We were unable to process your withdrawal of ${netDisplay}.
+${errorMessage ? `Reason: ${errorMessage}` : ""}
+
+Your funds remain in your BitWealth account. Please contact BitWealth support for assistance.
+
+Best regards,
+The BitWealth Team
+    `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Template: Withdrawal Cancelled
+ * Sent when EF11 cancels a pending withdrawal at customer's request.
+ */
+export function getWithdrawalCancelledEmail(
+  customerName: string,
+  currency: string,
+  amount: number,
+): EmailTemplate {
+  const currencySymbol = currency === "ZAR" ? "R" : "";
+  const fmt = (n: number, decimals = 2) =>
+    n.toLocaleString("en-ZA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const displayAmount = `${currencySymbol}${fmt(amount)} ${currency}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+      ${getLogoHeader()}
+      <div style="font-size: 48px; margin: 20px 0 10px 0;">🚫</div>
+      <h1 style="margin: 0; font-size: 28px;">Withdrawal Cancelled</h1>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">
+      <p style="font-size: 16px; color: #1e3a8a;">Hi ${customerName},</p>
+      <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #6b7280;">
+        <div style="font-size: 1.1em; font-weight: 700; color: #374151;">Withdrawal of ${displayAmount} cancelled</div>
+      </div>
+      <p style="color: #4b5563; line-height: 1.6;">
+        Your withdrawal request has been cancelled and no funds have been deducted from your account. Your full balance remains available in your BitWealth account.
+      </p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://bitwealth.co.za/customer-portal.html"
+           style="display: inline-block; background: #3b82f6; color: white; padding: 14px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+          View Your Portfolio →
+        </a>
+      </div>
+      <p style="color: #4b5563; margin-top: 30px;">Best regards,<br><strong>The BitWealth Team</strong></p>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} BitWealth. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `
+WITHDRAWAL CANCELLED - BitWealth
+
+Hi ${customerName},
+
+Your withdrawal request for ${displayAmount} has been cancelled.
+No funds have been deducted — your full balance remains in your account.
+
+Best regards,
+The BitWealth Team
+  `.trim();
+
+  return { html, text };
+}
