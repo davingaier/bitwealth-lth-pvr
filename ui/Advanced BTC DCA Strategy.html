@@ -9610,16 +9610,33 @@ This will:
       try {
         if (!supabaseClient) throw new Error('Supabase client not ready');
 
-        const { data, error } = await supabaseClient
+        // Step 1: fetch withdrawal_requests from lth_pvr schema (no cross-schema join)
+        const { data: withdrawals, error } = await supabaseClient
           .schema('lth_pvr')
           .from('withdrawal_requests')
-          .select('*, customer_details!inner(first_names, last_name, email)')
+          .select('*')
           .order('requested_at', { ascending: false })
           .limit(200);
 
         if (error) throw error;
 
-        allWithdrawals = data || [];
+        // Step 2: fetch customer_details from public schema for those customers
+        const customerIds = [...new Set((withdrawals || []).map(w => w.customer_id).filter(Boolean))];
+        let customerMap = {};
+        if (customerIds.length > 0) {
+          const { data: customers } = await supabaseClient
+            .schema('public')
+            .from('customer_details')
+            .select('customer_id, first_names, last_name, email')
+            .in('customer_id', customerIds);
+          (customers || []).forEach(c => { customerMap[c.customer_id] = c; });
+        }
+
+        // Merge customer details into each withdrawal record
+        allWithdrawals = (withdrawals || []).map(w => ({
+          ...w,
+          customer_details: customerMap[w.customer_id] || null
+        }));
         renderWithdrawals();
       } catch (err) {
         console.error('loadWithdrawals error:', err);
