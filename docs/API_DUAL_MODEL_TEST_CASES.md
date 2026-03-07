@@ -31,8 +31,8 @@
 | **Description** | Verify `account_model` column exists on `public.customer_details` |
 | **Steps** | Run: `SELECT account_model FROM public.customer_details LIMIT 1;` |
 | **Expected Result** | Query succeeds; column exists with values `'subaccount'` or `null` |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Query succeeded. Column exists; all active customers have `account_model = 'subaccount'`. |
+| **Status** | PASS |
 
 ---
 
@@ -42,10 +42,10 @@
 |---|---|
 | **ID** | TC-0-02 |
 | **Description** | Verify vault and API key columns exist on `public.exchange_accounts` |
-| **Steps** | Run: `SELECT api_key_vault_id, api_secret_vault_id, api_key_label, api_key_expires_at, api_key_verified_at, api_key_has_trade, api_key_has_withdraw FROM public.exchange_accounts LIMIT 1;` |
+| **Steps** | Run: `SELECT api_key_vault_id, api_secret_vault_id, api_key_label, api_key_expires_at, api_key_verified_at, api_key_has_trade, api_key_has_withdraw, api_key_has_view FROM public.exchange_accounts LIMIT 1;` |
 | **Expected Result** | Query succeeds; all columns exist |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | All vault and API key columns confirmed present on `public.exchange_accounts`. |
+| **Status** | PASS |
 
 ---
 
@@ -55,10 +55,11 @@
 |---|---|
 | **ID** | TC-0-03 |
 | **Description** | Verify bank account columns exist on `public.exchange_accounts` |
-| **Steps** | Run: `SELECT bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_holder_name, bank_valr_id, bank_verified_at FROM public.exchange_accounts LIMIT 1;` |
+| **Steps** | Run: `SELECT bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_account_holder, bank_valr_id, bank_linked_at FROM public.exchange_accounts LIMIT 1;` |
 | **Expected Result** | Query succeeds; all columns exist |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | All bank account columns confirmed present. Test case Steps had two wrong column names (corrected): `bank_holder_name` → `bank_account_holder`; `bank_verified_at` → `bank_linked_at`. |
+| **Status** | PASS |
+| **Notes** | Original Steps used design-phase column names. Actual column names: `bank_account_holder` (not `bank_holder_name`), `bank_linked_at` (not `bank_verified_at`). Steps corrected in this document. |
 
 ---
 
@@ -70,8 +71,8 @@
 | **Description** | Verify `lth_pvr.valr_transfer_log` table exists |
 | **Steps** | Run: `SELECT COUNT(*) FROM lth_pvr.valr_transfer_log;` |
 | **Expected Result** | Query returns 0 (or a number); table exists |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Query returned 66; table exists with data. |
+| **Status** | PASS |
 
 ---
 
@@ -83,8 +84,8 @@
 | **Description** | Verify `lth_pvr.pending_zar_conversions` table exists |
 | **Steps** | Run: `SELECT * FROM lth_pvr.pending_zar_conversions LIMIT 1;` |
 | **Expected Result** | Query succeeds; table exists with required columns |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Query succeeded; table exists. |
+| **Status** | PASS |
 
 ---
 
@@ -94,10 +95,11 @@
 |---|---|
 | **ID** | TC-0-06 |
 | **Description** | Verify `lth_pvr.withdrawal_requests` table exists with all required columns |
-| **Steps** | Run: `SELECT withdrawal_id, customer_id, currency, gross_amount, net_amount, interim_fee_usdt, status, requested_at, completed_at, error_message, valr_response, withdrawal_address FROM lth_pvr.withdrawal_requests LIMIT 1;` |
+| **Steps** | Run: `SELECT request_id, customer_id, currency, amount_usdt, net_amount, interim_performance_fee_usdt, status, requested_at, completed_at, notes, valr_response, withdrawal_address FROM lth_pvr.withdrawal_requests LIMIT 1;` |
 | **Expected Result** | Query succeeds; all columns exist |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Table exists with all required columns. Design-phase column names in original Steps differed from implemented names (corrected). |
+| **Status** | PASS |
+| **Notes** | Column name mapping — design vs actual: `withdrawal_id` → `request_id`; `gross_amount` → `amount_usdt`; `interim_fee_usdt` → `interim_performance_fee_usdt`; `error_message` → `notes`. Steps corrected in this document. |
 
 ---
 
@@ -109,8 +111,8 @@
 | **Description** | Confirm `public.withdrawal_requests` no longer exists |
 | **Steps** | Run: `SELECT COUNT(*) FROM public.withdrawal_requests;` |
 | **Expected Result** | Error: relation `public.withdrawal_requests` does not exist |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Confirmed: `public.withdrawal_requests` does not exist (0 rows in `information_schema.tables` for that relation). |
+| **Status** | PASS |
 
 ---
 
@@ -122,8 +124,8 @@
 | **Description** | Verify warning tracking columns exist on `public.exchange_accounts` |
 | **Steps** | Run: `SELECT api_key_last_warning_sent_at, api_key_warning_days_sent FROM public.exchange_accounts LIMIT 1;` |
 | **Expected Result** | Query succeeds; `api_key_warning_days_sent` defaults to `'{}'` |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Both columns exist. `api_key_warning_days_sent` is `integer[]` with default `'{}'::integer[]`. |
+| **Status** | PASS |
 
 ---
 
@@ -133,10 +135,11 @@
 |---|---|
 | **ID** | TC-0-09 |
 | **Description** | Verify SECURITY DEFINER function exists for vault key retrieval |
-| **Steps** | Run: `SELECT lth_pvr.get_customer_valr_credentials(1);` (use a valid customer_id with API keys) |
+| **Steps** | Run: `SELECT * FROM lth_pvr.get_customer_valr_credentials(12);` (subaccount customer) |
 | **Expected Result** | Returns decrypted api_key and api_secret for that customer |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Function exists (`SECURITY DEFINER`). Tested with subaccount customer (id=12): returned `api_key=null, api_secret=null, subaccount_id='1444354066788577280', account_model='subaccount'` (correct — subaccount model returns null keys). API key decryption path untestable: no API model customers exist yet. |
+| **Status** | SKIP |
+| **Notes** | Partial pass: function exists, subaccount path works correctly. API model path (vault decryption) requires an API model customer to be set up first (TC-6-01). |
 
 ---
 
@@ -600,8 +603,9 @@
 | **Description** | Cron job `ef_rotate_api_key_notifications_daily` is registered at 08:00 UTC |
 | **Steps** | Run: `SELECT jobname, schedule, command FROM cron.job WHERE jobname = 'ef_rotate_api_key_notifications_daily';` |
 | **Expected Result** | Row returned with `schedule = '0 8 * * *'` |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Row returned: `schedule = '0 8 * * *'`, `active = TRUE`. |
+| **Status** | PASS |
+| **Notes** | Auth header in cron command is empty `Bearer ` — acceptable since `ef_rotate_api_key_notifications` is deployed with `--no-verify-jwt`. |
 
 ---
 
@@ -1089,8 +1093,8 @@
 | **Description** | Cron job scheduled at 08:00 UTC daily |
 | **Steps** | Run: `SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'ef_rotate_api_key_notifications_daily';` |
 | **Expected Result** | `schedule = '0 8 * * *'`, `active = TRUE` |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | Confirmed: `schedule = '0 8 * * *'`, `active = TRUE`. |
+| **Status** | PASS |
 
 ---
 
@@ -1102,8 +1106,9 @@
 | **Description** | Cron job successfully calls the edge function at scheduled time |
 | **Steps** | Wait for 08:00 UTC; check `cron.job_run_details` for recent run |
 | **Expected Result** | `status = 'succeeded'`; function returned 200 |
-| **Actual Result** | |
-| **Status** | |
+| **Actual Result** | No run history found in `cron.job_run_details` at time of testing. Cron registered and active; check after first scheduled 08:00 UTC run. |
+| **Status** | SKIP |
+| **Notes** | Re-verify after 08:00 UTC the following day. |
 
 ---
 
@@ -1152,18 +1157,18 @@
 
 | Phase | Total Tests | PASS | FAIL | SKIP | BLOCKED |
 |---|---|---|---|---|---|
-| Phase 0 — Migrations | 9 | | | | |
+| Phase 0 — Migrations | 9 | 8 | 0 | 1 | 0 |
 | Phase 1 — Shared Modules | 5 | | | | |
 | Phase 2 — EF Updates | 6 | | | | |
 | Phase 3 — New EFs (EF7–EF8) | 5 | | | | |
 | Phase 4 — Withdrawal EFs | 11 | | | | |
-| Phase 5 — EF14 Notifications | 6 | | | | |
+| Phase 5 — EF14 Notifications | 6 | 1 | | | |
 | Phase 6 — Admin UI | 8 | | | | |
 | Phase 7 — Customer Portal | 18 | | | | |
 | Phase 8 — Email Templates | 7 | | | | |
-| Phase 9 — Cron Jobs | 2 | | | | |
+| Phase 9 — Cron Jobs | 2 | 1 | 0 | 1 | 0 |
 | End-to-End | 3 | | | | |
-| **TOTAL** | **80** | | | | |
+| **TOTAL** | **80** | **10** | **0** | **2** | **0** |
 
 ---
 
@@ -1192,11 +1197,12 @@ WHERE account_model = 'api';
 -- Check vault keys for API model customers
 SELECT cd.first_names, cd.last_name, ea.api_key_vault_id, ea.api_key_label, ea.api_key_expires_at, ea.api_key_verified_at
 FROM public.customer_details cd
-JOIN public.exchange_accounts ea ON ea.customer_id = cd.customer_id
+JOIN public.customer_strategies cs ON cs.customer_id = cd.customer_id
+JOIN public.exchange_accounts ea ON ea.exchange_account_id = cs.exchange_account_id
 WHERE cd.account_model = 'api';
 
--- Check withdrawal history
-SELECT wr.withdrawal_id, cd.first_names, cd.last_name, wr.currency, wr.gross_amount, wr.status, wr.requested_at
+-- Check withdrawal history (actual column names: request_id, amount_usdt, not withdrawal_id/gross_amount)
+SELECT wr.request_id, cd.first_names, cd.last_name, wr.currency, wr.amount_usdt, wr.status, wr.requested_at
 FROM lth_pvr.withdrawal_requests wr
 JOIN public.customer_details cd ON cd.customer_id = wr.customer_id
 ORDER BY wr.requested_at DESC LIMIT 20;
@@ -1208,5 +1214,6 @@ SELECT * FROM lth_pvr.pending_zar_conversions ORDER BY detected_at DESC LIMIT 10
 ---
 
 *Document owner: BitWealth Engineering*  
-*Last updated: 2026-03-07*  
+*Last updated: 2026-03-08*  
+*SQL test run: 2026-03-08 — TC-0-01 through TC-0-09, TC-5-06, TC-9-01, TC-9-02 executed*  
 *For implementation details, see: [docs/API_DUAL_MODEL_BUILD_PLAN.md](API_DUAL_MODEL_BUILD_PLAN.md)*
