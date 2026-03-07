@@ -3,11 +3,160 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-03 (v0.6.60)
+**Last updated:** 2026-03-08 (v0.6.62)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.62 – Customer Portal Bug Fixes (Withdrawal Submit & Balance Check)
+**Date:** 2026-03-08  
+**Purpose:** Fix "Customer account not found" 404 on withdrawal submit; add client-side insufficient-balance guard for ZAR withdrawals.
+
+**Status:** ✅ COMPLETE
+
+#### Bug Fix 1 – `ef_request_withdrawal` — `first_name` Column Does Not Exist (404)
+
+**Root cause:** Step 3 of `ef_request_withdrawal` selected `first_name` from `customer_details`, but the actual column is `first_names`. PostgreSQL returned an error, which set `custErr` and triggered the "Customer account not found for this email" 404 guard before any customer lookup could succeed.
+
+**Fix:**
+- `supabase/functions/ef_request_withdrawal/index.ts`: Changed `.select("..., first_name, ...")` → `.select("..., first_names, ...")` and `customer.first_name` → `customer.first_names` (two lines).
+- Redeployed with `supabase functions deploy ef_request_withdrawal`.
+
+#### Bug Fix 2 – Portal ZAR Withdrawal Missing Balance Check
+
+**Root cause:** `submitWithdrawal()` in `customer-portal.html` validated BTC and USDT amounts against `withdrawableBalance` before calling the API, but the ZAR path only checked the minimum R100 — it made no comparison to available balance. The server-side check in `ef_request_withdrawal` Step 8 was correct but unreachable due to Bug Fix 1.
+
+**Fix:**
+- Added module-level variable `let liveUsdtZarRate = 0` in `customer-portal.html`.
+- `loadWithdrawals()` now stores the CoinGecko rate in `liveUsdtZarRate` when it populates `#wdLiveRate`.
+- ZAR path in `submitWithdrawal()` now computes `usdtNeeded = amount / liveUsdtZarRate` and shows a clear error message before calling the API if `usdtNeeded > withdrawableBalance.usdt`.
+
+---
+
+### v0.6.61 – Customer Portal: Withdrawals & Settings Sections + Bug Fixes
+**Date:** 2026-03-07  
+**Purpose:** Implement Customer Portal Phases 7–9 (Withdrawals section CP1, Settings section CP2, Onboarding label CP3, Email Templates, Cron), fix three portal loading errors (exchange_accounts RLS, VALR CORS, column name mismatch), and add live USDT/ZAR rate display.
+
+**Status:** ✅ COMPLETE
+
+#### Phase 7 CP1 – Customer Portal: Withdrawals Section
+
+New `#withdrawals` section added to `website/customer-portal.html`:
+
+**Balance display:**
+- Withdrawable BTC, USDT, and ZAR equivalent (via `lth_pvr.get_withdrawable_balance` RPC)
+- Live USDT/ZAR exchange rate display (`#wdLiveRate`) fetched from CoinGecko public API
+
+**Withdrawal form:**
+- Currency selector radio: ZAR / BTC / USDT — toggles forms via `switchWithdrawalType(type)`
+- ZAR form: amount input, Recalculate button, bank display (`#wdBankDisplay`), estimate breakdown table (`#wdZarEstimate`)
+- BTC form: amount + address + regex validation (P2PKH, P2SH, bech32)
+- USDT form: amount + TRC-20 address + regex validation
+- API model whitelist note on BTC form (`#wdApiModelBtcNote`)
+- Interim fee notice (`#wdInterimFeeNote`)
+- Confirmation checkbox + Submit button → `submitWithdrawal()`
+- Cancel button on history rows → `cancelWithdrawal(withdrawalId)`
+
+**Fee label:** "VALR conversion fee (0.18% maker / 0.35% taker)" (corrected from "~0.1%")
+
+**Withdrawal history table:** Status badges (⏳🔄✅❌⊘), SLA amber highlight for processing rows >30 min old, "View Details" modal
+
+**New JS functions:**
+| Function | Purpose |
+|---|---|
+| `loadWithdrawals(customerId)` | Fetches balance, bank, history; stores live rate in `liveUsdtZarRate` |
+| `renderWithdrawalHistory(withdrawals)` | Renders table with badges and SLA highlight |
+| `viewWithdrawalDetails(withdrawalId)` | Alert modal with full record |
+| `switchWithdrawalType(type)` | Show/hide ZAR/BTC/USDT forms |
+| `recalculateZarEstimate()` | Live rate fetch → estimate table |
+| `submitWithdrawal()` | Validates + balance check + calls `ef_request_withdrawal` with session JWT |
+| `cancelWithdrawal(withdrawalId)` | Confirm + calls `ef_revert_withdrawal` |
+| `showWdFormMessage(msg, type)` | Styled loading/success/error message |
+
+#### Phase 7 CP2 – Customer Portal: Settings Section
+
+New `#settings` section:
+- **API key card** (`#settingsApiKeyCard`) — hidden for subaccount model customers, shown for API model
+- API key info rendered by `renderApiKeyInfo(acct)` — expiry colour-coded (red ≤10d / amber ≤30d / green)
+- Update form (`#apiKeyUpdateForm`) with 7-step VALR instructions + key/secret/expiry inputs → `saveApiKeyPortal()`
+- **Bank account card** (`#bankAccountInfo`) — masked account number (last 4 digits), shown for all models
+
+**New JS functions:**
+| Function | Purpose |
+|---|---|
+| `loadSettings(customerId)` | Fetches exchange account via RPC; sets API key card visibility |
+| `renderApiKeyInfo(acct)` | Renders key name, status, expiry, permissions |
+| `renderBankAccountInfo(acct)` | Masked bank details |
+| `showApiKeyUpdateForm()` / `hideApiKeyUpdateForm()` | Toggle update form |
+| `saveApiKeyPortal()` | Calls `ef_store_customer_api_keys` with customer JWT |
+| `showSettingsMsg(msg, type)` | Styled settings message |
+
+#### Phase 7 CP3 – Onboarding Labels for API Model
+
+`loadOnboardingStatus()` updated: for `account_model === 'api'` customers, sets:
+- Milestone 4 label (`#m4Label`) → "API Key Setup"
+- Milestone 5 label (`#m5Label`) → "Initial Deposit"
+
+Subaccount model retains default "VALR Setup" / "Deposit" labels.
+
+#### Phase 7 – Dashboard API Key Expiry Banner
+
+New `#apiKeyExpiryBanner` div added to dashboard section. `loadApiKeyExpiryBanner(customerId)` shows it when `api_key_expires_at ≤ 10 days` for API model customers.
+
+#### Phase 8 – Email Templates
+
+Two new functions added to `supabase/functions/_shared/email-templates.ts`:
+
+**`getZarDepositDetectedAdminEmail(...)`**  
+Admin notification when `ef_deposit_scan` detects ZAR balance for an API model customer. Shows: customer details, amount, detected time, account model badge, current balances, action steps (Admin UI → Pending ZAR Conversions → Convert).
+
+**`getWithdrawalFailedAdminEmail(...)`**  
+Admin alert when `ef_request_withdrawal` fails on VALR. Red email with customer details, withdrawal ID (monospace), VALR error message, retry/revert instructions and HWM warning.
+
+#### Phase 9 – Cron Job
+
+`ef_rotate_api_key_notifications_daily` cron registered at `0 8 * * *` in `pg_cron`. Verified via `SELECT * FROM cron.job WHERE jobname = 'ef_rotate_api_key_notifications_daily';`.
+
+#### Bug Fix 3 – `exchange_accounts` RLS Blocks Customer Portal (400 Bad Request)
+
+**Root cause:** `loadWithdrawals()`, `loadSettings()`, and `loadApiKeyExpiryBanner()` queried `public.exchange_accounts` using `.eq('customer_id', customerId)`. This had two errors: (1) `exchange_accounts` has no `customer_id` column — customers link via `customer_strategies.exchange_account_id`; (2) RLS on `exchange_accounts` only permits `org_members` (admins), not portal customers.
+
+**Fix:** Applied migration `add_get_customer_exchange_account_rpc`:
+```sql
+CREATE OR REPLACE FUNCTION public.get_customer_exchange_account(p_customer_id bigint)
+RETURNS TABLE (exchange_account_id, bank_name, bank_account_number, bank_account_holder,
+               bank_branch_code, bank_account_type, api_key_label, api_key_verified_at,
+               api_key_expires_at, api_key_has_trade, api_key_has_withdraw, api_key_has_view)
+LANGUAGE plpgsql SECURITY DEFINER ...
+```
+Joins `customer_strategies → exchange_accounts` by `exchange_account_id`. No vault secret IDs exposed. Granted to `authenticated` and `anon` roles.
+
+All three portal functions updated to call `sb.rpc('get_customer_exchange_account', { p_customer_id: customerId })` instead of the direct table query.
+
+#### Bug Fix 4 – VALR Public API CORS Error
+
+**Root cause:** `recalculateZarEstimate()` and `loadWithdrawals()` fetched `https://api.valr.com/v1/public/USDTZAR/marketsummary` directly from the browser. VALR's API does not include `Access-Control-Allow-Origin` headers, causing browsers to block the request.
+
+**Fix:** Replaced both calls with CoinGecko public API — `https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=zar` — which is CORS-friendly and requires no API key.
+
+#### Bug Fix 5 – `bank_holder_name` Column Does Not Exist
+
+**Root cause:** `renderBankAccountInfo()` referenced `acct.bank_holder_name`, but the actual column in `exchange_accounts` is `bank_account_holder`.
+
+**Fix:** Updated `renderBankAccountInfo()` to use `acct.bank_account_holder`.
+
+#### Live USDT/ZAR Rate Display
+
+Added `#wdLiveRate` element to the withdrawable balance bar displaying the real-time USDT/ZAR rate in blue alongside the ZAR equivalent. Populated from the same CoinGecko fetch on `loadWithdrawals()`.
+
+#### Files Changed (v0.6.61)
+- `website/customer-portal.html` — Withdrawals section, Settings section, CP3 labels, banner, all JS functions, all bug fixes
+- `supabase/functions/_shared/email-templates.ts` — `getZarDepositDetectedAdminEmail`, `getWithdrawalFailedAdminEmail`
+- `supabase/functions/ef_request_withdrawal/index.ts` — `first_names` fix (v0.6.62)
+- Migration applied: `add_get_customer_exchange_account_rpc`
+
+---
 
 ### v0.6.60 – Email Template Fixes & Deprecations
 **Date:** 2026-03-03  
