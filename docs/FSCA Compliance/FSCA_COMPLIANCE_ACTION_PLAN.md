@@ -86,11 +86,18 @@ The compliance officer does NOT need to be employed internally. An external comp
 - **Action: Contact 2–3 external compliance practices immediately for quotes**
 - An external compliance practice with an existing Phase 1 approval can be appointed much faster than obtaining Phase 1 approval yourself
 
-### Blocker 3 — Dedicated Client Money Bank Account
-FSP 1 Section 7 requires BitWealth to answer YES to holding client money. This mandates that client funds be held in a **separate, ring-fenced bank account** (not BitWealth's operating account).
+### Blocker 3 — Client Asset Segregation Documentation (VALR Subaccount Model)
+BitWealth's model means client ZAR flows **directly between the client's bank and their VALR subaccount** — it never passes through a BitWealth bank account. This eliminates the need for a separate BitWealth client trust/money bank account.
 
-- Open a dedicated trust/client money bank account at a commercial bank before submission
-- **Action: Open this account now — it will be referenced on FSP 1**
+However, BitWealth **does** hold client *crypto assets*: each client's BTC is held in a dedicated VALR subaccount under BitWealth's master account (directly administrable via the VALR API). FSP 1 Section 7 must therefore still be answered **YES** (holding client assets), with the asset type specified as crypto assets (BTC) in VALR subaccounts, not ZAR in a BitWealth bank account.
+
+**What this means for the application:**
+- No dedicated BitWealth client money bank account is required — the VALR subaccount per client IS the segregation mechanism
+- FSP 1 Section 7: answer YES for client assets; specify BTC in VALR subaccounts; name each client's subaccount ID as the segregated holding
+- FSP 7 Section 2 (Outsourcing): the VALR relationship must be documented as the custody/asset-management outsourcing arrangement; describe how it is supervised and managed
+- Attach a written description of the VALR subaccount model showing each client has their own identifiable subaccount
+
+**Action: Prepare a one-page VALR Subaccount Structure document** describing: (a) master account held by BitWealth; (b) dedicated subaccount per client; (c) client assets identifiable and segregated at subaccount level; (d) client fiat deposit/withdrawal flow bypasses BitWealth entirely.
 
 ### Blocker 4 — FIC Registration (FICA)
 BitWealth must be registered with the Financial Intelligence Centre as a CASP accountable institution **within 90 days of commencing business**. If this has not been done, it must be addressed immediately and in parallel.
@@ -107,7 +114,7 @@ Complete these before or during the application preparation. None require specia
 |---|------|-------|-------|
 | 0.1 | Confirm BitWealth (Pty) Ltd CIPC registration is active and annual returns are up to date | Director | FSCA will verify; CIPC registration number required on FSP 1 |
 | 0.2 | Obtain B-BBEE status certificate or sworn affidavit (for FSP 1) | Director | Level 4 exemption affidavit available if turnover < ZAR 10M |
-| 0.3 | Open a dedicated client money bank account (separate from operating account) | Director | Required by FSP 1 Section 7 and Section 19 of FAIS Act |
+| 0.3 | Prepare a written VALR Subaccount Structure document describing the client asset custody model | Director | BitWealth does NOT hold client ZAR in its own bank account — client fiat flows directly to/from VALR. A separate BitWealth client bank account is NOT required. Client crypto assets are segregated at VALR subaccount level. Document this clearly for FSP 1 Section 7 and FSP 7 Section 2. |
 | 0.4 | Confirm tax compliance: SARS income tax registration + VAT registration (if applicable) | Director / Accountant | FSCA may request financial information |
 | 0.5 | Confirm registered address for FSCA correspondence | Director | Must match CIPC records |
 | 0.6 | Ensure all directors and shareholders have valid SA ID documents (certified copies will be required) | All directors | Certification must be recent (< 3 months old at time of submission) |
@@ -141,6 +148,8 @@ Each key individual completing FSP 4D must demonstrate:
 | **Experience** | Relevant experience managing/overseeing financial services; must complete experience tables per Category (Table A for Category I) | Document all experience; experience in managing/overseeing crypto asset services is ideal; submit CV, reference letters |
 | **Crypto Assets Section (FSP 4D Section 5 = YES)** | Must demonstrate adequate skills, knowledge and expertise for crypto assets under section 6A of the FAIS Act | Write a comprehensive narrative: blockchain technology knowledge, BTC market dynamics, risk management, DCA strategy, regulatory awareness |
 | **Operational Ability** | FSP 4D Section 13: confirm permanent employment by BitWealth, not multi-FSP KI (initially), demonstrate capacity | Complete all sub-questions; sign joint confirmation with BitWealth |
+
+> **Note on the Compliance Officer:** Appointing a compliance officer (Phase 2 / FSP 6) is an entirely separate and independent requirement from the key individual's personal fit and proper requirements. The CO's role is to monitor and ensure BitWealth's regulatory compliance — it does NOT substitute for or exempt the KI from their own RE 1 examination, recognised qualification, class of business training, or experience requirements. Every KI must personally satisfy all of the above regardless of whether a CO is appointed.
 
 ### 5.3 Regulatory Examination (RE 1) — Detailed Steps
 
@@ -210,7 +219,7 @@ Section 17 of the FAIS Act: If BitWealth has more than one key individual OR one
 
 | Form | Purpose | Completed By | Key Fields for BitWealth |
 |---|---|---|---|
-| **FSP 1** | Business information | BitWealth | Company name, CIPC no., financial year end, number of KIs, directors, compliance officer, **Section 7: YES to holding client money/assets** (specify: ZAR in client bank account + BTC in VALR subaccounts); list dedicated client bank account |
+| **FSP 1** | Business information | BitWealth | Company name, CIPC no., financial year end, number of KIs, directors, compliance officer, **Section 7: YES to holding client assets** — specify asset type as BTC crypto assets held in dedicated VALR subaccounts per client. Clarify that client ZAR deposits/withdrawals are made directly to/from VALR (not through a BitWealth bank account) and that no BitWealth client money bank account exists. Attach the VALR Subaccount Structure document. |
 | **FSP 2** | Licence categories | BitWealth | Category I; sub-product **1.27 Crypto Assets**; tick both **Advice** AND **Intermediary Services**; tick **Section 3: Automated Advice** (LTH PVR algorithm); assess whether Category II is required |
 | **FSP 3** | Directors and shareholders | BitWealth | List all directors with full personal details; each director must separately complete FSP 4B |
 | **FSP 4A** | Fitness & propriety — BitWealth (Pty) Ltd | BitWealth | 23 honesty/integrity questions about the company; sign and submit |
@@ -218,7 +227,7 @@ Section 17 of the FAIS Act: If BitWealth has more than one key individual OR one
 | **FSP 4D** | Fitness & propriety — each key individual | Every KI | 23 questions + qualifications + RE 1 + experience tables + **Section 5 crypto assets = YES** + Section 12 written crypto skills narrative + Section 13 operational ability |
 | **FSP 5** | Representatives | BitWealth (per rep) | One form per person who personally renders services; if founders only act in a management/oversight capacity, FSP 5 may not be required for them; confirm with compliance officer |
 | **FSP 6** | Compliance officer Phase 2 | BitWealth + compliance officer | Internal vs external; Phase 1 approval number; independence annexure |
-| **FSP 7** | Operational ability | BitWealth | Confirm all 13 policy documents are attached; list VALR outsourcing; FICA compliance confirmation; PI/Fidelity insurance confirmation |
+| **FSP 7** | Operational ability | BitWealth | Confirm all 13 policy documents are attached; **Section 2 (Outsourcing): document VALR as the custody/asset-management outsourcing arrangement** — describe the subaccount model, how BitWealth supervises VALR, and the API-based control mechanism; FICA compliance confirmation; PI/Fidelity insurance confirmation |
 | **FSP 8** | Financial soundness | BitWealth (CFO or equivalent) | First year: projections + financial position statement + auditor/accounting officer confirmation; confirm assets > liabilities; complete liquidity section if holding client assets |
 | **FSP 9** | External auditor | BitWealth + auditor | Name, practice no., responsible partner, confirmation letter from audit partner |
 | **FSP 12** | Compliance officer Phase 1 (only if CO not already approved) | Compliance officer | Only if engaging a CO who is not yet Phase 1 FSCA approved |
@@ -257,7 +266,7 @@ All 13 documents must be prepared. They may be combined into fewer documents (e.
 | Reference letters confirming experience | FSP 4D | From senior officials at prior or current employers |
 | Crypto Assets skills narrative (per KI) | FSP 4D Section 12 | Written document per KI |
 | B-BBEE certificate or affidavit | FSP 1 | |
-| Client money bank account details | FSP 1 Section 7 | Bank name, account number |
+| VALR Subaccount Structure document | FSP 1 Section 7 + FSP 7 Section 2 | Written description of: BitWealth master VALR account; dedicated subaccount per client; BTC asset segregation at subaccount level; client fiat deposit/withdrawal flow (direct to/from VALR, not BitWealth); VALR API control mechanism |
 | Financial projections (first year) | FSP 8 | Income statement + balance sheet for 12 months |
 | Auditor/accounting officer confirmation letter | FSP 8 | Confirms first year; confirms assets exceed liabilities |
 | Liquid assets proof (Annexure 6 Form A) | FSP 8 | Complete Form A from Board Notice 194/2017 |
@@ -363,7 +372,7 @@ Once the FSP licence is granted:
 | **Operating without a licence** | Critical | High (if not yet applied) | Apply immediately; obtain legal advice on interim operating status; consider a conditional exemption under section 41 of FAIS while application is pending |
 | **Key Individual fails RE 1** | High | Medium | Register multiple attempts; use accredited study material; RE 1 has a 65% pass mark; most candidates pass on second attempt |
 | **No Phase 1 approved CO available** | High | Low | Engage 2–3 external compliance practices; they are Phase 1 approved and can be appointed immediately |
-| **Client assets not segregated** | High | Medium | Open dedicated client bank account before any client onboarding; VALR subaccounts provide crypto segregation; document both in FSP 1 Section 7 |
+| **Client assets not properly segregated** | High | Low | BitWealth uses dedicated VALR subaccounts per client — client crypto is identifiable and segregated at subaccount level. No BitWealth bank account holds client ZAR (fiat flows directly to/from VALR). Document the subaccount model clearly in FSP 1 Section 7 and FSP 7 Section 2. Main residual risk is VALR counterparty/custody risk — mitigate by documenting the VALR subaccount model and monitoring VALR's own regulatory status. |
 | **FICA non-registration** | High | Medium | Addressed in FIC Compliance Action Plan; prioritise alongside this plan |
 | **Travel Rule (Directive 9) non-compliance** | High | High (deadline was 30 April 2025) | Collect originator and beneficiary details at onboarding; implement Travel Rule data exchange with VALR; update KYC forms |
 | **Category II licence required (not applied for)** | High | Medium | Seek legal opinion on whether automated DCA = discretionary management; apply for Category II simultaneously if required |
@@ -447,7 +456,7 @@ Use this checklist when preparing the application package.
 - [ ] Accounting officer / auditor confirmation letter (first year)
 - [ ] Liquid assets proof (Form A, Annexure 6, Board Notice 194/2017)
 - [ ] Audit firm appointment confirmation letter (per FSP 9 Section 3)
-- [ ] Client money bank account proof (bank letter confirming account)
+- [ ] VALR Subaccount Structure document (describing per-client subaccount custody model and direct fiat flow)
 - [ ] Professional Indemnity Insurance certificate
 - [ ] Fidelity Insurance certificate
 - [ ] Compliance officer services agreement (signed)
