@@ -2796,6 +2796,44 @@
         </div>
       </div>
 
+      <!-- Withdrawal History card -->
+      <div class="card" id="withdrawalHistoryCard">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          <h3 style="margin:0;">💸 Withdrawal History</h3>
+          <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+            <select id="wdStatusFilter" class="context-select" style="height:32px;">
+              <option value="">All Statuses</option>
+              <option value="pending">⏳ Pending</option>
+              <option value="processing">🔄 Processing</option>
+              <option value="completed">✅ Completed</option>
+              <option value="failed">❌ Failed</option>
+              <option value="cancelled">⊘ Cancelled</option>
+            </select>
+            <button id="wdRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          </div>
+        </div>
+        <p class="small-muted" style="margin-bottom:.75rem;">All withdrawal requests across all customers. Failed items older than 30 minutes are highlighted.</p>
+        <div id="wdMessage" style="display:none;padding:.6rem 1rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <div class="table-scroll">
+          <table id="wdTable">
+            <thead>
+              <tr>
+                <th style="min-width:130px;">Requested</th>
+                <th>Customer</th>
+                <th style="min-width:70px;">Currency</th>
+                <th style="min-width:90px;text-align:right;">Amount</th>
+                <th style="min-width:90px;text-align:right;">Net</th>
+                <th style="min-width:90px;">Status</th>
+                <th style="min-width:80px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Alerts card -->
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
@@ -7779,11 +7817,18 @@ This will:
             <td style="font-size:0.85em;">${customer.kyc_source_of_income || '—'}</td>
             <td>${docLinks}</td>
             <td>
-              <button class="btn btn-primary-sm" 
-                      onclick="window.verifyKycId(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
-                      style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
-                ✓ Verify
-              </button>
+              <div style="display:flex;flex-direction:column;gap:.35rem;">
+                <select id="kycModelSelect_${customer.customer_id}"
+                        style="padding:.25rem .4rem;font-size:.8em;border:1px solid #cbd5e0;border-radius:4px;">
+                  <option value="subaccount" selected>🏦 Subaccount</option>
+                  <option value="api">🔑 API Model</option>
+                </select>
+                <button class="btn btn-primary-sm" 
+                        onclick="window.verifyKycId(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                        style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
+                  ✓ Verify
+                </button>
+              </div>
             </td>
           </tr>
         `;
@@ -7792,13 +7837,18 @@ This will:
 
     // Global function for onclick (exposed to window)
     window.verifyKycId = async function(customerId, firstName, lastName) {
+      const selectedModel = document.getElementById(`kycModelSelect_${customerId}`)?.value || 'subaccount';
+      const modelLabel = selectedModel === 'api' ? 'API Model (🔑 customer provides VALR API keys)' : 'Subaccount Model (🏦 BitWealth manages VALR subaccount)';
+
       const confirmed = confirm(
         `Verify ID document for ${firstName} ${lastName} (Customer ${customerId})?\n\n` +
+        `Account model: ${modelLabel}\n\n` +
         `This will:\n` +
         `• Change status from 'kyc' to 'setup'\n` +
         `• Record verification timestamp and your admin email\n` +
-        `• Automatically create VALR subaccount\n` +
-        `• Move customer to Milestone 4 (VALR Setup)`
+        (selectedModel === 'subaccount'
+          ? `• Automatically create VALR subaccount\n• Move customer to Milestone 4 (VALR Setup)`
+          : `• Move customer to Milestone 4 (VALR Setup)\n• Customer will be prompted to supply their VALR API keys`)
       );
 
       if (!confirmed) return;
@@ -7812,19 +7862,30 @@ This will:
           throw new Error('Admin session not found. Please log in again.');
         }
 
-        // Update customer record
+        // Update customer record — include account_model
         const { error } = await supabaseClient
           .from('customer_details')
           .update({
             registration_status: 'setup',
             kyc_id_verified_at: new Date().toISOString(),
-            kyc_verified_by: adminUserId
+            kyc_verified_by: adminUserId,
+            account_model: selectedModel
           })
           .eq('customer_id', customerId);
 
         if (error) throw error;
 
-        // Automatically trigger VALR subaccount creation
+        if (selectedModel === 'api') {
+          // API model: no subaccount needed — customer will supply API keys in setup step
+          showMessage(`✓ ID verified for ${firstName} ${lastName} (API Model). Customer moved to VALR Setup — they must supply their VALR API keys.`, 'success');
+          await loadPendingKyc();
+          if (typeof window.loadSetupCustomers === 'function') {
+            await window.loadSetupCustomers();
+          }
+          return;
+        }
+
+        // Subaccount model: existing flow — automatically create VALR subaccount
         showMessage(`✓ ID verified for ${firstName} ${lastName}. Creating VALR subaccount...`, 'info');
         
         try {
@@ -7924,7 +7985,7 @@ This will:
         // Get customers with status='setup' or 'deposit'
         const { data: customers, error: customerError } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_names, last_name, email, registration_status')
+          .select('customer_id, first_names, last_name, email, registration_status, account_model')
           .in('registration_status', ['setup', 'deposit'])
           .order('created_at', { ascending: false });
 
@@ -7953,7 +8014,7 @@ This will:
         if (exchangeAccountIds.length > 0) {
           const { data: accountData, error: accountError } = await supabaseClient
             .from('exchange_accounts')
-            .select('exchange_account_id, subaccount_id, deposit_ref, btc_wallet_address, usdt_wallet_address')
+            .select('exchange_account_id, subaccount_id, deposit_ref, btc_wallet_address, usdt_wallet_address, api_key_vault_id, api_key_label, api_key_expires_at, api_key_verified_at, api_key_has_withdraw, api_key_has_trade, bank_valr_id')
             .in('exchange_account_id', exchangeAccountIds);
           
           if (accountError) console.error('Error loading exchange accounts:', accountError);
@@ -7971,11 +8032,18 @@ This will:
             last_name: customer.last_name,
             email: customer.email,
             registration_status: customer.registration_status,
+            account_model: customer.account_model || 'subaccount',
             subaccount_id: account?.subaccount_id || null,
             deposit_ref: account?.deposit_ref || null,
             btc_wallet_address: account?.btc_wallet_address || null,
             usdt_wallet_address: account?.usdt_wallet_address || null,
-            exchange_account_id: account?.exchange_account_id || null
+            exchange_account_id: account?.exchange_account_id || null,
+            api_key_vault_id: account?.api_key_vault_id || null,
+            api_key_label: account?.api_key_label || null,
+            api_key_expires_at: account?.api_key_expires_at || null,
+            api_key_verified_at: account?.api_key_verified_at || null,
+            api_key_has_withdraw: account?.api_key_has_withdraw ?? null,
+            api_key_has_trade: account?.api_key_has_trade ?? null,
           };
         });
 
@@ -8002,65 +8070,237 @@ This will:
       }
 
       tableBody.innerHTML = filtered.map(customer => {
-        const hasSubaccount = !!customer.subaccount_id;
-        const hasDepositRef = !!customer.deposit_ref;
-        const hasBtcWallet = !!customer.btc_wallet_address;
-        const hasUsdtWallet = !!customer.usdt_wallet_address;
-        const hasAllReferences = hasDepositRef && hasBtcWallet && hasUsdtWallet;
+        const isApiModel = customer.account_model === 'api';
+        const modelBadge = isApiModel
+          ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.15rem .4rem;border-radius:3px;">🔑 API</span>'
+          : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.15rem .4rem;border-radius:3px;">🏦 Subacct</span>';
 
+        let accountCell = '';
         let actionButtons = '';
-        
-        if (!hasSubaccount) {
-          // Show status: Automatic creation in progress or failed
-          actionButtons = `
-            <div style="color: #f59e0b; font-size: 0.85em;">
-              ⏳ Auto-creating...
-            </div>
-            <button class="btn btn-secondary-sm" 
-                    onclick="window.manualCreateValrSubaccount(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
-                    style="padding: 0.4rem 0.8rem; font-size: 0.85em; margin-top: 0.3rem;">
-              🔄 Retry Manually
-            </button>
-          `;
-        } else if (!hasAllReferences) {
-          // Show wallet address inputs + save button
-          actionButtons = `
-            <button class="btn btn-primary-sm" 
-                    onclick="window.showWalletAddressModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}', '${customer.deposit_ref || ''}', '${customer.btc_wallet_address || ''}', '${customer.usdt_wallet_address || ''}')"
-                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
-              💳 ${hasDepositRef ? 'Add Wallet Addresses' : 'Enter All References'}
-            </button>
-          `;
+
+        if (isApiModel) {
+          // ── API Model: show API key status ──────────────────────────────
+          const hasKey = !!customer.api_key_vault_id;
+          if (!hasKey) {
+            accountCell = '<span style="color:#f59e0b;font-size:.85em;">⚠ Not configured</span>';
+            actionButtons = `
+              <button class="btn btn-primary-sm"
+                      onclick="window.showApiKeyModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                      style="padding:.4rem .8rem;font-size:.85em;">
+                🔑 Enter VALR API Keys
+              </button>
+            `;
+          } else {
+            const expiresAt = customer.api_key_expires_at ? new Date(customer.api_key_expires_at) : null;
+            const daysLeft = expiresAt ? Math.floor((expiresAt - Date.now()) / 86_400_000) : null;
+            const expStr = expiresAt ? expiresAt.toLocaleDateString('en-ZA', { day:'2-digit', month:'short', year:'numeric' }) : 'N/A';
+            const expColor = daysLeft !== null && daysLeft <= 10 ? '#dc3545' : daysLeft !== null && daysLeft <= 30 ? '#f59e0b' : '#059669';
+            accountCell = `
+              <div style="font-size:.8em;">
+                <div>✓ <strong>${customer.api_key_label || 'Key stored'}</strong></div>
+                <div style="color:${expColor};">Expires: ${expStr}${daysLeft !== null ? ` (${daysLeft}d)` : ''}</div>
+              </div>`;
+            const updateBtn = daysLeft !== null && daysLeft <= 30
+              ? `<button class="btn btn-secondary-sm"
+                         onclick="window.showApiKeyModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                         style="padding:.4rem .8rem;font-size:.85em;border-color:#f59e0b;color:#f59e0b;">
+                   🔄 Update API Keys 🔴
+                 </button>`
+              : `<button class="btn btn-secondary-sm" disabled
+                         style="padding:.4rem .8rem;font-size:.85em;cursor:default;opacity:.6;">
+                   ✅ API Key Active
+                 </button>`;
+            const walletBtn = (!customer.btc_wallet_address || !customer.usdt_wallet_address)
+              ? `<br><button class="btn btn-secondary-sm"
+                             onclick="window.showWalletAddressModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}', '${customer.deposit_ref || ''}', '${customer.btc_wallet_address || ''}', '${customer.usdt_wallet_address || ''}')"
+                             style="padding:.3rem .6rem;font-size:.8em;margin-top:.3rem;">
+                   💳 Add Wallets
+                 </button>`
+              : '';
+            actionButtons = updateBtn + walletBtn;
+          }
         } else {
-          // Show "Resend Email" button
-          actionButtons = `
-            <button class="btn btn-secondary-sm" 
-                    onclick="window.resendDepositEmail(${customer.customer_id}, '${customer.email}')"
-                    style="padding: 0.4rem 0.8rem; font-size: 0.85em;">
-              📧 Resend Email
-            </button>
-          `;
+          // ── Subaccount Model: existing logic ────────────────────────────
+          const hasSubaccount = !!customer.subaccount_id;
+          const hasDepositRef = !!customer.deposit_ref;
+          const hasBtcWallet = !!customer.btc_wallet_address;
+          const hasUsdtWallet = !!customer.usdt_wallet_address;
+          const hasAllReferences = hasDepositRef && hasBtcWallet && hasUsdtWallet;
+
+          accountCell = `<span style="font-family:monospace;font-size:.8em;">
+            ${hasSubaccount ? customer.subaccount_id : '<span style="color:#999;">Not created</span>'}
+          </span>`;
+
+          if (!hasSubaccount) {
+            actionButtons = `
+              <div style="color:#f59e0b;font-size:.85em;">⏳ Auto-creating...</div>
+              <button class="btn btn-secondary-sm"
+                      onclick="window.manualCreateValrSubaccount(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
+                      style="padding:.4rem .8rem;font-size:.85em;margin-top:.3rem;">
+                🔄 Retry Manually
+              </button>
+            `;
+          } else if (!hasAllReferences) {
+            actionButtons = `
+              <button class="btn btn-primary-sm"
+                      onclick="window.showWalletAddressModal(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}', '${customer.deposit_ref || ''}', '${customer.btc_wallet_address || ''}', '${customer.usdt_wallet_address || ''}')"
+                      style="padding:.4rem .8rem;font-size:.85em;">
+                💳 ${hasDepositRef ? 'Add Wallet Addresses' : 'Enter All References'}
+              </button>
+            `;
+          } else {
+            actionButtons = `
+              <button class="btn btn-secondary-sm"
+                      onclick="window.resendDepositEmail(${customer.customer_id}, '${customer.email}')"
+                      style="padding:.4rem .8rem;font-size:.85em;">
+                📧 Resend Email
+              </button>
+            `;
+          }
         }
+
+        const walletSummary = isApiModel ? `
+          <div style="font-size:.75em;color:#6c757d;margin-top:.2rem;">
+            ${customer.btc_wallet_address ? '✓ BTC' : '⚠ BTC'} | ${customer.usdt_wallet_address ? '✓ USDT' : '⚠ USDT'}
+          </div>` : `
+          <div style="font-size:.75em;color:#666;margin-top:.2rem;">
+            ${customer.deposit_ref || '<span style="color:#999;">Pending</span>'}
+          </div>
+          <div style="font-size:.7em;color:#666;">
+            ${customer.btc_wallet_address ? '✓ BTC' : '⚠ BTC'} | ${customer.usdt_wallet_address ? '✓ USDT' : '⚠ USDT'}
+          </div>`;
 
         return `
           <tr>
             <td>${customer.customer_id}</td>
-            <td>${customer.first_names} ${customer.last_name}</td>
+            <td>${customer.first_names} ${customer.last_name}<br>${modelBadge}</td>
             <td>${customer.email}</td>
-            <td style="font-family: monospace; font-size: 0.8em;">
-              ${hasSubaccount ? customer.subaccount_id : '<span style="color: #999;">Not created</span>'}
-            </td>
-            <td style="font-family: monospace; font-size: 0.85em;">
-              <div>${hasDepositRef ? customer.deposit_ref : '<span style="color: #999;">Pending</span>'}</div>
-              <div style="font-size: 0.75em; color: #666; margin-top: 0.2rem;">
-                ${hasBtcWallet ? '✓ BTC' : '⚠ BTC'} | ${hasUsdtWallet ? '✓ USDT' : '⚠ USDT'}
-              </div>
-            </td>
+            <td style="font-size:.85em;">${accountCell}</td>
+            <td style="font-size:.85em;">${walletSummary}</td>
             <td>${actionButtons}</td>
           </tr>
         `;
       }).join('');
     }
+
+    // Global function: Enter/Update VALR API keys for API model customer
+    window.showApiKeyModal = function(customerId, firstName, lastName) {
+      const customer = allSetupCustomers.find(c => c.customer_id === customerId);
+      const defaultExpiry = new Date(Date.now() + 365 * 86_400_000).toISOString().substring(0, 10);
+
+      const modalHtml = `
+        <div id="apiKeyModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;">
+          <div style="background:#fff;padding:30px;border-radius:8px;max-width:640px;width:90%;max-height:90vh;overflow-y:auto;">
+            <h3 style="margin:0 0 6px 0;color:#1e3a8a;">🔑 VALR API Keys — ${firstName} ${lastName}</h3>
+            <p style="margin:0 0 18px 0;font-size:.9em;color:#6b7280;">Enter the customer's VALR API credentials so BitWealth can execute trades on their behalf.</p>
+
+            <div style="background:#dbeafe;padding:14px;border-radius:5px;margin-bottom:18px;border-left:4px solid #3b82f6;">
+              <strong style="color:#1e40af;">Steps to get VALR API key:</strong>
+              <ol style="font-size:.88em;color:#1e3a8a;margin:8px 0 0;padding-left:18px;line-height:1.7;">
+                <li>Log into <a href="https://www.valr.com/" target="_blank" style="color:#3b82f6;">VALR</a> → <strong>Account → API Keys → Create New API Key</strong></li>
+                <li>Name: <strong>BitWealth Trade</strong></li>
+                <li>Permissions: <strong>View ✓ &nbsp;Trade ✓ &nbsp;Withdraw ✓ &nbsp;Link Bank Account ✓</strong></li>
+                <li>Whitelist BTC withdrawal: <code style="font-size:.85em;">38ppcqBCz58KENxP9Hi79oCrVFuPTHSdTP</code></li>
+                <li>Whitelist USDT (TRC-20): <code style="font-size:.85em;">TSivCwsgBRXBT2A4nF6zRJcMMSX2FeNrfP</code></li>
+                <li>Copy API Key + Secret → paste below</li>
+              </ol>
+            </div>
+
+            <div style="margin-bottom:14px;">
+              <label style="display:block;font-weight:600;margin-bottom:4px;">Key Label / Name:</label>
+              <input type="text" id="apiModal_label" value="BitWealth Trade" maxlength="60"
+                     style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+              <label style="display:block;font-weight:600;margin-bottom:4px;">API Key:</label>
+              <input type="password" id="apiModal_key" placeholder="Paste VALR API Key here"
+                     autocomplete="off" autocorrect="off" spellcheck="false"
+                     style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;font-family:monospace;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:14px;">
+              <label style="display:block;font-weight:600;margin-bottom:4px;">API Secret:</label>
+              <input type="password" id="apiModal_secret" placeholder="Paste VALR API Secret here"
+                     autocomplete="off" autocorrect="off" spellcheck="false"
+                     style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;font-family:monospace;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:18px;">
+              <label style="display:block;font-weight:600;margin-bottom:4px;">Key Expiry Date:</label>
+              <input type="date" id="apiModal_expiry" value="${defaultExpiry}"
+                     style="padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;">
+              <small style="color:#6b7280;display:block;margin-top:3px;">VALR keys typically expire after 1 year. Set to match the expiry shown in the VALR portal.</small>
+            </div>
+
+            <div style="background:#fee2e2;padding:12px;border-radius:4px;margin-bottom:18px;border-left:4px solid #ef4444;">
+              <strong style="color:#991b1b;">⚠️ Security:</strong> The API secret is stored encrypted in Vault. It will never be shown again after saving.
+            </div>
+
+            <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+              <button onclick="document.getElementById('apiKeyModal').remove()"
+                      style="padding:10px 20px;border:1px solid #cbd5e0;background:#fff;border-radius:4px;cursor:pointer;">
+                Cancel
+              </button>
+              <button onclick="window.saveApiKeys(${customerId}, '${firstName}', '${lastName}')"
+                      style="padding:10px 20px;border:none;background:#6366f1;color:#fff;border-radius:4px;cursor:pointer;font-weight:600;">
+                💾 Save &amp; Validate
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    };
+
+    // Global function: Save API keys via EF7
+    window.saveApiKeys = async function(customerId, firstName, lastName) {
+      const label   = document.getElementById('apiModal_label')?.value?.trim();
+      const apiKey  = document.getElementById('apiModal_key')?.value?.trim();
+      const secret  = document.getElementById('apiModal_secret')?.value?.trim();
+      const expiry  = document.getElementById('apiModal_expiry')?.value;
+
+      if (!apiKey || !secret) {
+        alert('Please enter both the API Key and API Secret.');
+        return;
+      }
+      if (!expiry) {
+        alert('Please set the key expiry date.');
+        return;
+      }
+
+      const saveBtn = document.querySelector('#apiKeyModal button[onclick*="saveApiKeys"]');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Saving…'; }
+
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_store_customer_api_keys`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: JSON.stringify({
+            customer_id: customerId,
+            api_key: apiKey,
+            api_secret: secret,
+            api_key_label: label || 'BitWealth Trade',
+            expires_at: new Date(expiry).toISOString()
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          document.getElementById('apiKeyModal')?.remove();
+          showMessage(`✓ API keys saved and validated for ${firstName} ${lastName}. Trading is now enabled.`, 'success');
+          await loadSetupCustomers();
+        } else {
+          throw new Error(result.error || result.message || 'Unknown error');
+        }
+      } catch (err) {
+        console.error('Error saving API keys:', err);
+        alert(`Failed to save API keys: ${err.message}`);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Save & Validate'; }
+      }
+    };
 
     // Global function: Manual retry for VALR subaccount creation (when automatic fails)
     window.manualCreateValrSubaccount = async function(customerId, firstName, lastName) {
@@ -9129,13 +9369,20 @@ This will:
         zarListEl.innerHTML = data.map(conv => {
           const hoursAgo = Math.floor(conv.hours_pending);
           const timeColor = hoursAgo > 24 ? '#dc3545' : hoursAgo > 4 ? '#ffc107' : '#28a745';
+          const modelBadge = conv.account_model === 'api'
+            ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
+            : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
+          const statusBadge = conv.conversion_status === 'partial'
+            ? '<span style="background:#ffc107;color:#000;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PARTIAL</span>'
+            : conv.conversion_status === 'pending'
+            ? '<span style="background:#6c757d;color:#fff;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PENDING</span>'
+            : '';
           
           return `
             <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
               <div style="flex:1;min-width:0;">
                 <div style="font-weight:500;margin-bottom:.25rem;">
-                  ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}
-                  ${conv.conversion_status === 'partial' ? '<span style="background:#ffc107;color:#000;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PARTIAL</span>' : ''}
+                  ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}${modelBadge}${statusBadge}
                 </div>
                 <div style="font-size:.85rem;color:#4b5563;margin-bottom:.25rem;">
                   <strong>Deposited:</strong> R${Number(conv.original_zar_amount).toFixed(2)}
@@ -9147,6 +9394,13 @@ This will:
                   · ${new Date(conv.occurred_at).toLocaleString()}
                   · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
                 </div>
+              </div>
+              <div style="flex-shrink:0;">
+                <button id="convertBtn_${conv.conversion_id}"
+                        onclick="window.executeZarConversion('${conv.conversion_id}', '${escapeHtml(conv.first_names)}', '${escapeHtml(conv.last_name)}')"
+                        style="padding:.4rem .8rem;font-size:.85em;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
+                  ⚡ Convert ZAR→USDT
+                </button>
               </div>
             </div>
           `;
@@ -9162,6 +9416,46 @@ This will:
         zarRefreshMessage.style.color = '#dc3545';
       }
     }
+
+    // Trigger ZAR→USDT conversion for a specific pending record
+    window.executeZarConversion = async function(conversionId, firstName, lastName) {
+      const btn = document.getElementById(`convertBtn_${conversionId}`);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing order…'; }
+
+      try {
+        zarRefreshMessage.textContent = `Converting for ${firstName} ${lastName}…`;
+        zarRefreshMessage.style.color = '#6c757d';
+
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_convert_zar_to_usdt`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token || window.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ conversion_id: conversionId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          zarRefreshMessage.textContent = `✅ Conversion complete for ${firstName} ${lastName}`;
+          zarRefreshMessage.style.color = '#28a745';
+          setTimeout(() => loadPendingZarConversions(), 1500);
+        } else {
+          const errMsg = result.error || result.message || 'Unknown error';
+          zarRefreshMessage.textContent = `❌ Conversion failed: ${errMsg}`;
+          zarRefreshMessage.style.color = '#dc3545';
+          if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }
+        }
+      } catch (err) {
+        console.error('executeZarConversion error:', err);
+        zarRefreshMessage.textContent = `Error: ${err.message}`;
+        zarRefreshMessage.style.color = '#dc3545';
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }
+      }
+    };
 
     // Sync Now button - triggers immediate transaction sync
     async function syncNowAndRefresh() {
@@ -9229,6 +9523,204 @@ This will:
         });
       }
     }, 5 * 60 * 1000);
+  })();
+
+  // =================== Withdrawal History Module (AU4) ===================
+  (function() {
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0OTc2NzMsImV4cCI6MjA0OTA3MzY3M30.t7YhiLG9j1F1rkipICLbGRFAC3Tl44TqsN3jtv8zOvA';
+
+    const tableBody  = document.querySelector('#wdTable tbody');
+    const refreshBtn = document.getElementById('wdRefreshBtn');
+    const statusFilter = document.getElementById('wdStatusFilter');
+    const msgDiv    = document.getElementById('wdMessage');
+
+    if (!tableBody || !refreshBtn) return;
+
+    let allWithdrawals = [];
+
+    function showMsg(text, type) {
+      msgDiv.textContent = text;
+      msgDiv.style.display = 'block';
+      msgDiv.style.backgroundColor = type === 'success' ? '#d1fae5' : type === 'error' ? '#fee2e2' : '#dbeafe';
+      msgDiv.style.color = type === 'success' ? '#065f46' : type === 'error' ? '#991b1b' : '#1e40af';
+      setTimeout(() => { msgDiv.style.display = 'none'; }, 5000);
+    }
+
+    function statusBadge(status) {
+      const cfg = {
+        pending:    { icon: '⏳', bg: '#e5e7eb', color: '#374151' },
+        processing: { icon: '🔄', bg: '#dbeafe', color: '#1e40af' },
+        completed:  { icon: '✅', bg: '#d1fae5', color: '#065f46' },
+        failed:     { icon: '❌', bg: '#fee2e2', color: '#991b1b' },
+        cancelled:  { icon: '⊘',  bg: '#fef3c7', color: '#92400e' },
+      };
+      const s = cfg[status] || { icon: '?', bg: '#f3f4f6', color: '#374151' };
+      return `<span style="background:${s.bg};color:${s.color};padding:.2rem .5rem;border-radius:4px;font-size:.8em;white-space:nowrap;">${s.icon} ${status}</span>`;
+    }
+
+    function renderWithdrawals() {
+      const filterStatus = statusFilter.value;
+      const filtered = allWithdrawals.filter(w => !filterStatus || w.status === filterStatus);
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="muted">No withdrawals${filterStatus ? ' with status: ' + filterStatus : ''}</td></tr>`;
+        return;
+      }
+
+      const now = Date.now();
+      tableBody.innerHTML = filtered.map(w => {
+        const cd = w.customer_details;
+        const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
+        const reqDate = new Date(w.requested_at).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' });
+        const amount = Number(w.gross_amount ?? w.amount_requested ?? 0).toFixed(2);
+        const net    = Number(w.net_amount ?? w.amount_requested ?? 0).toFixed(2);
+
+        // Highlight: failed more than 30 min ago
+        const isStuck = w.status === 'failed' ||
+          (w.status === 'processing' && (now - new Date(w.requested_at).getTime()) > 30 * 60_000);
+        const rowStyle = isStuck ? 'background:#fff3cd;' : '';
+
+        return `
+          <tr style="${rowStyle}">
+            <td style="font-size:.85em;white-space:nowrap;">${reqDate}</td>
+            <td style="font-size:.9em;">${fname}<br><span style="color:#6c757d;font-size:.8em;">${cd?.email || ''}</span></td>
+            <td style="font-size:.85em;">${w.currency}</td>
+            <td style="text-align:right;font-size:.9em;">${amount}</td>
+            <td style="text-align:right;font-size:.9em;">${net}</td>
+            <td>${statusBadge(w.status)}</td>
+            <td style="white-space:nowrap;">
+              <button onclick="window.viewWithdrawalDetails('${w.withdrawal_id}')"
+                      style="padding:.3rem .55rem;font-size:.8em;border:1px solid #6c757d;background:#fff;border-radius:4px;cursor:pointer;">
+                👁 Details
+              </button>
+              ${w.status === 'failed' ? `
+                <button onclick="window.retryWithdrawal('${w.withdrawal_id}')"
+                        style="padding:.3rem .55rem;font-size:.8em;border:none;background:#dc3545;color:#fff;border-radius:4px;cursor:pointer;margin-left:.3rem;">
+                  ↺ Retry
+                </button>` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadWithdrawals() {
+      tableBody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      try {
+        if (!supabaseClient) throw new Error('Supabase client not ready');
+
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('withdrawal_requests')
+          .select('*, customer_details!inner(first_names, last_name, email)')
+          .order('requested_at', { ascending: false })
+          .limit(200);
+
+        if (error) throw error;
+
+        allWithdrawals = data || [];
+        renderWithdrawals();
+      } catch (err) {
+        console.error('loadWithdrawals error:', err);
+        tableBody.innerHTML = `<tr><td colspan="7" style="color:#dc3545;">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Details modal
+    window.viewWithdrawalDetails = function(withdrawalId) {
+      const w = allWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+      if (!w) return;
+
+      const cd = w.customer_details;
+      const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
+      const valrJson = w.valr_response ? JSON.stringify(w.valr_response, null, 2) : 'None';
+
+      const modalHtml = `
+        <div id="wdDetailModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;">
+          <div style="background:#fff;padding:28px;border-radius:8px;max-width:620px;width:90%;max-height:90vh;overflow-y:auto;">
+            <h3 style="margin:0 0 16px 0;color:#1e3a8a;">💸 Withdrawal Details</h3>
+            <table style="width:100%;font-size:.9em;border-collapse:collapse;">
+              ${[
+                ['ID', w.withdrawal_id],
+                ['Customer', `${fname} (${cd?.email || ''})`],
+                ['Currency', w.currency],
+                ['Gross Amount', w.gross_amount ?? w.amount_requested],
+                ['Fee', w.fee_amount ?? '—'],
+                ['Net Amount', w.net_amount ?? '—'],
+                ['Status', w.status],
+                ['Requested', new Date(w.requested_at).toLocaleString('en-ZA')],
+                ['Processed', w.processed_at ? new Date(w.processed_at).toLocaleString('en-ZA') : '—'],
+                ['VALR Withdrawal ID', w.valr_withdrawal_id ?? '—'],
+                ['Destination', w.destination_address ?? w.bank_account_id ?? '—'],
+              ].map(([k, v]) => `
+                <tr style="border-bottom:1px solid #f3f4f6;">
+                  <td style="padding:.4rem;font-weight:600;color:#374151;width:40%;">${k}</td>
+                  <td style="padding:.4rem;color:#4b5563;">${v}</td>
+                </tr>`).join('')}
+            </table>
+            ${w.valr_response ? `
+              <div style="margin-top:14px;">
+                <strong style="font-size:.85em;color:#374151;">VALR Response:</strong>
+                <pre style="background:#f8f9fa;padding:10px;border-radius:4px;font-size:.75em;overflow-x:auto;margin-top:6px;">${valrJson}</pre>
+              </div>` : ''}
+            <div style="text-align:right;margin-top:16px;">
+              <button onclick="document.getElementById('wdDetailModal').remove()"
+                      style="padding:9px 20px;border:1px solid #cbd5e0;background:#fff;border-radius:4px;cursor:pointer;">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    };
+
+    // Retry failed withdrawal
+    window.retryWithdrawal = async function(withdrawalId) {
+      const w = allWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+      if (!w) return;
+      const cd = w.customer_details;
+      const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
+
+      if (!confirm(`Retry failed withdrawal for ${fname}?\n\nThis will call ef_request_withdrawal again with the same parameters.`)) return;
+
+      try {
+        showMsg(`Retrying withdrawal for ${fname}…`, 'info');
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_request_withdrawal`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: JSON.stringify({
+            withdrawal_id: withdrawalId,
+            retry: true
+          })
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+          showMsg(`✓ Retry submitted for ${fname}`, 'success');
+          setTimeout(loadWithdrawals, 2000);
+        } else {
+          showMsg(`Retry failed: ${result.error || result.message || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        showMsg(`Error: ${err.message}`, 'error');
+      }
+    };
+
+    refreshBtn.addEventListener('click', loadWithdrawals);
+    statusFilter.addEventListener('change', renderWithdrawals);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) loadWithdrawals();
+        });
+      }
+    });
   })();
 
   // =================== Strategy Maintenance Module ===================
