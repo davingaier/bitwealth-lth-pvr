@@ -91,11 +91,11 @@
                     <span class="icon">📄</span>
                     <span>Statements</span>
                 </a>
-                <a href="#withdrawals" class="nav-item">
+                <a href="#withdrawals" class="nav-item" onclick="scrollToSection('withdrawals'); return false;">
                     <span class="icon">💸</span>
                     <span>Withdrawals</span>
                 </a>
-                <a href="#settings" class="nav-item">
+                <a href="#settings" class="nav-item" onclick="scrollToSection('settings'); return false;">
                     <span class="icon">⚙️</span>
                     <span>Settings</span>
                 </a>
@@ -130,6 +130,13 @@
                     <div id="noDataMessage" class="alert" style="display: none; background: rgba(251, 191, 36, 0.1); border-left: 4px solid var(--gold); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: var(--gold); font-weight: 500;">
                         <strong>📊 Trading starts tomorrow!</strong><br>
                         Your portfolio data will appear here after your first trading day.
+                    </div>
+
+                    <!-- API Key Expiry Banner (API model customers only) -->
+                    <div id="apiKeyExpiryBanner" style="display: none; background: #fee2e2; border-left: 4px solid #ef4444; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <strong id="apiKeyExpiryBannerTitle" style="color: #991b1b;">⚠️ Action Required</strong><br>
+                        <span id="apiKeyExpiryBannerMsg" style="color: #7f1d1d; font-size: 14px;"></span>
+                        <a href="#settings" onclick="scrollToSection('settings'); return false;" style="color: #ef4444; font-weight: 600; margin-left: 8px; font-size: 14px;">Go to Settings →</a>
                     </div>
 
                     <!-- Stats Grid -->
@@ -220,11 +227,11 @@
                             </div>
                             <div class="milestone" id="m4">
                                 <div class="milestone-circle">4</div>
-                                <div class="milestone-label">VALR Setup</div>
+                                <div class="milestone-label" id="m4Label">VALR Setup</div>
                             </div>
                             <div class="milestone" id="m5">
                                 <div class="milestone-circle">5</div>
-                                <div class="milestone-label">Deposit</div>
+                                <div class="milestone-label" id="m5Label">Deposit</div>
                             </div>
                             <div class="milestone" id="m6">
                                 <div class="milestone-circle">6</div>
@@ -338,6 +345,202 @@
                 </div>
             </section>
 
+            <!-- Withdrawals Section -->
+            <section id="withdrawals" style="margin-top: 32px;">
+                <!-- Withdraw Funds Form -->
+                <div class="dashboard-card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <h2>💸 Withdraw Funds</h2>
+                    </div>
+                    <div style="padding: 20px;">
+                        <!-- Withdrawable balance -->
+                        <div style="background: rgba(16,185,129,0.1); border-left: 4px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">Withdrawable Balance (excludes accumulated performance fees)</div>
+                            <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: baseline;">
+                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdBtcBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">BTC</span></div>
+                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">$</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdtBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
+                                <div><span style="font-size: 17px; color: var(--text-secondary);">≈ R</span><span style="font-size: 17px; font-weight: 600; color: var(--text-secondary);" id="wdZarEquiv">--</span> <span style="font-size: 12px; color: var(--text-secondary);">ZAR equiv.</span></div>
+                            </div>
+                        </div>
+                        <!-- Warning -->
+                        <div style="background: rgba(251,191,36,0.1); border-left: 4px solid var(--gold); padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: var(--gold);">
+                            ⚠️ Withdrawals are processed immediately and <strong>cannot be undone</strong> once submitted. A pending request can be cancelled before processing begins.
+                        </div>
+                        <!-- Currency selector -->
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-secondary); font-weight: 600;">Withdrawal Type</label>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
+                                    <input type="radio" name="wdType" value="ZAR" checked onchange="switchWithdrawalType('ZAR')" style="accent-color: var(--gold);"> 🏦 ZAR to bank account
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
+                                    <input type="radio" name="wdType" value="BTC" onchange="switchWithdrawalType('BTC')" style="accent-color: var(--gold);"> ₿ BTC to address
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
+                                    <input type="radio" name="wdType" value="USDT" onchange="switchWithdrawalType('USDT')" style="accent-color: var(--gold);"> 💵 USDT to TRC-20 address
+                                </label>
+                            </div>
+                        </div>
+                        <!-- ZAR withdrawal form -->
+                        <div id="wdFormZar">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary);">Amount (ZAR)</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <span style="font-size: 18px; color: var(--text-secondary); font-weight: 600; min-width: 14px;">R</span>
+                                    <input type="number" id="wdZarAmount" min="100" step="1" placeholder="0"
+                                        style="flex: 1; padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 16px;"
+                                        oninput="recalculateZarEstimate()">
+                                    <button onclick="recalculateZarEstimate()" style="padding: 10px 14px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); border-radius: 8px; color: #93c5fd; cursor: pointer; font-size: 13px; white-space: nowrap;">🔄 Recalculate</button>
+                                </div>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.04); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;">
+                                <span style="color: var(--text-secondary);">Bank account: </span><span id="wdBankDisplay" style="color: var(--text-primary);">Loading...</span>
+                            </div>
+                            <div id="wdZarEstimate" style="display: none; background: rgba(16,185,129,0.05); border: 1px solid rgba(16,185,129,0.2); padding: 15px; border-radius: 8px; margin-bottom: 16px;">
+                                <table style="width: 100%; font-size: 13px;">
+                                    <tr><td style="color: var(--text-secondary); padding: 4px 0;">USDT to convert:</td><td style="text-align: right; color: var(--text-primary); font-family: monospace;" id="wdUsdtNeeded">--</td></tr>
+                                    <tr><td style="color: var(--text-secondary); padding: 4px 0;">VALR conversion fee (~0.1%):</td><td style="text-align: right; color: var(--text-primary); font-family: monospace;" id="wdConvFee">--</td></tr>
+                                    <tr><td style="color: var(--text-secondary); padding: 4px 0;">Bank withdrawal fee:</td><td style="text-align: right; color: var(--text-primary); font-family: monospace;" id="wdBankFee">--</td></tr>
+                                    <tr style="border-top: 1px solid rgba(255,255,255,0.1);"><td style="color: #10b981; padding-top: 8px; font-weight: 600;">Est. amount received:</td><td style="text-align: right; color: #10b981; font-weight: 700; font-family: monospace; padding-top: 8px;" id="wdZarNet">--</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- BTC withdrawal form -->
+                        <div id="wdFormBtc" style="display: none;">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary);">Amount (BTC)</label>
+                                <input type="number" id="wdBtcAmount" min="0.0001" step="0.00000001" placeholder="0.00000000"
+                                    style="width: 100%; padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary);">Bitcoin Address</label>
+                                <input type="text" id="wdBtcAddress" placeholder="e.g. 1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf..."
+                                    style="width: 100%; padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px; box-sizing: border-box; font-family: monospace;">
+                                <div id="wdBtcAddressError" style="color: #ef4444; font-size: 12px; margin-top: 4px; display: none;">Invalid Bitcoin address format.</div>
+                            </div>
+                            <div id="wdApiModelBtcNote" style="display: none; background: rgba(251,191,36,0.08); border-left: 4px solid var(--gold); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--gold);">
+                                ⚠️ Your VALR API key's Withdraw whitelist must include this address. Log in to VALR → Account → API Keys → edit your key → add the address before submitting.
+                            </div>
+                        </div>
+                        <!-- USDT withdrawal form -->
+                        <div id="wdFormUsdt" style="display: none;">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary);">Amount (USDT)</label>
+                                <input type="number" id="wdUsdtAmount" min="10" step="0.01" placeholder="0.00"
+                                    style="width: 100%; padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 16px; box-sizing: border-box;">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary);">USDT TRC-20 Address</label>
+                                <input type="text" id="wdUsdtAddress" placeholder="e.g. TGCRmHx43gMWwKPEXdFGv..."
+                                    style="width: 100%; padding: 10px 15px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px; box-sizing: border-box; font-family: monospace;">
+                                <div id="wdUsdtAddressError" style="color: #ef4444; font-size: 12px; margin-top: 4px; display: none;">Invalid TRC-20 address (must start with T, 34 characters total).</div>
+                            </div>
+                        </div>
+                        <!-- Interim fee note (BTC/USDT) -->
+                        <div id="wdInterimFeeNote" style="display: none; background: rgba(245,158,11,0.08); border-left: 4px solid #f59e0b; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #f59e0b;">
+                            ℹ️ <strong>Performance Fee:</strong> If your portfolio has accrued profits since your last fee settlement, an interim performance fee will be deducted at withdrawal time.
+                        </div>
+                        <!-- Confirm + Submit -->
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px;">
+                                <input type="checkbox" id="wdConfirmCheckbox" style="accent-color: var(--gold); width: 16px; height: 16px;">
+                                <span style="color: var(--text-primary);">I confirm this withdrawal and accept BitWealth's withdrawal policy</span>
+                            </label>
+                        </div>
+                        <button onclick="submitWithdrawal()" id="wdSubmitBtn"
+                            style="width: 100%; padding: 14px; background: var(--gold); color: var(--bg-dark); border: none; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; transition: opacity 0.2s;">
+                            💸 Submit Withdrawal Request
+                        </button>
+                        <div id="wdFormMessage" style="display: none; padding: 12px; border-radius: 8px; margin-top: 12px;"></div>
+                    </div>
+                </div>
+                <!-- Withdrawal History -->
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <h2>📋 Withdrawal History</h2>
+                        <button onclick="loadWithdrawals(customerData?.customer_id)" style="padding: 6px 14px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: var(--text-secondary); cursor: pointer; font-size: 13px;">🔄 Refresh</button>
+                    </div>
+                    <div id="wdHistoryArea" style="padding: 20px; color: var(--text-secondary);">Loading...</div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings" style="margin-top: 32px;">
+                <!-- API Key Management (API model only) -->
+                <div id="settingsApiKeyCard" style="display: none; margin-bottom: 20px;">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h2>🔑 VALR API Key</h2>
+                        </div>
+                        <div style="padding: 20px;">
+                            <div id="apiKeyInfo">Loading...</div>
+                            <div id="apiKeyUpdateForm" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <div style="background: rgba(59,130,246,0.08); border-left: 4px solid #3b82f6; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: #93c5fd; line-height: 1.8;">
+                                    <strong>How to create a new VALR API key:</strong>
+                                    <ol style="margin: 8px 0 0 0; padding-left: 20px;">
+                                        <li>Log in to <a href="https://www.valr.com/" target="_blank" style="color: #60a5fa;">valr.com</a> → Account → API Keys</li>
+                                        <li>Click <strong>Create New API Key</strong></li>
+                                        <li>Name: <code style="background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px;">BitWealth Trade</code></li>
+                                        <li>Enable: ☑ View &nbsp;☑ Trade &nbsp;☑ Withdraw &nbsp;☑ Link Bank Account</li>
+                                        <li>Withdraw whitelist — add both addresses:<br>
+                                            &nbsp;&nbsp;BTC: <code style="background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px;">38ppcqBCz58KENxP9Hi79oCrVFuPTHSdTP</code><br>
+                                            &nbsp;&nbsp;USDT (TRC-20): <code style="background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px;">TSivCwsgBRXBT2A4nF6zRJcMMSX2FeNrfP</code>
+                                        </li>
+                                        <li>Copy Key &amp; Secret — <strong>the Secret is shown only once!</strong></li>
+                                        <li>Enter your details below and click Save</li>
+                                    </ol>
+                                </div>
+                                <div style="display: grid; gap: 14px;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Key Name / Label</label>
+                                        <input type="text" id="settingsApiKeyLabel" placeholder="BitWealth Trade"
+                                            style="width: 100%; padding: 10px 14px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px; box-sizing: border-box;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">API Key</label>
+                                        <input type="text" id="settingsApiKey" placeholder="Paste your VALR API key"
+                                            style="width: 100%; padding: 10px 14px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px; box-sizing: border-box; font-family: monospace;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">API Secret</label>
+                                        <input type="password" id="settingsApiSecret" placeholder="Paste your VALR API secret"
+                                            style="width: 100%; padding: 10px 14px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px; box-sizing: border-box; font-family: monospace;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Key Expiry Date</label>
+                                        <input type="date" id="settingsApiKeyExpiry"
+                                            style="padding: 10px 14px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 14px;">
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-top: 16px;">
+                                    <button onclick="saveApiKeyPortal()" id="settingsSaveApiKeyBtn"
+                                        style="padding: 10px 24px; background: var(--gold); color: var(--bg-dark); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                                        💾 Save &amp; Validate
+                                    </button>
+                                    <button onclick="hideApiKeyUpdateForm()"
+                                        style="padding: 10px 20px; background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: var(--text-secondary); cursor: pointer; font-size: 14px;">
+                                        Cancel
+                                    </button>
+                                </div>
+                                <div id="settingsApiKeyMsg" style="margin-top: 12px; padding: 10px; border-radius: 6px; display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Bank Account -->
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <h2>🏦 Linked Bank Account</h2>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div id="bankAccountInfo">Loading...</div>
+                        <div style="margin-top: 15px; font-size: 13px; color: var(--text-secondary);">
+                            To update your linked bank account, please contact <a href="mailto:support@bitwealth.co.za" style="color: #3b82f6;">support@bitwealth.co.za</a> with a copy of your new bank confirmation letter.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             </div> <!-- End #content -->
         </main> <!-- End dashboard-main -->
     </div> <!-- End dashboard-container -->
@@ -420,6 +623,15 @@
                 // Load transaction history
                 await loadTransactionHistory(customerData.customer_id);
 
+                // Load withdrawal history and withdrawable balance
+                await loadWithdrawals(customerData.customer_id);
+
+                // Load settings (API key + bank account)
+                await loadSettings(customerData.customer_id);
+
+                // Load API key expiry banner (API model only)
+                await loadApiKeyExpiryBanner(customerData.customer_id);
+
                 // Initialize statement form with customer's account creation date
                 initializeStatementForm();
 
@@ -449,6 +661,14 @@
                         milestoneEl.classList.add('complete');
                     }
                 });
+
+                // CP3: Update milestone labels for API model customers
+                if (customerData?.account_model === 'api') {
+                    const m4Label = document.getElementById('m4Label');
+                    const m5Label = document.getElementById('m5Label');
+                    if (m4Label) m4Label.textContent = 'API Key Setup';
+                    if (m5Label) m5Label.textContent = 'Initial Deposit';
+                }
 
                 // Update progress bar
                 const progress = (data.current_milestone / 6) * 100;
@@ -1114,6 +1334,402 @@
         async function logout() {
             await sb.auth.signOut();
             window.location.href = 'login.html';
+        }
+
+        // ── Globals for new sections ──────────────────────────────────────────
+        let exchangeAccountData = null;
+        let currentWithdrawals = [];
+        let withdrawableBalance = { btc: 0, usdt: 0 };
+
+        // ── API Key Expiry Banner ─────────────────────────────────────────────
+        async function loadApiKeyExpiryBanner(customerId) {
+            if (customerData?.account_model !== 'api') return;
+            try {
+                const { data: acct } = await sb
+                    .from('exchange_accounts')
+                    .select('api_key_expires_at, api_key_label')
+                    .eq('customer_id', customerId)
+                    .maybeSingle();
+                if (!acct || !acct.api_key_expires_at) return;
+                const daysRemaining = Math.floor((new Date(acct.api_key_expires_at) - new Date()) / 86400000);
+                if (daysRemaining <= 10) {
+                    const banner = document.getElementById('apiKeyExpiryBanner');
+                    const title = document.getElementById('apiKeyExpiryBannerTitle');
+                    const msg = document.getElementById('apiKeyExpiryBannerMsg');
+                    if (banner) {
+                        title.textContent = daysRemaining <= 0
+                            ? '\ud83d\udea8 URGENT: Trading Paused \u2014 API Key Expired'
+                            : `\u26a0\ufe0f Action Required: Your VALR API key expires in ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}!`;
+                        msg.textContent = daysRemaining <= 0
+                            ? 'Your API key has expired and trading has been paused. Please update your key in Settings immediately.'
+                            : 'Automated trading will be paused when your key expires. Please renew it now to avoid interruption.';
+                        banner.style.display = 'block';
+                    }
+                }
+            } catch (e) { console.error('apiKeyExpiryBanner error:', e); }
+        }
+
+        // ── Withdrawals Section ───────────────────────────────────────────────
+        async function loadWithdrawals(customerId) {
+            if (!customerId) return;
+            try {
+                // Load withdrawable balance
+                const { data: wb } = await sb.schema('lth_pvr').rpc('get_withdrawable_balance', { p_customer_id: customerId });
+                if (wb && wb.length > 0) {
+                    withdrawableBalance.btc = parseFloat(wb[0].withdrawable_btc || 0);
+                    withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
+                }
+                const btcEl = document.getElementById('wdBtcBalance');
+                const usdtEl = document.getElementById('wdUsdtBalance');
+                if (btcEl) btcEl.textContent = withdrawableBalance.btc.toFixed(8);
+                if (usdtEl) usdtEl.textContent = withdrawableBalance.usdt.toFixed(2);
+
+                // Fetch live USDTZAR for ZAR equivalent display
+                try {
+                    const rateResp = await fetch('https://api.valr.com/v1/public/USDTZAR/marketsummary');
+                    if (rateResp.ok) {
+                        const rateData = await rateResp.json();
+                        const rate = parseFloat(rateData.lastTradedPrice || rateData.markPrice || 0);
+                        if (rate > 0) {
+                            const zarEl = document.getElementById('wdZarEquiv');
+                            if (zarEl) zarEl.textContent = (withdrawableBalance.usdt * rate).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        }
+                    }
+                } catch { /* non-critical */ }
+
+                // Load bank account display for ZAR form
+                const { data: acct } = await sb.from('exchange_accounts')
+                    .select('bank_name, bank_account_number')
+                    .eq('customer_id', customerId).maybeSingle();
+                const bankEl = document.getElementById('wdBankDisplay');
+                if (bankEl) {
+                    if (acct && acct.bank_name) {
+                        const masked = acct.bank_account_number ? `****${acct.bank_account_number.slice(-4)}` : 'number not on file';
+                        bankEl.textContent = `${acct.bank_name} ${masked}`;
+                    } else {
+                        bankEl.innerHTML = '<span style="color: #ef4444;">No bank account linked \u2014 contact support before submitting a ZAR withdrawal.</span>';
+                    }
+                }
+
+                // Show API model-specific notices
+                if (customerData?.account_model === 'api') {
+                    const n1 = document.getElementById('wdApiModelBtcNote');
+                    const n2 = document.getElementById('wdInterimFeeNote');
+                    if (n1) n1.style.display = 'block';
+                    if (n2) n2.style.display = 'block';
+                }
+
+                // Load withdrawal history (this customer only — no cross-schema join needed)
+                const { data: withdrawals, error: wdErr } = await sb
+                    .schema('lth_pvr')
+                    .from('withdrawal_requests')
+                    .select('*')
+                    .eq('customer_id', customerId)
+                    .order('requested_at', { ascending: false })
+                    .limit(50);
+                if (wdErr) throw wdErr;
+                currentWithdrawals = withdrawals || [];
+                renderWithdrawalHistory(currentWithdrawals);
+
+                // Default to ZAR form
+                switchWithdrawalType('ZAR');
+            } catch (e) {
+                console.error('loadWithdrawals error:', e);
+                const area = document.getElementById('wdHistoryArea');
+                if (area) area.innerHTML = '<p style="color: #ef4444;">Error loading withdrawal data. Please refresh.</p>';
+            }
+        }
+
+        function renderWithdrawalHistory(withdrawals) {
+            const area = document.getElementById('wdHistoryArea');
+            if (!area) return;
+            if (!withdrawals || withdrawals.length === 0) {
+                area.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No withdrawal requests yet.</p>';
+                return;
+            }
+            const now = new Date();
+            const statusBadge = (status) => {
+                const badges = {
+                    pending:    { label: '\u23f3 Pending',    bg: '#6b7280' },
+                    processing: { label: '\ud83d\udd04 Processing', bg: '#3b82f6' },
+                    completed:  { label: '\u2705 Completed',  bg: '#10b981' },
+                    failed:     { label: '\u274c Failed',     bg: '#ef4444' },
+                    cancelled:  { label: '\u2296 Cancelled',  bg: '#f59e0b' },
+                };
+                const b = badges[status] || { label: status, bg: '#6b7280' };
+                return `<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;color:white;background:${b.bg};">${b.label}</span>`;
+            };
+            const rows = withdrawals.map(w => {
+                const date = w.requested_at ? new Date(w.requested_at).toLocaleDateString('en-ZA') : '--';
+                const decimals = w.currency === 'BTC' ? 8 : 2;
+                const gross = parseFloat(w.gross_amount || 0);
+                const net = parseFloat(w.net_amount || gross);
+                const fee = parseFloat(w.interim_fee_usdt || 0);
+                const prefix = w.currency === 'ZAR' ? 'R' : (w.currency === 'USDT' ? '$' : '');
+                let rowStyle = w.status === 'processing' && w.requested_at && (now - new Date(w.requested_at)) / 60000 > 30
+                    ? 'background: rgba(245,158,11,0.08);' : '';
+                const cancelBtn = w.status === 'pending'
+                    ? `<button onclick="cancelWithdrawal('${w.withdrawal_id}')" style="margin-left:6px;padding:4px 10px;background:#ef4444;border:none;border-radius:4px;color:white;font-size:12px;cursor:pointer;">Cancel</button>`
+                    : '';
+                return `<tr style="${rowStyle} border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:10px 12px;font-size:13px;color:#1e3a8a;">${date}</td>
+                    <td style="padding:10px 12px;font-size:13px;">${w.currency || '--'}</td>
+                    <td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:13px;">${prefix}${gross.toFixed(decimals)}</td>
+                    <td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:13px;color:${fee>0?'#f59e0b':'#64748b'}">${fee>0?'$'+fee.toFixed(2):'--'}</td>
+                    <td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:13px;color:#10b981;">${prefix}${net.toFixed(decimals)}</td>
+                    <td style="padding:10px 12px;">${statusBadge(w.status)}</td>
+                    <td style="padding:10px 12px;">
+                        <button onclick="viewWithdrawalDetails('${w.withdrawal_id}')" style="padding:4px 10px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:4px;color:#93c5fd;font-size:12px;cursor:pointer;">View</button>
+                        ${cancelBtn}
+                    </td>
+                </tr>`;
+            }).join('');
+            area.innerHTML = `
+                <div style="overflow-x: auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="background:rgba(255,255,255,0.05);border-bottom:2px solid rgba(255,255,255,0.1);">
+                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Date</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Currency</th>
+                            <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Amount</th>
+                            <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Perf. Fee</th>
+                            <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Net Amount</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Status</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Actions</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        function viewWithdrawalDetails(withdrawalId) {
+            const w = currentWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+            if (!w) return;
+            const json = w.valr_response ? JSON.stringify(w.valr_response, null, 2) : 'No VALR response recorded.';
+            alert(`Withdrawal Details\n\nID: ${w.withdrawal_id}\nCurrency: ${w.currency}\nAmount: ${w.gross_amount}\nNet: ${w.net_amount}\nStatus: ${w.status}\nRequested: ${w.requested_at || '--'}\nCompleted: ${w.completed_at || '--'}\nError: ${w.error_message || '--'}\n\nVALR Response:\n${json}`);
+        }
+
+        function switchWithdrawalType(type) {
+            document.getElementById('wdFormZar').style.display = type === 'ZAR' ? 'block' : 'none';
+            document.getElementById('wdFormBtc').style.display = type === 'BTC' ? 'block' : 'none';
+            document.getElementById('wdFormUsdt').style.display = type === 'USDT' ? 'block' : 'none';
+            const interimNote = document.getElementById('wdInterimFeeNote');
+            if (interimNote) interimNote.style.display = (type !== 'ZAR' || customerData?.account_model === 'api') ? 'block' : 'none';
+            document.querySelectorAll('input[name="wdType"]').forEach(el => { if (el.value === type) el.checked = true; });
+        }
+
+        async function recalculateZarEstimate() {
+            const amount = parseFloat(document.getElementById('wdZarAmount')?.value);
+            if (!amount || amount <= 0) { const el = document.getElementById('wdZarEstimate'); if (el) el.style.display = 'none'; return; }
+            try {
+                const rateResp = await fetch('https://api.valr.com/v1/public/USDTZAR/marketsummary');
+                const rateData = await rateResp.json();
+                const rate = parseFloat(rateData.lastTradedPrice || rateData.markPrice || 18);
+                const usdtNeeded = amount / rate;
+                const convFeeZar = usdtNeeded * 0.001 * rate;
+                const bankFee = 0;
+                document.getElementById('wdUsdtNeeded').textContent = usdtNeeded.toFixed(4) + ' USDT';
+                document.getElementById('wdConvFee').textContent = 'R' + convFeeZar.toFixed(2);
+                document.getElementById('wdBankFee').textContent = bankFee > 0 ? 'R' + bankFee.toFixed(2) : 'Free';
+                document.getElementById('wdZarNet').textContent = '~R' + (amount - convFeeZar - bankFee).toFixed(2);
+                document.getElementById('wdZarEstimate').style.display = 'block';
+            } catch (e) { console.error('Rate fetch error:', e); }
+        }
+
+        async function submitWithdrawal() {
+            const typeEl = document.querySelector('input[name="wdType"]:checked');
+            const type = typeEl?.value;
+            if (!type) { showWdFormMessage('Please select a withdrawal type.', 'error'); return; }
+            if (!document.getElementById('wdConfirmCheckbox').checked) {
+                showWdFormMessage('Please tick the confirmation checkbox.', 'error'); return;
+            }
+            const payload = { customer_id: customerData.customer_id, currency: type };
+            if (type === 'ZAR') {
+                const amount = parseFloat(document.getElementById('wdZarAmount').value);
+                if (!amount || amount < 100) { showWdFormMessage('Please enter a valid ZAR amount (minimum R100).', 'error'); return; }
+                payload.amount = amount;
+            } else if (type === 'BTC') {
+                const amount = parseFloat(document.getElementById('wdBtcAmount').value);
+                const address = document.getElementById('wdBtcAddress').value.trim();
+                if (!amount || amount <= 0) { showWdFormMessage('Please enter a valid BTC amount.', 'error'); return; }
+                if (amount > withdrawableBalance.btc) { showWdFormMessage(`Amount exceeds withdrawable BTC balance (${withdrawableBalance.btc.toFixed(8)} BTC).`, 'error'); return; }
+                const btcRe = /^[13][a-zA-Z0-9]{25,34}$|^bc1[a-z0-9]{6,87}$/;
+                if (!btcRe.test(address)) { document.getElementById('wdBtcAddressError').style.display = 'block'; return; }
+                document.getElementById('wdBtcAddressError').style.display = 'none';
+                payload.amount = amount; payload.withdrawal_address = address;
+            } else if (type === 'USDT') {
+                const amount = parseFloat(document.getElementById('wdUsdtAmount').value);
+                const address = document.getElementById('wdUsdtAddress').value.trim();
+                if (!amount || amount < 10) { showWdFormMessage('Please enter a valid USDT amount (minimum $10).', 'error'); return; }
+                if (amount > withdrawableBalance.usdt) { showWdFormMessage(`Amount exceeds withdrawable USDT balance ($${withdrawableBalance.usdt.toFixed(2)}).`, 'error'); return; }
+                const trc20Re = /^T[a-zA-Z0-9]{33}$/;
+                if (!trc20Re.test(address)) { document.getElementById('wdUsdtAddressError').style.display = 'block'; return; }
+                document.getElementById('wdUsdtAddressError').style.display = 'none';
+                payload.amount = amount; payload.withdrawal_address = address;
+            }
+            const btn = document.getElementById('wdSubmitBtn');
+            btn.disabled = true; btn.textContent = '\u23f3 Submitting...';
+            showWdFormMessage('Submitting withdrawal request...', 'loading');
+            try {
+                const { data: { session } } = await sb.auth.getSession();
+                const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_request_withdrawal`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify(payload)
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Withdrawal request failed');
+                showWdFormMessage('\u2705 Withdrawal submitted successfully. You will receive an email confirmation shortly.', 'success');
+                btn.disabled = false; btn.textContent = '\ud83d\udcb8 Submit Withdrawal Request';
+                document.getElementById('wdConfirmCheckbox').checked = false;
+                await loadWithdrawals(customerData.customer_id);
+            } catch (e) {
+                console.error('Withdrawal submit error:', e);
+                showWdFormMessage('\u274c Error: ' + e.message, 'error');
+                btn.disabled = false; btn.textContent = '\ud83d\udcb8 Submit Withdrawal Request';
+            }
+        }
+
+        async function cancelWithdrawal(withdrawalId) {
+            if (!confirm('Are you sure you want to cancel this withdrawal request? This cannot be undone.')) return;
+            try {
+                const { data: { session } } = await sb.auth.getSession();
+                const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_revert_withdrawal`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ withdrawal_id: withdrawalId })
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Cancel failed');
+                alert('Withdrawal cancelled successfully.');
+                await loadWithdrawals(customerData.customer_id);
+            } catch (e) { alert('Error cancelling withdrawal: ' + e.message); }
+        }
+
+        function showWdFormMessage(msg, type) {
+            const el = document.getElementById('wdFormMessage');
+            if (!el) return;
+            const s = { loading: { bg: 'rgba(59,130,246,0.1)', b: '#3b82f6', c: '#93c5fd' }, success: { bg: 'rgba(16,185,129,0.1)', b: '#10b981', c: '#6ee7b7' }, error: { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' } }[type] || { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' };
+            el.style.cssText = `padding:12px;border-radius:8px;display:block;background:${s.bg};border-left:4px solid ${s.b};color:${s.c};`;
+            el.textContent = msg;
+            if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 8000);
+        }
+
+        // ── Settings Section ──────────────────────────────────────────────────
+        async function loadSettings(customerId) {
+            if (!customerId) return;
+            try {
+                const { data: acct } = await sb
+                    .from('exchange_accounts')
+                    .select('api_key_label, api_key_verified_at, api_key_expires_at, api_key_has_trade, api_key_has_withdraw, bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_holder_name')
+                    .eq('customer_id', customerId)
+                    .maybeSingle();
+                exchangeAccountData = acct;
+                // CP2-A: show API key card only for API model
+                const apiKeyCard = document.getElementById('settingsApiKeyCard');
+                if (apiKeyCard) apiKeyCard.style.display = customerData?.account_model === 'api' ? 'block' : 'none';
+                renderApiKeyInfo(acct);
+                renderBankAccountInfo(acct);
+            } catch (e) { console.error('loadSettings error:', e); }
+        }
+
+        function renderApiKeyInfo(acct) {
+            const el = document.getElementById('apiKeyInfo');
+            if (!el) return;
+            if (!acct || !acct.api_key_label) {
+                el.innerHTML = `
+                    <div style="background:rgba(245,158,11,0.1);border-left:4px solid #f59e0b;padding:15px;border-radius:8px;margin-bottom:15px;color:#f59e0b;">
+                        \u26a0\ufe0f No API key configured yet. Please add your VALR API key to enable trading.
+                    </div>
+                    <button onclick="showApiKeyUpdateForm()" style="padding:10px 20px;background:var(--gold);color:var(--bg-dark);border:none;border-radius:8px;font-weight:600;cursor:pointer;">
+                        \u2795 Add API Key
+                    </button>`;
+                return;
+            }
+            const expiresAt = acct.api_key_expires_at ? new Date(acct.api_key_expires_at) : null;
+            const daysLeft = expiresAt ? Math.floor((expiresAt - new Date()) / 86400000) : null;
+            const expiryColor = daysLeft === null ? '#64748b' : daysLeft <= 10 ? '#ef4444' : daysLeft <= 30 ? '#f59e0b' : '#10b981';
+            const expiryDisplay = expiresAt
+                ? `${expiresAt.toLocaleDateString('en-ZA')} <span style="color:${expiryColor};font-weight:600;">(${daysLeft} days)</span>`
+                : '<span style="color:#64748b;">Not set</span>';
+            const verifiedDisplay = acct.api_key_verified_at
+                ? `<span style="color:#10b981;">\u2705 Verified (${new Date(acct.api_key_verified_at).toLocaleDateString('en-ZA')})</span>`
+                : '<span style="color:#f59e0b;">\u26a0\ufe0f Not yet verified</span>';
+            el.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:15px;">
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);width:40%;">Key Name</td><td style="padding:8px 0;font-weight:600;color:var(--text-primary);">${acct.api_key_label}</td></tr>
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Status</td><td style="padding:8px 0;">${verifiedDisplay}</td></tr>
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Expires</td><td style="padding:8px 0;">${expiryDisplay}</td></tr>
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Permissions</td><td style="padding:8px 0;color:#10b981;">\u2705 View &nbsp;${acct.api_key_has_trade?'\u2705':'\u274c'} Trade &nbsp;${acct.api_key_has_withdraw?'\u2705':'\u274c'} Withdraw</td></tr>
+                </table>
+                <button onclick="showApiKeyUpdateForm()" style="padding:10px 20px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:8px;color:#93c5fd;cursor:pointer;font-size:14px;">
+                    \ud83d\udd04 Update API Key
+                </button>`;
+        }
+
+        function renderBankAccountInfo(acct) {
+            const el = document.getElementById('bankAccountInfo');
+            if (!el) return;
+            if (!acct || !acct.bank_name) {
+                el.innerHTML = '<p style="color:var(--text-secondary);">No bank account linked yet. <a href="mailto:support@bitwealth.co.za" style="color:#3b82f6;">Contact support</a> to link your bank account before making ZAR withdrawals.</p>';
+                return;
+            }
+            const masked = acct.bank_account_number ? `****${acct.bank_account_number.slice(-4)}` : 'Not provided';
+            el.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);width:40%;">Bank</td><td style="padding:8px 0;color:var(--text-primary);font-weight:600;">${acct.bank_name}</td></tr>
+                    ${acct.bank_holder_name?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Holder</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_holder_name}</td></tr>`:''}
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Account Number</td><td style="padding:8px 0;color:var(--text-primary);">${masked}</td></tr>
+                    ${acct.bank_branch_code?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Branch Code</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_branch_code}</td></tr>`:''}
+                    ${acct.bank_account_type?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Type</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_account_type}</td></tr>`:''}
+                </table>`;
+        }
+
+        function showApiKeyUpdateForm() {
+            const form = document.getElementById('apiKeyUpdateForm');
+            const labelInput = document.getElementById('settingsApiKeyLabel');
+            if (form) form.style.display = 'block';
+            if (labelInput) labelInput.value = exchangeAccountData?.api_key_label || 'BitWealth Trade';
+        }
+
+        function hideApiKeyUpdateForm() {
+            const form = document.getElementById('apiKeyUpdateForm');
+            if (form) form.style.display = 'none';
+        }
+
+        async function saveApiKeyPortal() {
+            const label = document.getElementById('settingsApiKeyLabel').value.trim();
+            const key = document.getElementById('settingsApiKey').value.trim();
+            const secret = document.getElementById('settingsApiSecret').value.trim();
+            const expiry = document.getElementById('settingsApiKeyExpiry').value;
+            if (!label || !key || !secret) { showSettingsMsg('Please fill in key name, API key, and API secret.', 'error'); return; }
+            const btn = document.getElementById('settingsSaveApiKeyBtn');
+            btn.disabled = true; btn.textContent = '\u23f3 Saving...';
+            try {
+                const { data: { session } } = await sb.auth.getSession();
+                const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_store_customer_api_keys`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ customer_id: customerData.customer_id, api_key_label: label, api_key: key, api_secret: secret, expires_at: expiry || null })
+                });
+                const result = await resp.json();
+                if (!resp.ok) throw new Error(result.error || 'Failed to save API key');
+                showSettingsMsg('\u2705 API key saved and validated successfully!', 'success');
+                hideApiKeyUpdateForm();
+                await loadSettings(customerData.customer_id);
+                await loadApiKeyExpiryBanner(customerData.customer_id);
+            } catch (e) {
+                showSettingsMsg('\u274c Error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = '\ud83d\udcbe Save & Validate';
+            }
+        }
+
+        function showSettingsMsg(msg, type) {
+            const el = document.getElementById('settingsApiKeyMsg');
+            if (!el) return;
+            const s = { success: { bg: 'rgba(16,185,129,0.1)', b: '#10b981', c: '#6ee7b7' }, error: { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' } }[type] || { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' };
+            el.style.cssText = `padding:10px;border-radius:6px;display:block;background:${s.bg};border-left:4px solid ${s.b};color:${s.c};`;
+            el.textContent = msg;
         }
 
         // Initialize on page load

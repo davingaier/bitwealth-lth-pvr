@@ -2,6 +2,176 @@
 // Purpose: HTML email templates for customer notifications
 // Each function returns HTML and plain text versions
 
+// ─── Template 1: ZAR Deposit Detected — Admin Notification ───────────────────
+/**
+ * Sent to admin when ef_deposit_scan detects a ZAR balance for any customer.
+ * Prompts admin to convert ZAR → USDT via the Admin UI.
+ */
+export function getZarDepositDetectedAdminEmail(
+  customerFirstName: string,
+  customerLastName: string,
+  customerEmail: string,
+  customerId: number,
+  zarAmount: string,
+  detectedAt: string | Date,
+  accountModel: "subaccount" | "api",
+  zarBalance: string,
+  usdtBalance: string,
+  adminUrl: string,
+): { html: string; text: string } {
+  const detectedDate = typeof detectedAt === "string" ? new Date(detectedAt) : detectedAt;
+  const formattedDate = detectedDate.toLocaleString("en-ZA", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const modelLabel = accountModel === "api" ? "🔑 API Model" : "🏦 Subaccount Model";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: linear-gradient(135deg, #0A2E4D 0%, #1e3a8a 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+      ${getLogoHeader()}
+      <div style="font-size: 48px; margin: 20px 0 10px 0;">💰</div>
+      <h1 style="margin: 0; font-size: 26px;">ZAR Deposit Detected</h1>
+      <p style="font-size: 15px; margin-top: 10px; opacity: 0.9;">Action Required — Manual Conversion Needed</p>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">
+      <div style="background: #fff3cd; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+        <strong style="color: #856404;">⚠️ A customer has deposited ZAR. Please convert it to USDT via the Admin UI.</strong>
+      </div>
+      <h3 style="color: #0A2E4D; margin-top: 0;">Customer Details</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
+        <tr><td style="padding: 6px 0; color: #4b5563; width: 45%;">Name</td><td style="padding: 6px 0; font-weight: 600; color: #111827;">${customerFirstName} ${customerLastName}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Email</td><td style="padding: 6px 0; color: #111827;">${customerEmail}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Customer ID</td><td style="padding: 6px 0; color: #111827;">${customerId}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Account Model</td><td style="padding: 6px 0; color: #111827;">${modelLabel}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">ZAR Amount</td><td style="padding: 6px 0; font-weight: 700; color: #059669; font-size: 1.1em;">R${zarAmount}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Detected At</td><td style="padding: 6px 0; color: #111827;">${formattedDate}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Current ZAR Balance</td><td style="padding: 6px 0; color: #111827;">R${zarBalance}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Current USDT Balance</td><td style="padding: 6px 0; color: #111827;">$${usdtBalance} USDT</td></tr>
+      </table>
+      <h3 style="color: #0A2E4D;">Action Required</h3>
+      <ol style="line-height: 2; color: #374151; font-size: 14px;">
+        <li>Log in to the <a href="${adminUrl}" style="color: #3b82f6;">BitWealth Admin UI</a></li>
+        <li>Go to <strong>Administration → Pending ZAR Conversions</strong></li>
+        <li>Find the row for <strong>${customerFirstName} ${customerLastName}</strong></li>
+        <li>Click <strong>⚡ Convert ZAR → USDT</strong></li>
+      </ol>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${adminUrl}#administration" style="display: inline-block; background: #3b82f6; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">
+          Open Admin UI →
+        </a>
+      </div>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} BitWealth. Internal admin notification — do not forward.</p>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+  const text = `
+ZAR DEPOSIT DETECTED — ACTION REQUIRED
+
+Customer: ${customerFirstName} ${customerLastName} (ID: ${customerId})
+Email:    ${customerEmail}
+Model:    ${modelLabel}
+Amount:   R${zarAmount}
+Detected: ${formattedDate}
+
+Current balances: ZAR = R${zarBalance}, USDT = $${usdtBalance}
+
+ACTION: Log in to Admin UI → Administration → Pending ZAR Conversions → Convert ZAR → USDT
+
+${adminUrl}#administration
+  `.trim();
+
+  return { html, text };
+}
+
+// ─── Template 5B: Withdrawal Failed — Admin Alert ─────────────────────────────
+/**
+ * Sent to admin when ef_request_withdrawal receives a VALR API error.
+ * Prompts admin to investigate and optionally retry or revert.
+ */
+export function getWithdrawalFailedAdminEmail(
+  customerFirstName: string,
+  customerLastName: string,
+  customerEmail: string,
+  withdrawalId: string,
+  currency: string,
+  amount: number,
+  errorMessage: string,
+  adminUrl: string,
+): { html: string; text: string } {
+  const fmt = (n: number) => n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const prefix = currency === "ZAR" ? "R" : currency === "USDT" ? "$" : "";
+  const displayAmount = `${prefix}${fmt(amount)} ${currency}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff;">
+    <div style="background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%); color: white; padding: 40px; text-align: center; border-radius: 10px 10px 0 0;">
+      ${getLogoHeader()}
+      <div style="font-size: 48px; margin: 20px 0 10px 0;">🚨</div>
+      <h1 style="margin: 0; font-size: 26px;">Withdrawal Failed</h1>
+      <p style="font-size: 15px; margin-top: 10px; opacity: 0.9;">Manual investigation required</p>
+    </div>
+    <div style="padding: 30px; background: #ffffff;">
+      <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+        <strong style="color: #991b1b;">⚠️ A customer withdrawal could not be processed. The customer's funds are safe — no deduction has occurred.</strong>
+      </div>
+      <h3 style="color: #0A2E4D; margin-top: 0;">Withdrawal Details</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
+        <tr><td style="padding: 6px 0; color: #4b5563; width: 45%;">Customer</td><td style="padding: 6px 0; font-weight: 600; color: #111827;">${customerFirstName} ${customerLastName}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Email</td><td style="padding: 6px 0; color: #111827;">${customerEmail}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Withdrawal ID</td><td style="padding: 6px 0; font-family: monospace; font-size: 0.85em; color: #111827;">${withdrawalId}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Amount</td><td style="padding: 6px 0; font-weight: 700; color: #dc2626;">${displayAmount}</td></tr>
+        <tr><td style="padding: 6px 0; color: #4b5563;">Error</td><td style="padding: 6px 0; color: #991b1b;">${errorMessage}</td></tr>
+      </table>
+      <h3 style="color: #0A2E4D;">Recommended Actions</h3>
+      <ol style="line-height: 2; color: #374151; font-size: 14px;">
+        <li>Log in to the <a href="${adminUrl}" style="color: #3b82f6;">Admin UI</a> → <strong>Administration → Customer Withdrawals</strong></li>
+        <li>Locate withdrawal ID <code>${withdrawalId}</code></li>
+        <li>View Details to review the VALR error response</li>
+        <li>If the issue is transient, click <strong>Retry</strong> to re-submit</li>
+        <li>If not retrying, call <code>ef_revert_withdrawal</code> to restore the customer's High-Water Mark</li>
+      </ol>
+      <div style="background: #fff3cd; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 4px; font-size: 13px; color: #856404; margin-top: 16px;">
+        <strong>Important:</strong> If an interim performance fee was deducted and the HWM was updated, and you are NOT retrying, call <code>ef_revert_withdrawal</code> to reverse these changes and restore the customer's balance correctly.
+      </div>
+    </div>
+    <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+      <p style="margin: 0;">© ${new Date().getFullYear()} BitWealth. Internal admin alert — do not forward.</p>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+  const text = `
+🚨 WITHDRAWAL FAILED — ACTION REQUIRED
+
+Customer: ${customerFirstName} ${customerLastName}
+Email:    ${customerEmail}
+ID:       ${withdrawalId}
+Amount:   ${displayAmount}
+Error:    ${errorMessage}
+
+ACTIONS:
+1. Log in to Admin UI → Administration → Customer Withdrawals
+2. Find withdrawal ${withdrawalId}
+3. Review the VALR error response
+4. Retry if transient, or call ef_revert_withdrawal to restore HWM
+
+${adminUrl}#administration
+  `.trim();
+
+  return { html, text };
+}
+
 export interface EmailTemplate {
   html: string;
   text: string;
