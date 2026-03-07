@@ -1345,11 +1345,9 @@
         async function loadApiKeyExpiryBanner(customerId) {
             if (customerData?.account_model !== 'api') return;
             try {
-                const { data: acct } = await sb
-                    .from('exchange_accounts')
-                    .select('api_key_expires_at, api_key_label')
-                    .eq('customer_id', customerId)
-                    .maybeSingle();
+                const { data: acctRows } = await sb
+                    .rpc('get_customer_exchange_account', { p_customer_id: customerId });
+                const acct = acctRows?.[0];
                 if (!acct || !acct.api_key_expires_at) return;
                 const daysRemaining = Math.floor((new Date(acct.api_key_expires_at) - new Date()) / 86400000);
                 if (daysRemaining <= 10) {
@@ -1384,12 +1382,12 @@
                 if (btcEl) btcEl.textContent = withdrawableBalance.btc.toFixed(8);
                 if (usdtEl) usdtEl.textContent = withdrawableBalance.usdt.toFixed(2);
 
-                // Fetch live USDTZAR for ZAR equivalent display
+                // Fetch live USDTZAR for ZAR equivalent display (CoinGecko — CORS safe)
                 try {
-                    const rateResp = await fetch('https://api.valr.com/v1/public/USDTZAR/marketsummary');
+                    const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=zar');
                     if (rateResp.ok) {
                         const rateData = await rateResp.json();
-                        const rate = parseFloat(rateData.lastTradedPrice || rateData.markPrice || 0);
+                        const rate = parseFloat(rateData?.tether?.zar || 0);
                         if (rate > 0) {
                             const zarEl = document.getElementById('wdZarEquiv');
                             if (zarEl) zarEl.textContent = (withdrawableBalance.usdt * rate).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1397,10 +1395,9 @@
                     }
                 } catch { /* non-critical */ }
 
-                // Load bank account display for ZAR form
-                const { data: acct } = await sb.from('exchange_accounts')
-                    .select('bank_name, bank_account_number')
-                    .eq('customer_id', customerId).maybeSingle();
+                // Load bank account display for ZAR form (via RPC — bypasses exchange_accounts RLS)
+                const { data: acctRows } = await sb.rpc('get_customer_exchange_account', { p_customer_id: customerId });
+                const acct = acctRows?.[0];
                 const bankEl = document.getElementById('wdBankDisplay');
                 if (bankEl) {
                     if (acct && acct.bank_name) {
@@ -1521,9 +1518,11 @@
             const amount = parseFloat(document.getElementById('wdZarAmount')?.value);
             if (!amount || amount <= 0) { const el = document.getElementById('wdZarEstimate'); if (el) el.style.display = 'none'; return; }
             try {
-                const rateResp = await fetch('https://api.valr.com/v1/public/USDTZAR/marketsummary');
+                // CoinGecko public API — CORS safe, no key required
+                const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=zar');
+                if (!rateResp.ok) throw new Error('Rate fetch failed');
                 const rateData = await rateResp.json();
-                const rate = parseFloat(rateData.lastTradedPrice || rateData.markPrice || 18);
+                const rate = parseFloat(rateData?.tether?.zar || 18);
                 const usdtNeeded = amount / rate;
                 const convFeeZar = usdtNeeded * 0.001 * rate;
                 const bankFee = 0;
@@ -1618,11 +1617,9 @@
         async function loadSettings(customerId) {
             if (!customerId) return;
             try {
-                const { data: acct } = await sb
-                    .from('exchange_accounts')
-                    .select('api_key_label, api_key_verified_at, api_key_expires_at, api_key_has_trade, api_key_has_withdraw, bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_holder_name')
-                    .eq('customer_id', customerId)
-                    .maybeSingle();
+                const { data: acctRows } = await sb
+                    .rpc('get_customer_exchange_account', { p_customer_id: customerId });
+                const acct = acctRows?.[0] || null;
                 exchangeAccountData = acct;
                 // CP2-A: show API key card only for API model
                 const apiKeyCard = document.getElementById('settingsApiKeyCard');
@@ -1677,7 +1674,7 @@
             el.innerHTML = `
                 <table style="width:100%;border-collapse:collapse;font-size:14px;">
                     <tr><td style="padding:8px 0;color:var(--text-secondary);width:40%;">Bank</td><td style="padding:8px 0;color:var(--text-primary);font-weight:600;">${acct.bank_name}</td></tr>
-                    ${acct.bank_holder_name?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Holder</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_holder_name}</td></tr>`:''}
+                    ${acct.bank_account_holder?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Holder</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_account_holder}</td></tr>`:''}
                     <tr><td style="padding:8px 0;color:var(--text-secondary);">Account Number</td><td style="padding:8px 0;color:var(--text-primary);">${masked}</td></tr>
                     ${acct.bank_branch_code?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Branch Code</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_branch_code}</td></tr>`:''}
                     ${acct.bank_account_type?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Type</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_account_type}</td></tr>`:''}
