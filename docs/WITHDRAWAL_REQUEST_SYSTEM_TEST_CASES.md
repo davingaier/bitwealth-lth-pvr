@@ -1,7 +1,11 @@
+> **⛔ DEPRECATED** — 2026-03-07  
+> These test cases covered the old admin-approval withdrawal flow. The new design (auto-execute, multi-currency, no admin approval) is covered in `docs/API_DUAL_MODEL_BUILD_PLAN.md` (v1.1) Phase 8 — Testing Checklist, rows T8-xxx, T9-xxx.  
+> TC-WR-API-4 (admin approve) and TC-WR-API-5 (admin reject) are now obsolete. Retain for historical reference only.
+
 # Withdrawal Request System - Test Cases
 
 **Feature:** Customer-Initiated Withdrawal Requests with Admin Approval Workflow  
-**Version:** v0.7.0  
+**Version:** v0.7.0 (DEPRECATED)  
 **Test Plan Created:** 2026-01-24  
 **Testing Window:** After Phase 8 deployment (est. 6-8 hours build time)  
 **Test Environment:** Production (Customer 47 - DEV TEST account)

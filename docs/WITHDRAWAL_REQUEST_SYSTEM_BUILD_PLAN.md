@@ -1,7 +1,12 @@
+> **⛔ DEPRECATED** — 2026-03-07  
+> This plan has been superseded by [`docs/API_DUAL_MODEL_BUILD_PLAN.md`](API_DUAL_MODEL_BUILD_PLAN.md) (v1.1).  
+> Key design decisions that changed: no admin approval step (auto-execute), BTC/USDT direct crypto withdrawals added, customer cancellation via `ef_revert_withdrawal`, pre-linked bank only, month-end interim fee exemption removed.  
+> Nothing from this document has been implemented. Retain for reference only.
+
 # Withdrawal Request System - Build Plan
 
 **Feature:** Customer-Initiated Withdrawal Requests with Admin Approval Workflow  
-**Version:** v0.7.0  
+**Version:** v0.7.0 (DEPRECATED)  
 **Planning Date:** 2026-01-24  
 **Estimated Effort:** 6-8 hours  
 **Priority:** HIGH (Customer Self-Service)  

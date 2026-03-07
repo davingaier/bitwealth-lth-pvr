@@ -1,8 +1,16 @@
 # API Discretionary Model — Dual-Model Build Plan
 
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Prepared:** 2026-03-07  
+**Updated:** 2026-03-07 — Q1-Q5 answers incorporated from old Withdrawal Request System build plan  
 **Status:** Ready for implementation
+
+**Key decisions incorporated in v1.1:**
+- Q1: BTC and USDT direct crypto withdrawals added alongside ZAR fiat path
+- Q2: Customer can cancel pending withdrawal before execution begins (`ef_revert_withdrawal`)
+- Q3: No admin approval step — withdrawals auto-execute on submission; admin has read-only history panel
+- Q4: Pre-linked bank details only (FSCA compliance); no per-request bank input
+- Q5: Month-end interim fee exemption removed — HWM update mechanism already prevents double-charging
 
 ## Overview
 
@@ -32,10 +40,8 @@ This document is the authoritative step-by-step build plan for adding the **API 
 | `lth_pvr.pending_zar_conversions` | DB table | Add `status`, `order_id`, `order_side`, `pair` columns |
 | `lth_pvr.v_pending_zar_conversions` | DB view | Rebuild after table enhancement |
 | "Pending ZAR Conversions" card | Admin UI | Add "Convert ZAR → USDT" button |
-| `public.withdrawal_requests` | DB table | Add `amount_zar`, `estimated_usdt`, `valr_conversion_fee_usdt`, `valr_withdrawal_fee_zar`, `conversion_order_id`, `conversion_status`, `zar_withdrawal_ref`, `is_first_free_withdrawal` columns |
-| `lth_pvr.withdrawal_fee_snapshots` | DB table | No change |
-| "Withdrawal Request Notification" email | DB | No change |
-| "Withdrawal Approved" email | DB | No change |
+| `public.withdrawal_requests` | DB table | Add `currency`, `withdrawal_address`, `withdrawable_balance_snapshot`, `interim_performance_fee_btc`, `interim_performance_fee_usdt`, `net_amount`, `source_asset`, `amount_zar`, `valr_conversion_fee_usdt`, `valr_withdrawal_fee_zar`, `is_first_free_withdrawal`, `conversion_order_id`, `conversion_status`, `zar_withdrawal_ref`, `valr_withdrawal_id`, `valr_response`, `processed_at`, `completed_at`; add `'cancelled'` to status enum; add RLS policies and indexes |
+| `lth_pvr.withdrawal_fee_snapshots` | DB table | No change — already tracks pre-withdrawal HWM for reversion |
 | "Withdrawal Completed" email | DB | No change |
 | Customer portal Withdrawals + Settings nav | `website/customer-portal.html` | Build content sections |
 | `supabase_vault` extension | Supabase project | No action needed |
@@ -53,14 +59,18 @@ This document is the authoritative step-by-step build plan for adding the **API 
 | `_shared/valrCredentials.ts` | New shared module | Centralised credential resolver |
 | `ef_store_customer_api_keys` | New edge function | Securely store + validate customer VALR API keys |
 | `ef_convert_zar_to_usdt` | New edge function | Admin-triggered ZAR→USDT limit/market order |
-| `ef_request_withdrawal` | New edge function | Customer-initiated withdrawal request |
-| `ef_convert_usdt_to_zar` | New edge function | Admin-triggered USDT→ZAR conversion + fiat withdrawal |
-| `ef_convert_btc_to_zar` | New edge function | Admin-triggered BTC→ZAR conversion + fiat withdrawal (fallback when USDT insufficient) |
+| `ef_request_withdrawal` | New edge function | Customer-initiated withdrawal — auto-executes immediately (BTC/USDT direct crypto or ZAR fiat via conversion); no admin approval step |
+| `ef_revert_withdrawal` | New edge function | Cancels a pending withdrawal and reverts the interim performance fee HWM snapshot |
+| `ef_calculate_interim_performance_fee` | New SQL function | Mid-month HWM performance fee calculation used during withdrawal; updates HWM atomically and stores reversion snapshot |
+| `ef_convert_usdt_to_zar` | New edge function | USDT→ZAR conversion (limit/market fallback) + fiat withdrawal to customer's pre-linked bank |
+| `ef_convert_btc_to_zar` | New edge function | BTC→ZAR conversion (limit/market fallback) + fiat withdrawal (when USDT balance insufficient) |
 | `ef_rotate_api_key_notifications` | New edge function | Daily cron to warn on expiring API keys |
 | `ef_link_bank_account` | New edge function | Programmatic VALR bank account linking |
-| "ZAR Deposit Detected - Conversion Required" | New email template | Admin alert for API/subaccount ZAR deposit needing manual conversion |
-| "API Key Expiry Warning" | New email template | Customer warning 30/10-day before expiry |
+| "ZAR Deposit Detected - Conversion Required" | New email template | Admin alert for ZAR deposit needing conversion |
+| "API Key Expiry Warning" | New email template | Customer warning 30/10/5/1 days before expiry |
 | "API Key Expiry Critical" | New email template | Customer alert on key expiry + trading suspended |
+| "Withdrawal Submitted & Processing" | New email template | Customer confirmation sent when VALR execution begins (combines request confirmation + processing notice) |
+| "Withdrawal Outcome" | New email template | Completion notice to customer (Variant A) or failure alert to admin (Variant B) |
 
 ---
 
@@ -233,24 +243,124 @@ ORDER BY pzc.occurred_at;
 ### Migration 6: `20260307_enhance_withdrawal_requests`
 
 ```sql
--- Enhance existing public.withdrawal_requests with ZAR, conversion, and bank details
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 1: Add 'cancelled' to existing status enum (if not already a CHECK)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- withdrawal_requests.status currently: pending|approved|rejected|processing|completed|failed
+-- Add 'cancelled' for customer self-cancellation
+ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS withdrawal_requests_status_check;
 ALTER TABLE public.withdrawal_requests
-  ADD COLUMN amount_zar               NUMERIC     NULL,   -- amount customer wants to receive in ZAR
-  ADD COLUMN estimated_usdt           NUMERIC     NULL,   -- USDT required to cover amount_zar at time of request
+  ADD CONSTRAINT withdrawal_requests_status_check
+  CHECK (status IN ('pending','processing','completed','failed','cancelled'));
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 2: Multi-currency and crypto withdrawal support
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.withdrawal_requests
+  -- Currency selector (BTC, USDT direct crypto; ZAR fiat via conversion)
+  ADD COLUMN currency                TEXT        NULL
+                                     CHECK (currency IN ('BTC','USDT','ZAR') OR currency IS NULL),
+  -- For BTC/USDT withdrawals: destination crypto address (customer-provided)
+  ADD COLUMN withdrawal_address      TEXT        NULL,
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 3: Interim performance fee tracking
+-- ─────────────────────────────────────────────────────────────────────────────
+  -- Balance at the moment of request (audit trail + race condition protection)
+  ADD COLUMN withdrawable_balance_snapshot NUMERIC(20,8) NULL,
+  -- Interim performance fee charged at withdrawal time (HWM logic, same as month-end)
+  ADD COLUMN interim_performance_fee_btc   NUMERIC(20,8) NOT NULL DEFAULT 0,
+  ADD COLUMN interim_performance_fee_usdt  NUMERIC(20,8) NOT NULL DEFAULT 0,
+  -- Net amount customer receives after interim fee deducted
+  ADD COLUMN net_amount              NUMERIC(20,8) NULL,
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 4: ZAR fiat conversion fields (ZAR withdrawals only)
+-- ─────────────────────────────────────────────────────────────────────────────
+  ADD COLUMN source_asset             TEXT        NULL    -- which asset was sold to produce ZAR
+                                      CHECK (source_asset IN ('USDT','BTC') OR source_asset IS NULL),
+  ADD COLUMN amount_zar               NUMERIC     NULL,   -- ZAR amount customer wants to receive
   ADD COLUMN valr_conversion_fee_usdt NUMERIC     NULL,   -- VALR 0.18% conversion fee estimate
-  ADD COLUMN valr_withdrawal_fee_zar  NUMERIC     NULL,   -- R8.50 or R0 (first free) or R30 (fast)
-  ADD COLUMN is_first_free_withdrawal BOOLEAN     NULL,   -- whether this is within the 30 free/month
-  ADD COLUMN conversion_order_id      TEXT        NULL,   -- VALR order ID for USDT→ZAR conversion step
+  ADD COLUMN valr_withdrawal_fee_zar  NUMERIC     NULL,   -- R8.50 or R0 (first 30 free) or R30 (fast)
+  ADD COLUMN is_first_free_withdrawal BOOLEAN     NULL,   -- within 30 free normal withdrawals/month?
+  ADD COLUMN conversion_order_id      TEXT        NULL,   -- VALR order ID for USDT/BTC→ZAR step
   ADD COLUMN conversion_status        TEXT        NULL
                                       CHECK (conversion_status IN ('pending','limit_placed','market_placed','filled','failed') OR conversion_status IS NULL),
-  ADD COLUMN zar_withdrawal_ref       TEXT        NULL,   -- VALR withdrawal reference
-  ADD COLUMN source_asset             TEXT        NULL    -- 'USDT' or 'BTC' (which was converted to ZAR)
-                                      CHECK (source_asset IN ('USDT','BTC') OR source_asset IS NULL);
+  ADD COLUMN zar_withdrawal_ref       TEXT        NULL,   -- VALR fiat withdrawal reference
 
-COMMENT ON COLUMN public.withdrawal_requests.amount_zar IS
-  'ZAR amount customer wants to receive (not USDT). amount_usdt is derived from this via live USDTZAR rate.';
-COMMENT ON COLUMN public.withdrawal_requests.is_first_free_withdrawal IS
-  'True if this is within the 30 free normal ZAR withdrawals for the calendar month.';
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 5: Execution audit trail
+-- ─────────────────────────────────────────────────────────────────────────────
+  ADD COLUMN valr_withdrawal_id       TEXT        NULL,   -- VALR crypto/fiat withdrawal ID
+  ADD COLUMN valr_response            JSONB       NULL,   -- full VALR API response for debugging
+  ADD COLUMN processed_at             TIMESTAMPTZ NULL,   -- when VALR withdrawal was executed
+  ADD COLUMN completed_at             TIMESTAMPTZ NULL;   -- when funds confirmed received
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 6: Performance indexes
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_wr_customer_date
+  ON public.withdrawal_requests (customer_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wr_active
+  ON public.withdrawal_requests (status, requested_at)
+  WHERE status IN ('pending','processing');
+CREATE INDEX IF NOT EXISTS idx_wr_org_date
+  ON public.withdrawal_requests (org_id, requested_at DESC);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 7: Row Level Security
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
+
+-- Service role full access
+CREATE POLICY wr_service_role_bypass ON public.withdrawal_requests
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ⚠️  Customer-facing RLS policies (SELECT / INSERT / UPDATE) are DEFERRED.
+-- Prerequisite: customer_details needs a user_id UUID column linking to auth.users.
+-- Neither customer_details nor any other table currently has this link.
+-- These policies are to be added in the portal auth migration (Phase 7 prerequisite)
+-- once Supabase Auth accounts are issued to customers and linked to customer_details.
+--
+-- When ready, add:
+--   ALTER TABLE public.customer_details ADD COLUMN user_id UUID REFERENCES auth.users(id);
+-- Then create the following policies:
+--
+-- CREATE POLICY wr_customer_select ON public.withdrawal_requests
+--   FOR SELECT TO authenticated
+--   USING (
+--     customer_id IN (
+--       SELECT customer_id FROM public.customer_details WHERE user_id = auth.uid()
+--     )
+--   );
+--
+-- CREATE POLICY wr_customer_insert ON public.withdrawal_requests
+--   FOR INSERT TO authenticated
+--   WITH CHECK (
+--     customer_id IN (
+--       SELECT customer_id FROM public.customer_details WHERE user_id = auth.uid()
+--     )
+--     AND status = 'pending'
+--   );
+--
+-- CREATE POLICY wr_customer_cancel ON public.withdrawal_requests
+--   FOR UPDATE TO authenticated
+--   USING (
+--     customer_id IN (
+--       SELECT customer_id FROM public.customer_details WHERE user_id = auth.uid()
+--     )
+--     AND status = 'pending'
+--   )
+--   WITH CHECK (status = 'cancelled');
+
+COMMENT ON TABLE public.withdrawal_requests IS
+  'Customer withdrawal requests. Auto-executed on submission — no admin approval step. Supports BTC/USDT direct crypto and ZAR fiat via conversion.';
+COMMENT ON COLUMN public.withdrawal_requests.currency IS
+  'BTC or USDT = crypto withdrawal to customer-provided address. ZAR = fiat to pre-linked bank account via VALR conversion.';
+COMMENT ON COLUMN public.withdrawal_requests.interim_performance_fee_btc IS
+  'Interim HWM performance fee charged at withdrawal time using same logic as month-end. HWM updated atomically. No month-end exemption — double-charging is prevented by HWM update.';
+COMMENT ON COLUMN public.withdrawal_requests.withdrawable_balance_snapshot IS
+  'Balance at time of request submission. Used for audit trail and race condition detection.';
 ```
 
 ---
@@ -610,62 +720,90 @@ All conversion functions use the **same limit→5-minutes→0.25% price move→m
 
 **Auth:** JWT-enabled (customer session)  
 **Triggered by:** Customer submitting the Withdrawals form in customer portal  
+**Design:** Auto-executes immediately — no admin approval step. Customer is limited to withdrawable NAV minus accumulated fees and VALR fees, so the balance check is the only gate needed.
 
 **Request body:**
 ```json
 {
-  "amount_zar": 5000,
-  "withdrawal_type": "normal"  // "normal" or "fast"
+  "currency": "ZAR",             // "BTC", "USDT", or "ZAR"
+  "amount": 5000,                // ZAR amount (for ZAR), or BTC/USDT amount (for crypto)
+  "withdrawal_address": null,    // required for BTC or USDT; null for ZAR (uses pre-linked bank)
+  "withdrawal_type": "normal"   // ZAR only: "normal" (R8.50/free) or "fast" (R0 SB / R30 other)
 }
 ```
 
-**Process:**
-1. Validate the customer's identity via JWT
-2. Fetch customer `nav_usd` and withdrawable balance from `lth_pvr.get_withdrawable_balance()`
-3. Convert withdrawable to ZAR using live USDTZAR rate from VALR
-4. Validate `amount_zar <= withdrawable_zar` — reject if insufficient
-5. Calculate fees:
-   - Conversion fee: `amount_usdt * 0.0018` (0.18% of USDT being converted)
-   - Check withdrawal count this calendar month from `lth_pvr.valr_transfer_log` or `public.withdrawal_requests`; if < 30 free withdrawals used: `withdrawal_fee = R0`, else `R8.50` (normal) or `R30` (fast, non-Standard Bank)
-6. Create `public.withdrawal_requests` record with `status = 'pending'`, all fee estimates, `amount_zar`, `estimated_usdt`
-7. Send "Withdrawal Request Notification" email to admin (existing template)
-8. Return estimated breakdown to customer UI
+**Process — all currencies:**
+1. Validate the customer's identity via JWT; resolve their `customer_id`
+2. Validate `currency` is valid and `amount > 0`
+3. For **BTC/USDT**: validate `withdrawal_address` is provided and correctly formatted (Bitcoin: starts with 1/3/bc1, length 26–62; USDT TRC-20: starts with T, length 34)
+4. For **ZAR**: validate customer has a linked bank account in `exchange_accounts` (`bank_valr_id IS NOT NULL`); no address field needed
+5. Fetch withdrawable balance from `lth_pvr.get_withdrawable_balance(customer_id)`
+6. **Validate amount ≤ withdrawable balance** for the requested currency. For ZAR: convert withdrawable USDT to ZAR using live USDTZAR rate.
+7. **Calculate interim performance fee** using HWM logic (same as `ef_calculate_performance_fees` monthly run):
+   - Compare current NAV to HWM
+   - Fee = 10% of profit above HWM (if any)
+   - **No month-end exemption** — the HWM update prevents double-charging at month-end
+   - Store pre-withdrawal state in `lth_pvr.withdrawal_fee_snapshots` for reversion if cancellation
+   - Update HWM immediately after fee calculation (atomic snapshot)
+   - Fee in same currency as `amount`
+8. **Calculate VALR fees** (ZAR withdrawals only):
+   - Conversion fee: `amount_usdt * 0.0018` (0.18%)
+   - Withdrawal fee: check `bank_name` in `exchange_accounts`; if `bank_name ILIKE '%standard bank%'` → R0 fast OR check free withdrawal count this month:
+     - Count `withdrawal_requests WHERE status='completed' AND completed_at >= date_trunc('month', now())`
+     - If count < 30: R0 (one of the 30 free normal withdrawals); else: R8.50 (normal) or R30 (fast, non-SB)
+9. **net_amount** = `amount - interim_fee - valr_fees`
+10. Create `public.withdrawal_requests` record with `status = 'pending'`, snapshot, all fee fields
+11. Immediately proceed to execution (do not wait for admin):
+    - Mark `status = 'processing'`
+    - Call `ef_convert_usdt_to_zar` logic (ZAR), direct VALR crypto withdrawal (BTC/USDT)
+12. Send **"Withdrawal Submitted & Processing"** email to customer (confirmation + VALR order details in one email)
+13. On VALR success: update `status = 'completed'`, `completed_at`, `valr_withdrawal_id`; send **"Withdrawal Outcome"** (Variant A — completed) email to customer
+14. On VALR failure: update `status = 'failed'`, store `valr_response`; send **"Withdrawal Outcome"** (Variant B — failed) admin alert; **do NOT revert HWM** (the interim fee was earned regardless of VALR status)
+
+**BTC/USDT direct crypto withdrawal path:**
+- Call VALR `POST /v1/wallet/crypto/{currency}/withdraw` with `{ amount, address: withdrawal_address }` using customer credentials (resolved via `resolveCustomerCredentials()`)
+- For subaccount model: master key + `X-VALR-SUB-ACCOUNT-ID` header
+- For API model: customer vault key, no header
+- Note: VALR will reject if the address is not whitelisted on the key. For API model customers who whitelisted BitWealth's addresses only, they cannot withdraw to their own address this way — they will either need to whitelist their external address on their VALR key, or contact BitWealth support. Document this limitation clearly in the portal.
+
+**ZAR fiat withdrawal path:**
+- Calls `ef_convert_usdt_to_zar` or `ef_convert_btc_to_zar` (as sub-calls within this function)
+- After conversion: calls VALR `POST /v1/wallet/fiat/ZAR/withdraw` using `exchange_accounts.bank_valr_id`
 
 ---
 
-### EF11 — New: `ef_execute_withdrawal`
+### EF11 — New: `ef_revert_withdrawal`
 
-**Auth:** `--no-verify-jwt` (admin-triggered from Admin UI)  
-**Triggered by:** Admin clicking "Execute Withdrawal" in withdrawal management panel
+**Auth:** JWT-enabled (customer session, for self-cancel) OR `--no-verify-jwt` (internal, for failed-state cleanup)  
+**Triggered by:** Customer clicking "Cancel" on a pending withdrawal in the portal (before execution begins), OR internal cleanup when `ef_request_withdrawal` encounters a pre-VALR error
 
 **Request body:** `{ "request_id": "uuid" }`
 
 **Process:**
-1. Fetch `withdrawal_requests` record, validate `status = 'pending'`
-2. Mark `status = 'processing'`
-3. Resolve customer credentials
-4. Check customer's USDT balance:
-   - If USDT sufficient: call `ef_convert_usdt_to_zar` logic (convert USDT → ZAR)
-   - If USDT insufficient: call `ef_convert_btc_to_zar` logic (convert BTC → ZAR first)
-5. On conversion complete: execute VALR fiat withdrawal `POST /v1/wallet/fiat/ZAR/withdraw` to customer's linked bank (`exchange_accounts.bank_valr_id`)
-6. Update `withdrawal_requests.status = 'completed'`, `completed_at = now()`, `zar_withdrawal_ref`
-7. Update `lth_pvr.withdrawal_fee_snapshots` (existing table) with pre-withdrawal HWM snapshot
-8. Send "Withdrawal Completed" email to customer (existing template)
-9. Send admin confirmation
+1. Fetch `withdrawal_requests` record; validate `status = 'pending'` (cannot cancel once `processing`)
+2. If triggered by customer: validate JWT matches `withdrawal_requests.customer_id`
+3. **Revert HWM snapshot** — look up `lth_pvr.withdrawal_fee_snapshots WHERE withdrawal_request_id = request_id`:
+   - Restore `customer_state_daily.high_water_mark_usd` to `pre_withdrawal_hwm`
+   - Mark `withdrawal_fee_snapshots.reverted = true`, `reverted_at = now()`, `reversion_reason = 'customer_cancelled'`
+4. **Revert interim fee ledger entries** — if any `ledger_lines` records were written with `kind = 'interim_performance_fee'` for this request: reverse them (insert offsetting positive entries)
+5. Update `withdrawal_requests.status = 'cancelled'`
+6. Send "Withdrawal Cancelled" notification to customer (can use existing email infrastructure; create simple template or reuse rejection template with "cancelled" language)
+
+**Important:** `ef_revert_withdrawal` can only be called while `status = 'pending'`. Once execution has started (`status = 'processing'`), the VALR order may already be in flight and reversion is not safe.
 
 ---
 
 ### EF12 — New: `ef_convert_usdt_to_zar`
 
-**Auth:** `--no-verify-jwt` (called internally by `ef_execute_withdrawal`)  
-**Process:** Place USDTZAR SELL order (limit → market fallback). Same pattern as `ef_convert_zar_to_usdt` but direction reversed.
+**Auth:** Called internally by `ef_request_withdrawal` (not a standalone callable endpoint)  
+**Process:** Place USDTZAR SELL order (limit → 5-min → market fallback). Same pattern as `ef_convert_zar_to_usdt` but direction reversed (selling USDT, receiving ZAR). On fill: stores `conversion_order_id`, updates `conversion_status = 'filled'`, then triggers fiat withdrawal.
 
 ---
 
 ### EF13 — New: `ef_convert_btc_to_zar`
 
-**Auth:** `--no-verify-jwt` (called internally by `ef_execute_withdrawal` when USDT insufficient)  
-**Process:** Place BTCZAR SELL order (limit → market fallback). Two steps: (1) sell BTC to get ZAR, (2) ZAR is then sent to bank via fiat withdrawal.
+**Auth:** Called internally by `ef_request_withdrawal` when USDT balance is insufficient for requested amount  
+**Process:** Place BTCZAR SELL order (limit → 5-min → market fallback). On fill: ZAR proceeds used for fiat withdrawal to customer's linked bank.
 
 ---
 
@@ -797,15 +935,34 @@ Replace the generic "pending" display with the actual `status` field: `pending` 
 
 ---
 
-### AU4 — New: Withdrawal Management Panel (Administration module)
+### AU4 — New: Withdrawal History Panel (Administration module, read-only)
 
-Add a new card in the Administration module: **"Customer Withdrawal Requests"**
+Add a new card in the Administration module: **"Customer Withdrawals"**
 
-Reads from `public.withdrawal_requests WHERE status = 'pending'` joined with `customer_details`.
+Since withdrawals are auto-executed on submission, this panel is **read-only** — for monitoring and audit purposes only. No approve/reject buttons.
 
-Per-row display:
-- Customer name | Requested ZAR | Estimated USDT | Conversion fee | Withdrawal fee | First Free? | Requested At
-- Actions: **"✅ Execute"** → calls `ef_execute_withdrawal` | **"❌ Reject"** → updates status to 'rejected'
+Reads from `public.withdrawal_requests` joined with `customer_details`, ordered by `requested_at DESC`.
+
+**Filters (dropdowns):**
+- Status: All / Pending / Processing / Completed / Failed / Cancelled
+- Customer: search by name/email
+- Date range: past 7 days (default), 30 days, 90 days
+
+**Per-row display:**
+- Date | Customer | Currency | Amount | Interim Fee | Net Amount | Status badge | Actions
+
+**Status badge colours:**
+- `pending` → Gray ⏳
+- `processing` → Blue 🔄
+- `completed` → Green ✅
+- `failed` → Red ❌ (with alert indicator — requires manual investigation)
+- `cancelled` → Orange ⊘
+
+**Actions (read-only except for failed):**
+- **"View Details"** → modal showing full request record including `valr_response` JSONB for debugging
+- For `failed` status: **"Retry"** button → calls `ef_request_withdrawal` with the same parameters and a new request ID (admin manually re-initiates)
+
+**SLA indicator:** Requests stuck in `processing` for > 30 minutes are highlighted in amber (may indicate VALR order not filling — check Pending ZAR Conversions card for related conversion status).
 
 ---
 
@@ -820,34 +977,71 @@ Add a new `<section id="withdrawals">` block in `website/customer-portal.html` a
 💸 Withdraw Funds
 ─────────────────────────────────────────────────
 Withdrawable Balance: $X,XXX.XX USDT + 0.XXXXXXXX BTC
-(This is your NAV minus accumulated unpaid fees)
+(Your NAV minus accumulated unpaid fees)
 
-Enter withdrawal amount in ZAR:
-[Amount: R_____]                     [Recalculate]
+⚠️ Withdrawals are processed immediately and cannot be
+   undone once submitted. A pending request can be cancelled
+   before processing begins.
+
+Withdrawal Type:
+  ◉ ZAR to my linked bank account
+  ○ BTC to a Bitcoin address
+  ○ USDT to a USDT (TRC-20) address
+
+─── ZAR withdrawal (shown when ZAR selected) ──────────
+Amount (ZAR): [R_____]          [Recalculate estimate]
+
+Bank account:  FNB ****5678  ← pre-linked, read-only
+               (To update your bank account, go to Settings)
 
 Estimated breakdown:
-  USDT to convert:           XXX.XX USDT
+  USDT to convert:             XXX.XX USDT
+  Interim performance fee:     $X.XX USDT  ← shown if any accrued
   VALR conversion fee (0.18%): XX.XX USDT
-  VALR withdrawal fee:        R8.50 (or Free / R30 fast)
-  You will receive:          ~R X,XXX.XX to your bank account
+  VALR withdrawal fee:         R8.50 (or Free if within first 30/month)
+  You will receive:            ~R X,XXX.XX
 
-[⚠ Confirming means you accept BitWealth's withdrawal policy]
-☐ I confirm withdrawal from my linked bank account: [masked account number]
+─── BTC withdrawal (shown when BTC selected) ──────────
+Amount (BTC): [0.________]
+Withdrawal address: [___________________________________]
+(Must be whitelisted on your VALR API key if API model)
 
-[💸  Submit Withdrawal Request]
+─── USDT withdrawal (shown when USDT selected) ────────
+Amount (USDT): [$________]
+Withdrawal address (TRC-20): [___________________________]
+
+─── Common fields ─────────────────────────────────────
+Interim performance fee: $X.XX (if applicable)
+Net amount you will receive: [calculated]
+
+☐ I confirm this withdrawal and accept BitWealth's withdrawal policy
+
+[💸 Submit Withdrawal Request]
 ─────────────────────────────────────────────────
-Pending Requests:
-[Table of customer's withdrawal_requests for their customer_id]
+Withdrawal History:
+[Table: Date | Currency | Amount | Interim Fee | Net | Status | Actions]
+
+Status badges:
+• ⏳ Processing (cancel button visible — only before execution starts)
+• ✅ Completed
+• ❌ Failed (contact support)
+• ⊘ Cancelled
 ```
 
-**JavaScript:**
-- On amount change: fetch live USDTZAR rate from VALR public endpoint and recalculate estimates
-- Call `ef_request_withdrawal` on submit; show success confirmation
-- After submission: reload pending requests table
+**JavaScript logic:**
+- **Currency selector:** toggles visible form section
+- **Amount change (ZAR path):** fetch live USDTZAR rate from VALR public endpoint (`GET /v1/marketsummary/USDTZAR`), recalculate USDT needed, conversion fee, and withdrawal fee. For withdrawal fee: call RPC to check free withdrawal count this month
+- **Amount change (BTC/USDT path):** simply validate amount ≤ withdrawable balance for that currency; show interim fee estimate
+- **Interim fee estimate:** call `lth_pvr.get_customer_valr_credentials()` → no, call a new RPC `lth_pvr.estimate_interim_performance_fee(p_customer_id)` that returns the current accrued fee without writing anything
+- **Submit:** call `ef_request_withdrawal`; show loading state; on success: "Your withdrawal is being processed — you'll receive an email confirmation shortly"; reload history table
+- **Cancel button:** visible only for `pending` status rows; calls `ef_revert_withdrawal` after confirmation dialog
+- **Address validation (client-side):**
+  - BTC: `/^[13][a-zA-Z0-9]{25,34}$|^bc1[a-z0-9]{6,87}$/`
+  - USDT TRC-20: `/^T[a-zA-Z0-9]{33}$/`
 
-**Withdrawable balance logic:** Use existing `lth_pvr.get_withdrawable_balance(p_customer_id)` RPC — already returns `withdrawable_btc` and `withdrawable_usdt`. Convert to ZAR using live rate.
+**Withdrawable balance logic:** Use existing `lth_pvr.get_withdrawable_balance(p_customer_id)` RPC — already returns `withdrawable_btc` and `withdrawable_usdt`. Convert USDT to ZAR using live USDTZAR rate for ZAR path display.
 
-**UI note:** This section is visible for ALL customers (both models). For API model customers, the "linked bank account" note should say: "Funds will be withdrawn to the bank account linked to your VALR account." For subaccount model: "Funds will be withdrawn to the bank account linked to your VALR subaccount."
+**BTC withdrawal address restriction note (API model customers):** For API model customers, their VALR API key's Withdraw permission has BitWealth's wallets whitelisted. Withdrawing BTC to a personal external address will be rejected by VALR unless the customer also adds that address to their whitelist on VALR. Show a note: "Your VALR API key must have this address whitelisted for the withdrawal to succeed."
 
 ---
 
@@ -976,13 +1170,60 @@ For `account_model = 'api'`, update Milestone 4 (VALR Setup) label to **"API Key
 
 ---
 
+### New Template 4: `Withdrawal Submitted & Processing`
+
+**Trigger:** `ef_request_withdrawal` immediately after the VALR order is placed (i.e., once execution has started — status → `processing`)  
+**Recipient:** Customer  
+**Subject:** `✅ Your withdrawal is being processed`
+
+**Body content:**
+- Confirmation of request: currency, amount, net amount after fees
+- Interim fee breakdown (if any, with explanation: "This is your accrued performance fee, settled at withdrawal time")
+- For ZAR: VALR fee breakdown (conversion + withdrawal fee)
+- For BTC/USDT: withdrawal address shown (masked/abbreviated for security)
+- VALR order/withdrawal ID (if returned immediately)
+- Expected arrival timeframe (crypto: minutes to hours; ZAR bank transfer: 1–2 business days)
+- "It is no longer possible to cancel this withdrawal."
+- Portal link to view request history
+
+---
+
+### New Template 5: `Withdrawal Outcome`
+
+A single template with two variants depending on the terminal state of the withdrawal.
+
+**Variant A — Completed (customer email):**  
+**Trigger:** `ef_request_withdrawal` on VALR success (status → `completed`)  
+**Recipient:** Customer  
+**Subject:** `✅ Withdrawal complete — funds sent`
+
+**Body content:**
+- Currency, amount, net amount, VALR withdrawal reference/ID
+- For ZAR: "Funds have been sent to your linked bank account and should arrive within 1–2 business days"
+- For BTC/USDT: "Your {{currency}} has been sent to {{masked_address}}"
+- Portal link to view statement
+
+**Variant B — Failed (admin alert):**  
+**Trigger:** `ef_request_withdrawal` when VALR API call returns an error (status → `failed`)  
+**Recipient:** Admin  
+**Subject:** `🚨 ALERT: Withdrawal Failed — {{first_name}} {{last_name}}`
+
+**Body content:**
+- Customer name, ID, email
+- Withdrawal request ID, currency, and amount
+- VALR error message
+- Action: Log in to Admin UI → Customer Withdrawals panel → find the failed request → "Retry"
+- Note: Interim performance fee was charged and HWM was updated. If not retrying, manually call `ef_revert_withdrawal` to restore the customer's HWM.
+
+> The two variants share the same `email_templates` row; the edge function selects the correct subject/body based on the `status` outcome.
+
+---
+
 ### Existing Templates (use without modification)
 
 | Template Name | Used for |
 |---|---|
-| "Withdrawal Request Notification" | Admin notified of customer withdrawal request (existing) |
-| "Withdrawal Approved" | Customer notified by admin (existing) |
-| "Withdrawal Completed" | Customer notified on fiat withdrawal complete (existing) |
+| "Withdrawal Completed" | Customer notified when VALR confirms the withdrawal is complete (existing) |
 | "Funds Deposited - Admin Notification" | Subaccount model customer activation on first deposit (existing — no change) |
 
 ---
@@ -1027,10 +1268,11 @@ Build in this order to minimise disruption and allow incremental testing. Each p
 | 11 | **S3 `valrTransfer.ts`** + **EF5 ledger** update | High — live fee transfer | S1, Migration 4 |
 | 12 | **EF9 `ef_convert_zar_to_usdt`** | Medium — new function | Migration 5, S1 |
 | 13 | **AU3 Enhance Pending ZAR Conversions card** | Low — UI only | EF9 |
-| 14 | **EF10 `ef_request_withdrawal`** | Medium — new function | Migration 6 |
-| 15 | **EF11–13 withdrawal execution chain** | Medium — new functions | EF10 |
-| 16 | **AU4 Withdrawal Management Panel** | Low — UI only | EF11 |
-| 17 | **CP1 Portal Withdrawals section** | Low — UI, no live trading | EF10 |
+| 14 | **EF10 `ef_request_withdrawal`** (auto-execute) | Medium — new function, triggers live VALR calls | Migration 6, S1, S2 |
+| 15 | **EF11 `ef_revert_withdrawal`** | Low — new function, no VALR calls | Migration 6 |
+| 16 | **EF12–13 `ef_convert_usdt_to_zar` / `ef_convert_btc_to_zar`** | Medium — called by EF10 | S1, S2 |
+| 17 | **AU4 Withdrawal History Panel** (read-only) | Low — UI only | Migration 6 |
+| 18 | **CP1 Portal Withdrawals section** | Low — UI only | EF10, EF11 |
 | 18 | **CP2 Portal Settings section** | Low — UI | EF7 |
 | 19 | **Email Templates 1–3** | Low | None |
 | 20 | **EF14 `ef_rotate_api_key_notifications`** + cron | Low | Migration 2, Email Templates |
@@ -1181,8 +1423,14 @@ After building, test in this sequence:
 | T5 | Click "Convert ZAR → USDT" for a pending conversion | Limit USDTZAR buy placed, status updates, eventually filled |
 | T6 | Run `ef_execute_orders` with API model customer in active status | Order placed using customer vault key, no subaccount header |
 | T7 | Run `ef_post_ledger_and_balances` for API model customer | Fee withdrawn using customer key to BitWealth's static wallet |
-| T8 | Customer submits withdrawal request in portal | withdrawal_requests created, admin email sent, pending request shows for admin |
-| T9 | Admin executes withdrawal | USDT→ZAR conversion placed, then fiat withdrawal sent to bank |
+| T8-ZAR | Customer submits ZAR withdrawal in portal | Interim fee calculated and deducted, USDT→ZAR conversion placed, fiat withdrawal sent to pre-linked bank, emails sent |
+| T8-BTC | Customer submits BTC withdrawal to external address | Interim fee calculated, VALR crypto withdrawal executed, confirmation email sent |
+| T8-USDT | Customer submits USDT withdrawal to TRC-20 address | Same as T8-BTC but USDT currency |
+| T8-FEE | Customer with accrued profit withdraws mid-month | Interim performance fee deducted, HWM updated atomically, fee snapshot written to withdrawal_fee_snapshots |
+| T8-CANCEL | Customer cancels a pending withdrawal before processing | HWM reverted, interim fee ledger reversed, status → cancelled, no VALR call made |
+| T9 | Customer with zero accrued performance fee withdraws | No interim fee charged, full net amount processed |
+| T9-NOBANK | Customer without linked bank account tries ZAR withdrawal | Error: "No linked bank account — please contact support" |
+| T9-ADDR | Customer provides invalid Bitcoin address | Error: client-side validation rejects before submission |
 | T10 | Set `api_key_expires_at = now() + 8 days` and run `ef_rotate_api_key_notifications` | Warning email sent to customer, `live_enabled` not yet disabled |
 | T11 | Set `api_key_expires_at = now() - 1 day` and run `ef_rotate_api_key_notifications` | `live_enabled = false`, critical email sent, alert logged |
 | T12 | Customer updates API key in portal Settings | Old vault secrets removed, new ones stored, `api_key_expires_at` reset |
