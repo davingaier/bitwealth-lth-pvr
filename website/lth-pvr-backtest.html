@@ -625,8 +625,8 @@
             showState('loading');
             
             try {
-                // Call RPC function
-                const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/run_public_backtest`, {
+                // Call edge function (reCAPTCHA verified in Deno — no DB connection held)
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_submit_public_backtest`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
