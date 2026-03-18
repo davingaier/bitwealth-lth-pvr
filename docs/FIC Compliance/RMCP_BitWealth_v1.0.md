@@ -1,8 +1,12 @@
 # Risk Management and Compliance Programme (RMCP)
 
-**Institution:** BitWealth (Pty) Ltd  
-**Registration No.:** [COMPANY REGISTRATION NUMBER]  
-**Registered Address:** [REGISTERED BUSINESS ADDRESS]  
+**Institution:** BitWealth Asset Managers (Pty) Ltd  
+**Registration No.:** 2026 / 090346 / 07
+**Registered Address:** 89 BLOEKOM CURVE
+                        TERENURE EXT 16
+                        KEMPTON PARK
+                        GAUTENG
+                        1619
 **Classification:** Accountable Institution — Schedule 1, Item 22, Financial Intelligence Centre Act 38 of 2001 (Crypto Asset Service Provider)  
 **Version:** 1.0  
 **Date Approved:** [DATE OF BOARD/OWNER APPROVAL]  
@@ -44,7 +48,7 @@
 
 ### 1.1 Purpose
 
-This Risk Management and Compliance Programme (RMCP) sets out how BitWealth (Pty) Ltd ("BitWealth") identifies, assesses, monitors and manages its exposure to money laundering (ML) and terrorist financing (TF) risk. It establishes the policies, procedures and controls that ensure BitWealth meets all obligations imposed on it as an accountable institution under the Financial Intelligence Centre Act 38 of 2001 (FIC Act), as amended.
+This Risk Management and Compliance Programme (RMCP) sets out how BitWealth Asset Managers (Pty) Ltd ("BitWealth") identifies, assesses, monitors and manages its exposure to money laundering (ML) and terrorist financing (TF) risk. It establishes the policies, procedures and controls that ensure BitWealth meets all obligations imposed on it as an accountable institution under the Financial Intelligence Centre Act 38 of 2001 (FIC Act), as amended.
 
 This RMCP is a living document. It must be reviewed at least annually and updated whenever there is a material change to the business, the regulatory environment, or the institution's risk profile.
 
@@ -839,7 +843,7 @@ Each update to this RMCP must:
 
 ---
 
-*This RMCP has been approved as the official Risk Management and Compliance Programme of BitWealth (Pty) Ltd.*
+*This RMCP has been approved as the official Risk Management and Compliance Programme of BitWealth Asset Managers (Pty) Ltd.*
 
 **Signed:**
 
@@ -847,12 +851,12 @@ Each update to this RMCP must:
 
 [OWNER / DIRECTOR FULL NAME]  
 [TITLE]  
-BitWealth (Pty) Ltd  
+BitWealth Asset Managers (Pty) Ltd  
 Date: [DATE]
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
 [COMPLIANCE OFFICER FULL NAME]  
 Compliance Officer  
-BitWealth (Pty) Ltd  
+BitWealth Asset Managers (Pty) Ltd  
 Date: [DATE]
