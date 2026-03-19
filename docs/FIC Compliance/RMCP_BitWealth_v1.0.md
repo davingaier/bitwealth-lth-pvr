@@ -73,7 +73,7 @@ BitWealth's AML/CFT compliance programme is governed by the following legislatio
 
 ### 1.3 FIC Registration
 
-BitWealth is registered (or in the process of registering) with the Financial Intelligence Centre as an accountable institution:
+BitWealth is registered with the Financial Intelligence Centre as an accountable institution:
 
 - **goAML Organisation Reference:** 77952
 - **Registration Date:** 19/03/2026
