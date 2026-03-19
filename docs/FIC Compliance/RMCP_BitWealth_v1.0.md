@@ -77,7 +77,7 @@ BitWealth is registered with the Financial Intelligence Centre as an accountable
 
 - **goAML Organisation Reference:** 77952
 - **Registration Date:** 19/03/2026
-- **Reporting Entity Type:** Crypto Asset Service Provider (CASP)
+- **Reporting Entity Type:**  S1I22 - Crypto Assets Service Providers - General
 - **FSCA CASP Licence Number:** [FSCA LICENCE NUMBER — pending]
 
 ---
