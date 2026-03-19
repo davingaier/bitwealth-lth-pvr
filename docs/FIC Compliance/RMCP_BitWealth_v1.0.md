@@ -8,11 +8,11 @@
                         GAUTENG
                         1619
 **Classification:** Accountable Institution — Schedule 1, Item 22, Financial Intelligence Centre Act 38 of 2001 (Crypto Asset Service Provider)  
-**Version:** 1.0  
-**Date Approved:** [DATE OF BOARD/OWNER APPROVAL]  
-**Approved By:** [OWNER / BOARD MEMBER NAME AND TITLE]  
-**Compliance Officer:** [COMPLIANCE OFFICER FULL NAME]  
-**Next Review Date:** [DATE — ANNUAL REVIEW REQUIRED]
+**Version:** 1.1  
+**Date Approved:** 19/03/2026
+**Approved By:** Davin Harald Gaier (Owner/Director)
+**Compliance Officer:** [COMPLIANCE OFFICER FULL NAME - to be appointed]  
+**Next Review Date:** 18/03/2027
 
 ---
 
@@ -20,7 +20,8 @@
 
 | Version | Date | Author | Summary of Changes |
 |---------|------|--------|--------------------|
-| 1.0 | 2026-03-04 | [AUTHOR NAME] | Initial RMCP — first FIC registration |
+| 1.0 | 2026-03-04 | Davin Harald Gaier | Initial RMCP — first FIC registration |
+| 1.1 | 2026-03-19 | Davin Harald Gaier | Updated operating model: Phase 1 (API model) — client holds own personal VALR account; BitWealth executes via restricted trading API key (trade-only, no custody of client funds); funds flow, delivery channel controls, and CDD timing updated accordingly |
 
 ---
 
@@ -74,10 +75,10 @@ BitWealth's AML/CFT compliance programme is governed by the following legislatio
 
 BitWealth is registered (or in the process of registering) with the Financial Intelligence Centre as an accountable institution:
 
-- **goAML Organisation Reference:** [FIC ORGANISATION REFERENCE — assigned upon registration]
-- **Registration Date:** [DATE]
+- **goAML Organisation Reference:** SHREG-260315-0000013
+- **Registration Date:** 19/03/2026
 - **Reporting Entity Type:** Crypto Asset Service Provider (CASP)
-- **FSCA CASP Licence Number:** [FSCA LICENCE NUMBER — pending / insert once issued]
+- **FSCA CASP Licence Number:** [FSCA LICENCE NUMBER — pending]
 
 ---
 
@@ -89,20 +90,16 @@ BitWealth provides an automated Bitcoin Dollar-Cost Averaging (DCA) investment s
 
 BitWealth is not an exchange. It does not hold order books, facilitate peer-to-peer trades, or offer speculative or leveraged products. It acts as an investment service provider that uses a licensed crypto exchange (VALR) as its execution venue.
 
+Under the **current operating model (Phase 1)**, pending receipt of a FAIS investment manager licence, each client maintains their own personal VALR account into which they deposit ZAR directly. The client provides BitWealth with a restricted VALR API key (trade permissions only — withdrawal permissions excluded). BitWealth's automated platform uses this key to execute daily BTC purchases on the client's behalf. **BitWealth does not hold, custody, or control client funds at any point in this model.**
+
+A **Phase 2 omnibus/subaccount operating model** — in which client funds flow into segregated VALR subaccounts within a BitWealth-managed master account — is planned for implementation upon receipt of the appropriate FAIS licence. This RMCP will be updated materially when Phase 2 is implemented.
+
 ### 2.2 Products and Services
 
 | Product / Service | Description |
 |------------------|-------------|
 | LTH PVR Automated DCA | Daily automated BTC buy strategy based on on-chain LTH PVR signal. Clients invest ZAR; the system converts to BTC over time. |
-| Standard DCA | Fixed-interval DCA without on-chain signal (benchmark product) |
 | Portfolio Reporting | Performance dashboards and reporting for client portfolios |
-
-**Products currently in development (not yet live):**
-
-| Product | Status |
-|---------|--------|
-| Additional DCA strategies | Development |
-| Direct ZAR withdrawal to bank | Planned |
 
 ### 2.3 Client Base
 
@@ -122,32 +119,43 @@ BitWealth is not an exchange. It does not hold order books, facilitate peer-to-p
 | Automated pipeline | Daily BTC purchase pipeline (no client interaction) | Low — automated, pre-approved mandates |
 | Email | Client communications only — no funds transfer instructions via email | Low |
 
-BitWealth does **not** accept:
+Under the current Phase 1 operating model, BitWealth does not accept or hold client funds directly. All client funds are deposited by the client into their own personal VALR account. BitWealth requires that each client's VALR account is funded only from the client's own verified SA bank account via ZAR EFT.
+
+BitWealth does **not** permit and will not onboard clients who intend to fund their VALR account via:
 - Physical cash (coins or notes) in any form
 - Cheque payments
-- Third-party payments (funds must originate from the verified client's own bank account)
-- Cryptocurrency deposits (ZAR EFT only for funding)
+- Third-party payments (funds from any account other than the client's own verified bank account)
+- Cryptocurrency deposits direct to VALR (ZAR EFT from own SA bank account only)
 
-### 2.5 Funds Flow
+### 2.5 Funds Flow — Phase 1 (Current Operating Model: Client-Owned VALR Account)
 
 ```
-Client's SA bank account
+Client registers own personal VALR account
+(VALR performs FICA/CASP KYC directly with the client and BitWealth performs independent CDD/KYC before accepting API key)
         │
-        ▼ EFT (ZAR)
-VALR omnibus holding account (BitWealth subaccount pool)
+        ▼ Client deposits ZAR via EFT from their own SA bank account
+          into their personal VALR account
         │
-        ▼ Per-client VALR subaccount (segregated ZAR balance)
+        ▼ Client generates a VALR API key (trade permissions only —
+          withdrawal permissions expressly excluded)
+          and provides it securely to BitWealth
         │
-        ▼ Daily automated BTC purchase (LIMIT/MARKET order on VALR BTC/USDT pair)
+        ▼ BitWealth executes daily automated BTC purchases via API
+          (LIMIT/MARKET order on VALR BTC/USDT pair)
         │
-        ▼ BTC held in client's VALR subaccount
+        ▼ BTC held in client's own personal VALR account
 ```
 
 **Key controls in the funds flow:**
-- VALR performs its own FICA/CASP KYC on clients at subaccount level
-- BitWealth performs independent KYC (this RMCP)
-- Client's bank account must be verified (bank confirmation letter required on KYC)
-- No cash-to-crypto or peer-to-peer components
+- **No custody of client funds:** BitWealth does not hold, pool, or control client funds at any point. All ZAR and BTC remain in the client's own personal VALR account at all times.
+- **API key restrictions:** BitWealth holds only a restricted trading API key per client. The key is configured with trade permissions only — withdrawal permissions are expressly excluded. BitWealth cannot move ZAR or BTC out of a client's VALR account.
+- **VALR independent KYC:** VALR performs full FICA/CASP KYC directly with clients on account opening. BitWealth confirms VALR account activation before accepting a client's API key.
+- **BitWealth independent KYC:** BitWealth performs its own CDD (this RMCP) before activating any trading mandate. No trades may be executed until the client's `registration_status` is `active`.
+- **Source of funds:** Clients must fund their VALR account only from their own verified SA bank account (ZAR EFT). BitWealth verifies bank account ownership as part of CDD.
+- **No cash-to-crypto or peer-to-peer components**
+
+**Planned Phase 2 Operating Model (subject to FAIS investment manager licence):**  
+Upon receipt of the appropriate FAIS licence, BitWealth intends to migrate to an omnibus subaccount model in which client ZAR flows into segregated per-client VALR subaccounts within a BitWealth-managed master account. This RMCP will be updated materially at that time.
 
 ---
 
@@ -158,7 +166,7 @@ VALR omnibus holding account (BitWealth subaccount pool)
 BitWealth has designated a Compliance Officer responsible for the implementation and ongoing management of this RMCP, as required by Section 42A of the FIC Act.
 
 **Compliance Officer:**  
-Name: [COMPLIANCE OFFICER FULL NAME]  
+Name: [COMPLIANCE OFFICER FULL NAME - to be appointed]  
 Title: [JOB TITLE]  
 Contact: [EMAIL ADDRESS]  
 Phone: [PHONE NUMBER]  
@@ -217,7 +225,7 @@ Residual risk is determined by applying the mitigating controls in this RMCP to 
 
 | Product | Inherent Risk | Key ML/TF Vulnerabilities | Mitigating Controls | Residual Risk |
 |---------|--------------|--------------------------|--------------------|----|
-| LTH PVR Bitcoin DCA | **High** | Crypto is pseudonymous; BTC can be moved globally; client could use layering (buy BTC with criminal funds) | ZAR EFT only (traceable fiat on-ramp); bank account verification; VALR also performs KYC; automated pipeline (no manual cash handling) | **Medium** |
+| LTH PVR Bitcoin DCA | **High** | Crypto is pseudonymous; BTC can be moved globally; client could use layering (buy BTC with criminal funds) | ZAR EFT only (traceable fiat on-ramp); client funds own personal VALR account; bank account verified by BitWealth; VALR performs independent FICA KYC directly with client; BitWealth holds trade-only API key (no withdrawal access — zero custody of client funds); automated trading pipeline (no manual cash handling) | **Medium** |
 | Standard DCA | **High** | Same as above | Same as above | **Medium** |
 | Portfolio reporting | **Low** | No funds movement | N/A | **Low** |
 
@@ -260,8 +268,8 @@ FATF grey-listed and black-listed countries are monitored at: [https://www.fatf-
 
 | Channel | Inherent Risk | Controls | Residual Risk |
 |---------|--------------|----------|---------------|
-| Online onboarding (no face-to-face) | **High** | Document upload + liveness checks (where implemented); bank account verification; VALR parallel KYC | **Medium** |
-| Automated BTC purchase pipeline | **Low** | Pre-approved mandates; no client-initiated trade instructions; ATMS monitoring | **Low** |
+| Online onboarding (no face-to-face) | **High** | Document upload + liveness checks (where implemented); bank account verification; VALR independent FICA KYC performed directly with client; VALR API key restricted to trade permissions only — no withdrawal access; BitWealth holds zero custody of client funds | **Medium** |
+| Automated BTC purchase pipeline | **Low** | Pre-approved trading mandates; no client-initiated trade instructions; ATMS monitoring; BitWealth API key scoped to trade-only permissions — cannot initiate withdrawals | **Low** |
 
 ### 4.6 Overall Institutional Risk Rating
 
@@ -322,7 +330,7 @@ Each client is assigned an individual risk rating at onboarding and reviewed at 
 
 ### 6.1 Timing — When CDD Must Be Completed
 
-CDD must be completed **before** a client is onboarded and before any funds are received or any transactions are executed on their behalf. No deposit, conversion or investment may proceed until CDD is complete and the client's `registration_status` is set to `active` in the BitWealth platform.
+CDD must be completed **before** a client is onboarded and before any transactions are executed on their behalf. Under the Phase 1 API model, no trading mandate may be activated and no automated trades may be executed on a client's behalf until CDD is complete and the client's `registration_status` is set to `active` in the BitWealth platform. BitWealth will not accept or activate a client's VALR API key until all CDD requirements have been met and approved. Where a client has already registered and funded their personal VALR account prior to completing BitWealth's CDD, trading will remain suspended until CDD is approved.
 
 Exceptions to this timing rule are **not permitted.**
 
@@ -703,12 +711,12 @@ Section 43 of the FIC Act requires accountable institutions to provide staff wit
 
 | Training Module | Target Audience | Frequency | Format |
 |----------------|----------------|-----------|---------|
-| AML/CFT Fundamentals (FIC Act, ML/TF offences, accountable institution obligations) | All staff | On commencement, then annually | [ONLINE / CLASSROOM / WRITTEN TEST] |
-| Customer Due Diligence Procedures | All client-facing staff and Compliance Officer | On commencement, then annually | [FORMAT] |
-| Suspicious Transaction Identification | All staff | On commencement, then annually | [FORMAT] — Includes case studies |
-| Targeted Financial Sanctions (TFS) Screening | Compliance Officer + admin staff | On commencement, then annually | [FORMAT] |
-| goAML Reporting — Practical | Compliance Officer | On commencement; when goAML system changes | [FIC goAML training / practical] |
-| RMCP Update Briefing | All staff | After each RMCP version update | [Email / meeting briefing] |
+| AML/CFT Fundamentals (FIC Act, ML/TF offences, accountable institution obligations) | All staff | On commencement, then annually | ONLINE |
+| Customer Due Diligence Procedures | All client-facing staff and Compliance Officer | On commencement, then annually | ONLINE |
+| Suspicious Transaction Identification | All staff | On commencement, then annually | ONLINE — Includes case studies |
+| Targeted Financial Sanctions (TFS) Screening | Compliance Officer + admin staff | On commencement, then annually | ONLINE |
+| goAML Reporting — Practical | Compliance Officer | On commencement; when goAML system changes | ONLINE |
+| RMCP Update Briefing | All staff | After each RMCP version update | ONLINE |
 
 ### 12.3 Training Records
 
@@ -719,7 +727,7 @@ The following must be recorded for each training event:
 - Assessment score (if applicable)
 - Trainer name (if facilitated)
 
-Training records are retained for **5 years** and stored at: [CLOUD STORAGE / HR SYSTEM LOCATION]
+Training records are retained for **5 years** and stored at: CLOUD STORAGE
 
 ---
 
@@ -781,7 +789,7 @@ Each update to this RMCP must:
 | Organisation | Contact |
 |-------------|---------|
 | Financial Intelligence Centre (FIC) | FICEMD@fic.gov.za; 012 641 6000 |
-| FIC goAML Registration | goAML helpdesk: [FIC GOAML HELPDESK EMAIL — confirm on FIC website] |
+| FIC goAML Registration | goAML helpdesk: https://www.fic.gov.za/compliance-queries/ |
 | FIC Guidance Documents | https://www.fic.gov.za |
 | FATF High-Risk Jurisdictions | https://www.fatf-gafi.org/en/topics/high-risk-and-other-monitored-jurisdictions.html |
 | UNSC Consolidated Sanctions List | https://www.un.org/securitycouncil/content/un-sc-consolidated-list |
@@ -825,6 +833,8 @@ Each update to this RMCP must:
 - [ ] Completed KYC form (occupation, source of funds, PEP declaration)
 - [ ] Tax reference number (self-declared)
 - [ ] TFS screening completed — result: `clear`
+- [ ] VALR account confirmed in client's own name and VALR KYC approved
+- [ ] VALR trading API key received — verified: trade permissions only, no withdrawal permissions
 - [ ] Risk rating assigned and documented
 - [ ] Compliance Officer sign-off (if high risk)
 
@@ -849,10 +859,10 @@ Each update to this RMCP must:
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
-[OWNER / DIRECTOR FULL NAME]  
-[TITLE]  
+Davin Harald Gaier
+Managing Director
 BitWealth Asset Managers (Pty) Ltd  
-Date: [DATE]
+Date: 19/03/2026
 
 \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
 
