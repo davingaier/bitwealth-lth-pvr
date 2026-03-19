@@ -75,7 +75,7 @@ BitWealth's AML/CFT compliance programme is governed by the following legislatio
 
 BitWealth is registered (or in the process of registering) with the Financial Intelligence Centre as an accountable institution:
 
-- **goAML Organisation Reference:** SHREG-260315-0000013
+- **goAML Organisation Reference:** 77952
 - **Registration Date:** 19/03/2026
 - **Reporting Entity Type:** Crypto Asset Service Provider (CASP)
 - **FSCA CASP Licence Number:** [FSCA LICENCE NUMBER — pending]
