@@ -162,7 +162,7 @@
       display: flex;
       height: 28px;
       border-radius: 6px;
-      overflow: visible;
+      overflow: hidden;
       margin-bottom: 8px;
     }
     .sigma-seg {
@@ -480,7 +480,7 @@
               <li>Resistant to market manipulation — on-chain accumulation cannot be faked</li>
               <li>Signal generates one decision per day, reducing emotional trading and churn</li>
             </ul>
-            <p>The strategy executes <strong>daily via automated pipeline</strong> on VALR exchange, with each participant's portfolio tracked independently at the sub-account level.</p>
+            <p>The strategy executes <strong>daily via automated trading pipeline</strong>, with each participant's portfolio tracked independently at the sub-account level.</p>
           </div>
         </div>
       </div>
@@ -529,7 +529,7 @@
           <div class="variant-badge badge-prog">MAXIMUM GROWTH ORIENTATION</div>
           <ul class="variant-desc">
             <li>Full 11-tier sigma allocation system active</li>
-            <li>Higher buy percentages in deeply undervalued zones (22.8% at B1)</li>
+            <li>Higher buy percentages in deeply undervalued zones</li>
             <li>Bear Market Pause preserves capital above +2.0σ — re-enters below −1.0σ</li>
             <li>Momentum filter suppresses sells in weak uptrends (B7–B9 tiers)</li>
             <li>Retrace exception allows counter-trend buys when price corrects from elevated zones</li>
@@ -544,9 +544,8 @@
             <li>Reduced allocation sizes across all tiers for smoother NAV path</li>
             <li>Earlier, smaller sell triggers to capture gains more frequently</li>
             <li>Same Bear Market Pause and momentum logic for downside protection</li>
-            <li>Lower maximum drawdown profile relative to Progressive variant</li>
+            <li>Earlier accumulation relative to Progressive variant</li>
             <li>More consistent intra-cycle performance — smaller gap between bull and bear years</li>
-            <li>Higher Sharpe Ratio in shorter periods — better risk-adjusted performance</li>
             <li><strong>Best suited for:</strong> Capital preservation focus, shorter investment horizons, or portfolio diversification role</li>
           </ul>
         </div>
@@ -579,13 +578,14 @@
               <th>CAGR</th>
               <th>Max Drawdown</th>
               <th>Sharpe Ratio</th>
+              <th>Total ROI</th>
             </tr>
           </thead>
           <tbody>
 
             <!-- 1 YEAR -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">1 Year  (Mar 2025 – Mar 2026) &nbsp;·&nbsp; $1,000/month contributions</td>
+              <td class="period-cell" colspan="7">1 Year  (Mar 2025 – Mar 2026) &nbsp;·&nbsp; $1,000/month contributions</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -594,6 +594,7 @@
               <td><span class="cagr-neg">−5.4%</span></td>
               <td><span class="dd-val">4.4%</span></td>
               <td class="sharpe-val">−1.23</td>
+              <td><span class="cagr-pos">+2.5%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -602,11 +603,12 @@
               <td><span class="cagr-neg">−6.2%</span></td>
               <td><span class="dd-val">3.3%</span></td>
               <td class="sharpe-val">−1.87</td>
+              <td><span class="cagr-pos">+1.6%</span></td>
             </tr>
 
             <!-- 2 YEARS -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">2 Years  (Mar 2024 – Mar 2026)</td>
+              <td class="period-cell" colspan="7">2 Years  (Mar 2024 – Mar 2026)</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -615,6 +617,7 @@
               <td><span class="cagr-pos">+10.4%</span></td>
               <td><span class="dd-val">14.6%</span></td>
               <td class="sharpe-val">0.72</td>
+              <td><span class="cagr-pos">+27.0%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -623,11 +626,12 @@
               <td><span class="cagr-pos">+5.0%</span></td>
               <td><span class="dd-val">7.4%</span></td>
               <td class="sharpe-val">0.67</td>
+              <td><span class="cagr-pos">+14.9%</span></td>
             </tr>
 
             <!-- 3 YEARS -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">3 Years  (Mar 2023 – Mar 2026)</td>
+              <td class="period-cell" colspan="7">3 Years  (Mar 2023 – Mar 2026)</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -636,6 +640,7 @@
               <td><span class="cagr-pos">+21.0%</span></td>
               <td><span class="dd-val">17.5%</span></td>
               <td class="sharpe-val">1.20</td>
+              <td><span class="cagr-pos">+82.3%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -644,11 +649,12 @@
               <td><span class="cagr-pos">+16.6%</span></td>
               <td><span class="dd-val">13.0%</span></td>
               <td class="sharpe-val">1.28</td>
+              <td><span class="cagr-pos">+63.0%</span></td>
             </tr>
 
             <!-- 5 YEARS -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">5 Years  (Mar 2021 – Mar 2026)</td>
+              <td class="period-cell" colspan="7">5 Years  (Mar 2021 – Mar 2026)</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -657,6 +663,7 @@
               <td><span class="cagr-pos">+23.6%</span></td>
               <td><span class="dd-val">25.8%</span></td>
               <td class="sharpe-val">0.91</td>
+              <td><span class="cagr-pos">+193.3%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -665,11 +672,12 @@
               <td><span class="cagr-pos">+18.9%</span></td>
               <td><span class="dd-val">28.6%</span></td>
               <td class="sharpe-val">0.66</td>
+              <td><span class="cagr-pos">+141.9%</span></td>
             </tr>
 
             <!-- 7 YEARS -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">7 Years  (Mar 2019 – Mar 2026)</td>
+              <td class="period-cell" colspan="7">7 Years  (Mar 2019 – Mar 2026)</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -678,6 +686,7 @@
               <td><span class="cagr-pos">+35.9%</span></td>
               <td><span class="dd-val">49.3%</span></td>
               <td class="sharpe-val">0.73</td>
+              <td><span class="cagr-pos">+767.4%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -686,11 +695,12 @@
               <td><span class="cagr-pos">+26.8%</span></td>
               <td><span class="dd-val">48.3%</span></td>
               <td class="sharpe-val">0.56</td>
+              <td><span class="cagr-pos">+435.1%</span></td>
             </tr>
 
             <!-- 10 YEARS -->
             <tr class="period-header">
-              <td class="period-cell" colspan="6">10 Years  (Mar 2016 – Mar 2026)</td>
+              <td class="period-cell" colspan="7">10 Years  (Mar 2016 – Mar 2026)</td>
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
@@ -699,6 +709,7 @@
               <td><span class="cagr-pos">+60.7%</span></td>
               <td><span class="dd-val">61.9%</span></td>
               <td class="sharpe-val">0.98</td>
+              <td><span class="cagr-pos">+11,536.1%</span></td>
             </tr>
             <tr class="strategy-row-cons">
               <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
@@ -707,12 +718,13 @@
               <td><span class="cagr-pos">+40.6%</span></td>
               <td><span class="dd-val">57.4%</span></td>
               <td class="sharpe-val">0.71</td>
+              <td><span class="cagr-pos">+2,942.7%</span></td>
             </tr>
 
           </tbody>
         </table>
         <div class="table-note">
-          Back-test parameters: $1,000/month contribution, $0 upfront, ending 19 March 2026. Fees included: VALR exchange 8bps trading, 18bps conversion, BitWealth 0.75% platform fee, 10% performance fee on monthly profits above high-water mark. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using CryptoQuant LTH on-chain data.
+          Back-test parameters: $1,000/month contribution, $0 upfront, ending 19 March 2026. Fees included: VALR exchange 8bps trading, 18bps conversion, BitWealth 0.75% platform fee, 10% performance fee on monthly profits above high-water mark. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using LTH on-chain data.
         </div>
       </div>
 
@@ -755,12 +767,12 @@
       <div class="footer">
         <div class="footer-left">
           <div class="cta-title">Book a Strategy Demonstration</div>
-          <div class="cta-sub">We invite the Africa Bitcoin Corporation investment committee to review a live simulation session and full technical documentation.</div>
+          <div class="cta-sub">We invite the Africa Bitcoin Corporation investment committee to review a live simulation session.</div>
         </div>
         <div class="footer-right">
           <div class="contact-item"><strong>BitWealth</strong></div>
-          <div class="contact-item">www.bit-wealth.co.za</div>
-          <div class="contact-item">info@bit-wealth.co.za</div>
+          <div class="contact-item">bitwealth.co.za</div>
+          <div class="contact-item">info@bitwealth.co.za</div>
           <div class="disclaimer">This document is provided for institutional information purposes only. It does not constitute financial advice or an offer to invest. Past performance does not guarantee future results. Bitcoin is a high-risk asset class.</div>
         </div>
       </div>
