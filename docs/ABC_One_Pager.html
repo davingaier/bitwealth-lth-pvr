@@ -39,22 +39,26 @@
     /* ─── Print / A4 Layout ─── */
     @media print {
       body { background: #fff !important; color: #111 !important; font-size: 11px; }
-      .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm; max-width: none; box-shadow: none !important; }
+      .screen-wrap { display: block; padding: 0; gap: 0; background: transparent; }
+      .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm; max-width: none; box-shadow: none !important; margin: 0; }
+      .page-1 { break-after: page; }
       .no-print { display: none !important; }
 
       /* Force dark sections to print in colour */
-      .hero        { background: #0A0F1E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .sigma-bar   { background: #151B2E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .variant-card{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      table        { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .footer      { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .hero            { background: #0A0F1E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sigma-bar       { background: #151B2E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .variant-card    { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page-2-header   { background: #0A0F1E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      table            { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .footer          { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .diff-card       { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 
     /* ─── Page Container ─── */
     .page {
       width: 210mm;
       min-height: 297mm;
-      margin: 0 auto;
+      flex-shrink: 0;
       padding: 14mm 16mm 12mm;
       background: var(--bg);
       box-shadow: 0 0 60px rgba(0,0,0,0.8);
@@ -63,10 +67,14 @@
     /* ─── Screen wrapper ─── */
     .screen-wrap {
       display: flex;
+      flex-direction: row;
       justify-content: center;
-      padding: 24px 16px;
+      align-items: flex-start;
+      gap: 28px;
+      padding: 28px 28px;
       background: #060a12;
       min-height: 100vh;
+      overflow-x: auto;
     }
 
     /* ─── Hero ─── */
@@ -382,13 +390,65 @@
       box-shadow: 0 4px 16px rgba(255,180,0,0.4);
     }
     .print-btn:hover { background: var(--gold-lt); }
+
+    /* ─── Page 2 continuation header ─── */
+    .page-2-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 11px;
+      border-bottom: 2px solid var(--gold);
+      margin-bottom: 16px;
+      gap: 12px;
+      background: var(--bg);
+    }
+    .page-2-header .p2-logo img {
+      height: 36px;
+      border-radius: 6px;
+      background: #fff;
+      padding: 3px;
+    }
+    .page-2-header .p2-title { flex: 1; text-align: right; }
+    .page-2-header .p2-title h2 {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: -0.3px;
+      line-height: 1.1;
+    }
+    .page-2-header .p2-title .p2-sub {
+      font-size: 10px;
+      color: var(--txt3);
+      margin-top: 2px;
+    }
+
+    /* ─── Page 2 tighter sizing ─── */
+    .page-2 .perf-table th { padding: 5px 8px; font-size: 9px; }
+    .page-2 .perf-table td { padding: 4px 8px; font-size: 11px; }
+    .page-2 .perf-table td.period-cell { font-size: 10px; padding-left: 10px; }
+    .page-2 .perf-table th.period-col { padding-left: 10px; }
+    .page-2 .perf-table .period-header td { padding: 3px 8px; }
+    .page-2 .perf-table .period-header td.period-cell { padding-left: 10px; }
+    .page-2 .table-note { font-size: 9px; padding: 4px 10px 6px; }
+    .page-2 .perf-wrap { margin-bottom: 14px; }
+    .page-2 .section-heading { margin-bottom: 6px; font-size: 10px; }
+    .page-2 .diff-grid { gap: 10px; margin-bottom: 14px; }
+    .page-2 .diff-card { padding: 9px 11px; }
+    .page-2 .diff-icon { font-size: 16px; margin-bottom: 3px; }
+    .page-2 .diff-title { font-size: 11px; margin-bottom: 3px; }
+    .page-2 .diff-desc { font-size: 10px; line-height: 1.4; }
+    .page-2 .footer { padding: 12px 15px; }
+    .page-2 .footer-left .cta-title { font-size: 13px; }
+    .page-2 .footer-left .cta-sub { font-size: 10.5px; }
+    .page-2 .footer-right .contact-item { font-size: 11px; }
+    .page-2 .footer-right .disclaimer { font-size: 8.5px; }
   </style>
 </head>
 <body>
   <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
 
   <div class="screen-wrap">
-    <div class="page">
+    <div class="page page-1">
 
       <!-- ═══════════════════ HERO ═══════════════════ -->
       <div class="hero">
@@ -489,6 +549,21 @@
             <li>Higher Sharpe Ratio in shorter periods — better risk-adjusted performance</li>
             <li><strong>Best suited for:</strong> Capital preservation focus, shorter investment horizons, or portfolio diversification role</li>
           </ul>
+        </div>
+      </div>
+
+    </div><!-- /.page.page-1 -->
+
+    <div class="page page-2">
+
+      <!-- ═══════════════════ PAGE 2 HEADER ═══════════════════ -->
+      <div class="page-2-header">
+        <div class="p2-logo">
+          <img id="p2-logo-img" alt="BitWealth Logo" />
+        </div>
+        <div class="p2-title">
+          <h2>Back-Test Performance &amp; Strategy Rationale</h2>
+          <div class="p2-sub">LTH PVR Bitcoin DCA &nbsp;·&nbsp; BitWealth &nbsp;·&nbsp; March 2026 &nbsp;·&nbsp; Page 2 of 2</div>
         </div>
       </div>
 
@@ -690,8 +765,15 @@
         </div>
       </div>
 
-    </div><!-- /.page -->
+    </div><!-- /.page.page-2 -->
   </div><!-- /.screen-wrap -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var p1 = document.querySelector('.hero-logo img');
+      var p2 = document.getElementById('p2-logo-img');
+      if (p1 && p2) p2.src = p1.src;
+    });
+  </script>
 </body>
 </html>
 
