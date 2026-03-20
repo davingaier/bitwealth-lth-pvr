@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LTH PVR Bitcoin DCA Strategy — BitWealth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset & Base ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0A0F1E;
+      --bg2:      #151B2E;
+      --bg3:      #1A2138;
+      --gold:     #FFB400;
+      --gold-lt:  #FFC933;
+      --gold-dk:  #E6A200;
+      --navy:     #003F5C;
+      --blue:     #0A4A6E;
+      --white:    #FFFFFF;
+      --txt2:     #A8B2D1;
+      --txt3:     #6B7896;
+      --green:    #10B981;
+      --red:      #EF4444;
+      --border:   rgba(255,180,0,0.15);
+    }
+
+    html, body {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--white);
+      background: var(--bg);
+    }
+
+    /* ─── Print / A4 Layout ─── */
+    @media print {
+      body { background: #fff !important; color: #111 !important; font-size: 11px; }
+      .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm; max-width: none; box-shadow: none !important; }
+      .no-print { display: none !important; }
+
+      /* Force dark sections to print in colour */
+      .hero        { background: #0A0F1E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sigma-bar   { background: #151B2E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .variant-card{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      table        { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .footer      { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    /* ─── Page Container ─── */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 14mm 16mm 12mm;
+      background: var(--bg);
+      box-shadow: 0 0 60px rgba(0,0,0,0.8);
+    }
+
+    /* ─── Screen wrapper ─── */
+    .screen-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+      background: #060a12;
+      min-height: 100vh;
+    }
+
+    /* ─── Hero ─── */
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--gold);
+      margin-bottom: 18px;
+      gap: 16px;
+    }
+    .hero-logo img {
+      height: 52px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+    }
+    .hero-text { flex: 1; text-align: right; }
+    .hero-text h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: -0.5px;
+      line-height: 1.1;
+    }
+    .hero-text .tagline {
+      font-size: 12px;
+      color: var(--txt2);
+      margin-top: 3px;
+      font-weight: 400;
+    }
+    .hero-text .meta {
+      font-size: 10px;
+      color: var(--txt3);
+      margin-top: 2px;
+    }
+
+    /* ─── Section headings ─── */
+    .section-heading {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-heading::after {
+      content: '';
+      display: inline-block;
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Layout: 2-column grid ─── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .full-col { margin-bottom: 18px; }
+
+    /* ─── Body text ─── */
+    p { color: var(--txt2); font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+    p strong { color: var(--white); font-weight: 600; }
+    ul { list-style: none; padding: 0; margin: 0 0 8px; }
+    ul li { color: var(--txt2); font-size: 13px; padding-left: 14px; position: relative; margin-bottom: 4px; line-height: 1.5; }
+    ul li::before { content: '▸'; color: var(--gold); position: absolute; left: 0; font-size: 10px; top: 2px; }
+
+    /* ─── Sigma Band Diagram ─── */
+    .sigma-bar {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+    }
+    .sigma-label { font-size: 11px; font-weight: 600; color: var(--txt3); margin-bottom: 10px; text-align: center; }
+    .sigma-track {
+      display: flex;
+      height: 28px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .sigma-seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      color: #fff;
+      flex: 1;
+    }
+    .sig-b1  { background: #1d4ed8; }
+    .sig-b2  { background: #2563eb; }
+    .sig-b3  { background: #3b82f6; }
+    .sig-b4  { background: #60a5fa; }
+    .sig-b5  { background: #93c5fd; }
+    .sig-mid { background: #374151; flex: 0.6; }
+    .sig-s6  { background: #d97706; }
+    .sig-s7  { background: #b45309; }
+    .sig-s8  { background: #92400e; }
+    .sig-s9  { background: #78350f; }
+    .sig-s10 { background: #7c2d12; }
+    .sig-s11 { background: #991b1b; }
+    .sigma-axis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--txt3);
+      padding: 0 2px;
+    }
+    .sigma-legend {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+    .sigma-legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--txt2); }
+    .sigma-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+    /* ─── Strategy variant cards ─── */
+    .variant-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .variant-card {
+      border-radius: 10px;
+      padding: 14px 15px;
+      border: 1px solid var(--border);
+    }
+    .variant-prog {
+      background: linear-gradient(135deg, #0A4A6E 0%, #003F5C 100%);
+      border-color: rgba(255,180,0,0.4);
+    }
+    .variant-cons {
+      background: linear-gradient(135deg, #1A2138 0%, #151B2E 100%);
+      border-color: rgba(255,180,0,0.2);
+    }
+    .variant-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    .variant-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+    }
+    .badge-prog { background: rgba(255,180,0,0.15); color: var(--gold); border: 1px solid rgba(255,180,0,0.4); }
+    .badge-cons { background: rgba(16,185,129,0.1); color: #10B981; border: 1px solid rgba(16,185,129,0.3); }
+    .variant-desc { font-size: 11.5px; color: var(--txt2); line-height: 1.5; }
+    .variant-desc li { font-size: 11.5px; margin-bottom: 3px; }
+
+    /* ─── Performance Table ─── */
+    .perf-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .perf-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .perf-table th {
+      background: var(--bg3);
+      color: var(--txt3);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 8px 10px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .perf-table th.period-col { text-align: left; padding-left: 14px; }
+    .perf-table td {
+      padding: 7px 10px;
+      font-size: 12px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: var(--txt2);
+    }
+    .perf-table td.period-cell {
+      text-align: left;
+      padding-left: 14px;
+      font-weight: 600;
+      color: var(--txt3);
+      font-size: 11px;
+    }
+    .perf-table tr:last-child td { border-bottom: none; }
+    .perf-table .strategy-row-prog td { background: rgba(10,74,110,0.2); }
+    .perf-table .strategy-row-cons td { background: transparent; }
+    .perf-table .strategy-row-sep td {
+      background: var(--bg3);
+      padding-top: 3px; padding-bottom: 3px;
+      border-top: 1px solid var(--border);
+    }
+    .nav-val { color: var(--white); font-weight: 600; }
+    .cagr-pos { color: var(--green); font-weight: 600; }
+    .cagr-neg { color: var(--red); font-weight: 600; }
+    .dd-val { color: #f97316; }
+    .sharpe-val { color: var(--txt2); }
+    .contrib-val { color: var(--txt3); font-size: 11px; }
+    .strategy-label {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+    .label-prog { background: rgba(255,180,0,0.15); color: var(--gold-lt); }
+    .label-cons { background: rgba(16,185,129,0.1); color: #6ee7b7; }
+
+    /* period header rows */
+    .perf-table .period-header td {
+      background: var(--bg3) !important;
+      color: var(--txt3);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 5px 10px;
+      border-top: 1px solid var(--border);
+    }
+    .perf-table .period-header td.period-cell { color: var(--txt3); }
+
+    /* table note */
+    .table-note {
+      font-size: 10px;
+      color: var(--txt3);
+      padding: 6px 14px 8px;
+      font-style: italic;
+    }
+
+    /* ─── Differentiators ─── */
+    .diff-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .diff-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 13px;
+    }
+    .diff-icon { font-size: 20px; margin-bottom: 5px; }
+    .diff-title { font-size: 12px; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+    .diff-desc { font-size: 11px; color: var(--txt2); line-height: 1.5; }
+
+    /* ─── Footer / CTA ─── */
+    .footer {
+      background: linear-gradient(90deg, #003F5C 0%, #0A4A6E 100%);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border: 1px solid rgba(255,180,0,0.3);
+    }
+    .footer-left .cta-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 2px;
+    }
+    .footer-left .cta-sub { font-size: 11.5px; color: var(--txt2); }
+    .footer-right { text-align: right; }
+    .footer-right .contact-item { font-size: 12px; color: var(--txt2); margin-bottom: 2px; }
+    .footer-right .contact-item strong { color: var(--white); }
+    .footer-right .disclaimer {
+      font-size: 9px;
+      color: var(--txt3);
+      margin-top: 6px;
+      max-width: 300px;
+      line-height: 1.4;
+    }
+
+    /* ─── Screen-only decorative ─── */
+    .print-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      z-index: 999;
+      box-shadow: 0 4px 16px rgba(255,180,0,0.4);
+    }
+    .print-btn:hover { background: var(--gold-lt); }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+  <div class="screen-wrap">
+    <div class="page">
+
+      <!-- ═══════════════════ HERO ═══════════════════ -->
+      <div class="hero">
+        <div class="hero-logo">
+          <img src="data:image/png;base64,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" alt="BitWealth Logo" />
+        </div>
+        <div class="hero-text">
+          <h1>LTH PVR Bitcoin DCA Strategy</h1>
+          <div class="tagline">Intelligent on-chain signal allocation — outperforming standard DCA across all market cycles</div>
+          <div class="meta">Prepared by BitWealth · March 2026 · Confidential — For Institutional Review Only</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ HOW IT WORKS ═══════════════════ -->
+      <div class="full-col">
+        <div class="section-heading">The Strategy</div>
+        <div class="two-col" style="margin-bottom:0;">
+          <div>
+            <p><strong>LTH PVR (Long-Term Holder Price Variance Ratio)</strong> is a proprietary Bitcoin DCA strategy that dynamically sizes buy and sell allocations based on where the current BTC price sits relative to on-chain derived statistical bands.</p>
+            <p>The bands are computed daily from <strong>Long-Term Holder (LTH) realised price data</strong> — a measure of the average acquisition cost held by Bitcoin investors who have not moved their coins in over 155 days. This cohort accounts for over 70% of circulating supply and has historically been the most accurate leading indicator of macro cycle turning points.</p>
+            <p>The ratio of spot price to LTH realised price, expressed in <strong>standard deviations (σ)</strong>, determines the allocation tier for the day's contribution — buying aggressively when price is statistically cheap relative to long-term conviction, and reducing exposure when price is statistically extended.</p>
+          </div>
+          <div>
+            <p><strong>Why this signal is distinctive:</strong></p>
+            <ul>
+              <li>Derived from blockchain data — not price action, sentiment, or technical indicators</li>
+              <li>Based on aggregate cost basis of real BTC holders, not derivatives</li>
+              <li>Sigma thresholds are calculated from a proprietary smoothed LTH dataset and <em>cannot be replicated</em> from public price feeds alone</li>
+              <li>Resistant to market manipulation — on-chain accumulation cannot be faked</li>
+              <li>Signal generates one decision per day, reducing emotional trading and churn</li>
+            </ul>
+            <p>The strategy executes <strong>daily via automated pipeline</strong> on VALR exchange, with each participant's portfolio tracked independently at the sub-account level.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ SIGMA DIAGRAM ═══════════════════ -->
+      <div class="sigma-bar">
+        <div class="sigma-label">11-Tier Sigma Band Architecture — LTH PVR Decision Framework</div>
+        <div class="sigma-track">
+          <div class="sigma-seg sig-b1" title="B1: Below −1.0σ → BUY 22.8%">B1</div>
+          <div class="sigma-seg sig-b2" title="B2: −1.0σ to −0.75σ → BUY">B2</div>
+          <div class="sigma-seg sig-b3" title="B3: −0.75σ to −0.5σ → BUY">B3</div>
+          <div class="sigma-seg sig-b4" title="B4: −0.5σ to −0.25σ → BUY">B4</div>
+          <div class="sigma-seg sig-b5" title="B5: −0.25σ to 0 → BUY">B5</div>
+          <div class="sigma-seg sig-mid" title="Mean — Hold">≈ Mean</div>
+          <div class="sigma-seg sig-s6" title="S6: 0 to +0.5σ → SELL partial">S6</div>
+          <div class="sigma-seg sig-s7" title="S7: +0.5σ to +1.0σ → SELL">S7</div>
+          <div class="sigma-seg sig-s8" title="S8: +1.0σ to +1.5σ → SELL">S8</div>
+          <div class="sigma-seg sig-s9" title="S9: +1.5σ to +2.0σ → SELL">S9</div>
+          <div class="sigma-seg sig-s10" title="S10: +2.0σ to +2.5σ → SELL">S10</div>
+          <div class="sigma-seg sig-s11" title="S11: Above +2.5σ → SELL 9.6%">S11</div>
+        </div>
+        <div class="sigma-axis">
+          <span>Deeply Undervalued</span>
+          <span>−2.0σ</span>
+          <span>−1.0σ</span>
+          <span>Mean (LTH Realised Price)</span>
+          <span>+1.0σ</span>
+          <span>+2.0σ</span>
+          <span>Bubble Territory</span>
+        </div>
+        <div class="sigma-legend">
+          <div class="sigma-legend-item"><div class="sigma-legend-dot" style="background:#2563eb;"></div>Buy zones (B1–B5) — increasing aggression</div>
+          <div class="sigma-legend-item"><div class="sigma-legend-dot" style="background:#374151;"></div>Near mean — hold</div>
+          <div class="sigma-legend-item"><div class="sigma-legend-dot" style="background:#b45309;"></div>Sell zones (S6–S11) — increasing reduction</div>
+        </div>
+        <div style="font-size:10px;color:var(--txt3);text-align:center;margin-top:6px;">
+          Bear Market Pause activates above +2.0σ — all buying suspended until price re-enters below −1.0σ &nbsp;|&nbsp; Momentum filter and retrace exception logic apply
+        </div>
+      </div>
+
+      <!-- ═══════════════════ STRATEGY VARIANTS ═══════════════════ -->
+      <div class="section-heading">Strategy Variants</div>
+      <div class="variant-grid">
+        <div class="variant-card variant-prog">
+          <div class="variant-title">Progressive Strategy</div>
+          <div class="variant-badge badge-prog">MAXIMUM GROWTH ORIENTATION</div>
+          <ul class="variant-desc">
+            <li>Full 11-tier sigma allocation system active</li>
+            <li>Higher buy percentages in deeply undervalued zones (22.8% at B1)</li>
+            <li>Bear Market Pause preserves capital above +2.0σ — re-enters below −1.0σ</li>
+            <li>Momentum filter suppresses sells in weak uptrends (B7–B9 tiers)</li>
+            <li>Retrace exception allows counter-trend buys when price corrects from elevated zones</li>
+            <li>Maximises BTC accumulation during bear cycles; captures profit in bull runs</li>
+            <li><strong>Best suited for:</strong> Long horizon investors comfortable with higher short-term volatility in exchange for superior growth</li>
+          </ul>
+        </div>
+        <div class="variant-card variant-cons">
+          <div class="variant-title">Conservative Strategy</div>
+          <div class="variant-badge badge-cons">RISK-MANAGED ORIENTATION</div>
+          <ul class="variant-desc">
+            <li>Reduced allocation sizes across all tiers for smoother NAV path</li>
+            <li>Earlier, smaller sell triggers to capture gains more frequently</li>
+            <li>Same Bear Market Pause and momentum logic for downside protection</li>
+            <li>Lower maximum drawdown profile relative to Progressive variant</li>
+            <li>More consistent intra-cycle performance — smaller gap between bull and bear years</li>
+            <li>Higher Sharpe Ratio in shorter periods — better risk-adjusted performance</li>
+            <li><strong>Best suited for:</strong> Capital preservation focus, shorter investment horizons, or portfolio diversification role</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ PERFORMANCE TABLE ═══════════════════ -->
+      <div class="section-heading">Back-Tested Performance</div>
+      <div class="perf-wrap">
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th class="period-col">Period / Strategy</th>
+              <th>Final NAV</th>
+              <th>Total Invested</th>
+              <th>CAGR</th>
+              <th>Max Drawdown</th>
+              <th>Sharpe Ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- 1 YEAR -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">1 Year  (Mar 2025 – Mar 2026) &nbsp;·&nbsp; $1,000/month contributions</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$12,296</span></td>
+              <td class="contrib-val">$12,000</td>
+              <td><span class="cagr-neg">−5.4%</span></td>
+              <td><span class="dd-val">4.4%</span></td>
+              <td class="sharpe-val">−1.23</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$12,192</span></td>
+              <td class="contrib-val">$12,000</td>
+              <td><span class="cagr-neg">−6.2%</span></td>
+              <td><span class="dd-val">3.3%</span></td>
+              <td class="sharpe-val">−1.87</td>
+            </tr>
+
+            <!-- 2 YEARS -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">2 Years  (Mar 2024 – Mar 2026)</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$30,487</span></td>
+              <td class="contrib-val">$24,000</td>
+              <td><span class="cagr-pos">+10.4%</span></td>
+              <td><span class="dd-val">14.6%</span></td>
+              <td class="sharpe-val">0.72</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$27,564</span></td>
+              <td class="contrib-val">$24,000</td>
+              <td><span class="cagr-pos">+5.0%</span></td>
+              <td><span class="dd-val">7.4%</span></td>
+              <td class="sharpe-val">0.67</td>
+            </tr>
+
+            <!-- 3 YEARS -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">3 Years  (Mar 2023 – Mar 2026)</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$65,621</span></td>
+              <td class="contrib-val">$36,000</td>
+              <td><span class="cagr-pos">+21.0%</span></td>
+              <td><span class="dd-val">17.5%</span></td>
+              <td class="sharpe-val">1.20</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$58,669</span></td>
+              <td class="contrib-val">$36,000</td>
+              <td><span class="cagr-pos">+16.6%</span></td>
+              <td><span class="dd-val">13.0%</span></td>
+              <td class="sharpe-val">1.28</td>
+            </tr>
+
+            <!-- 5 YEARS -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">5 Years  (Mar 2021 – Mar 2026)</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$175,984</span></td>
+              <td class="contrib-val">$60,000</td>
+              <td><span class="cagr-pos">+23.6%</span></td>
+              <td><span class="dd-val">25.8%</span></td>
+              <td class="sharpe-val">0.91</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$145,120</span></td>
+              <td class="contrib-val">$60,000</td>
+              <td><span class="cagr-pos">+18.9%</span></td>
+              <td><span class="dd-val">28.6%</span></td>
+              <td class="sharpe-val">0.66</td>
+            </tr>
+
+            <!-- 7 YEARS -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">7 Years  (Mar 2019 – Mar 2026)</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$728,609</span></td>
+              <td class="contrib-val">$84,000</td>
+              <td><span class="cagr-pos">+35.9%</span></td>
+              <td><span class="dd-val">49.3%</span></td>
+              <td class="sharpe-val">0.73</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$449,510</span></td>
+              <td class="contrib-val">$84,000</td>
+              <td><span class="cagr-pos">+26.8%</span></td>
+              <td><span class="dd-val">48.3%</span></td>
+              <td class="sharpe-val">0.56</td>
+            </tr>
+
+            <!-- 10 YEARS -->
+            <tr class="period-header">
+              <td class="period-cell" colspan="6">10 Years  (Mar 2016 – Mar 2026)</td>
+            </tr>
+            <tr class="strategy-row-prog">
+              <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
+              <td><span class="nav-val">$13,963,354</span></td>
+              <td class="contrib-val">$120,000</td>
+              <td><span class="cagr-pos">+60.7%</span></td>
+              <td><span class="dd-val">61.9%</span></td>
+              <td class="sharpe-val">0.98</td>
+            </tr>
+            <tr class="strategy-row-cons">
+              <td class="period-cell"><span class="strategy-label label-cons">Conservative</span></td>
+              <td><span class="nav-val">$3,651,282</span></td>
+              <td class="contrib-val">$120,000</td>
+              <td><span class="cagr-pos">+40.6%</span></td>
+              <td><span class="dd-val">57.4%</span></td>
+              <td class="sharpe-val">0.71</td>
+            </tr>
+
+          </tbody>
+        </table>
+        <div class="table-note">
+          Back-test parameters: $1,000/month contribution, $0 upfront, ending 19 March 2026. Fees included: VALR exchange 8bps trading, 18bps conversion, BitWealth 0.75% platform fee, 10% performance fee on monthly profits above high-water mark. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using CryptoQuant LTH on-chain data.
+        </div>
+      </div>
+
+      <!-- ═══════════════════ DIFFERENTIATORS ═══════════════════ -->
+      <div class="section-heading">Why LTH PVR</div>
+      <div class="diff-grid">
+        <div class="diff-card">
+          <div class="diff-icon">⛓</div>
+          <div class="diff-title">Non-Replicable Signal</div>
+          <div class="diff-desc">The LTH PVR sigma bands are derived from a proprietary smoothed on-chain dataset. They cannot be reconstructed from public price data or standard technical indicators alone.</div>
+        </div>
+        <div class="diff-card">
+          <div class="diff-icon">🛡</div>
+          <div class="diff-title">Cycle-Aware Risk Management</div>
+          <div class="diff-desc">Bear Market Pause automatically halts accumulation in macro bubble territory, protecting capital during the most dangerous phases of BTC market cycles.</div>
+        </div>
+        <div class="diff-card">
+          <div class="diff-icon">⚙️</div>
+          <div class="diff-title">Fully Automated Pipeline</div>
+          <div class="diff-desc">Pipeline runs daily at 03:00 UTC — signal generation, order sizing, execution, and NAV reconciliation — with no manual intervention required.</div>
+        </div>
+        <div class="diff-card">
+          <div class="diff-icon">📐</div>
+          <div class="diff-title">Statistically Grounded</div>
+          <div class="diff-desc">Each of the 11 allocation tiers corresponds to a measurable standard deviation from the LTH realised price mean — providing a repeatable, objective framework.</div>
+        </div>
+        <div class="diff-card">
+          <div class="diff-icon">🔍</div>
+          <div class="diff-title">Full Transparency</div>
+          <div class="diff-desc">Each client has a sub-account on VALR with a dedicated trade-only API key. All trades, fills, and NAV calculations are auditable in real time.</div>
+        </div>
+        <div class="diff-card">
+          <div class="diff-icon">📈</div>
+          <div class="diff-title">Two Strategy Options</div>
+          <div class="diff-desc">Progressive maximises BTC accumulation for long-term growth. Conservative smooths the NAV curve for capital preservation mandates. Both share the same on-chain signal engine.</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ FOOTER / CTA ═══════════════════ -->
+      <div class="footer">
+        <div class="footer-left">
+          <div class="cta-title">Book a Strategy Demonstration</div>
+          <div class="cta-sub">We invite the Africa Bitcoin Corporation investment committee to review a live simulation session and full technical documentation.</div>
+        </div>
+        <div class="footer-right">
+          <div class="contact-item"><strong>BitWealth</strong></div>
+          <div class="contact-item">www.bit-wealth.co.za</div>
+          <div class="contact-item">info@bit-wealth.co.za</div>
+          <div class="disclaimer">This document is provided for institutional information purposes only. It does not constitute financial advice or an offer to invest. Past performance does not guarantee future results. Bitcoin is a high-risk asset class.</div>
+        </div>
+      </div>
+
+    </div><!-- /.page -->
+  </div><!-- /.screen-wrap -->
+</body>
+</html>
