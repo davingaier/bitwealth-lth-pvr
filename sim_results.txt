@@ -1,0 +1,2 @@
+progressive: NAV=5462 Inv=5000 CAGR=9.2 DD=6.1 Sharpe=1.52 ROI=9.2
+conservative: NAV=5098 Inv=5000 CAGR=2 DD=3.4 Sharpe=0.57 ROI=2
