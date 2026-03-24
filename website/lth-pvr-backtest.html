@@ -339,12 +339,12 @@
                         
                         <div class="form-group">
                             <label for="startDate">Start Date *</label>
-                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2010-07-18" max="2026-12-31">
+                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2010-07-18">
                         </div>
                         
                         <div class="form-group">
                             <label for="endDate">End Date *</label>
-                            <input type="date" id="endDate" name="endDate" required value="2026-02-08" min="2010-07-18" max="2026-12-31">
+                            <input type="date" id="endDate" name="endDate" required min="2010-07-18">
                         </div>
                         
                         <div class="form-group">
@@ -943,7 +943,13 @@
             // Clear form
             document.getElementById('backtestForm').reset();
             document.getElementById('startDate').value = '2020-01-01';
-            document.getElementById('endDate').value = '2026-02-08';
+            
+            // Set end date to yesterday
+            const today = new Date();
+            const yesterday = new Date(today.getTime() - 86400000);
+            const yesterdayString = yesterday.toISOString().split('T')[0];
+            document.getElementById('endDate').value = yesterdayString;
+            
             document.getElementById('upfront').value = '10000';
             document.getElementById('monthly').value = '1000';
             
@@ -985,6 +991,26 @@
         
         // Add event listener for log scale toggle (after DOM loads)
         document.addEventListener('DOMContentLoaded', () => {
+            // Set max date to yesterday (LTH PVR data only available up to yesterday)
+            const today = new Date();
+            const yesterday = new Date(today.getTime() - 86400000);
+            const yesterdayString = yesterday.toISOString().split('T')[0];
+            
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            
+            if (startDateInput) {
+                startDateInput.setAttribute('max', yesterdayString);
+            }
+            if (endDateInput) {
+                endDateInput.setAttribute('max', yesterdayString);
+                // Set default value to yesterday if empty
+                if (!endDateInput.value) {
+                    endDateInput.value = yesterdayString;
+                }
+            }
+            
+            // Log scale toggle
             const logToggle = document.getElementById('logScaleToggle');
             if (logToggle) {
                 logToggle.addEventListener('change', (e) => {
@@ -992,12 +1018,6 @@
                 });
             }
         });
-        
-        // Set max date to yesterday (LTH PVR data only available up to yesterday)
-        const today = new Date();
-        const yesterday = new Date(today.getTime() - 86400000);
-        const yesterdayString = yesterday.toISOString().split('T')[0];
-        document.getElementById('endDate').setAttribute('max', yesterdayString);
     </script>
 </body>
 </html>
