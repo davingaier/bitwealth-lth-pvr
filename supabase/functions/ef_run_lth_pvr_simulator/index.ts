@@ -263,6 +263,18 @@ Deno.serve(async (req) => {
       console.info(`ef_run_lth_pvr_simulator: ${variation.variation_name} - NAV=$${simResult.final_nav_usd.toFixed(2)}, ROI=${simResult.final_roi_percent.toFixed(2)}%, CAGR=${simResult.final_cagr_percent.toFixed(2)}%`);
     }
     
+    // Hoist std_dca from first result (same for all variations)
+    const firstResult = results[0];
+    const std_dca = firstResult ? {
+      final_nav_usd: firstResult.std_dca_final_nav_usd,
+      final_roi_percent: firstResult.std_dca_final_roi_percent,
+      final_cagr_percent: firstResult.std_dca_final_cagr_percent,
+      max_drawdown_percent: firstResult.std_dca_max_drawdown_percent,
+      sharpe_ratio: firstResult.std_dca_sharpe_ratio,
+      total_contrib_gross_usdt: firstResult.std_dca_total_contrib_gross_usdt,
+      daily: firstResult.std_dca_daily
+    } : null;
+
     // Return results
     return new Response(
       JSON.stringify({
@@ -275,6 +287,7 @@ Deno.serve(async (req) => {
           upfront_usd,
           monthly_usd
         },
+        std_dca,
         results
       }),
       {

@@ -442,7 +442,62 @@
     .page-2 .footer-left .cta-sub { font-size: 10.5px; }
     .page-2 .footer-right .contact-item { font-size: 11px; }
     .page-2 .footer-right .disclaimer { font-size: 8.5px; }
+
+    /* ─── Standard DCA benchmark strip (page 1) ─── */
+    .variant-bench {
+      background: rgba(107,120,150,0.04);
+      border: 1px dashed rgba(107,120,150,0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .variant-bench-label { flex-shrink: 0; min-width: 115px; }
+    .variant-bench-title { font-size: 12px; font-weight: 700; color: #A8B2D1; margin-bottom: 5px; }
+    .badge-bench {
+      display: inline-block; font-size: 9px; font-weight: 600;
+      padding: 2px 7px; border-radius: 999px;
+      background: rgba(107,120,150,0.12); color: #8892A4;
+      border: 1px dashed rgba(107,120,150,0.3); letter-spacing: 0.05em;
+    }
+    .variant-bench-body { flex: 1; }
+    .variant-bench-body li { font-size: 11px; margin-bottom: 2px; }
+    .variant-bench-note {
+      font-size: 9.5px; color: var(--txt3); font-style: italic;
+      margin-top: 5px; padding-top: 5px;
+      border-top: 1px solid rgba(107,120,150,0.15);
+    }
+
+    /* ─── NAV Comparison Charts (page 2) ─── */
+    .charts-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-bottom: 12px;
+    }
+    .chart-box {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px 5px;
+    }
+    .chart-title {
+      font-size: 9.5px; font-weight: 700; color: var(--txt2);
+      margin-bottom: 4px; text-align: center; letter-spacing: 0.02em;
+    }
+    .chart-legend {
+      display: flex; justify-content: center; gap: 14px; margin-top: 3px;
+    }
+    .chart-legend-item {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 8px; color: var(--txt3);
+    }
+    .chart-legend-line { width: 14px; height: 2px; border-radius: 1px; }
+
+    /* Standard DCA table row + label */
+    .perf-table .strategy-row-dca td { background: rgba(107,120,150,0.06); }
+    .label-dca { background: rgba(107,120,150,0.12); color: #8892A4; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="chart-data.js"></script>
 </head>
 <body>
   <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
@@ -457,7 +512,7 @@
         </div>
         <div class="hero-text">
           <h1>LTH PVR Bitcoin DCA Strategy</h1>
-          <div class="tagline">Intelligent on-chain signal allocation — outperforming standard DCA across all market cycles</div>
+          <div class="tagline">Intelligent on-chain signal allocation — outperforming standard dollar-cost-average (DCA) across all market cycles</div>
           <div class="meta">Prepared by BitWealth · March 2026 · Confidential — For Institutional Review Only</div>
         </div>
       </div>
@@ -552,6 +607,23 @@
         </div>
       </div>
 
+      <!-- ═══════════════════ STANDARD DCA BENCHMARK ═══════════════════ -->
+      <div class="variant-bench">
+        <div class="variant-bench-label">
+          <div class="variant-bench-title">Standard DCA</div>
+          <div class="variant-badge badge-bench">BENCHMARK ONLY</div>
+        </div>
+        <div class="variant-bench-body">
+          <ul>
+            <li>Fixed-amount BTC purchases at closing price on each contribution day — no signal, no timing optimisation</li>
+            <li>Exchange fees only (26bps combined) — no BitWealth platform fee or performance fee applied</li>
+            <li>Never sells — portfolio value tracks BTC price directly and experiences full market drawdowns</li>
+            <li>Represents the simplest possible Bitcoin accumulation strategy — included here as a performance baseline only</li>
+          </ul>
+          <div class="variant-bench-note">&#9888; BitWealth does not offer Standard DCA as a product. This benchmark is shown solely to contextualise the LTH PVR strategy's risk-adjusted outperformance. All figures are back-tested simulations and do not guarantee future results.</div>
+        </div>
+      </div>
+
     </div><!-- /.page.page-1 -->
 
     <div class="page page-2">
@@ -564,6 +636,27 @@
         <div class="p2-title">
           <h2>Back-Test Performance &amp; Strategy Rationale</h2>
           <div class="p2-sub">LTH PVR Bitcoin DCA &nbsp;·&nbsp; BitWealth &nbsp;·&nbsp; March 2026 &nbsp;·&nbsp; Page 2 of 2</div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ NAV COMPARISON CHARTS ═══════════════════ -->
+      <div class="section-heading">Performance vs Standard DCA</div>
+      <div class="charts-row">
+        <div class="chart-box">
+          <div class="chart-title">5-Year Back-Test: NAV Growth Comparison &nbsp;&middot;&nbsp; Mar 2021 &ndash; Mar 2026</div>
+          <canvas id="chart5yr" height="90"></canvas>
+          <div class="chart-legend">
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $46,982</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $23,355</div>
+          </div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">10-Year Back-Test: NAV Growth Comparison &nbsp;&middot;&nbsp; Mar 2016 &ndash; Mar 2026</div>
+          <canvas id="chart10yr" height="90"></canvas>
+          <div class="chart-legend">
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $5,972,799</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $835,333</div>
+          </div>
         </div>
       </div>
 
@@ -606,6 +699,15 @@
               <td class="sharpe-val">0.57</td>
               <td><span class="cagr-pos">+2.0%</span></td>
             </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$3,866</span></td>
+              <td class="contrib-val">$5,000</td>
+              <td><span class="cagr-neg">&minus;22.7%</span></td>
+              <td><span class="dd-val">39.2%</span></td>
+              <td class="sharpe-val">&minus;0.58</td>
+              <td><span class="cagr-neg">&minus;22.7%</span></td>
+            </tr>
 
             <!-- 2 YEARS -->
             <tr class="period-header">
@@ -628,6 +730,15 @@
               <td><span class="dd-val">8.4%</span></td>
               <td class="sharpe-val">1.48</td>
               <td><span class="cagr-pos">+26.4%</span></td>
+            </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$7,052</span></td>
+              <td class="contrib-val">$7,400</td>
+              <td><span class="cagr-neg">&minus;2.4%</span></td>
+              <td><span class="dd-val">44.5%</span></td>
+              <td class="sharpe-val">&minus;0.05</td>
+              <td><span class="cagr-neg">&minus;4.7%</span></td>
             </tr>
 
             <!-- 3 YEARS -->
@@ -652,6 +763,15 @@
               <td class="sharpe-val">1.85</td>
               <td><span class="cagr-pos">+102.7%</span></td>
             </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$15,676</span></td>
+              <td class="contrib-val">$9,800</td>
+              <td><span class="cagr-pos">+16.9%</span></td>
+              <td><span class="dd-val">47.5%</span></td>
+              <td class="sharpe-val">0.36</td>
+              <td><span class="cagr-pos">+60.0%</span></td>
+            </tr>
 
             <!-- 5 YEARS -->
             <tr class="period-header">
@@ -674,6 +794,15 @@
               <td><span class="dd-val">31.0%</span></td>
               <td class="sharpe-val">0.67</td>
               <td><span class="cagr-pos">+158.7%</span></td>
+            </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$23,355</span></td>
+              <td class="contrib-val">$14,600</td>
+              <td><span class="cagr-pos">+9.8%</span></td>
+              <td><span class="dd-val">60.0%</span></td>
+              <td class="sharpe-val">0.16</td>
+              <td><span class="cagr-pos">+60.0%</span></td>
             </tr>
 
             <!-- 7 YEARS -->
@@ -698,6 +827,15 @@
               <td class="sharpe-val">0.69</td>
               <td><span class="cagr-pos">+743.4%</span></td>
             </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$99,634</span></td>
+              <td class="contrib-val">$19,400</td>
+              <td><span class="cagr-pos">+26.3%</span></td>
+              <td><span class="dd-val">75.0%</span></td>
+              <td class="sharpe-val">0.35</td>
+              <td><span class="cagr-pos">+413.6%</span></td>
+            </tr>
 
             <!-- 10 YEARS -->
             <tr class="period-header">
@@ -721,11 +859,20 @@
               <td class="sharpe-val">0.85</td>
               <td><span class="cagr-pos">+5,421.1%</span></td>
             </tr>
+            <tr class="strategy-row-dca">
+              <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
+              <td><span class="nav-val">$835,333</span></td>
+              <td class="contrib-val">$26,600</td>
+              <td><span class="cagr-pos">+41.1%</span></td>
+              <td><span class="dd-val">82.7%</span></td>
+              <td class="sharpe-val">0.50</td>
+              <td><span class="cagr-pos">+3,040.4%</span></td>
+            </tr>
 
           </tbody>
         </table>
         <div class="table-note">
-          Back-test parameters: $2,400 upfront + $200/month contribution, ending 19 March 2026. Fees included: VALR exchange 8bps trading, 18bps conversion, BitWealth 0.75% platform fee, 10% performance fee on monthly profits above high-water mark. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using LTH on-chain data.
+          Back-test parameters: $2,400 upfront + $200/month contribution, ending 19 March 2026. LTH PVR fees: VALR exchange 8bps trading, 18bps conversion, BitWealth 0.75% platform fee, 10% performance fee on monthly profits above high-water mark. Std DCA benchmark rows reflect exchange fees only &mdash; no platform or performance fee applied. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using LTH on-chain data.
         </div>
       </div>
 
@@ -782,9 +929,62 @@
   </div><!-- /.screen-wrap -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      // Copy logo to page 2
       var p1 = document.querySelector('.hero-logo img');
       var p2 = document.getElementById('p2-logo-img');
       if (p1 && p2) p2.src = p1.src;
+
+      // NAV comparison charts
+      if (typeof Chart !== 'undefined' && typeof _lth5 !== 'undefined') {
+        var chartOpts = {
+          responsive: true,
+          maintainAspectRatio: true,
+          animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: {
+              ticks: { color: '#4A5568', font: { size: 7 }, maxTicksLimit: 6, maxRotation: 0 },
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              border: { color: 'rgba(255,255,255,0.1)' }
+            },
+            y: {
+              ticks: {
+                color: '#4A5568', font: { size: 7 },
+                callback: function(v) {
+                  if (v >= 1000000) return '$' + (v/1e6).toFixed(1) + 'M';
+                  if (v >= 1000) return '$' + Math.round(v/1000) + 'K';
+                  return '$' + Math.round(v);
+                }
+              },
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              border: { color: 'rgba(255,255,255,0.1)' }
+            }
+          },
+          elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0.2 } }
+        };
+        new Chart(document.getElementById('chart5yr'), {
+          type: 'line',
+          data: {
+            labels: _lth5.map(function(d){return d[0];}),
+            datasets: [
+              { data: _lth5.map(function(d){return d[1];}), borderColor: '#FFB400', backgroundColor: 'transparent' },
+              { data: _std5.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' }
+            ]
+          },
+          options: chartOpts
+        });
+        new Chart(document.getElementById('chart10yr'), {
+          type: 'line',
+          data: {
+            labels: _lth10.map(function(d){return d[0];}),
+            datasets: [
+              { data: _lth10.map(function(d){return d[1];}), borderColor: '#FFB400', backgroundColor: 'transparent' },
+              { data: _std10.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' }
+            ]
+          },
+          options: chartOpts
+        });
+      }
     });
   </script>
 </body>

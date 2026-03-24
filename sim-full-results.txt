@@ -1,0 +1,24 @@
+=== 1yr ===
+  [STD_DCA]  NAV=3866 Inv=5000 CAGR=-22.7 DD=39.2 Sharpe=-0.58 ROI=-22.7
+  [progressive]  NAV=5462 Inv=5000 CAGR=9.2 DD=6.1 Sharpe=1.52 ROI=9.2
+  [conservative]  NAV=5098 Inv=5000 CAGR=2 DD=3.4 Sharpe=0.57 ROI=2
+=== 2yr ===
+  [STD_DCA]  NAV=7052 Inv=7400 CAGR=-2.4 DD=44.5 Sharpe=-0.05 ROI=-4.7
+  [progressive]  NAV=10602 Inv=7400 CAGR=19.7 DD=16.1 Sharpe=1.23 ROI=43.3
+  [conservative]  NAV=9357 Inv=7400 CAGR=12.4 DD=8.4 Sharpe=1.48 ROI=26.4
+=== 3yr ===
+  [STD_DCA]  NAV=15676 Inv=9800 CAGR=16.9 DD=47.5 Sharpe=0.36 ROI=60
+  [progressive]  NAV=22033 Inv=9800 CAGR=31 DD=18.8 Sharpe=1.65 ROI=124.8
+  [conservative]  NAV=19869 Inv=9800 CAGR=26.5 DD=14.4 Sharpe=1.85 ROI=102.7
+=== 5yr ===
+  [STD_DCA]  NAV=23355 Inv=14600 CAGR=9.8 DD=60 Sharpe=0.16 ROI=60
+  [progressive]  NAV=46982 Inv=14600 CAGR=26.3 DD=25.9 Sharpe=1.02 ROI=221.8
+  [conservative]  NAV=37770 Inv=14600 CAGR=20.9 DD=31 Sharpe=0.68 ROI=158.7
+=== 7yr ===
+  [STD_DCA]  NAV=99634 Inv=19400 CAGR=26.3 DD=75 Sharpe=0.35 ROI=413.6
+  [progressive]  NAV=272546 Inv=19400 CAGR=45.8 DD=51.9 Sharpe=0.88 ROI=1304.9
+  [conservative]  NAV=163650 Inv=19400 CAGR=35.6 DD=51.5 Sharpe=0.69 ROI=743.6
+=== 10yr ===
+  [STD_DCA]  NAV=835333 Inv=26600 CAGR=41.1 DD=82.7 Sharpe=0.5 ROI=3040.4
+  [progressive]  NAV=5972799 Inv=26600 CAGR=71.8 DD=62.3 Sharpe=1.15 ROI=22354.1
+  [conservative]  NAV=1468864 Inv=26600 CAGR=49.3 DD=58.2 Sharpe=0.85 ROI=5422

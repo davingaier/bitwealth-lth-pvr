@@ -172,6 +172,15 @@ export interface SimulationResult {
   
   // Ledger entries
   ledger: LedgerEntry[];
+
+  // Standard DCA benchmark (buy-and-hold, same contribution schedule, same exchange fees, no platform/performance fees)
+  std_dca_final_nav_usd: number;
+  std_dca_final_roi_percent: number;
+  std_dca_final_cagr_percent: number;
+  std_dca_max_drawdown_percent: number;
+  std_dca_sharpe_ratio: number;
+  std_dca_total_contrib_gross_usdt: number;
+  std_dca_daily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[];
 }
 
 // =============================================================================
@@ -341,6 +350,12 @@ export function runSimulation(
   let firstContribDate: string | null = null;
   let lastMonthForPerfFee: string | null = null;
   
+  // Standard DCA benchmark state (same contribution schedule, exchange fees only, immediate buy, never sell)
+  let stdBtcBal = 0;
+  let stdContribGrossCum = 0;
+  let stdFirstContribDate: string | null = null;
+  const stdDcaDaily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[] = [];
+
   const daily: DailyResult[] = [];
   const ledger: LedgerEntry[] = [];
   
@@ -379,7 +394,20 @@ export function runSimulation(
       grossContribToday += params.monthly_usd;
     }
     lastMonth = monthKey;
-    
+
+    // --- Standard DCA benchmark contribution + immediate buy ---
+    if (grossContribToday > 0 && px > 0) {
+      const stdExchangeFee = grossContribToday * contribFeeRate;
+      const stdNet = grossContribToday - stdExchangeFee;
+      if (stdNet > 0) {
+        const stdTradeBtcGross = stdNet / px;
+        const stdFeeBtc = stdTradeBtcGross * tradeFeeRate;
+        stdBtcBal += stdTradeBtcGross - stdFeeBtc;
+        stdContribGrossCum += grossContribToday;
+        if (!stdFirstContribDate) stdFirstContribDate = tradeDate;
+      }
+    }
+
     // Apply contribution
     if (grossContribToday > 0) {
       // Step 1: Deduct VALR USDT/ZAR exchange fee (18 bps)
@@ -634,11 +662,34 @@ export function runSimulation(
       exchange_fees_paid_usdt: exchangeFeeUsdtToday,
       high_water_mark_usdt: highWaterMark
     });
+
+    // Standard DCA daily NAV
+    stdDcaDaily.push({
+      trade_date: tradeDate,
+      nav_usd: stdBtcBal * px,
+      contrib_gross_usdt_cum: stdContribGrossCum
+    });
   }
   
   // Calculate final metrics
   const lastDay = daily[daily.length - 1];
   const metrics = calculateMetrics(daily);
+
+  // Compute Standard DCA summary metrics
+  const stdLastDay = stdDcaDaily[stdDcaDaily.length - 1];
+  const stdFinalNav = stdLastDay?.nav_usd ?? 0;
+  const stdFinalRoi = stdContribGrossCum > 0 ? (stdFinalNav / stdContribGrossCum - 1) * 100 : 0;
+  const stdFinalCagr = computeCagr(stdFinalNav, stdContribGrossCum, stdFirstContribDate, stdLastDay?.trade_date ?? "");
+  let stdPeak = 0;
+  let stdMaxDrawdown = 0;
+  for (const d of stdDcaDaily) {
+    if (d.nav_usd > stdPeak) stdPeak = d.nav_usd;
+    if (stdPeak > 0) {
+      const dd = (stdPeak - d.nav_usd) / stdPeak * 100;
+      if (dd > stdMaxDrawdown) stdMaxDrawdown = dd;
+    }
+  }
+  const stdSharpe = stdMaxDrawdown > 0 ? stdFinalCagr / stdMaxDrawdown : 0;
   
   // Debug logging: Compare first 5 and last 5 days
   console.log("🔬 Simulator Debug - First 5 days:");
@@ -693,7 +744,16 @@ export function runSimulation(
     daily,
     
     // Ledger entries
-    ledger
+    ledger,
+
+    // Standard DCA benchmark
+    std_dca_final_nav_usd: stdFinalNav,
+    std_dca_final_roi_percent: stdFinalRoi,
+    std_dca_final_cagr_percent: stdFinalCagr,
+    std_dca_max_drawdown_percent: stdMaxDrawdown,
+    std_dca_sharpe_ratio: stdSharpe,
+    std_dca_total_contrib_gross_usdt: stdContribGrossCum,
+    std_dca_daily: stdDcaDaily
   };
 }
 
