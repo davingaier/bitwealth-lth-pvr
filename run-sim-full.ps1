@@ -1,5 +1,6 @@
 $url = "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_run_lth_pvr_simulator"
-$key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5b7BZdgG_GVF6MLWE-zs"
+# Set $env:SUPABASE_ANON_KEY in your shell before running this script
+$key = $env:SUPABASE_ANON_KEY
 $headers = @{ "Authorization" = "Bearer $key"; "Content-Type" = "application/json" }
 $progId = "f7ec6155-5b31-4ba2-9d44-f3516f76c1a7"
 $consId = "b8763e40-1bf5-4847-ae6a-f670cbb509e0"
