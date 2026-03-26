@@ -1,0 +1,9 @@
+LTH_PVR(t) = (LTH_Supply(t) × Price(t) - LTH_Supply(t) × LTH_Realized_Price(t)) /
+  σ_cumulative(t)
+
+  Where:
+  σ_cumulative(t) = √[Σ(MC(i) - μ(t))² / (t - 1)]   for i = 0 to t
+
+ μ(t) = Σ(MC(i)) / t   for i = 0 to t
+
+ MC(i) = LTH_Supply(i) × Price(i)
