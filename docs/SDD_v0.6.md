@@ -3,11 +3,127 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-28 (v0.6.63)
+**Last updated:** 2026-03-28 (v0.6.64)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.64 – Public Back-Tester: Long-Term Data Support & UX Enhancements
+**Date:** 2026-02-09  
+**Purpose:** Enable 16-year back-tests (from 2010-07-18), fix numeric overflow issues, and improve chart visualization for exponential growth patterns.
+
+**Status:** ✅ COMPLETE
+
+#### 1. Date Constraint Fix (CI Bands Requirement)
+
+**Problem:** Public back-tester allowed start date of 2010-07-17, but trading decisions require CI bands from the previous day. Since the first CI band record is 2010-07-17, there's no data for 2010-07-16, causing back-tests to fail with "insert into bt_std_dca_balances failed: numeric field overflow".
+
+**Root Cause:** The edge function `ef_bt_execute` uses each day's CI bands to make trading decisions, but it needs T-1 data. Starting on 2010-07-17 meant trying to fetch 2010-07-16 bands (which don't exist).
+
+**Fix:**
+- Changed minimum start date from **2010-07-17** to **2010-07-18** in `website/lth-pvr-backtest.html`
+- Updated both `startDate` and `endDate` input `min` attributes
+- Migration: None required (UI-only change)
+
+#### 2. Numeric Precision Overflow Fix (16-Year Accumulation)
+
+**Problem:** Back-tests from 2010-2026 failed with "numeric field overflow" error during inserts into `lth_pvr_bt.bt_std_dca_balances` and `bt_results_daily`. The error occurred even after the first database insert (0 days completed).
+
+**Root Cause:** Multiple back-test tables had unbounded `NUMERIC` columns (no explicit precision/scale). With 16 years of daily compounding and BTC's exponential growth (values reaching $178B NAV, +1.78 trillion % ROI), accumulated fee totals and performance metrics exceeded PostgreSQL's default numeric limits.
+
+**Affected Tables:**
+- `lth_pvr_bt.bt_std_dca_balances` – `total_exchange_fees_btc`, `total_exchange_fees_usdt`
+- `lth_pvr_bt.bt_results_daily` – `platform_fees_paid_usdt`, `performance_fees_paid_usdt`, `exchange_fees_paid_btc`, `exchange_fees_paid_usdt`, `high_water_mark_usdt`
+- `lth_pvr_bt.bt_params` – `platform_fee_pct`, `performance_fee_pct`
+
+**Fix:**
+- **Migration 1:** `20260209_fix_bt_std_dca_balances_precision.sql`
+  - `ALTER TABLE lth_pvr_bt.bt_std_dca_balances` set `total_exchange_fees_btc` and `total_exchange_fees_usdt` to `numeric(38,8)`
+  
+- **Migration 2:** `20260209_fix_all_backtest_numeric_precision.sql`
+  - `ALTER TABLE lth_pvr_bt.bt_results_daily` set 5 fee columns to `numeric(38,8)`
+  - `ALTER TABLE lth_pvr_bt.bt_params` set 2 percentage columns to `numeric(10,6)`
+
+**Precision Rationale:**
+- Fee amounts: `numeric(38,8)` supports values up to 10^30 with 8 decimal places (more than sufficient for Bitcoin precision)
+- Percentages: `numeric(10,6)` supports percentages with 6 decimal precision (e.g., 0.000075 for 0.0075%)
+
+**Impact:** Back-tests now successfully run from 2010-07-18 through present, supporting 16+ years of historical analysis.
+
+#### 3. Percentage Formatting Enhancement (Thousand Separators)
+
+**Problem:** Large ROI values like **+1783400546.98%** displayed without thousand separators, making them difficult to read at a glance. CAGR and other percentage metrics also lacked formatting.
+
+**Fix:**
+- Added `formatPercent(num)` helper function using `Intl.NumberFormat` with 2 decimal places
+- Updated ROI and CAGR displays to use `formatPercent()` instead of `toFixed(2)`
+- Updated Chart.js Y-axis tick formatter for percentage chart
+
+**Result:** Percentages now display as **+1,783,400,546.98%** and **192.17%** with proper thousand separators.
+
+**Files Modified:**
+- `website/lth-pvr-backtest.html` – Added `formatPercent()`, updated 4 display calls + chart callback
+
+#### 4. Logarithmic Scale Toggle (Chart Visualization)
+
+**Problem:** With ROI ranging from +6% (2010) to +1,783,400,546% (2026), linear scale compresses the first 10 years into an invisible flat line at the bottom of the chart. Early accumulation phase, bear markets, and rally cycles were visually indistinguishable.
+
+**Solution:** Added checkbox toggle to switch both ROI and NAV charts between linear and logarithmic Y-axis scales.
+
+**Implementation:**
+- Added **"Logarithmic Scale"** checkbox with inline styling next to "ROI % Comparison" heading
+- `toggleLogScale(useLog)` function updates `scales.y.type` on both `roiChart` and `navChart`, calls `chart.update()`
+- Both Y-axes explicitly initialize with `type: 'linear'` in Chart.js options
+- Event listener attached in `DOMContentLoaded` block
+
+**Benefits:**
+- **Linear scale:** Best for viewing recent exponential growth (2024-2026)
+- **Logarithmic scale:** Reveals all growth phases equally:
+  - Early accumulation (2010-2015)
+  - First bull run (2016-2017)
+  - Bear market (2018-2019)
+  - COVID crash & recovery (2020-2021)
+  - Current cycle (2024-2026)
+
+**Files Modified:**
+- `website/lth-pvr-backtest.html` – Added checkbox HTML, `toggleLogScale()` function, Y-axis `type` properties
+
+#### 5. Dynamic Date Validation Fix (End Date Tooltip)
+
+**Problem:** Browser validation tooltip ("Value must be 2026/03/15 or earlier") appeared immediately on page load, even though the date was valid. This occurred because:
+1. HTML had hardcoded `max="2026-12-31"` which became outdated as time passed
+2. JavaScript code to set `max` to yesterday ran **before** DOM loaded, so it never executed
+
+**Fix:**
+- Removed hardcoded `max` attributes from both date inputs in HTML
+- Moved date initialization into `DOMContentLoaded` event listener
+- Dynamically calculate and set `max` attribute to yesterday on page load
+- Remove hardcoded default `value` from end date input, set via JavaScript instead
+- Updated `resetForm()` to use dynamic yesterday calculation
+
+**Result:** Validation tooltip only appears when user actually selects a future date. Default end date always shows yesterday with no validation errors.
+
+**Files Modified:**
+- `website/lth-pvr-backtest.html` – Removed static max/value, added dynamic date setting in DOMContentLoaded
+
+#### Summary
+
+**Migrations Created:**
+1. `20260209_fix_bt_std_dca_balances_precision.sql`
+2. `20260209_fix_all_backtest_numeric_precision.sql`
+
+**Database Changes:**
+- 7 numeric columns given explicit precision to prevent overflow
+
+**UI Enhancements:**
+- Thousand separators for all percentage displays
+- Logarithmic scale toggle for better visualization of exponential growth
+- Dynamic date validation (no more premature tooltips)
+
+**Capability Unlocked:** Public users can now back-test strategies across Bitcoin's entire post-genesis history (2010-2026), visualizing 16+ years of exponential wealth creation.
+
+---
 
 ### v0.6.63 – Research Bitcoin API Integration: RB Bands Parallel Run & Auto-Renewal
 **Date:** 2026-03-28  
