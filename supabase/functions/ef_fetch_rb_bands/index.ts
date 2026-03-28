@@ -13,10 +13,13 @@
 //   3. Band prices: price_at_X = (pvr_target × cum_std + lth_rc) / lth_supply
 //
 // Environment variables required:
-//   RB_API_TOKEN           — Research Bitcoin API token
 //   SUPABASE_URL           — Supabase project URL
 //   SUPABASE_SERVICE_ROLE_KEY — Service role key
 //   ORG_ID                 — Organisation UUID
+//
+// NOTE: The Research Bitcoin API token is stored in lth_pvr.rb_api_token
+// and is renewed automatically by ef_renew_rb_token (runs at 00:03 UTC).
+// The RB_API_TOKEN env secret is no longer used.
 // ===========================================================
 
 import { getServiceClient, sleep } from "./client.ts";
@@ -170,8 +173,6 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("ORG_ID") ||
     null;
 
-  const rbToken = Deno.env.get("RB_API_TOKEN");
-
   // ---- Validate prerequisites -----------------------------------------------
   if (!org_id) {
     return new Response("missing org_id (set ORG_ID secret or pass in payload)", {
@@ -180,10 +181,22 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if (!rbToken) {
-    await logAlert(sb, "critical", "RB_API_TOKEN missing in environment", { org_id }, org_id);
-    return new Response("RB_API_TOKEN missing", { status: 500 });
+  // ---- Load RB API token from DB (managed by ef_renew_rb_token) ------------
+  const { data: tokenRow, error: tokenErr } = await sb
+    .schema("lth_pvr")
+    .from("rb_api_token")
+    .select("token, expires_at")
+    .eq("org_id", org_id)
+    .maybeSingle();
+
+  if (tokenErr || !tokenRow?.token) {
+    await logAlert(sb, "critical",
+      "rb_api_token not found — run migration create_rb_api_token_table",
+      { org_id, error: tokenErr?.message }, org_id);
+    return new Response("rb_api_token not found", { status: 500 });
   }
+
+  const rbToken = tokenRow.token;
 
   // ---- Determine target date (yesterday UTC, same as ef_fetch_ci_bands) -----
   const nowUTC = new Date();

@@ -3,11 +3,57 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-08 (v0.6.62)
+**Last updated:** 2026-03-28 (v0.6.63)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.63 – Research Bitcoin API Integration: RB Bands Parallel Run & Auto-Renewal
+**Date:** 2026-03-28  
+**Purpose:** Eliminate dependency on ChartInspect (CI) as sole source of LTH PVR band data by integrating the Research Bitcoin (RB) API as a parallel source. Introduces automatic token self-renewal to prevent 90-day token expiry from disrupting production.
+
+**Status:** ✅ COMPLETE
+
+#### 1. New tables
+
+- **`lth_pvr.rb_bands_daily`** – Identical schema to `ci_bands_daily`. Populated daily by `ef_fetch_rb_bands`. Seeded with historical data (2010-07-17 → present) copied directly from `ci_bands_daily` for historical accuracy; new rows from 2026-03-28 onwards are computed via the hybrid Welford formula.
+- **`lth_pvr.rb_bands_state`** – Welford running state for the LTH market-cap series. Columns: `org_id` (PK), `pvr_mean`, `pvr_std`, `mc_n`, `mc_mean`, `mc_m2`, `seeded_at`, `last_date`. Seeded from CI's known constants (pvr_mean=0.8726, pvr_std=0.9661, mc_n=5734, cum_std≈$453.7B) so the hybrid formula remains calibrated to CI.
+- **`lth_pvr.rb_api_token`** – Stores the Research Bitcoin API token with expiry metadata. Columns: `org_id` (PK), `token`, `issued_at`, `expires_at`, `updated_at`. Tokens expire every 90 days and are renewed automatically by `ef_renew_rb_token`.
+
+#### 2. New edge functions
+
+- **`ef_fetch_rb_bands`** – Daily RB-sourced band computation. Reads token from `rb_api_token`, fetches 3 RB endpoints (`supply_lth`, `realized_price_lth`, `price`) via CSV API, updates Welford state in `rb_bands_state`, computes all 10 band prices, upserts to `rb_bands_daily`. Formula: `price_at_X = (pvr_target × cum_std + lth_rc) / lth_supply`. Validated to <0.3% of CI values.
+- **`ef_renew_rb_token`** – Daily token renewal check. If `expires_at ≤ today + 14 days`, calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <token>`, stores new token + new expiry (today + 90 days) in `rb_api_token`, logs `info` alert on success or `critical` alert on failure.
+
+#### 3. New cron jobs (all use `lth_pvr.call_edge()`)
+
+| Job name | Schedule | Function |
+|---|---|---|
+| `lthpvr_rb_token_renew` | `3 0 * * *` (00:03 UTC) | `ef_renew_rb_token` |
+| `lthpvr_ci_fetch` | `5 0 * * *` (00:05 UTC) | `ef_fetch_ci_bands` (rescheduled from 03:00) |
+| `lthpvr_rb_fetch` | `6 0 * * *` (00:06 UTC) | `ef_fetch_rb_bands` |
+
+**Rationale for 00:05 UTC:** The daily BTC candle closes at 00:00 UTC. Fetching at 00:05 means bands are computed from the finalised daily candle. Prior 03:00 schedule was unnecessarily delayed.
+
+#### 4. Historical backfill
+
+All historical rows in `rb_bands_daily` were populated by copying directly from `ci_bands_daily` (rows 2010-07-17 → 2026-03-27). A Python script `docs/rb_bands_backfill.py` was created for re-use if needed.
+
+**Why copy from CI for history:** CI's `cumulative_std_dev` was pre-seeded with internal Bitcoin data from before 2010-07-17 (including genesis era) that is not available through external APIs. Reconstructing the Welford state from scratch using only RB data produces incorrect (too-small) `cum_std` values for historical dates prior to ~2020, causing completely wrong band levels. The hybrid approach (use CI's established constants as seeds) only produces accurate results when the Welford state carries the CI-seeded baseline — which is only possible from the seed date (2026-03-28) forward.
+
+#### 5. Token security model
+
+The RB token is stored in `lth_pvr.rb_api_token` (Supabase table, service-role access only) rather than as an env secret, because env secrets cannot be updated programmatically from within an edge function. The `SUPABASE_SERVICE_ROLE_KEY` (already required by all edge functions) provides equivalent access control. The `RB_API_TOKEN` env secret has been superseded and is no longer used.
+
+#### 6. Future cutover path
+
+After several weeks of parallel data confirming <1% drift between `rb_bands_daily` and `ci_bands_daily`:
+1. Swap `ci_bands_daily` reference to `rb_bands_daily` in `ef_generate_decisions`, back-tester, and signal logic
+2. Disable `lthpvr_ci_fetch` cron and `ef_fetch_ci_bands`
+3. Remove `CI_API_KEY` secret
+
+---
 
 ### v0.6.62 – Customer Portal Bug Fixes (Withdrawal Submit & Balance Check)
 **Date:** 2026-03-08  
@@ -6403,9 +6449,28 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 **Tables:**
 - **`lth_pvr.ci_bands_daily`**
   - Daily CI LTH PVR bands and BTC price
-  - Columns: `org_id`, `date`, `mode` (static/dynamic), `btc_price`, band levels (ultra_bear through ultra_bull)
+  - Columns: `org_id`, `date`, `mode` (static/dynamic), `btc_price`, band levels (`price_at_m100` through `price_at_p250`)
   - Used by both live trading and back-testing
   - Guard function ensures yesterday's data is always present
+
+- **`lth_pvr.rb_bands_daily`** *(added 2026-03-28)*
+  - Identical schema to `ci_bands_daily` — same column names, same `mode = 'static'` constraint, same unique index `(org_id, date, mode)`
+  - Populated by `ef_fetch_rb_bands` using Research Bitcoin API data
+  - Historical rows (2010-07-17 → 2026-03-27) copied from `ci_bands_daily`; new rows computed via hybrid Welford formula
+  - Purpose: parallel comparison with `ci_bands_daily` before full cutover to RB as primary source
+  - Cutover: swap `ci_bands_daily` → `rb_bands_daily` in `ef_generate_decisions` and back-tester once drift confirmed <1%
+
+- **`lth_pvr.rb_bands_state`** *(added 2026-03-28)*
+  - Welford running state for the LTH market-cap series used to compute `cumulative_std_dev`
+  - Columns: `org_id` (PK), `pvr_mean` numeric(22,16), `pvr_std` numeric(22,16), `mc_n` bigint, `mc_mean` numeric(38,4), `mc_m2` numeric(60,4), `seeded_at` timestamptz, `last_date` date
+  - Seeded from CI constants: `pvr_mean=0.8725631072438145`, `pvr_std=0.9661021921370878`, `mc_n=5734`, derived `cum_std≈$453.7B`
+  - Updated daily by `ef_fetch_rb_bands` after each successful fetch
+
+- **`lth_pvr.rb_api_token`** *(added 2026-03-28)*
+  - Stores the Research Bitcoin API token with expiry metadata
+  - Columns: `org_id` (PK), `token` text, `issued_at` date, `expires_at` date, `updated_at` timestamptz
+  - Tokens expire every 90 days; auto-renewed by `ef_renew_rb_token` within 14-day window before expiry
+  - Used by `ef_fetch_rb_bands` instead of env secret (table allows programmatic updates)
 
 - **`lth_pvr.ci_bands_guard_log`**
   - Audit trail for guard function executions
@@ -6414,14 +6479,37 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 
 **Edge Functions:**
 - **`ef_fetch_ci_bands`**
-  - Normal mode: scheduled daily at 03:00 UTC
+  - Normal mode: scheduled daily at **00:05 UTC** (rescheduled from 03:00 on 2026-03-28 — daily candle closes at 00:00 UTC)
   - **[UPDATED 2026-01-05]** Fetches YESTERDAY's data only (signal_date = trade_date - 1)
-  - **Rationale:** Today's on-chain CI bands data changes throughout the day and is only finalized at day's close. Trading decisions made at 03:00 UTC must use yesterday's finalized data.
-  - **Default Behavior:** When no date range specified, explicitly fetches single day (yesterday) via `start` and `end` parameters
+  - **Rationale:** Today's on-chain CI bands data changes throughout the day and is only finalized at day's close. Trading decisions must use yesterday's finalized data.
   - Guard mode: called by `ensure_ci_bands_today()` when data is missing
   - Fetches from ChartInspect API
   - Upserts by (`org_id`, `date`, `mode`)
   - Self-healing: attempts 1-day refetch if current data missing
+
+- **`ef_fetch_rb_bands`** *(added 2026-03-28)*
+  - Scheduled daily at **00:06 UTC** (one minute after `ef_fetch_ci_bands`)
+  - Reads RB API token from `lth_pvr.rb_api_token` (not from env secret)
+  - Fetches 3 Research Bitcoin endpoints in parallel for signal_date (yesterday):
+    - `GET /v2/supply_distribution/supply_lth` — LTH supply in BTC
+    - `GET /v2/realizedprice/realized_price_lth` — LTH realized price (USD/BTC)
+    - `GET /v2/price/price` — BTC spot price
+  - **CRITICAL:** `to_time` must be strictly > `from_time`; uses `from_time=date`, `to_time=date+1`
+  - API returns CSV (not JSON); `Content-Disposition: attachment; filename=<field>.csv`
+  - Updates Welford state in `rb_bands_state` with new LTH_MC = supply × price observation
+  - Computes all 10 band prices: `price_at_X = (pvr_target × cum_std + lth_rc) / lth_supply`
+  - Upserts to `rb_bands_daily`, persists new Welford state
+  - Idempotent: skips if row already exists for signal_date (pass `force: true` to override)
+  - Validated accuracy: <0.3% of CI values on live test
+
+- **`ef_renew_rb_token`** *(added 2026-03-28)*
+  - Scheduled daily at **00:03 UTC** (before band fetches)
+  - Reads current token from `rb_api_token`; checks days until expiry
+  - If `expires_at > today + 14 days` → returns `{skipped: true, reason: "not_due"}`
+  - If within 14-day window (or `force: true` in payload) → calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <current_token>`
+  - On success: stores new token + `expires_at = today + 90 days` in `rb_api_token`, logs `info` alert
+  - On failure: logs `critical` alert (surfaces in daily digest email), retries next day
+  - First automatic renewal attempt: **2026-06-12** (14 days before 2026-06-26 expiry)
 
 **Database Functions:**
 - **`lth_pvr.ensure_ci_bands_today()`**
@@ -7187,12 +7275,23 @@ ORDER BY created_at DESC;
 
 ### 4.1 Timeline (UTC)
 
-> **Note (updated 2026-03-03):** The pipeline no longer has individual cron jobs per step (03:05/03:10/03:15). All pipeline steps are driven sequentially by `ef_resume_pipeline` triggered at **05:05 UTC**. WebSocket monitoring (`ef_valr_ws_monitor`) was **deleted in v0.6.41 (2026-02-01)**; order monitoring is now handled by `poll-orders-1min` (every 1 min) and 6 staggered market-fallback cron jobs.
+> **Note (updated 2026-03-28):** CI bands fetch rescheduled from 03:00 → **00:05 UTC** (5 min after daily BTC candle close at 00:00 UTC). RB bands fetch added at **00:06 UTC**. Token renewal check added at **00:03 UTC**. WebSocket monitoring (`ef_valr_ws_monitor`) was **deleted in v0.6.41 (2026-02-01)**; order monitoring is now handled by `poll-orders-1min` (every 1 min) and 6 staggered market-fallback cron jobs.
 
-**03:00** – First CI bands fetch
+**00:03** – Research Bitcoin token renewal check *(added 2026-03-28)*
+- `pg_cron` job `lthpvr_rb_token_renew` calls `ef_renew_rb_token`
+- Silently skips if more than 14 days remain before expiry
+- If within 14-day window: renews token via RB API, stores new token in `rb_api_token`
+
+**00:05** – CI bands fetch *(rescheduled from 03:00, 2026-03-28)*
 - `pg_cron` job `lthpvr_ci_fetch` calls `ef_fetch_ci_bands`
 - Inserts/updates yesterday's CI bands in `ci_bands_daily` (CURRENT_DATE - 1)
 - If data is already present, it is a no-op
+
+**00:06** – Research Bitcoin bands fetch *(added 2026-03-28)*
+- `pg_cron` job `lthpvr_rb_fetch` calls `ef_fetch_rb_bands`
+- Fetches `supply_lth`, `realized_price_lth`, `price` from Research Bitcoin API
+- Updates Welford state in `rb_bands_state`, computes 10 band prices, upserts to `rb_bands_daily`
+- Running in parallel with `ci_bands_daily` for comparison; future primary source after cutover
 
 **Every 30 min (all hours)** – CI bands guard
 - `pg_cron` job `ef_fetch_ci_bands_guard_30m` checks if yesterday's bands exist
@@ -7692,6 +7791,14 @@ ALERT_EMAIL_TO="your-email@example.com"
 
 # ChartInspect API
 CI_API_KEY="[api_key]"
+
+# Research Bitcoin API
+# NOTE: Token is stored in lth_pvr.rb_api_token and auto-renewed by ef_renew_rb_token.
+# The RB_API_TOKEN env secret is no longer used by ef_fetch_rb_bands.
+# To seed a new token manually:
+#   INSERT INTO lth_pvr.rb_api_token (org_id, token, issued_at, expires_at)
+#   VALUES ('<org_id>', '<token>', CURRENT_DATE, CURRENT_DATE + 90);
+# Token obtained from: https://api.researchbitcoin.net/v2/token (expires every 90 days)
 ```
 
 **Setting Secrets:**
@@ -8248,7 +8355,10 @@ async function pollConversionStatus(orderId) {
 
 | Table | Purpose | Key Columns | Size Estimate |
 |-------|---------|-------------|---------------|
-| `lth_pvr.ci_bands_daily` | Daily CI bands and BTC price | date, btc_price, band levels | ~365 rows/year |
+| `lth_pvr.ci_bands_daily` | Daily CI LTH PVR bands and BTC price | date, btc_price, price_at_m100..price_at_p250 | ~365 rows/year |
+| `lth_pvr.rb_bands_daily` | Daily RB-sourced LTH PVR bands (parallel run) | date, btc_price, price_at_m100..price_at_p250 | ~365 rows/year |
+| `lth_pvr.rb_bands_state` | Welford running state for RB band computation | org_id, pvr_mean, pvr_std, mc_n, mc_mean, mc_m2 | 1 row |
+| `lth_pvr.rb_api_token` | Research Bitcoin API token + expiry | org_id, token, issued_at, expires_at | 1 row |
 | `lth_pvr.decisions_daily` | Per-customer daily decisions | customer_id, trade_date, action, allocation_pct | ~365 rows/customer/year |
 | `lth_pvr.order_intents` | Tradeable order intents | intent_id, portfolio_id, side, amount_usdt | ~365 rows/portfolio/year |
 | `lth_pvr.exchange_orders` | VALR orders | order_id, portfolio_id, status | ~365 rows/portfolio/year |
@@ -8260,15 +8370,20 @@ async function pollConversionStatus(orderId) {
 
 ### 11.4 Edge Function Execution Flow
 
-> **Updated 2026-03-03** to reflect actual cron job schedule. Individual step cron jobs (03:05/03:10/03:15) never existed in production. WebSocket monitoring deleted 2026-02-01.
+> **Updated 2026-03-28** to reflect rescheduled CI bands fetch and new RB bands / token renewal jobs. Individual step cron jobs (03:05/03:10/03:15) never existed in production. WebSocket monitoring deleted 2026-02-01.
 
 ```
-03:00 UTC ─ lthpvr_ci_fetch ──────────────────────────────── ef_fetch_ci_bands (first fetch)
+00:03 UTC ─ lthpvr_rb_token_renew ────────────────────────── ef_renew_rb_token (token renewal check)
+    │         (skips if >14 days to expiry; renews silently within 14-day window)
+    │
+00:05 UTC ─ lthpvr_ci_fetch ──────────────────────────────── ef_fetch_ci_bands (daily fetch)
+    │
+00:06 UTC ─ lthpvr_rb_fetch ──────────────────────────────── ef_fetch_rb_bands (RB parallel fetch)
     │
     │ (every 30 min, all hours)
     ├─ ef_fetch_ci_bands_guard_30m ────────────────────────── ef_fetch_ci_bands (guard retry)
     │
-05:00 UTC ─ ef_fetch_ci_bands_daily_0500_utc ─────────────── ef_fetch_ci_bands (second fetch)
+05:00 UTC ─ ef_fetch_ci_bands_daily_0500_utc ─────────────── ef_fetch_ci_bands (safety second fetch)
           ─ ef_alert_digest_daily ────────────────────────── ef_alert_digest (email digest)
     │
 05:05 UTC ─ lth_pvr_resume_pipeline_morning ──────────────── ef_resume_pipeline
