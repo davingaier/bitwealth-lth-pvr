@@ -47,3 +47,9 @@ node_modules/
 # Documentation files that might contain secrets
 QUICK_DEPLOY_*.md
 STATEMENT_*.md
+
+# Script output files (may contain on-chain data or API responses)
+ci_bands_raw_response.json
+ci_bands_raw_response.meta.txt
+ci_bands_raw_response.error.txt
+rb_pvr_bands_output.json
