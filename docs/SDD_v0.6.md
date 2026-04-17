@@ -3,11 +3,91 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-03-28 (v0.6.64)
+**Last updated:** 2026-04-17 (v0.6.65)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.65 – Public Backtest: Double-Execution Race Condition Fix & Alert Logging
+**Date:** 2026-04-17  
+**Purpose:** Fix a race condition that caused public back-tests to report failure despite producing correct results. Add alerting and idempotency so future failures are visible and not repeatable.
+
+**Status:** ✅ COMPLETE
+
+#### Root Cause
+
+On 2026-04-16, a user submitted a public back-test (bt_run_id `e7fe798c-c3ba-4836-a0a2-dfdfc03a6ad8`). The `backtest_requests` table showed `status='failed'` with `error_message = "insert into bt_results_daily failed: duplicate key value violates unique constraint bt_results_daily_pk"`. However, `bt_runs` showed `status='ok'` with 1,553 rows correctly written to `bt_results_daily`.
+
+The failure was caused by **double-execution of `ef_bt_execute`** for the same `bt_run_id`:
+
+| t | Event |
+|---|---|
+| t=0 | `ef_submit_public_backtest` fires `ef_bt_execute` (call #1, fire-and-forget) |
+| t<60s | `ef_execute_public_backtests` **cron** (every minute) finds `backtest_requests.status='running'` → fires a second `ef_bt_execute` (call #2) |
+| t≈61s | Both running concurrently. Call #2 loses race → duplicate key on `bt_results_daily` → `bt_runs.status='error'` → cron propagates `backtest_requests.status='failed'` |
+| t≈64s | Call #1 completes → overwrites `bt_runs.status='ok'` |
+
+**Final state:** correct data in DB, but user saw "failed" on their screen. No alert was created.
+
+#### Fix 1 — Idempotency guard in `ef_bt_execute`
+
+Added a check immediately after loading `bt_runs`. If `status='ok'` already, the function returns `200 { skipped: true }` without re-running the simulation. This eliminates the duplicate-key error even if the function is fired twice concurrently.
+
+```typescript
+if (run.status === "ok") {
+  return new Response(JSON.stringify({ status: "ok", bt_run_id, skipped: true }), { status: 200 });
+}
+```
+
+**File:** `supabase/functions/ef_bt_execute/index.ts`
+
+#### Fix 2 — `ef_execute_public_backtests` cron no longer blindly re-fires
+
+The poller previously fired `ef_bt_execute` for every request with `status='running'`, regardless of whether the run had just started. Replaced with a **check-then-act** pattern:
+
+1. Read `bt_runs.status` first.
+2. If `status='ok'` → sync `backtest_requests` to `completed`, skip.
+3. If `status='error'` → sync `backtest_requests` to `failed`, skip.
+4. If still `running` and run age < 5 minutes → skip (normal in-progress execution window).
+5. If still `running` and age ≥ 5 minutes → fire `ef_bt_execute` as a **stale run recovery** kick.
+
+This means the cron acts as a safety net for runs whose original executor died silently, not as a concurrent duplicate launcher.
+
+**File:** `supabase/functions/ef_execute_public_backtests/index.ts`
+
+#### Fix 3 — Alert logging in `ef_bt_execute` catch block
+
+Previously, if `ef_bt_execute` threw an error, it only logged to the Deno console and updated `bt_runs.error`. The error never appeared in the Admin UI alert panel. Added a best-effort insert into `lth_pvr.alert_events` on failure:
+
+```typescript
+await sb.schema("lth_pvr").from("alert_events").insert({
+  component: "ef_bt_execute",
+  severity: "error",
+  message: `Public backtest failed: ${errMsg}`,
+  context: { bt_run_id },
+});
+```
+
+**File:** `supabase/functions/ef_bt_execute/index.ts`
+
+#### Alert Status for 2026-04-16 Failure
+
+**No alert was created** for the original 2026-04-16 failure — confirmed by querying `lth_pvr.alert_events` for 2026-04-16 (664 alerts found, 0 backtest-related). This was the absence of Fix 3. Future failures will now appear in the alert panel.
+
+#### Files Changed
+
+- `supabase/functions/ef_bt_execute/index.ts` — Idempotency guard + alert logging
+- `supabase/functions/ef_execute_public_backtests/index.ts` — Check-then-act pattern replacing unconditional re-fire
+
+#### Deployments
+
+```powershell
+supabase functions deploy ef_bt_execute --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_execute_public_backtests --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
 
 ### v0.6.64 – Public Back-Tester: Long-Term Data Support & UX Enhancements
 **Date:** 2026-02-09  
