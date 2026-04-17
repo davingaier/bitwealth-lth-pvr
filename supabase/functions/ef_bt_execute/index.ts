@@ -101,6 +101,18 @@ Deno.serve(async (req)=>{
     if (runErr) throw new Error(`bt_runs query failed: ${runErr.message}`);
     const run = runRows?.[0];
     if (!run) throw new Error(`bt_run_id ${bt_run_id} not found`);
+
+    // ── Idempotency guard: skip if already completed ──────────────────────────
+    // Prevents duplicate-key errors when ef_execute_public_backtests cron also
+    // fires ef_bt_execute for a run that ef_submit_public_backtest already started.
+    if (run.status === "ok") {
+      console.log(`ef_bt_execute: bt_run_id ${bt_run_id} already completed (status=ok), skipping.`);
+      return new Response(JSON.stringify({ status: "ok", bt_run_id, skipped: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const org_id = run.org_id ?? Deno.env.get("ORG_ID") ?? null;
     if (!org_id) throw new Error("missing org_id on bt_runs and ORG_ID env");
     // Load params
@@ -715,15 +727,32 @@ Deno.serve(async (req)=>{
       }
     });
   } catch (e) {
-    console.error("ef_bt_execute error:", e?.message ?? e, e?.stack ?? "");
+    const errMsg = String(e?.message ?? e ?? "unknown");
+    console.error("ef_bt_execute error:", errMsg, e?.stack ?? "");
     if (bt_run_id) {
       await sbBt.from("bt_runs").update({
         status: "error",
         finished_at: new Date().toISOString(),
-        error: String(e?.message ?? e ?? "unknown")
+        error: errMsg
       }).eq("bt_run_id", bt_run_id);
+
+      // Log an alert so the failure appears in the Admin UI alert panel
+      try {
+        const sb = getServiceClient();
+        await sb.schema("lth_pvr").from("alert_events").insert({
+          component: "ef_bt_execute",
+          severity: "error",
+          org_id: Deno.env.get("ORG_ID") ?? null,
+          customer_id: null,
+          message: `Public backtest failed: ${errMsg}`,
+          context: { bt_run_id },
+        });
+      } catch (_alertErr) {
+        // Best-effort — don't mask the original error
+        console.error("Failed to log alert:", _alertErr);
+      }
     }
-    return new Response(`error: ${e?.message ?? "unknown"}`, {
+    return new Response(`error: ${errMsg}`, {
       status: 500,
       headers: corsHeaders
     });
