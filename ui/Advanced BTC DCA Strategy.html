@@ -835,12 +835,14 @@
                 <th style="min-width:150px;">Name</th>
                 <th style="min-width:200px;">Email</th>
                 <th style="min-width:120px;">Performance Fee</th>
+                <th style="min-width:110px;">Perf. Schedule</th>
                 <th style="min-width:120px;">Platform Fee</th>
+                <th style="min-width:110px;">Plat. Schedule</th>
                 <th style="min-width:180px;"></th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="6" class="muted">Loading customers...</td></tr>
+              <tr><td colspan="8" class="muted">Loading customers...</td></tr>
             </tbody>
           </table>
         </div>
@@ -8787,17 +8789,17 @@ This will:
 
     async function loadCustomerFees() {
       if (!supabaseClient) {
-        tableBody.innerHTML = '<tr><td colspan="6">Loading Supabase client…</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8">Loading Supabase client…</td></tr>';
         return;
       }
 
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session?.user) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Please sign in via Administration tab to manage fees.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8" class="muted">Please sign in via Administration tab to manage fees.</td></tr>';
         return;
       }
 
-      tableBody.innerHTML = '<tr><td colspan="6">Loading customers...</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="8">Loading customers...</td></tr>';
 
       try {
         // Get all customers with registration_status = setup or active
@@ -8832,38 +8834,46 @@ This will:
         (feeConfigs || []).forEach(fc => {
           feeMap.set(fc.customer_id, {
             performance_fee_rate: fc.performance_fee_rate ?? 0.10,
-            platform_fee_rate: fc.platform_fee_rate ?? 0.0075
+            platform_fee_rate: fc.platform_fee_rate ?? 0.0075,
+            performance_fee_schedule: fc.performance_fee_schedule ?? 'monthly',
+            platform_fee_schedule: fc.platform_fee_schedule ?? 'immediate'
           });
         });
 
         allCustomers = customers.map(c => {
-          const fees = feeMap.get(c.customer_id) || { performance_fee_rate: 0.10, platform_fee_rate: 0.0075 };
+          const fees = feeMap.get(c.customer_id) || { performance_fee_rate: 0.10, platform_fee_rate: 0.0075, performance_fee_schedule: 'monthly', platform_fee_schedule: 'immediate' };
           return {
             customer_id: c.customer_id,
             name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
             email: c.email || '—',
             status: c.registration_status,
             performance_fee_rate: fees.performance_fee_rate,
-            platform_fee_rate: fees.platform_fee_rate
+            platform_fee_rate: fees.platform_fee_rate,
+            performance_fee_schedule: fees.performance_fee_schedule,
+            platform_fee_schedule: fees.platform_fee_schedule
           };
         });
 
         renderCustomers(allCustomers);
       } catch (err) {
         console.error('loadCustomerFees error:', err);
-        tableBody.innerHTML = `<tr><td colspan="6" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="8" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
     function renderCustomers(customers) {
       if (!customers || customers.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="muted">No customers found.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8" class="muted">No customers found.</td></tr>';
         return;
       }
+
+      const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val;
 
       const rowsHtml = customers.map(c => {
         const perfPercent = (c.performance_fee_rate * 100).toFixed(2);
         const platPercent = (c.platform_fee_rate * 100).toFixed(3);
+        const perfSched = c.performance_fee_schedule || 'monthly';
+        const platSched = c.platform_fee_schedule || 'immediate';
         return `
           <tr data-customer-id="${c.customer_id}">
             <td>${escapeHtml(c.customer_id)}</td>
@@ -8873,9 +8883,23 @@ This will:
               <span class="fee-display">${perfPercent}%</span>
               <input type="number" class="fee-input" value="${perfPercent}" min="0" max="100" step="0.01" style="display:none;width:80px;padding:4px;">
             </td>
+            <td class="perf-schedule-cell">
+              <span class="schedule-display">${scheduleLabel(perfSched)}</span>
+              <select class="schedule-input" style="display:none;padding:4px;">
+                <option value="monthly"${perfSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                <option value="annual"${perfSched === 'annual' ? ' selected' : ''}>Annual</option>
+              </select>
+            </td>
             <td class="platform-fee-cell">
               <span class="fee-display">${platPercent}%</span>
               <input type="number" class="fee-input" value="${platPercent}" min="0" max="10" step="0.001" style="display:none;width:80px;padding:4px;">
+            </td>
+            <td class="plat-schedule-cell">
+              <span class="schedule-display">${scheduleLabel(platSched)}</span>
+              <select class="schedule-input" style="display:none;padding:4px;">
+                <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
+                <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
+              </select>
             </td>
             <td>
               <button type="button" class="btn btn-secondary-sm js-edit-fee">Edit</button>
@@ -8915,10 +8939,16 @@ This will:
 
       const perfCell = tr.querySelector('.performance-fee-cell');
       const platCell = tr.querySelector('.platform-fee-cell');
+      const perfSchedCell = tr.querySelector('.perf-schedule-cell');
+      const platSchedCell = tr.querySelector('.plat-schedule-cell');
       const perfDisplay = perfCell.querySelector('.fee-display');
       const perfInput = perfCell.querySelector('.fee-input');
       const platDisplay = platCell.querySelector('.fee-display');
       const platInput = platCell.querySelector('.fee-input');
+      const perfSchedDisplay = perfSchedCell.querySelector('.schedule-display');
+      const perfSchedInput = perfSchedCell.querySelector('.schedule-input');
+      const platSchedDisplay = platSchedCell.querySelector('.schedule-display');
+      const platSchedInput = platSchedCell.querySelector('.schedule-input');
       const editBtn = tr.querySelector('.js-edit-fee');
       const saveBtn = tr.querySelector('.js-save-fee');
       const cancelBtn = tr.querySelector('.js-cancel-fee');
@@ -8929,6 +8959,10 @@ This will:
         perfInput.style.display = 'inline-block';
         platDisplay.style.display = 'none';
         platInput.style.display = 'inline-block';
+        perfSchedDisplay.style.display = 'none';
+        perfSchedInput.style.display = 'inline-block';
+        platSchedDisplay.style.display = 'none';
+        platSchedInput.style.display = 'inline-block';
         perfInput.focus();
         editBtn.style.display = 'none';
         saveBtn.style.display = 'inline-block';
@@ -8942,10 +8976,20 @@ This will:
         const origPlat = platDisplay.textContent.replace('%', '');
         perfInput.value = origPerf;
         platInput.value = origPlat;
+        // Reset schedule selects
+        const customer = allCustomers.find(c => c.customer_id == customerId);
+        if (customer) {
+          perfSchedInput.value = customer.performance_fee_schedule || 'monthly';
+          platSchedInput.value = customer.platform_fee_schedule || 'immediate';
+        }
         perfDisplay.style.display = 'inline-block';
         perfInput.style.display = 'none';
         platDisplay.style.display = 'inline-block';
         platInput.style.display = 'none';
+        perfSchedDisplay.style.display = 'inline-block';
+        perfSchedInput.style.display = 'none';
+        platSchedDisplay.style.display = 'inline-block';
+        platSchedInput.style.display = 'none';
         editBtn.style.display = 'inline-block';
         saveBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
@@ -8956,6 +9000,8 @@ This will:
       if (target.classList.contains('js-save-fee')) {
         const newPerfPercent = parseFloat(perfInput.value);
         const newPlatPercent = parseFloat(platInput.value);
+        const newPerfSchedule = perfSchedInput.value;
+        const newPlatSchedule = platSchedInput.value;
         
         if (isNaN(newPerfPercent) || newPerfPercent < 0 || newPerfPercent > 100) {
           showMessage('Performance fee rate must be between 0% and 100%', 'error');
@@ -8977,18 +9023,28 @@ This will:
           const { data, error } = await supabaseClient.rpc('update_customer_fee_rates', {
             p_customer_id: parseInt(customerId),
             p_performance_fee_rate: newPerfRate,
-            p_platform_fee_rate: newPlatRate
+            p_platform_fee_rate: newPlatRate,
+            p_performance_fee_schedule: newPerfSchedule,
+            p_platform_fee_schedule: newPlatSchedule
           });
 
           if (error) throw error;
 
+          const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val;
+
           // Update UI
           perfDisplay.textContent = `${newPerfPercent.toFixed(2)}%`;
           platDisplay.textContent = `${newPlatPercent.toFixed(3)}%`;
+          perfSchedDisplay.textContent = scheduleLabel(newPerfSchedule);
+          platSchedDisplay.textContent = scheduleLabel(newPlatSchedule);
           perfDisplay.style.display = 'inline-block';
           perfInput.style.display = 'none';
           platDisplay.style.display = 'inline-block';
           platInput.style.display = 'none';
+          perfSchedDisplay.style.display = 'inline-block';
+          perfSchedInput.style.display = 'none';
+          platSchedDisplay.style.display = 'inline-block';
+          platSchedInput.style.display = 'none';
           editBtn.style.display = 'inline-block';
           saveBtn.style.display = 'none';
           cancelBtn.style.display = 'none';
@@ -8998,12 +9054,14 @@ This will:
           if (customer) {
             customer.performance_fee_rate = newPerfRate;
             customer.platform_fee_rate = newPlatRate;
+            customer.performance_fee_schedule = newPerfSchedule;
+            customer.platform_fee_schedule = newPlatSchedule;
           }
 
           showMessage(
-            `Fees updated successfully for customer ${customerId}.\n` +
-            `Performance: ${(data.previous_performance_fee_rate * 100).toFixed(2)}% → ${(data.new_performance_fee_rate * 100).toFixed(2)}%\n` +
-            `Platform: ${(data.previous_platform_fee_rate * 100).toFixed(3)}% → ${(data.new_platform_fee_rate * 100).toFixed(3)}%`,
+            `Fees updated for customer ${customerId}. ` +
+            `Perf: ${(data.previous_performance_fee_rate * 100).toFixed(2)}% → ${(data.new_performance_fee_rate * 100).toFixed(2)}% (${data.new_performance_fee_schedule}), ` +
+            `Platform: ${(data.previous_platform_fee_rate * 100).toFixed(3)}% → ${(data.new_platform_fee_rate * 100).toFixed(3)}% (${data.new_platform_fee_schedule})`,
             'success'
           );
         } catch (err) {
