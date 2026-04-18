@@ -3,11 +3,103 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-18 (v0.6.68)
+**Last updated:** 2026-04-18 (v0.6.69)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.69 – Admin UI: Portal Impersonation, Fee Card Reorganisation & Sync Duplicate Fix
+**Date:** 2026-04-18  
+**Purpose:** (1) Fix recurring VALR-TX sync duplicate deposits for annual-schedule customers. (2) Record `platform_fee_usdt`/`platform_fee_btc` on ledger entries for annual-schedule customers so `ledger_lines` is the single source of truth. (3) Move Annual Fee Accruals card from Administration to Finance module. (4) Move "View Portal" link from Customer Fee Management to Active Customers card. (5) Enable admin portal impersonation via `?admin_as=<customer_id>` with login passthrough.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Bug Fix: Recurring Sync Duplicates (`ef_sync_valr_transactions`)
+
+**Root cause:** The cross-namespace duplicate check added in v0.6.66 was committed to git but `ef_sync_valr_transactions` was never redeployed. The live edge function lacked the check, so every 30-minute cron run re-created the VALR `INTERNAL_TRANSFER` deposit as a new `VALR_TX_*` funding event, even though an `ACTIVATION:*` event for the same physical deposit already existed.
+
+**Fix:** Deployed `ef_sync_valr_transactions` with the cross-namespace check active:
+```typescript
+// Before inserting a deposit, check whether any funding event already exists
+// for this customer + asset + amount within a ±7-day window
+if (isDeposit && amount > 0) {
+  const { data: dupCheck } = await supabase
+    .from("exchange_funding_events")
+    .select("funding_id, idempotency_key")
+    .eq("customer_id", customer.customer_id)
+    .eq("asset", currency)
+    .eq("amount", Math.abs(amount))
+    .gte("occurred_at", windowStart.toISOString())
+    .lte("occurred_at", windowEnd.toISOString())
+    .maybeSingle();
+  if (dupCheck) { continue; }  // Skip — already recorded under different key prefix
+}
+```
+
+**Data remediation (customer 49 — performed twice as sync ran before each prior deployment):**
+- Deleted duplicate `VALR_TX_*` funding events (`3d8cf96b` and `b1a150df`)
+- Deleted corresponding duplicate ledger lines
+- Deleted spurious `balances_daily` rows for duplicate dates
+- Reset `annual_fee_accrual.accrued_platform_fee_usdt` from 269.25298568 → **134.62649284**
+
+#### 2 — Bug Fix: `platform_fee_usdt` Not Written for Annual-Schedule Deposits (`ef_post_ledger_and_balances`)
+
+**Root cause:** The annual-schedule code path calculated the fee and called `accumulate_annual_platform_fee()` but left `platformFeeUsdt` / `platformFeeBtc` at `"0"` — the default. The insert payload already referenced `platform_fee_usdt: platformFeeUsdt`, so the ledger entry was written with zero, while the fee only existed in `annual_fee_accrual`.
+
+**Design principle:** `ledger_lines` must be the single source of truth for all fee data. The `annual_fee_accrual` table accumulates for collection timing only; the individual deposit fee must be visible on the originating ledger entry.
+
+**Fix:** For both BTC and USDT annual-schedule deposit paths, set the variable before the RPC call:
+```typescript
+// USDT annual path
+platformFeeUsdt = feeDecimal.toFixed(8); // Record fee on ledger entry
+const accrualUsdt = parseFloat(feeDecimal.toFixed(8));
+sb.rpc("accumulate_annual_platform_fee", { ... p_fee_usdt: accrualUsdt });
+
+// BTC annual path
+platformFeeBtc = feeDecimal.toFixed(8); // Record fee on ledger entry
+const accrualBtc = parseFloat(feeDecimal.toFixed(8));
+sb.rpc("accumulate_annual_platform_fee", { ... p_fee_btc: accrualBtc });
+```
+
+**Note:** Setting `platform_fee_usdt` on an annual-schedule ledger entry does NOT deduct from the customer's balance. Balance calculations only deduct `fee_btc` / `fee_usdt` (VALR exchange fees). The platform fee is informational on the ledger entry until `ef_collect_annual_fees` runs.
+
+**Data fix:** Customer 49's existing topup ledger entry (`7707ab52`) was manually updated to `platform_fee_usdt = 134.62649284`.
+
+#### 3 — Admin UI: Annual Fee Accruals Card Moved to Finance Module
+
+The Annual Fee Accruals card was previously in the Administration module. Moved to the **Finance module**, placed after the "Accumulated Platform Fees (Customer Subaccounts)" card.
+
+The JS `MutationObserver` that initialises the card's data load was updated to watch `finance-module` instead of `admin-module`.
+
+#### 4 — Admin UI: View Portal Link Moved to Active Customers Card
+
+The 👁️ "View customer portal as this customer" link was previously in the Customer Fee Management table (one link per row). Moved to the **Active Customers** table, alongside the "⏸ Set Inactive" button.
+
+#### 5 — Customer Portal: Admin Impersonation via `?admin_as=<customer_id>`
+
+Clicking the 👁️ link opens `customer-portal.html?admin_as=<customer_id>`. If the caller has no active Supabase Auth session, the portal now redirects to `login.html?return_to=customer-portal.html%3Fadmin_as%3D<customer_id>`.
+
+After login, `login.html` reads `return_to` and redirects back to the original URL, preserving the `admin_as` parameter. The portal then verifies the logged-in user has `admin` or `owner` role in `org_members` before loading the impersonated customer's data.
+
+**Flow:**
+1. Click 👁️ on Active Customers row → opens `customer-portal.html?admin_as=49`
+2. No session → redirect to `login.html?return_to=customer-portal.html%3Fadmin_as%3D49`
+3. Log in with admin credentials → redirected back to `customer-portal.html?admin_as=49`
+4. Portal reads `adminAsCustomerId = 49`, checks `org_members` role, sets `isAdminPreview = true`
+5. Loads customer 49's data; orange banner "Admin Preview — Viewing as [Name]" displayed
+
+#### 6 — Files Changed
+
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — Deployed with cross-namespace duplicate check (code existed since v0.6.66, first deployment here)
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` — Annual-schedule paths now set `platformFeeUsdt`/`platformFeeBtc` on ledger entry
+- `website/customer-portal.html` — Redirects to `login.html?return_to=...` when unauthenticated with `admin_as` param
+- `website/login.html` — Reads `return_to` param; all `customer-portal.html` redirects replaced with `portalUrl()` helper
+- `ui/Advanced BTC DCA Strategy.html` — Annual Fee Accruals card moved to Finance module; 👁️ link moved to Active Customers table; removed from Fee Management table
+
+---
 
 ### v0.6.68 – Annual Fee Accrual Tracking & Anniversary-Based Collection
 **Date:** 2026-04-18  
