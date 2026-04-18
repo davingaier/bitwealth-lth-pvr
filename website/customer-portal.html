@@ -581,8 +581,11 @@
             const { data: { session }, error } = await sb.auth.getSession();
             
             if (error || !session) {
-                // Not logged in - redirect to login
-                window.location.href = 'login.html';
+                // Not logged in - redirect to login, preserving return URL for admin_as
+                const returnTo = adminAsCustomerId
+                  ? encodeURIComponent('customer-portal.html?admin_as=' + adminAsCustomerId)
+                  : '';
+                window.location.href = returnTo ? 'login.html?return_to=' + returnTo : 'login.html';
                 return;
             }
 
