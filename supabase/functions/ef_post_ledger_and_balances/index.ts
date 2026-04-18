@@ -314,11 +314,12 @@ Deno.serve(async (req: Request) => {
               const feeDecimal = amountDecimal.times(platformFeeRate);
               platformFeeBtc = feeDecimal.toFixed(8);
             } else {
-              // Annual schedule: calculate fee but accrue instead of deducting
+              // Annual schedule: calculate fee, record on ledger AND accrue
               const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
               const feeDecimal = amountDecimal.times(platformFeeRate);
+              platformFeeBtc = feeDecimal.toFixed(8); // Record fee on ledger entry
               const accrualBtc = parseFloat(feeDecimal.toFixed(8));
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualBtc} BTC (not deducting)`);
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualBtc} BTC (recorded on ledger, not deducted)`);
               // Record accrual (non-blocking; best-effort)
               sb.rpc("accumulate_annual_platform_fee", {
                 p_org_id: org_id,
@@ -345,11 +346,12 @@ Deno.serve(async (req: Request) => {
               platformFeeUsdt = feeDecimal.toFixed(8);
               console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, gross=${amountUsdt}, type=${typeof amountUsdt}`);
             } else {
-              // Annual schedule: calculate fee but accrue instead of deducting
+              // Annual schedule: calculate fee, record on ledger AND accrue
               const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
               const feeDecimal = amountDecimal.times(platformFeeRate);
+              platformFeeUsdt = feeDecimal.toFixed(8); // Record fee on ledger entry
               const accrualUsdt = parseFloat(feeDecimal.toFixed(8));
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualUsdt} USDT (not deducting)`);
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualUsdt} USDT (recorded on ledger, not deducted)`);
               // Record accrual (non-blocking; best-effort)
               sb.rpc("accumulate_annual_platform_fee", {
                 p_org_id: org_id,

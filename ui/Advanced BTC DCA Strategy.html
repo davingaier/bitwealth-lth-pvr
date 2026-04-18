@@ -2652,6 +2652,41 @@
           </div>
         </div>
       </div>
+
+      <!-- Annual Fee Accrual Panel -->
+      <div class="card" id="annualFeeAccrualCard">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          <h3 style="margin:0;">📅 Annual Fee Accruals</h3>
+          <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem;">
+              Year:
+              <select id="annualFeeYearSelect" class="context-select" style="height:32px;min-width:90px;"></select>
+            </label>
+            <button id="annualFeeRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+            <button id="annualFeeCollectBtn" type="button" class="btn" style="background:#dc3545;">Collect Mature Fees</button>
+          </div>
+        </div>
+        <p class="small-muted" style="margin-bottom:.75rem;">Tracks accrued platform &amp; performance fees for customers on annual billing schedule. Collection triggers automatically on each customer's anniversary of <code>effective_from</code>.</p>
+        <div id="annualFeeMessage" style="display:none;padding:.6rem 1rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <div class="table-scroll">
+          <table id="annualFeeTable">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th style="min-width:100px;">Period</th>
+                <th style="text-align:right;">Platform BTC</th>
+                <th style="text-align:right;">Platform USDT</th>
+                <th style="text-align:right;">Perf Fee USDT</th>
+                <th style="min-width:100px;">Settled</th>
+                <th style="min-width:130px;">Last Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
     
     <!-- ===================== Administration (owner-only) ===================== -->
@@ -2827,41 +2862,6 @@
                 <th style="min-width:90px;text-align:right;">Net</th>
                 <th style="min-width:90px;">Status</th>
                 <th style="min-width:80px;"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="7" class="muted">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Annual Fee Accrual Panel -->
-      <div class="card" id="annualFeeAccrualCard">
-        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
-          <h3 style="margin:0;">📅 Annual Fee Accruals</h3>
-          <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
-            <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem;">
-              Year:
-              <select id="annualFeeYearSelect" class="context-select" style="height:32px;min-width:90px;"></select>
-            </label>
-            <button id="annualFeeRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
-            <button id="annualFeeCollectBtn" type="button" class="btn" style="background:#dc3545;">Collect Mature Fees</button>
-          </div>
-        </div>
-        <p class="small-muted" style="margin-bottom:.75rem;">Tracks accrued platform &amp; performance fees for customers on annual billing schedule. Collection triggers automatically on each customer's anniversary of <code>effective_from</code>.</p>
-        <div id="annualFeeMessage" style="display:none;padding:.6rem 1rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
-        <div class="table-scroll">
-          <table id="annualFeeTable">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th style="min-width:100px;">Period</th>
-                <th style="text-align:right;">Platform BTC</th>
-                <th style="text-align:right;">Platform USDT</th>
-                <th style="text-align:right;">Perf Fee USDT</th>
-                <th style="min-width:100px;">Settled</th>
-                <th style="min-width:130px;">Last Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -6924,12 +6924,12 @@
       }
     });
 
-    // Load when admin module becomes visible
+    // Load when finance module becomes visible
     const observer = new MutationObserver(() => {
       const card = document.getElementById('annualFeeAccrualCard');
       if (card && card.offsetParent !== null) loadAnnualAccruals();
     });
-    observer.observe(document.getElementById('admin-module') || document.body, { attributes: true, subtree: true });
+    observer.observe(document.getElementById('finance-module') || document.body, { attributes: true, subtree: true });
   })();
 
   // --- Alerts card (Administration module) ---
