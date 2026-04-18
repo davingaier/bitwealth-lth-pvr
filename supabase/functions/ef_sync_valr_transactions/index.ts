@@ -776,6 +776,32 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // Cross-namespace duplicate check: if this is a deposit, verify no
+            // funding event already exists for this customer+asset+amount from
+            // another source (e.g. activation scan). This prevents the same
+            // physical deposit being recorded twice with different idempotency
+            // key prefixes (ACTIVATION:* vs VALR_TX_*).
+            if (isDeposit && amount > 0) {
+              const txOccurred = new Date(timestamp);
+              const windowStart = new Date(txOccurred.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days before
+              const windowEnd   = new Date(txOccurred.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days after
+              const { data: dupCheck } = await supabase
+                .from("exchange_funding_events")
+                .select("funding_id, idempotency_key")
+                .eq("customer_id", customer.customer_id)
+                .eq("asset", currency)
+                .eq("amount", Math.abs(amount))
+                .gte("occurred_at", windowStart.toISOString())
+                .lte("occurred_at", windowEnd.toISOString())
+                .limit(1)
+                .maybeSingle();
+
+              if (dupCheck) {
+                console.log(`  ⏭️  Skipping duplicate deposit: ${amount} ${currency} for customer ${customer.customer_id} (already recorded as ${dupCheck.idempotency_key})`);
+                continue;
+              }
+            }
+
             // Determine kind (deposit or withdrawal) and ensure amount has correct sign
             // VALR API: creditAmount = positive (deposit), debitAmount = positive (withdrawal)
             // Use explicit fundingKind if set (zar_deposit, zar_balance, zar_withdrawal), otherwise infer

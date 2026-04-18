@@ -556,6 +556,11 @@
 
         let currentUser = null;
         let customerData = null;
+        let isAdminPreview = false;
+
+        // Check for admin impersonation param
+        const urlParams = new URLSearchParams(window.location.search);
+        const adminAsCustomerId = urlParams.get('admin_as') ? parseInt(urlParams.get('admin_as')) : null;
 
         // Helper function for navigation scrolling
         function scrollToSection(sectionId) {
@@ -582,18 +587,47 @@
             }
 
             currentUser = session.user;
+
+            // Admin impersonation: if ?admin_as=<customer_id>, verify caller is an org admin
+            if (adminAsCustomerId) {
+                const { data: memberRow } = await sb
+                    .from('org_members')
+                    .select('role')
+                    .eq('user_id', currentUser.id)
+                    .in('role', ['admin', 'owner'])
+                    .maybeSingle();
+
+                if (!memberRow) {
+                    // Not an admin - ignore the param and load normally
+                    console.warn('admin_as param ignored: caller is not an org admin');
+                } else {
+                    isAdminPreview = true;
+                }
+            }
+
             await loadCustomerData();
         }
 
         async function loadCustomerData() {
             try {
-                // Get customer details by email (handle duplicates gracefully)
-                const { data: customerList, error: customerError } = await sb
-                    .from('customer_details')
-                    .select('*')
-                    .eq('email', currentUser.email)
-                    .order('customer_id', { ascending: false })
-                    .limit(1);
+                let customerList, customerError;
+
+                if (isAdminPreview && adminAsCustomerId) {
+                    // Admin impersonation: load by customer_id
+                    ({ data: customerList, error: customerError } = await sb
+                        .from('customer_details')
+                        .select('*')
+                        .eq('customer_id', adminAsCustomerId)
+                        .limit(1));
+                } else {
+                    // Normal flow: load by email
+                    ({ data: customerList, error: customerError } = await sb
+                        .from('customer_details')
+                        .select('*')
+                        .eq('email', currentUser.email)
+                        .order('customer_id', { ascending: false })
+                        .limit(1));
+                }
 
                 if (customerError || !customerList || customerList.length === 0) throw customerError;
                 
@@ -639,6 +673,29 @@
                 // Show content
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
+
+                // Admin preview mode: show banner and disable mutations
+                if (isAdminPreview) {
+                    const banner = document.createElement('div');
+                    banner.id = 'adminPreviewBanner';
+                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);color:#000;text-align:center;padding:10px 16px;font-weight:600;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+                    banner.innerHTML = `👁️ Admin Preview — Viewing as <strong>${customerData.first_names} ${customerData.last_name}</strong> (#${customerData.customer_id}) &nbsp;|&nbsp; <a href="javascript:window.close()" style="color:#000;text-decoration:underline;">Close</a>`;
+                    document.body.prepend(banner);
+                    // Push page content down to avoid overlap
+                    document.querySelector('.dashboard-container').style.marginTop = '44px';
+
+                    // Disable all mutation buttons
+                    const mutationBtns = [
+                        document.getElementById('wdSubmitBtn'),
+                        document.getElementById('settingsSaveApiKeyBtn'),
+                    ];
+                    mutationBtns.forEach(btn => {
+                        if (btn) { btn.disabled = true; btn.title = 'Disabled in admin preview'; btn.style.opacity = '0.4'; }
+                    });
+                    // Override mutation functions to no-op
+                    window.submitWithdrawal = () => alert('Withdrawals are disabled in admin preview mode.');
+                    window.saveApiKeyPortal = () => alert('Settings changes are disabled in admin preview mode.');
+                }
 
             } catch (error) {
                 console.error('Error loading customer data:', error);
@@ -1333,6 +1390,12 @@
         }
 
         async function logout() {
+            if (isAdminPreview) {
+                // Admin preview: just close or go back, don't sign out
+                window.close();
+                window.history.back();
+                return;
+            }
             await sb.auth.signOut();
             window.location.href = 'login.html';
         }
