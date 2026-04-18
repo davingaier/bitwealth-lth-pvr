@@ -314,8 +314,20 @@ Deno.serve(async (req: Request) => {
               const feeDecimal = amountDecimal.times(platformFeeRate);
               platformFeeBtc = feeDecimal.toFixed(8);
             } else {
-              // Annual schedule: no immediate fee, will be charged at year-end
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - skipping immediate BTC fee`);
+              // Annual schedule: calculate fee but accrue instead of deducting
+              const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+              const feeDecimal = amountDecimal.times(platformFeeRate);
+              const accrualBtc = parseFloat(feeDecimal.toFixed(8));
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualBtc} BTC (not deducting)`);
+              // Record accrual (non-blocking; best-effort)
+              sb.rpc("accumulate_annual_platform_fee", {
+                p_org_id: org_id,
+                p_customer_id: f.customer_id,
+                p_fee_btc: accrualBtc,
+                p_fee_usdt: 0,
+              }).then(({ error: accrErr }) => {
+                if (accrErr) console.error(`  ⚠️  Failed to accrue annual BTC fee for customer ${f.customer_id}:`, accrErr.message);
+              });
             }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
@@ -333,8 +345,20 @@ Deno.serve(async (req: Request) => {
               platformFeeUsdt = feeDecimal.toFixed(8);
               console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, gross=${amountUsdt}, type=${typeof amountUsdt}`);
             } else {
-              // Annual schedule: no immediate fee, will be charged at year-end
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - skipping immediate USDT fee`);
+              // Annual schedule: calculate fee but accrue instead of deducting
+              const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+              const feeDecimal = amountDecimal.times(platformFeeRate);
+              const accrualUsdt = parseFloat(feeDecimal.toFixed(8));
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualUsdt} USDT (not deducting)`);
+              // Record accrual (non-blocking; best-effort)
+              sb.rpc("accumulate_annual_platform_fee", {
+                p_org_id: org_id,
+                p_customer_id: f.customer_id,
+                p_fee_btc: 0,
+                p_fee_usdt: accrualUsdt,
+              }).then(({ error: accrErr }) => {
+                if (accrErr) console.error(`  ⚠️  Failed to accrue annual USDT fee for customer ${f.customer_id}:`, accrErr.message);
+              });
             }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it

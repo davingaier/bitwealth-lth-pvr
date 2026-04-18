@@ -3,11 +3,88 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-18 (v0.6.67)
+**Last updated:** 2026-04-18 (v0.6.68)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.68 – Annual Fee Accrual Tracking & Anniversary-Based Collection
+**Date:** 2026-04-18  
+**Purpose:** Implement annual fee accrual recording and automatic anniversary-based collection. Previously, setting a customer's fee schedule to `annual` effectively exempted them from all fees (platform fees were skipped, performance fees were excluded). This version adds proper accrual tracking throughout the year and a per-customer anniversary collection mechanism based on `customer_strategies.effective_from`.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — New Table: `lth_pvr.annual_fee_accrual`
+
+Tracks per-customer, per-year accrued platform fees (BTC + USDT) and performance fees (USDT).
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `accrual_id` | UUID PK | Primary key |
+| `org_id` | UUID | Organization |
+| `customer_id` | BIGINT | Customer reference |
+| `accrual_year` | INT | Year the period started in (e.g., 2026) |
+| `period_start` | DATE | Anniversary period start (from `effective_from`) |
+| `period_end` | DATE | Anniversary period end (period_start + 1 year - 1 day) |
+| `accrued_platform_fee_btc` | NUMERIC(38,8) | Running total of BTC platform fees |
+| `accrued_platform_fee_usdt` | NUMERIC(38,8) | Running total of USDT platform fees |
+| `accrued_performance_fee_usdt` | NUMERIC(38,8) | Calculated at year-end |
+| `performance_fee_calculated_at` | TIMESTAMPTZ | When perf fee was calculated |
+| `settled_at` | TIMESTAMPTZ | NULL until collected |
+| `settlement_ledger_ids` | UUID[] | Linked ledger entries |
+| `settlement_transfer_ids` | UUID[] | Linked VALR transfers |
+| `settlement_notes` | TEXT | Audit notes |
+
+**Unique constraint:** `(org_id, customer_id, period_start)` — one row per customer per anniversary period.
+
+#### 2 — `ef_post_ledger_and_balances` Changes
+
+For customers with `platform_fee_schedule = 'annual'`:
+- **Before:** Logged a skip message and wrote `platform_fee_btc/usdt = 0` to ledger
+- **After:** Calculates the same fee amount, then calls `lth_pvr.accumulate_annual_platform_fee()` to upsert into `annual_fee_accrual` (incrementing the running total). Ledger still shows 0 (no deduction from customer balance).
+
+The `accumulate_annual_platform_fee()` SQL function uses `INSERT ... ON CONFLICT DO UPDATE` for atomic accumulation. It looks up `customer_strategies.effective_from` to compute the current anniversary period (period_start/period_end) automatically.
+
+#### 3 — New Edge Function: `ef_collect_annual_fees`
+
+**Schedule:** pg_cron `0 6 * * *` (daily at 06:00 UTC)  
+**Also callable:** On-demand via Admin UI "Collect Mature Fees" button or with `{ "customer_id": N }` for single-customer collection
+
+**Anniversary-based collection:** Each customer's annual period runs from their `effective_from` date to one day before the next anniversary. The daily cron picks up any unsettled accrual rows where `period_end < today` (i.e., the anniversary has passed).
+
+**Flow:**
+1. Read unsettled `annual_fee_accrual` rows where `period_end < today` (mature periods)
+2. For each customer with `performance_fee_schedule = 'annual'`, calculate annual performance fee via HWM methodology (same as monthly but over full year period)
+3. Create fee ledger entries (`kind = 'platform_fee'` or `'performance_fee'`, negative `amount_*` = deduction)
+4. Call `withdrawFeeFromCustomerAccount()` for each fee — automatically routes via internal transfer (subaccount model) or on-chain withdrawal (API model)
+5. If insufficient USDT for performance fee, triggers `ef_auto_convert_btc_to_usdt`
+6. Update HWM state (`customer_state_daily`) after performance fee deduction
+7. Mark accrual row as settled with ledger/transfer IDs
+
+**Deployment:** `--no-verify-jwt` (cron/internal calls)
+
+#### 4 — Admin UI: Annual Fee Accruals Panel
+
+New card in Administration module showing:
+- Year filter (dropdown)
+- Table: Customer name, Period (start → end), Accrued Platform BTC, Accrued Platform USDT, Perf Fee USDT, Settlement status, Last Updated
+- "Collect Mature Fees" button (red, requires confirmation) — collects all periods where anniversary has passed
+- Calls `lth_pvr.get_annual_fee_accruals(p_accrual_year)` RPC for data
+- Calls `ef_collect_annual_fees` with `{ year }` body for collection
+
+#### 5 — Files Changed
+
+- `supabase/migrations/20260418_create_annual_fee_accrual.sql` — Table, indexes, RPC functions, CHECK constraint update, cron job
+- `supabase/functions/ef_collect_annual_fees/index.ts` — New edge function
+- `supabase/functions/ef_collect_annual_fees/client.ts` — Client helper
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` — Annual accrual recording
+- `ui/Advanced BTC DCA Strategy.html` — Annual Fee Accruals admin panel + JS
+- `docs/SDD_v0.6.md` — This changelog entry
+
+---
 
 ### v0.6.67 – Dual-Model Pipeline Support, Fee Schedules & Admin UI Enhancements
 **Date:** 2026-04-18  

@@ -2836,6 +2836,41 @@
         </div>
       </div>
 
+      <!-- Annual Fee Accrual Panel -->
+      <div class="card" id="annualFeeAccrualCard">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          <h3 style="margin:0;">📅 Annual Fee Accruals</h3>
+          <div style="margin-left:auto;display:flex;gap:.5rem;align-items:center;">
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.35rem;">
+              Year:
+              <select id="annualFeeYearSelect" class="context-select" style="height:32px;min-width:90px;"></select>
+            </label>
+            <button id="annualFeeRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+            <button id="annualFeeCollectBtn" type="button" class="btn" style="background:#dc3545;">Collect Mature Fees</button>
+          </div>
+        </div>
+        <p class="small-muted" style="margin-bottom:.75rem;">Tracks accrued platform &amp; performance fees for customers on annual billing schedule. Collection triggers automatically on each customer's anniversary of <code>effective_from</code>.</p>
+        <div id="annualFeeMessage" style="display:none;padding:.6rem 1rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <div class="table-scroll">
+          <table id="annualFeeTable">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th style="min-width:100px;">Period</th>
+                <th style="text-align:right;">Platform BTC</th>
+                <th style="text-align:right;">Platform USDT</th>
+                <th style="text-align:right;">Perf Fee USDT</th>
+                <th style="min-width:100px;">Settled</th>
+                <th style="min-width:130px;">Last Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Alerts card -->
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
@@ -6781,6 +6816,120 @@
 
     // Load once on page open
     loadExecutedLast7Days();
+  })();
+
+  // --- Annual Fee Accruals card (Administration module) ---
+  (() => {
+    const tableBody   = document.querySelector('#annualFeeTable tbody');
+    const refreshBtn  = document.getElementById('annualFeeRefreshBtn');
+    const collectBtn  = document.getElementById('annualFeeCollectBtn');
+    const yearSelect  = document.getElementById('annualFeeYearSelect');
+    const msgDiv      = document.getElementById('annualFeeMessage');
+
+    if (!tableBody || !refreshBtn) return;
+
+    // Populate year selector (current year down to 2025)
+    const curYear = new Date().getFullYear();
+    for (let y = curYear; y >= 2025; y--) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSelect.appendChild(opt);
+    }
+
+    function showMsg(text, isError) {
+      msgDiv.style.display = 'block';
+      msgDiv.style.background = isError ? '#f8d7da' : '#d4edda';
+      msgDiv.style.color = isError ? '#721c24' : '#155724';
+      msgDiv.textContent = text;
+      setTimeout(() => { msgDiv.style.display = 'none'; }, 8000);
+    }
+
+    function fmtNum(val, decimals) {
+      const n = Number(val || 0);
+      return n === 0 ? '—' : n.toFixed(decimals);
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+    }
+
+    async function loadAnnualAccruals() {
+      if (!supabaseClient) return;
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        tableBody.innerHTML = '<tr><td colspan="7" class="muted">Please sign in via Administration tab.</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+      const year = parseInt(yearSelect.value) || curYear;
+
+      const { data, error } = await supabaseClient.rpc('get_annual_fee_accruals', { p_accrual_year: year });
+      if (error) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="muted" style="color:red;">${error.message}</td></tr>`;
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="muted">No annual fee accruals for ${year}.</td></tr>`;
+        return;
+      }
+
+      tableBody.innerHTML = data.map(r => {
+        const settled = r.settled_at ? `<span class="status-pill filled" style="background:#d4edda;color:#155724;">✓ ${fmtDate(r.settled_at)}</span>` : '<span class="status-pill" style="background:#fff3cd;color:#856404;">Pending</span>';
+        const period = r.period_start && r.period_end ? `${r.period_start} → ${r.period_end}` : '—';
+        return `<tr>
+          <td>${r.first_name || ''} ${r.last_name || ''} <span class="muted">(#${r.customer_id})</span></td>
+          <td style="font-size:.82rem;">${period}</td>
+          <td style="text-align:right;font-family:monospace;">${fmtNum(r.accrued_platform_fee_btc, 8)}</td>
+          <td style="text-align:right;font-family:monospace;">${fmtNum(r.accrued_platform_fee_usdt, 2)}</td>
+          <td style="text-align:right;font-family:monospace;">${fmtNum(r.accrued_performance_fee_usdt, 2)}</td>
+          <td>${settled}</td>
+          <td class="muted">${fmtDate(r.updated_at)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    refreshBtn.addEventListener('click', loadAnnualAccruals);
+    yearSelect.addEventListener('change', loadAnnualAccruals);
+
+    collectBtn.addEventListener('click', async () => {
+      if (!confirm(`This will collect all mature annual fee periods (where the anniversary has passed). This includes platform fees and performance fees. Proceed?`)) return;
+      collectBtn.disabled = true;
+      collectBtn.textContent = 'Collecting…';
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_collect_annual_fees`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({}),
+        });
+        const result = await resp.json();
+        if (result.success) {
+          showMsg(`Collection complete: ${result.processed} customers processed, ${result.platform_fees_collected} platform + ${result.performance_fees_collected} performance fees collected.`, false);
+        } else {
+          showMsg(`Collection failed: ${result.error || 'Unknown error'}`, true);
+        }
+        loadAnnualAccruals();
+      } catch (err) {
+        showMsg(`Error: ${err.message}`, true);
+      } finally {
+        collectBtn.disabled = false;
+        collectBtn.textContent = 'Collect Mature Fees';
+      }
+    });
+
+    // Load when admin module becomes visible
+    const observer = new MutationObserver(() => {
+      const card = document.getElementById('annualFeeAccrualCard');
+      if (card && card.offsetParent !== null) loadAnnualAccruals();
+    });
+    observer.observe(document.getElementById('admin-module') || document.body, { attributes: true, subtree: true });
   })();
 
   // --- Alerts card (Administration module) ---

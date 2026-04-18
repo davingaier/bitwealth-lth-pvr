@@ -641,8 +641,17 @@ Changes take effect from the **next trading day**. In-flight trades for the curr
 - Performance fee: 10% of monthly profit above HWM → charged on the 1st of each month
 
 **High-value / annual billing customer:**
-- Platform fee: 0.75% but schedule = `annual` → no daily deductions; admin invoices annually
-- Performance fee: 10% but schedule = `annual` → not included in monthly cron; admin invoices annually
+- Platform fee: 0.75% but schedule = `annual` → fee amounts are **accrued** in `lth_pvr.annual_fee_accrual` (not deducted daily); collected automatically on Jan 2
+- Performance fee: 10% but schedule = `annual` → not included in monthly cron; calculated and collected by `ef_collect_annual_fees` on Jan 2
+
+**Annual Fee Collection (Anniversary-Based):**
+- Each customer's annual period runs from their `effective_from` anniversary to the next anniversary
+- **Automatic:** `ef_collect_annual_fees` runs daily via pg_cron at 06:00 UTC; collects any mature periods (where anniversary has passed)
+- **On-demand:** Administration → Annual Fee Accruals panel → "Collect Mature Fees" button
+- Supports both subaccount model (internal VALR transfer) and API model (on-chain withdrawal)
+- If insufficient USDT, triggers automatic BTC→USDT conversion before collection
+- Performance fee uses HWM methodology (same as monthly, but calculated over the full anniversary year)
+- Track accruals: Administration → Annual Fee Accruals panel (shows period dates + running totals per customer)
 
 **Zero-fee / promotional customer:**
 - Set both rates to 0% via Fee Management; schedules are irrelevant
