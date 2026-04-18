@@ -7,14 +7,14 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
+import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { signVALR } from "../_shared/valr.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const orgId = Deno.env.get("ORG_ID");
-const valrApiKey = Deno.env.get("VALR_API_KEY");
-const valrApiSecret = Deno.env.get("VALR_API_SECRET");
 
-if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
+if (!supabaseUrl || !supabaseKey || !orgId) {
   throw new Error("Missing required environment variables");
 }
 
@@ -22,48 +22,27 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   db: { schema: "lth_pvr" }
 });
 
-// VALR API: Sign request with HMAC SHA-512
-async function signVALR(
-  timestamp: string,
-  method: string,
-  path: string,
-  body: string = "",
-  subaccountId: string = ""
-): Promise<string> {
-  const payload = timestamp + method.toUpperCase() + path + body + subaccountId;
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(valrApiSecret);
-  const messageData = encoder.encode(payload);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// Query VALR transaction history for subaccount
-// Returns: deposits, withdrawals, fees, etc. with actual amounts and timestamps
-async function getTransactionHistory(subaccountId: string, skip = 0, limit = 200) {
+// Query VALR transaction history for a customer account
+// Supports both subaccount model (subaccountId set) and API model (own apiKey/apiSecret)
+async function getTransactionHistory(
+  apiKey: string, apiSecret: string, subaccountId: string | null,
+  skip = 0, limit = 200
+) {
   const timestamp = Date.now().toString();
   const method = "GET";
   const path = `/v1/account/transactionhistory?skip=${skip}&limit=${limit}`;
-  const signature = await signVALR(timestamp, method, path, "", subaccountId);
+  const signature = await signVALR(timestamp, method, path, "", apiSecret, subaccountId ?? "");
+
+  const headers: Record<string, string> = {
+    "X-VALR-API-KEY": apiKey,
+    "X-VALR-SIGNATURE": signature,
+    "X-VALR-TIMESTAMP": timestamp,
+  };
+  if (subaccountId) headers["X-VALR-SUB-ACCOUNT-ID"] = subaccountId;
 
   const response = await fetch(`https://api.valr.com${path}`, {
     method: "GET",
-    headers: {
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -142,8 +121,7 @@ Deno.serve(async (req) => {
       .from("exchange_accounts")
       .select("exchange_account_id, subaccount_id, label")
       .eq("exchange", "VALR")
-      .in("exchange_account_id", exchangeAccountIds)
-      .not("subaccount_id", "is", null);
+      .in("exchange_account_id", exchangeAccountIds);
 
     if (accountError) {
       throw new Error(`Account query failed: ${accountError.message}`);
@@ -200,8 +178,13 @@ Deno.serve(async (req) => {
         console.log(`Syncing ${customerName} (${account.label})`);
         console.log(`  Sync window: ${sinceDatetime.toISOString()} to ${new Date().toISOString()}`);
 
+        // Resolve VALR credentials for this customer
+        const creds = await resolveCustomerCredentials(supabase, customerId);
+
         // Query VALR transaction history
-        const transactionsResponse = await getTransactionHistory(account.subaccount_id);
+        const transactionsResponse = await getTransactionHistory(
+          creds.apiKey, creds.apiSecret, creds.subaccountId
+        );
         
         // VALR API might return { transactions: [...] } or just [...]
         const transactions = Array.isArray(transactionsResponse) 

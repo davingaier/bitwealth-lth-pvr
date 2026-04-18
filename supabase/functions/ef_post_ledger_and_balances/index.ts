@@ -257,12 +257,12 @@ Deno.serve(async (req: Request) => {
         (existingFundingLedger ?? []).map((x: any) => x.note),
       );
 
-      // Query platform fee rates for all customers with funding events
+      // Query platform fee rates and schedules for all customers with funding events
       const customerIds = Array.from(new Set((funding as FundingRow[]).map(f => f.customer_id)));
       const { data: customerStrategies, error: stratErr } = await sb
         .schema("public")
         .from("customer_strategies")
-        .select("customer_id, platform_fee_rate")
+        .select("customer_id, platform_fee_rate, platform_fee_schedule")
         .in("customer_id", customerIds);
 
       if (stratErr) {
@@ -273,11 +273,13 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Create lookup map for platform fee rates (default to 0.75% if not found)
+      // Create lookup maps for platform fee rates and schedules
       const feeRateMap = new Map<number, number>();
+      const feeScheduleMap = new Map<number, string>();
       for (const strat of customerStrategies ?? []) {
         const rate = parseFloat(strat.platform_fee_rate ?? "0.0075");
         feeRateMap.set(strat.customer_id, rate);
+        feeScheduleMap.set(strat.customer_id, strat.platform_fee_schedule ?? "immediate");
       }
 
       const toInsertFunding: any[] = [];
@@ -298,27 +300,42 @@ Deno.serve(async (req: Request) => {
         let platformFeeBtc: number | string = 0;
         let platformFeeUsdt: number | string = 0;
 
+        // Check if this customer has annual platform fee schedule (skip immediate fee deduction)
+        const feeSchedule = feeScheduleMap.get(f.customer_id) ?? "immediate";
+
         if (asset === "BTC") {
           if (isDeposit) {
-            // BTC deposits: record GROSS amount (what VALR credited), calculate platform fee separately
-            const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+            // BTC deposits: record GROSS amount (what VALR credited)
             const amountDecimal = new Decimal(amount);
-            const feeDecimal = amountDecimal.times(platformFeeRate);
-            platformFeeBtc = feeDecimal.toFixed(8); // Keep as string to preserve precision
             amountBtc = amountDecimal.toFixed(8); // Record GROSS amount from VALR
+            if (feeSchedule === "immediate") {
+              // Calculate platform fee separately (charged now)
+              const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+              const feeDecimal = amountDecimal.times(platformFeeRate);
+              platformFeeBtc = feeDecimal.toFixed(8);
+            } else {
+              // Annual schedule: no immediate fee, will be charged at year-end
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - skipping immediate BTC fee`);
+            }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountBtc = amount;
           }
         } else if (asset === "USDT") {
           if (isDeposit) {
-            // USDT deposits: record GROSS amount (what VALR credited), calculate platform fee separately
-            const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+            // USDT deposits: record GROSS amount (what VALR credited)
             const amountDecimal = new Decimal(amount);
-            const feeDecimal = amountDecimal.times(platformFeeRate);
-            platformFeeUsdt = feeDecimal.toFixed(8); // Keep as string to preserve precision
             amountUsdt = amountDecimal.toFixed(8); // Record GROSS amount from VALR
-            console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, gross=${amountUsdt}, type=${typeof amountUsdt}`);
+            if (feeSchedule === "immediate") {
+              // Calculate platform fee separately (charged now)
+              const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
+              const feeDecimal = amountDecimal.times(platformFeeRate);
+              platformFeeUsdt = feeDecimal.toFixed(8);
+              console.log(`[PRECISION CHECK] amount=${amount}, fee=${platformFeeUsdt}, gross=${amountUsdt}, type=${typeof amountUsdt}`);
+            } else {
+              // Annual schedule: no immediate fee, will be charged at year-end
+              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - skipping immediate USDT fee`);
+            }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
             amountUsdt = amount;

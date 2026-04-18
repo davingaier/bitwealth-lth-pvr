@@ -47,15 +47,16 @@ Deno.serve(async (req) => {
 
     console.log(`Calculating performance fees for ${lastMonthStr} (last day: ${lastDayStr})`);
 
-    // Get all active customers with strategies
+    // Get all active customers with monthly performance fee strategies
     const { data: activeStrategies, error: strategyError } = await supabase
       .schema("public")
       .from("customer_strategies")
-      .select("customer_id, customer_strategy_id, performance_fee_rate")
+      .select("customer_id, customer_strategy_id, performance_fee_rate, performance_fee_schedule")
       .eq("org_id", orgId)
       .eq("status", "active")
       .eq("live_enabled", true)
-      .gt("performance_fee_rate", 0);
+      .gt("performance_fee_rate", 0)
+      .neq("performance_fee_schedule", "annual");
 
     if (strategyError) {
       console.error("Error fetching active strategies:", strategyError);

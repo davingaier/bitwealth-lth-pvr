@@ -1,6 +1,7 @@
 import { getServiceClient } from "./client.ts";
 import { placeLimitOrder, placeMarketOrder, getOrderBook } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
+import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 
 Deno.serve(async ()=>{
   const sb = getServiceClient();
@@ -54,44 +55,20 @@ Deno.serve(async ()=>{
         errorCount++;
         continue;
       }
-      // Look up VALR subaccount ID for this exchange account
-      const { data: exAcc, error: exErr } = await sb.from("exchange_accounts").select("subaccount_id").eq("org_id", org_id).eq("exchange_account_id", exchange_account_id).limit(1).single();
-      if (exErr) {
-        console.error("exchange_accounts lookup failed", exErr);
-        await logAlert(
-          sb,
-          "ef_execute_orders",
-          "error",
-          `Exchange account lookup failed: ${exErr.message}`,
-          {
-            customer_id: i.customer_id,
-            intent_id: i.intent_id,
-            exchange_account_id,
-            error: exErr.message
-          },
-          org_id,
-          i.customer_id
-        );
-        errorCount++;
-        continue;
-      }
-      const subaccountId = exAcc?.subaccount_id ?? null;
-      if (!subaccountId) {
-        console.warn(`No subaccount_id for exchange_account_id ${exchange_account_id}, skipping intent ${i.intent_id}`);
-        await logAlert(
-          sb,
-          "ef_execute_orders",
-          "critical",
-          `No VALR subaccount mapped for exchange_account_id ${exchange_account_id}`,
-          {
-            customer_id: i.customer_id,
-            intent_id: i.intent_id,
-            exchange_account_id,
-            trade_date: todayDate
-          },
-          org_id,
-          i.customer_id
-        );
+      // Look up VALR credentials for this customer (supports both subaccount and API model)
+      let subaccountId: string | null = null;
+      let credentials: { apiKey: string; apiSecret: string } | null = null;
+      try {
+        const creds = await resolveCustomerCredentials(sb, i.customer_id);
+        subaccountId = creds.subaccountId;
+        credentials = creds.accountModel === "api" ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret } : null;
+      } catch (credErr) {
+        const errMsg = credErr instanceof Error ? credErr.message : String(credErr);
+        console.error(`Credential resolution failed for customer ${i.customer_id}:`, errMsg);
+        await logAlert(sb, "ef_execute_orders", "error",
+          `Credential resolution failed: ${errMsg}`,
+          { customer_id: i.customer_id, intent_id: i.intent_id, exchange_account_id, error: errMsg },
+          org_id, i.customer_id);
         errorCount++;
         continue;
       }
@@ -115,7 +92,8 @@ Deno.serve(async ()=>{
             side,
             qtyStr,
             i.intent_id,
-            subaccountId
+            subaccountId,
+            credentials
           );
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
@@ -210,7 +188,7 @@ Deno.serve(async ()=>{
             customerOrderId: i.intent_id,
             timeInForce: "GTC",
             postOnly: false
-          }, subaccountId);
+          }, subaccountId, credentials);
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
           console.error("VALR LIMIT order failed", e);
@@ -348,16 +326,17 @@ Deno.serve(async ()=>{
           accountGroups.get(accountId)!.push(order.intent_id);
         }
 
-        // Launch WebSocket monitor for each subaccount
+        // Launch WebSocket monitor for each subaccount (subaccount model only)
         for (const [accountId, orderIds] of accountGroups.entries()) {
           const { data: exAcc } = await sb
             .from("exchange_accounts")
-            .select("subaccount_id")
+            .select("subaccount_id, account_model")
             .eq("exchange_account_id", accountId)
             .single();
 
           const subaccountId = exAcc?.subaccount_id;
 
+          // WebSocket monitoring only works for subaccount model currently
           if (subaccountId) {
             // Call WebSocket monitor Edge Function (non-blocking)
             const wsUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ef_valr_ws_monitor`;
@@ -365,7 +344,7 @@ Deno.serve(async ()=>{
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${Deno.env.get("SECRET_KEY")}`,
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SECRET_KEY")}`,
               },
               body: JSON.stringify({
                 order_ids: orderIds,

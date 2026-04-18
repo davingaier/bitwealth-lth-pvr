@@ -5,11 +5,13 @@
 //    then cancel it and place a fallback MARKET order for the remaining qty.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getOrderSummaryByCustomerOrderId, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
+import type { ValrRequestCredentials } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
+import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("SECRET_KEY");
+const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SECRET_KEY");
 const supabase = createClient(supabaseUrl, supabaseKey, {
   db: {
     schema: "lth_pvr"
@@ -22,9 +24,8 @@ const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const PRICE_MOVE_THRESHOLD = 0.0025; // 0.25%
 const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
 
-// Cache subaccount lookups per exchange_account_id so we don't hit the DB
-// repeatedly for the same account within a single run.
-const subaccountCache = new Map<string, string | null>();
+// Cache resolved credentials per exchange_account_id to avoid repeated vault lookups.
+const credentialCache = new Map<string, { subaccountId: string | null; credentials: ValrRequestCredentials | null }>();
 
 Deno.serve(async (_req: Request)=>{
   console.log("ef_poll_orders: Starting single-pass polling");
@@ -94,46 +95,45 @@ Deno.serve(async (_req: Request)=>{
   let processed = 0;
   for (const o of (orders ?? [])){
 
-    // Look up VALR subaccount_id for this exchange_account_id from the shared
-    // public.exchange_accounts table. We cache lookups per run to avoid
-    // hammering the DB when multiple orders share the same account.
+    // Look up VALR credentials for this exchange_account_id.
+    // We need the customer_id to resolve credentials from vault.
     let subaccountId: string | null = null;
+    let credentials: ValrRequestCredentials | null = null;
 
-    if (subaccountCache.has(o.exchange_account_id)) {
-      subaccountId = subaccountCache.get(o.exchange_account_id) ?? null;
+    if (credentialCache.has(o.exchange_account_id)) {
+      const cached = credentialCache.get(o.exchange_account_id)!;
+      subaccountId = cached.subaccountId;
+      credentials = cached.credentials;
     } else {
-      const { data: exAcc, error: exErr } = await supabase
-        .schema("public")
-        .from("exchange_accounts")
-        .select("subaccount_id")
-        .eq("exchange_account_id", o.exchange_account_id)
+      // Find customer_id for this exchange_account via order_intents
+      const { data: intent } = await supabase
+        .from("order_intents")
+        .select("customer_id")
+        .eq("intent_id", o.intent_id)
         .limit(1)
         .single();
 
-      if (exErr) {
-        console.error(
-          `ef_poll_orders: exchange_accounts lookup failed for exchange_account_id=${o.exchange_account_id}`,
-          exErr,
-        );
+      if (!intent?.customer_id) {
+        console.warn(`ef_poll_orders: no customer_id found for intent_id=${o.intent_id}, skipping`);
         continue;
       }
 
-      subaccountId = exAcc?.subaccount_id ?? null;
-      subaccountCache.set(o.exchange_account_id, subaccountId);
-    }
-
-    if (!subaccountId) {
-      console.warn(
-        `ef_poll_orders: no subaccount_id for exchange_account_id=${o.exchange_account_id}, skipping`,
-      );
-      continue;
+      try {
+        const creds = await resolveCustomerCredentials(supabase, intent.customer_id);
+        subaccountId = creds.subaccountId;
+        credentials = creds.accountModel === "api" ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret } : null;
+        credentialCache.set(o.exchange_account_id, { subaccountId, credentials });
+      } catch (credErr) {
+        console.error(`ef_poll_orders: credential resolution failed for customer ${intent.customer_id}:`, credErr);
+        continue;
+      }
     }
 
     const pair = o.pair;
     const side = o.side.toUpperCase();
     let summary;
     try {
-      summary = await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId);
+      summary = await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId, credentials);
 
     } catch (err) {
       console.error(`ef_poll_orders: VALR poll failed for customerOrderId (intent_id)=${o.intent_id}`, err);
@@ -257,7 +257,7 @@ Deno.serve(async (_req: Request)=>{
         if (remainingQty > 0) {
           // 2.a Cancel the stale LIMIT order on VALR
           try {
-            await cancelOrderById(last.id, pair, subaccountId);
+            await cancelOrderById(last.id, pair, subaccountId, credentials);
           } catch (err) {
             console.error(`ef_poll_orders: failed to cancel stale limit order ${last.id}`, err);
             await logAlert(
@@ -287,7 +287,7 @@ Deno.serve(async (_req: Request)=>{
           }
 
           try {
-            const marketOrder = await placeMarketOrder(pair, side, amount, o.intent_id, subaccountId);
+            const marketOrder = await placeMarketOrder(pair, side, amount, o.intent_id, subaccountId, credentials);
 
             const { error: insertError } = await supabase.from("exchange_orders").insert({
               org_id: o.org_id,

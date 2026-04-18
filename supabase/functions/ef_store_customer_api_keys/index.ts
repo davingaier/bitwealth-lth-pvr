@@ -197,6 +197,32 @@ Deno.serve(async (req) => {
         .from("customer_details")
         .update({ registration_status: "deposit" })
         .eq("customer_id", customer_id);
+
+      // ── Step 7b: If customer already has funds, trigger immediate deposit scan
+      //    to skip 'deposit' milestone and activate directly.
+      const hasFunds = usdtBal > 0 || btcBal > 0 ||
+        balances.some(b => b.currency === "ZAR" && Number(b.available ?? 0) > 0);
+      if (hasFunds) {
+        console.log(`Customer ${customer_id} has existing funds — triggering immediate deposit scan`);
+        try {
+          const scanResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_deposit_scan`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+            },
+            body: JSON.stringify({}),
+          });
+          if (scanResponse.ok) {
+            const scanResult = await scanResponse.json();
+            console.log(`✓ Immediate deposit scan result:`, scanResult);
+          } else {
+            console.error(`Immediate deposit scan failed: ${scanResponse.status}`);
+          }
+        } catch (scanError) {
+          console.error("Error calling ef_deposit_scan:", scanError);
+        }
+      }
     }
 
     // ── Log success alert if any permissions were missing ────────────────────

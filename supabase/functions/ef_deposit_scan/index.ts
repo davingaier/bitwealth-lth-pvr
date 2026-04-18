@@ -1,55 +1,48 @@
 // Edge Function: ef_deposit_scan
-// Purpose: Milestone 5 - Hourly scan for customer deposits on VALR subaccounts
+// Purpose: Milestone 5 - Hourly scan for customer deposits on VALR
+// Supports both subaccount and API model customers.
 // Flow: Queries VALR balances → Activates customers when balance > 0 → Sends notification emails
+// For API model: also detects ZAR deposits and writes to pending_zar_conversions.
 // Deployed with: --no-verify-jwt (called by pg_cron hourly)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { signVALR } from "../_shared/valr.ts";
+import { logAlert } from "../_shared/alerting.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const orgId = Deno.env.get("ORG_ID");
-const valrApiKey = Deno.env.get("VALR_API_KEY");
-const valrApiSecret = Deno.env.get("VALR_API_SECRET");
 
-if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
+if (!supabaseUrl || !supabaseKey || !orgId) {
   throw new Error("Missing required environment variables");
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const sbLthPvr = createClient(supabaseUrl, supabaseKey, { db: { schema: "lth_pvr" } });
 
-// VALR API: Sign request with HMAC SHA-512
-async function signVALR(timestamp: string, method: string, path: string, body: string = "", subaccountId: string = "") {
-  const message = timestamp + method.toUpperCase() + path + body + subaccountId;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(valrApiSecret),
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return Array.from(new Uint8Array(signature))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-// Query VALR subaccount balances
-async function getSubaccountBalances(subaccountId: string) {
+// Query VALR balances using resolved credentials (supports both models)
+async function getBalances(
+  apiKey: string,
+  apiSecret: string,
+  subaccountId: string | null,
+): Promise<any[]> {
   const timestamp = Date.now().toString();
   const method = "GET";
   const path = "/v1/account/balances";
-  const signature = await signVALR(timestamp, method, path, "", subaccountId);
+  const signature = await signVALR(timestamp, method, path, "", apiSecret, subaccountId ?? "");
 
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method: "GET",
-    headers: {
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-  });
+  const headers: Record<string, string> = {
+    "X-VALR-API-KEY": apiKey,
+    "X-VALR-SIGNATURE": signature,
+    "X-VALR-TIMESTAMP": timestamp,
+  };
+  if (subaccountId) {
+    headers["X-VALR-SUB-ACCOUNT-ID"] = subaccountId;
+  }
+
+  const response = await fetch(`https://api.valr.com${path}`, { method: "GET", headers });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -120,14 +113,13 @@ Deno.serve(async (req) => {
       throw strategyError;
     }
 
-    // Get the actual exchange accounts with subaccount IDs
+    // Get the actual exchange accounts (both subaccount and API model)
     const exchangeAccountIds = (strategies || []).map(s => s.exchange_account_id);
     const { data: accounts, error: accountError } = await supabase
       .from("exchange_accounts")
       .select("exchange_account_id, subaccount_id, label")
       .eq("exchange", "VALR")
-      .in("exchange_account_id", exchangeAccountIds)
-      .not("subaccount_id", "is", null);
+      .in("exchange_account_id", exchangeAccountIds);
 
     if (accountError) {
       console.error("Error loading exchange accounts:", accountError);
@@ -136,7 +128,7 @@ Deno.serve(async (req) => {
 
     console.log(`Found ${accounts?.length || 0} VALR accounts to check`);
 
-    // Check balances for each subaccount
+    // Check balances for each customer account (both subaccount and API model)
     for (const account of accounts || []) {
       results.scanned++;
 
@@ -148,15 +140,55 @@ Deno.serve(async (req) => {
       if (!customer) continue;
 
       try {
-        console.log(`Checking balances for customer ${customer.customer_id} (${account.subaccount_id})`);
+        // Resolve credentials via vault (API model) or env (subaccount model)
+        const creds = await resolveCustomerCredentials(sbLthPvr, customer.customer_id);
+        const modelLabel = creds.accountModel === "api" ? "API-model" : `subaccount ${creds.subaccountId}`;
+        console.log(`Checking balances for customer ${customer.customer_id} (${modelLabel})`);
 
-        const balances = await getSubaccountBalances(account.subaccount_id);
+        const balances = await getBalances(creds.apiKey, creds.apiSecret, creds.subaccountId);
 
-        // Check if any balance > 0
-        const hasBalance = balances.some((bal: any) => {
+        // Check for tradeable balances (BTC or USDT > 0)
+        const tradeableBalances = balances.filter((bal: any) => {
           const available = parseFloat(bal.available || "0");
-          return available > 0;
+          return available > 0 && ["BTC", "USDT"].includes(bal.currency);
         });
+
+        // For API model: also check for ZAR deposits that need conversion
+        const zarBalance = balances.find((bal: any) => {
+          const available = parseFloat(bal.available || "0");
+          return available > 0 && bal.currency === "ZAR";
+        });
+        if (zarBalance && creds.accountModel === "api") {
+          const zarAmount = parseFloat(zarBalance.available);
+          console.log(`ZAR balance detected for API-model customer ${customer.customer_id}: R${zarAmount.toFixed(2)}`);
+          // Create a zar_deposit funding event — the DB trigger auto-creates pending_zar_conversions
+          try {
+            const zarIdempotencyKey = `ZAR_DEPOSIT_SCAN:${customer.customer_id}:${new Date().toISOString().split('T')[0]}`;
+            const { error: zarFundingError } = await sbLthPvr
+              .from("exchange_funding_events")
+              .insert({
+                org_id: customer.org_id,
+                customer_id: customer.customer_id,
+                exchange_account_id: account.exchange_account_id,
+                kind: "zar_deposit",
+                asset: "ZAR",
+                amount: zarAmount,
+                ext_ref: `zar_deposit_scan_${customer.customer_id}`,
+                occurred_at: new Date().toISOString(),
+                idempotency_key: zarIdempotencyKey,
+              });
+            if (zarFundingError && !zarFundingError.message.includes("duplicate key")) {
+              console.error(`Error creating ZAR funding event for customer ${customer.customer_id}:`, zarFundingError);
+            } else {
+              console.log(`✓ Created ZAR funding event: R${zarAmount.toFixed(2)} (trigger will create pending conversion)`);
+            }
+          } catch (zarWriteError) {
+            console.error(`Exception writing ZAR funding event for ${customer.customer_id}:`, zarWriteError);
+          }
+        }
+
+        // Also count ZAR as a balance for activation purposes (customer deposited something)
+        const hasBalance = tradeableBalances.length > 0 || (zarBalance && parseFloat(zarBalance.available) > 0);
 
         if (hasBalance) {
           console.log(`✓ Balance detected for customer ${customer.customer_id}`);
@@ -350,10 +382,10 @@ Deno.serve(async (req) => {
         }
       } catch (balanceError) {
         console.error(`Error checking balance for customer ${customer.customer_id}:`, balanceError);
-        console.error(`VALR error details:`, {
-          subaccount_id: account.subaccount_id,
-          error_message: balanceError instanceof Error ? balanceError.message : String(balanceError)
-        });
+        await logAlert(sbLthPvr, "ef_deposit_scan", "error",
+          `Balance check failed for customer ${customer.customer_id}: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`,
+          { customer_id: customer.customer_id, exchange_account_id: account.exchange_account_id },
+          customer.org_id, customer.customer_id);
         results.errors++;
       }
     }

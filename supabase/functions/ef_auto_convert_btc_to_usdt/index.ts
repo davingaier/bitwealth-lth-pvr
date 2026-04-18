@@ -7,15 +7,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { resolveCustomerCredentials, type ValrCredentials } from "../_shared/valrCredentials.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const orgId = Deno.env.get("ORG_ID");
-const valrApiKey = Deno.env.get("VALR_API_KEY");
-const valrApiSecret = Deno.env.get("VALR_API_SECRET");
 const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
 
-if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
+if (!supabaseUrl || !supabaseKey || !orgId) {
   throw new Error("Missing required environment variables");
 }
 
@@ -33,211 +32,93 @@ function generateApprovalToken(): string {
   return token;
 }
 
+// VALR private request helper (supports both account models)
+async function valrRequest(
+  method: string,
+  path: string,
+  body: string | null,
+  apiKey: string,
+  apiSecret: string,
+  subaccountId: string | null,
+): Promise<Response> {
+  const timestamp = Date.now().toString();
+  const signature = await signVALR(timestamp, method, path, body ?? "", apiSecret, subaccountId ?? "");
+  const headers: Record<string, string> = {
+    "X-VALR-API-KEY": apiKey,
+    "X-VALR-SIGNATURE": signature,
+    "X-VALR-TIMESTAMP": timestamp,
+  };
+  if (body) headers["Content-Type"] = "application/json";
+  if (subaccountId) headers["X-VALR-SUB-ACCOUNT-ID"] = subaccountId;
+  return await fetch(`https://api.valr.com${path}`, { method, headers, body: body ?? undefined });
+}
+
 // Place VALR LIMIT order
 async function placeLimitOrder(
-  subaccountId: string,
-  side: "BUY" | "SELL",
-  pair: string,
-  quantity: number,
-  price: number,
-  customerOrderId: string
+  apiKey: string, apiSecret: string, subaccountId: string | null,
+  side: "BUY" | "SELL", pair: string, quantity: number, price: number, customerOrderId: string,
 ) {
-  const timestamp = Date.now().toString();
-  const method = "POST";
-  const path = "/v1/orders/limit";
-  const body = JSON.stringify({
-    side,
-    quantity: quantity.toFixed(8),
-    price: price.toFixed(2),
-    pair,
-    postOnly: false,
-    customerOrderId,
-  });
-
-  const signature = await signVALR(timestamp, method, path, body, valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`VALR LIMIT order failed: ${response.status} - ${errorText}`);
-  }
-
+  const body = JSON.stringify({ side, quantity: quantity.toFixed(8), price: price.toFixed(2), pair, postOnly: false, customerOrderId });
+  const response = await valrRequest("POST", "/v1/orders/limit", body, apiKey, apiSecret, subaccountId);
+  if (!response.ok) { const errorText = await response.text(); throw new Error(`VALR LIMIT order failed: ${response.status} - ${errorText}`); }
   return await response.json();
 }
 
 // Place VALR MARKET order
 async function placeMarketOrder(
-  subaccountId: string,
-  side: "BUY" | "SELL",
-  pair: string,
-  quantity: number,
-  customerOrderId: string
+  apiKey: string, apiSecret: string, subaccountId: string | null,
+  side: "BUY" | "SELL", pair: string, quantity: number, customerOrderId: string,
 ) {
-  const timestamp = Date.now().toString();
-  const method = "POST";
-  const path = "/v1/orders/market";
-  const body = JSON.stringify({
-    side,
-    baseAmount: quantity.toFixed(8),
-    pair,
-    customerOrderId,
-  });
-
-  const signature = await signVALR(timestamp, method, path, body, valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`VALR MARKET order failed: ${response.status} - ${errorText}`);
-  }
-
+  const body = JSON.stringify({ side, baseAmount: quantity.toFixed(8), pair, customerOrderId });
+  const response = await valrRequest("POST", "/v1/orders/market", body, apiKey, apiSecret, subaccountId);
+  if (!response.ok) { const errorText = await response.text(); throw new Error(`VALR MARKET order failed: ${response.status} - ${errorText}`); }
   return await response.json();
 }
 
-// Cancel VALR order by ID
+// Cancel VALR order
 async function cancelOrder(
+  apiKey: string, apiSecret: string, subaccountId: string | null,
   orderId: string,
-  subaccountId: string
 ) {
-  const timestamp = Date.now().toString();
-  const method = "DELETE";
-  const path = `/v1/orders/order`;
-  const body = JSON.stringify({
-    orderId,
-    pair: "BTCUSDT",
-  });
-
-  const signature = await signVALR(timestamp, method, path, body, valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`VALR cancel order failed: ${response.status} - ${errorText}`);
-  }
-
+  const body = JSON.stringify({ orderId, pair: "BTCUSDT" });
+  const response = await valrRequest("DELETE", "/v1/orders/order", body, apiKey, apiSecret, subaccountId);
+  if (!response.ok) { const errorText = await response.text(); throw new Error(`VALR cancel order failed: ${response.status} - ${errorText}`); }
   return await response.json();
 }
 
-// Poll order status by customer order ID
+// Get VALR order status
 async function getOrderStatus(
+  apiKey: string, apiSecret: string, subaccountId: string | null,
   customerOrderId: string,
-  subaccountId: string
 ) {
-  const timestamp = Date.now().toString();
-  const method = "GET";
   const path = `/v1/orders/history/summary/customerorderid/${customerOrderId}?currencyPair=BTCUSDT`;
-
-  const signature = await signVALR(timestamp, method, path, "", valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`VALR order status fetch failed: ${response.status}`);
-  }
-
+  const response = await valrRequest("GET", path, null, apiKey, apiSecret, subaccountId);
+  if (!response.ok) throw new Error(`VALR order status fetch failed: ${response.status}`);
   return await response.json();
 }
 
-// Get BTC price from VALR
-async function getBTCPrice(subaccountId: string): Promise<number> {
-  const timestamp = Date.now().toString();
-  const method = "GET";
+// Get BTC price
+async function getBTCPrice(
+  apiKey: string, apiSecret: string, subaccountId: string | null,
+): Promise<number> {
   const path = "/v1/marketdata/BTCUSDT/ticker";
-
-  const signature = await signVALR(timestamp, method, path, "", valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`VALR price fetch failed: ${response.status}`);
-  }
-
+  const response = await valrRequest("GET", path, null, apiKey, apiSecret, subaccountId);
+  if (!response.ok) throw new Error(`VALR price fetch failed: ${response.status}`);
   const data = await response.json();
   return Number(data.lastTradedPrice || 50000);
 }
 
-// Get best ask price from VALR order book (lowest sell price - for our LIMIT SELL order)
-async function getBestAskPrice(subaccountId: string): Promise<number> {
-  const timestamp = Date.now().toString();
-  const method = "GET";
+// Get best ask price
+async function getBestAskPrice(
+  apiKey: string, apiSecret: string, subaccountId: string | null,
+): Promise<number> {
   const path = "/v1/marketdata/BTCUSDT/orderbook";
-
-  const signature = await signVALR(timestamp, method, path, "", valrApiSecret, subaccountId);
-
-  const response = await fetch(`https://api.valr.com${path}`, {
-    method,
-    headers: {
-      "X-VALR-API-KEY": valrApiKey,
-      "X-VALR-SIGNATURE": signature,
-      "X-VALR-TIMESTAMP": timestamp,
-      "X-VALR-SUB-ACCOUNT-ID": subaccountId,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`VALR order book fetch failed: ${response.status}`);
-  }
-
+  const response = await valrRequest("GET", path, null, apiKey, apiSecret, subaccountId);
+  if (!response.ok) throw new Error(`VALR order book fetch failed: ${response.status}`);
   const data = await response.json();
-  
-  // Get best ask (lowest sell price - we match or slightly undercut this)
   const bestAsk = data.Asks?.[0];
-  if (!bestAsk) {
-    throw new Error("No asks available in order book");
-  }
-
-  // Place slightly below best ask (0.01% lower) to be at top of sell side
-  const ourPrice = Number(bestAsk.price) * 0.9999;
-  return ourPrice;
+  if (!bestAsk) throw new Error("No asks available in order book");
+  return Number(bestAsk.price) * 0.9999;
 }
 
 Deno.serve(async (req) => {
@@ -275,26 +156,19 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get exchange account
-      const { data: exchangeAcct, error: exAcctError } = await supabase
-        .schema("public")
-        .from("exchange_accounts")
-        .select("subaccount_id")
-        .eq("customer_id", customerId)
-        .eq("exchange", "VALR")
-        .single();
-
-      if (exAcctError || !exchangeAcct) {
+      // Resolve VALR credentials for this customer
+      let creds: ValrCredentials;
+      try {
+        creds = await resolveCustomerCredentials(supabase, customerId);
+      } catch (credErr) {
         return new Response(
-          JSON.stringify({ error: "No exchange account found" }),
+          JSON.stringify({ error: `No exchange account found: ${credErr instanceof Error ? credErr.message : String(credErr)}` }),
           { status: 404, headers: { "Content-Type": "application/json" } }
         );
       }
 
-      const subaccountId = exchangeAcct.subaccount_id;
-
       // Get current BTC price
-      const btcPrice = await getBTCPrice(subaccountId);
+      const btcPrice = await getBTCPrice(creds.apiKey, creds.apiSecret, creds.subaccountId);
       
       // Calculate BTC needed with 2% slippage buffer
       const btcNeeded = (usdtNeeded / btcPrice) * 1.02;
@@ -415,26 +289,19 @@ Deno.serve(async (req) => {
       const customerId = approval.customer_id;
       const btcToSell = Number(approval.btc_to_sell);
 
-      // Get exchange account
-      const { data: exchangeAcct, error: exAcctError } = await supabase
-        .schema("public")
-        .from("exchange_accounts")
-        .select("subaccount_id")
-        .eq("customer_id", customerId)
-        .eq("exchange", "VALR")
-        .single();
-
-      if (exAcctError || !exchangeAcct) {
+      // Resolve VALR credentials
+      let creds: ValrCredentials;
+      try {
+        creds = await resolveCustomerCredentials(supabase, customerId);
+      } catch (credErr) {
         return new Response(
-          JSON.stringify({ error: "No exchange account found" }),
+          JSON.stringify({ error: `No exchange account found: ${credErr instanceof Error ? credErr.message : String(credErr)}` }),
           { status: 404, headers: { "Content-Type": "application/json" } }
         );
       }
 
-      const subaccountId = exchangeAcct.subaccount_id;
-
       // Get best ask price from order book (lowest sell price)
-      const limitPrice = await getBestAskPrice(subaccountId);
+      const limitPrice = await getBestAskPrice(creds.apiKey, creds.apiSecret, creds.subaccountId);
       const customerOrderId = `conversion_${approval.approval_id}`;
 
       console.log(`Placing LIMIT order: SELL ${btcToSell.toFixed(8)} BTC @ $${limitPrice.toFixed(2)} (slightly below best ask)`);
@@ -445,7 +312,7 @@ Deno.serve(async (req) => {
       try {
         // Place LIMIT order slightly below best ask
         const limitOrder = await placeLimitOrder(
-          subaccountId,
+          creds.apiKey, creds.apiSecret, creds.subaccountId,
           "SELL",
           "BTCUSDT",
           btcToSell,
@@ -471,7 +338,7 @@ Deno.serve(async (req) => {
 
           try {
             // Check order status
-            const orderStatus = await getOrderStatus(customerOrderId, subaccountId);
+            const orderStatus = await getOrderStatus(creds.apiKey, creds.apiSecret, creds.subaccountId, customerOrderId);
             
             if (orderStatus && Array.isArray(orderStatus) && orderStatus.length > 0) {
               const latestOrder = orderStatus[0];
@@ -486,7 +353,7 @@ Deno.serve(async (req) => {
             }
 
             // Check if price moved >= 0.25%
-            const currentPrice = await getBTCPrice(subaccountId);
+            const currentPrice = await getBTCPrice(creds.apiKey, creds.apiSecret, creds.subaccountId);
             const priceMove = Math.abs(currentPrice - limitPrice) / limitPrice;
 
             if (priceMove >= PRICE_MOVE_THRESHOLD) {
@@ -540,7 +407,7 @@ Deno.serve(async (req) => {
 
           // Cancel LIMIT order
           try {
-            await cancelOrder(limitOrder.id, subaccountId);
+            await cancelOrder(creds.apiKey, creds.apiSecret, creds.subaccountId, limitOrder.id);
             console.log(`✓ LIMIT order cancelled: ${limitOrder.id}`);
           } catch (cancelError) {
             console.error("Failed to cancel LIMIT order:", cancelError);
@@ -549,7 +416,7 @@ Deno.serve(async (req) => {
 
           // Place MARKET order
           const marketOrder = await placeMarketOrder(
-            subaccountId,
+            creds.apiKey, creds.apiSecret, creds.subaccountId,
             "SELL",
             "BTCUSDT",
             btcToSell,
@@ -558,7 +425,7 @@ Deno.serve(async (req) => {
 
           console.log(`✓ MARKET order placed: ${marketOrder.id}`);
           finalOrderId = marketOrder.id;
-          executionPrice = await getBTCPrice(subaccountId); // Use current market price
+          executionPrice = await getBTCPrice(creds.apiKey, creds.apiSecret, creds.subaccountId); // Use current market price
         }
 
         // Estimate USDT received (will be updated when order fills)
@@ -662,23 +529,16 @@ Deno.serve(async (req) => {
       console.log(`🚀 TC1.7 Auto-conversion for customer ${customerId}`);
       console.log(`   Fee due: $${performanceFee.toFixed(2)}, USDT available: $${usdtAvailable.toFixed(2)}`);
 
-      // Get exchange account
-      const { data: exchangeAcct, error: exAcctError } = await supabase
-        .schema("public")
-        .from("exchange_accounts")
-        .select("subaccount_id")
-        .eq("customer_id", customerId)
-        .eq("exchange", "VALR")
-        .single();
-
-      if (exAcctError || !exchangeAcct) {
+      // Resolve VALR credentials
+      let creds3: ValrCredentials;
+      try {
+        creds3 = await resolveCustomerCredentials(supabase, customerId);
+      } catch (credErr) {
         return new Response(
-          JSON.stringify({ error: "No exchange account found" }),
+          JSON.stringify({ error: `No exchange account found: ${credErr instanceof Error ? credErr.message : String(credErr)}` }),
           { status: 404, headers: { "Content-Type": "application/json" } }
         );
       }
-
-      const subaccountId = exchangeAcct.subaccount_id;
 
       try {
         const results = {
@@ -728,7 +588,7 @@ Deno.serve(async (req) => {
           console.log(`   Step 2: Converting BTC for shortfall: $${shortfall.toFixed(2)}`);
           
           // Get current BTC price
-          const btcPrice = await getBTCPrice(subaccountId);
+          const btcPrice = await getBTCPrice(creds3.apiKey, creds3.apiSecret, creds3.subaccountId);
           console.log(`   BTC price: $${btcPrice.toFixed(2)}`);
           
           // Calculate BTC needed with 2% slippage buffer
@@ -738,7 +598,7 @@ Deno.serve(async (req) => {
           console.log(`   BTC needed: ${btcNeeded.toFixed(8)} (${btcNeededExact.toFixed(8)} + 2% buffer)`);
           
           // Get best ask price for LIMIT order
-          const bestAsk = await getBestAskPrice(subaccountId);
+          const bestAsk = await getBestAskPrice(creds3.apiKey, creds3.apiSecret, creds3.subaccountId);
           const limitPrice = bestAsk * 0.9999; // Slightly below best ask
           
           console.log(`   Placing LIMIT SELL: ${btcNeeded.toFixed(8)} BTC @ $${limitPrice.toFixed(2)}`);
@@ -748,7 +608,7 @@ Deno.serve(async (req) => {
           
           // Place LIMIT order
           const orderResult = await placeLimitOrder(
-            subaccountId,
+            creds3.apiKey, creds3.apiSecret, creds3.subaccountId,
             "SELL",
             "BTCUSDT",
             btcNeeded,
@@ -769,7 +629,7 @@ Deno.serve(async (req) => {
             
             console.log(`   Polling attempt ${attempt}/${maxAttempts}...`);
             
-            const orderStatus = await getOrderStatus(customerOrderId, subaccountId);
+            const orderStatus = await getOrderStatus(creds3.apiKey, creds3.apiSecret, creds3.subaccountId, customerOrderId);
             
             if (orderStatus.orderStatusType === "Filled") {
               orderFilled = true;
@@ -787,11 +647,11 @@ Deno.serve(async (req) => {
             if (attempt === maxAttempts) {
               console.log(`   ⏱️ Timeout reached, cancelling LIMIT order and placing MARKET order`);
               
-              await cancelOrder(orderResult.id, subaccountId);
+              await cancelOrder(creds3.apiKey, creds3.apiSecret, creds3.subaccountId, orderResult.id);
               
               const marketOrderId = `perf_fee_mkt_${customerId}_${Date.now()}`;
               const marketResult = await placeMarketOrder(
-                subaccountId,
+                creds3.apiKey, creds3.apiSecret, creds3.subaccountId,
                 "SELL",
                 "BTCUSDT",
                 btcNeeded,
@@ -803,7 +663,7 @@ Deno.serve(async (req) => {
               // Wait for market order to fill (should be immediate)
               await new Promise(resolve => setTimeout(resolve, 5000));
               
-              const marketStatus = await getOrderStatus(marketOrderId, subaccountId);
+              const marketStatus = await getOrderStatus(creds3.apiKey, creds3.apiSecret, creds3.subaccountId, marketOrderId);
               
               if (marketStatus.orderStatusType === "Filled") {
                 usdtReceived = Number(marketStatus.total);
