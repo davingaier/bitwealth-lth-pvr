@@ -5,7 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendHTMLEmail } from "../_shared/smtp.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SECRET_KEY = Deno.env.get("Secret Key");
+const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("Secret Key");
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

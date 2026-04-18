@@ -8117,7 +8117,14 @@ This will:
                    💳 Add Wallets
                  </button>`
               : '';
-            actionButtons = updateBtn + walletBtn;
+            const resendBtn = (customer.btc_wallet_address || customer.usdt_wallet_address)
+              ? `<br><button class="btn btn-secondary-sm"
+                             onclick="window.resendDepositEmail(${customer.customer_id}, '${customer.email}')"
+                             style="padding:.3rem .6rem;font-size:.8em;margin-top:.3rem;">
+                   📧 Resend Email
+                 </button>`
+              : '';
+            actionButtons = updateBtn + walletBtn + resendBtn;
           }
         } else {
           // ── Subaccount Model: existing logic ────────────────────────────

@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Step 5 & 6: Store in vault and update exchange_accounts (DB function) ─
-    const { data: vaultResult, error: vaultErr } = await sb.rpc("store_customer_valr_api_keys", {
+    const { data: vaultResult, error: vaultErr } = await sb.schema("lth_pvr").rpc("store_customer_valr_api_keys", {
       p_customer_id:   customer_id,
       p_api_key:       api_key,
       p_api_secret:    api_secret,
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
       p_has_trade:     permissions.hasTrade,
       p_has_withdraw:  permissions.hasWithdraw,
       p_has_link_bank: permissions.hasLinkBank,
-    }, { schema: "lth_pvr" });
+    });
 
     if (vaultErr) {
       await logAlert(
