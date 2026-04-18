@@ -3,11 +3,194 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-18 (v0.6.66)
+**Last updated:** 2026-04-18 (v0.6.67)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.67 – Dual-Model Pipeline Support, Fee Schedules & Admin UI Enhancements
+**Date:** 2026-04-18  
+**Purpose:** (1) Extend all 6 pipeline edge functions to support the API-model customer type alongside the original subaccount model. (2) Add per-customer fee billing schedules. (3) Fix email template header rendering across all 19 DB templates. (4) Introduce consolidated customer setup modal that prevents a race condition where fees could be charged at default rates before the admin configured custom schedules.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Dual-Model Pipeline Support
+
+**Background:** Two customer account models are supported:
+
+| Model | Credentials | Per-Customer Routing |
+|-------|------------|---------------------|
+| **Subaccount** | BitWealth master VALR API key + `X-VALR-SUB-ACCOUNT-ID` header | `exchange_accounts.subaccount_id` |
+| **API** | Customer's own VALR API key/secret stored in Supabase Vault | Vault secret key `valr_api_key_<customer_id>` |
+
+Before this version, all pipeline edge functions used only the master API key + subaccount routing, silently ignoring API-model customers.
+
+**New shared credential resolver:** `supabase/functions/_shared/valrCredentials.ts`
+
+```typescript
+// Exported function
+export async function resolveCustomerCredentials(
+  sb: SupabaseClient,
+  customerId: number
+): Promise<{ apiKey: string; apiSecret: string; subaccountId?: string; accountModel: string }>
+
+// Calls DB RPC:
+await sb.rpc("get_customer_valr_credentials", { p_customer_id: customerId });
+// Returns: { api_key, api_secret, subaccount_id, account_model }
+// - subaccount model: uses master env key + fills subaccount_id
+// - api model: retrieves key/secret from Vault, subaccount_id = undefined
+```
+
+**Edge functions updated (all 6 pipeline steps):**
+
+| Edge Function | Change |
+|--------------|--------|
+| `ef_execute_orders` | Replaced hardcoded subaccount lookup with `resolveCustomerCredentials()` |
+| `ef_poll_orders` | Replaced `subaccountCache` with `credentialCache`; resolves `customer_id` via `order_intents` lookup |
+| `ef_post_ledger_and_balances` | Now reads `platform_fee_schedule` from `customer_strategies`; skips immediate deduction for `annual` schedule |
+| `ef_calculate_performance_fees` | Added `.neq("performance_fee_schedule", "annual")` filter |
+| `ef_deposit_scan` | Per-customer credential resolution; removed `.not("subaccount_id","is",null)` filter; added ZAR detection for API-model customers |
+| `ef_auto_convert_btc_to_usdt` | All 3 action handlers updated for dual model |
+| `ef_sync_valr_transactions` | Per-customer credential resolution in processing loop |
+
+`ef_poll_orders/valrClient.ts` was also updated: added `ValrRequestCredentials` interface; all functions accept optional `credentials` param.
+
+---
+
+#### 2 — Per-Customer Fee Billing Schedules
+
+**New columns on `public.customer_strategies`:**
+
+| Column | Type | Default | Values |
+|--------|------|---------|--------|
+| `platform_fee_schedule` | TEXT NOT NULL | `'immediate'` | `'immediate'`, `'annual'` |
+| `performance_fee_schedule` | TEXT NOT NULL | `'monthly'` | `'monthly'`, `'annual'` |
+
+**Behaviour:**
+- `platform_fee_schedule = 'immediate'`: Platform fee (0.75% of trade) deducted on every fill, as before.
+- `platform_fee_schedule = 'annual'`: `ef_post_ledger_and_balances` skips the per-fill platform fee deduction; annual invoicing handled separately.
+- `performance_fee_schedule = 'monthly'`: Performance fee calculated monthly (default, existing behaviour).
+- `performance_fee_schedule = 'annual'`: `ef_calculate_performance_fees` excludes this customer from the monthly run.
+
+**Migration:** `add_fee_schedule_columns`
+```sql
+ALTER TABLE public.customer_strategies
+  ADD COLUMN platform_fee_schedule TEXT NOT NULL DEFAULT 'immediate'
+    CHECK (platform_fee_schedule IN ('immediate','annual')),
+  ADD COLUMN performance_fee_schedule TEXT NOT NULL DEFAULT 'monthly'
+    CHECK (performance_fee_schedule IN ('monthly','annual'));
+```
+
+**Updated RPC functions:**
+
+- **`public.get_customer_fee_rates(p_customer_ids bigint[])`**  
+  Now returns two additional columns: `performance_fee_schedule text`, `platform_fee_schedule text`.
+
+- **`public.update_customer_fee_rates(p_customer_id, p_performance_fee_rate, p_platform_fee_rate, p_performance_fee_schedule DEFAULT NULL, p_platform_fee_schedule DEFAULT NULL)`**  
+  Validates and updates both rate and schedule columns when supplied. Returns extended JSON with previous/new schedule values.
+
+**Migration:** `add_fee_schedule_to_rpc_functions`
+
+---
+
+#### 3 — Email Template Header Color Fix (All 19 DB Templates)
+
+**Root Cause:** All 19 DB email templates shared a broken CSS structure where a `@media (prefers-color-scheme: dark)` block had been inserted mid-rule, leaving orphaned CSS properties after the closing `}`. The header `<td>` had `background-color: #ffffff` (white) with a white logo — invisible on white background.
+
+**Fix (two migrations applied: `fix_email_template_header_colors` and `fix_email_template_header_colors_v2`):**
+
+| Before | After |
+|--------|-------|
+| Header TD `background-color: #ffffff; border: 3px solid #032C48` | `background-color: #032C48; border: 3px solid #ffffff` |
+| `<h1>` inline `color: #032C48` | `color: #ffffff` |
+| `@media (prefers-color-scheme: dark)` override block | `@media (prefers-color-scheme: light)` (inverted — dark blue is the default) |
+| Orphaned CSS fragments after closing `}` | Removed |
+
+The header is now dark navy (`#032C48`) by default with a white logo and white heading, matching the intended brand styling. A `prefers-color-scheme: light` override inverts to white background for light-mode email clients.
+
+---
+
+#### 4 — Consolidated Customer Setup Modal (Race Condition Fix)
+
+**Root Cause (Race Condition):** For API-model customers who already have VALR funds:
+1. Admin stores API keys → `ef_store_customer_api_keys` triggers `ef_deposit_scan`
+2. `ef_deposit_scan` finds funds → advances customer to `active` → triggers pipeline
+3. `ef_post_ledger_and_balances` charges 0.75% platform fee at **default `immediate` schedule**
+4. Admin tries to configure `annual` schedule in Fee Management → **too late**
+
+**Fix:** New consolidated `showSetupModal(customerId, firstName, lastName, accountModel)` function in Admin UI that performs a two-phase save:
+
+1. **Phase 1 (always first):** Calls `update_customer_fee_rates` RPC to persist fee rates + schedules to DB.
+2. **Phase 2 (API model only, if keys entered):** Calls `ef_store_customer_api_keys`, which may immediately trigger deposit scan + pipeline.
+
+This guarantees fees are configured before any deposit scan can occur.
+
+**UI changes in `ui/Advanced BTC DCA Strategy.html`:**
+
+| Function | Status | Description |
+|----------|--------|-------------|
+| `showSetupModal(customerId, firstName, lastName, accountModel)` | NEW | Consolidated modal with fee config section (always) + API key section (API model only) |
+| `saveSetupConfig(customerId, firstName, lastName, accountModel)` | NEW | Two-phase save: fees first, then API keys |
+| `showApiKeyModal(customerId, firstName, lastName)` | Preserved | Backward-compat wrapper → calls `showSetupModal(..., 'api')` |
+| `saveApiKeys` | REMOVED | Replaced by `saveSetupConfig` |
+
+**Modal content:**
+- **Section 1 (all models):** Fee Configuration — performance rate + schedule, platform rate + schedule in 2×2 grid. Warning callout: "Fee configuration must be set here before the account goes active."
+- **Section 2 (API model only):** VALR API Keys — label, API key, secret, expiry date.
+
+**Admin UI setup table button changes:**
+
+| Customer State | Previous Button | New Button |
+|---------------|----------------|------------|
+| API model, no key stored | "Enter API Keys" | "🔧 Configure & Enter API Keys" |
+| API model, key expires ≤ 30 days | "Update API Keys 🔴" | "🔄 Update API Keys 🔴" → `showSetupModal` |
+| API model, key ok | (none) | "🔧 Configure / Update" → `showSetupModal` |
+| Subaccount model (any state) | (none) | "🔧 Configure Fees" → `showSetupModal` |
+
+**Fee Management table** (Administration module) now shows 8 columns including `Perf. Schedule` and `Plat. Schedule` dropdowns in edit mode. This panel is for **post-activation** schedule changes only.
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/valrCredentials.ts` | NEW — shared credential resolver |
+| `supabase/functions/ef_execute_orders/index.ts` | Dual-model credentials |
+| `supabase/functions/ef_poll_orders/index.ts` | Dual-model credential cache |
+| `supabase/functions/ef_poll_orders/valrClient.ts` | `ValrRequestCredentials` interface |
+| `supabase/functions/ef_post_ledger_and_balances/index.ts` | Fee schedule-aware platform fee |
+| `supabase/functions/ef_calculate_performance_fees/index.ts` | Annual schedule filter |
+| `supabase/functions/ef_deposit_scan/index.ts` | Per-customer credentials; API-model ZAR detection |
+| `supabase/functions/ef_auto_convert_btc_to_usdt/index.ts` | Dual-model all 3 handlers |
+| `supabase/functions/ef_sync_valr_transactions/index.ts` | Per-customer credentials |
+| `ui/Advanced BTC DCA Strategy.html` | Consolidated setup modal; fee schedule columns in Fee Management |
+
+#### Migrations Applied
+
+| Migration | Purpose |
+|-----------|---------|
+| `add_fee_schedule_columns` | Add `platform_fee_schedule` + `performance_fee_schedule` to `customer_strategies` |
+| `fix_email_template_header_colors` | Fix header BG + heading colour in 16 DB email templates |
+| `fix_email_template_header_colors_v2` | Fix remaining 3 templates + remove orphaned CSS |
+| `add_fee_schedule_to_rpc_functions` | Update `get_customer_fee_rates` + `update_customer_fee_rates` RPCs |
+
+#### Deployments
+
+```powershell
+supabase functions deploy ef_execute_orders --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_poll_orders --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_post_ledger_and_balances --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_calculate_performance_fees --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_deposit_scan --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_auto_convert_btc_to_usdt --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_sync_valr_transactions --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
 
 ### v0.6.66 – API Key Onboarding Bug Fixes (Customer 49)
 **Date:** 2026-04-18  
@@ -3141,11 +3324,21 @@ const payload = timestamp + method + path + body;
 - Safety check: Verified `customer_strategies` has fee data before dropping
 - Dropped obsolete `lth_pvr.fee_configs` table
 
+**Migration 3: `add_fee_schedule_columns` *(NEW v0.6.67)***
+- Added `platform_fee_schedule TEXT NOT NULL DEFAULT 'immediate' CHECK (IN ('immediate','annual'))`
+- Added `performance_fee_schedule TEXT NOT NULL DEFAULT 'monthly' CHECK (IN ('monthly','annual'))`
+- Purpose: support per-customer billing cadence (e.g., annual invoicing for high-value customers)
+
+**Migration 4: `add_fee_schedule_to_rpc_functions` *(NEW v0.6.67)***
+- `get_customer_fee_rates(customer_ids[])` now returns `performance_fee_schedule` and `platform_fee_schedule` columns
+- `update_customer_fee_rates()` accepts optional `p_performance_fee_schedule` and `p_platform_fee_schedule` params
+
 **Admin UI Updates:**
-- Fee Management table now displays TWO columns: "Performance Fee" and "Platform Fee"
-- Both fees editable in-place (Edit/Save/Cancel buttons)
-- Validation: Performance (0-100%), Platform (0-10%)
-- Uses `update_customer_fee_rates()` RPC to save both fees simultaneously
+- Fee Management table now displays **four** fee columns: "Performance Fee", "Performance Schedule", "Platform Fee", "Platform Schedule"
+- All four are editable in-place via Edit/Save/Cancel buttons; schedules use dropdown selects
+- Validation: Performance (0-100%), Platform (0-10%), Schedules: restricted to valid enum values
+- Uses `update_customer_fee_rates()` RPC to save all four values simultaneously
+- ⚠️ **For pre-activation fee setup**, use the M4 Consolidated Setup Modal (see v0.6.67 changelog), not this panel
 
 **Historical Deposit Fixes:**
 - Fixed 8 deposit records for customers 12, 31, 44, 45 from NET to GROSS
@@ -7005,7 +7198,28 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
   - Serves as routing key for UI: "Active Portfolio / Strategy" dropdown
   - Trading EFs filter on `status = 'active'`
 
-### 2.4 Exchange Integration & Shared Exchange Accounts
+### 2.4 Exchange Integration & Customer Account Models
+
+#### Two Customer Account Models *(updated v0.6.67)*
+
+| Model | Description | Credential Source |
+|-------|-------------|------------------|
+| **Subaccount** | BitWealth holds the master VALR account; each customer trades in a dedicated VALR subaccount. Routing via `X-VALR-SUB-ACCOUNT-ID` header. | Master `VALR_API_KEY` + `VALR_API_SECRET` env vars; `subaccount_id` from `exchange_accounts` |
+| **API** | Customer provides their own VALR API key/secret. BitWealth stores credentials in Supabase Vault and trades on their behalf in their personal VALR account. No subaccount routing header needed. | Vault secrets `valr_api_key_<customer_id>` / `valr_api_secret_<customer_id>` |
+
+**Credential Resolution (shared module):** `supabase/functions/_shared/valrCredentials.ts`
+
+```typescript
+// Call this in any EF that needs to place/query orders on behalf of a customer
+const creds = await resolveCustomerCredentials(sb, customerId);
+// Returns: { apiKey, apiSecret, subaccountId?, accountModel }
+// - subaccount model: apiKey/apiSecret = env vars; subaccountId = exchange_accounts.subaccount_id
+// - api model: apiKey/apiSecret = Vault; subaccountId = undefined (no header sent)
+```
+
+The underlying RPC is `public.get_customer_valr_credentials(p_customer_id)`.
+
+**All 6 core pipeline EFs now use `resolveCustomerCredentials()`** — see v0.6.67 changelog for details.
 
 **Shared Exchange Accounts:**
 - **`public.exchange_accounts`**
@@ -7014,11 +7228,13 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
     - `exchange_account_id` (PK, UUID)
     - `org_id`
     - `exchange` ('VALR')
-    - `label` ("Main VALR", "LTH PVR Test")
-    - `subaccount_id` – VALR internal ID for X-VALR-SUB-ACCOUNT-ID header
+    - `label` ("Main VALR", "Customer Name API")
+    - `subaccount_id` – VALR internal ID for `X-VALR-SUB-ACCOUNT-ID` header (NULL for API-model customers)
+    - `is_omnibus` (bool) – true for the master subaccount account, false for individual API-model accounts
     - `notes`, `tags`, timestamps
   - RLS on `org_id`
   - Referenced by `public.customer_portfolios.exchange_account_id`
+  - **API-model customers:** exchange account row is auto-created by `lth_pvr.store_customer_valr_api_keys()` when the first API keys are stored (v0.6.66 bug fix)
 
 **Orders and Fills:**
 - **`lth_pvr.exchange_orders`**
@@ -7034,9 +7250,9 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 
 **VALR Client:**
 - Shared `valrClient` helper in TypeScript
-- Injects `X-VALR-API-KEY` from environment
-- Adds `X-VALR-SUB-ACCOUNT-ID` from `exchange_accounts.subaccount_id`
-- HMAC signs: timestamp + verb + path + body + subaccount_id
+- For subaccount model: injects `X-VALR-API-KEY` from environment + `X-VALR-SUB-ACCOUNT-ID` from `exchange_accounts.subaccount_id`
+- For API model: injects customer's own `apiKey` from Vault; no subaccount header
+- HMAC signs: timestamp + verb + path + body (+ subaccount_id if present)
 
 ### 2.5 Decisions & Order Intents
 

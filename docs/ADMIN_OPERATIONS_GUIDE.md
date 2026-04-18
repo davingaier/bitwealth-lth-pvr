@@ -1,7 +1,7 @@
 # BitWealth Admin Operations Guide
 
-**Version:** 1.1  
-**Last Updated:** February 17, 2026  
+**Version:** 1.2  
+**Last Updated:** April 18, 2026  
 **For:** BitWealth Operations Team  
 **System:** LTH PVR Bitcoin DCA Service
 
@@ -13,12 +13,13 @@
 2. [Daily Operations](#daily-operations)
 3. [Customer Onboarding](#customer-onboarding)
 4. [KYC Document Review](#kyc-document-review)
-5. [Customer Support](#customer-support)
-6. [Trading Pipeline Monitoring](#trading-pipeline-monitoring)
-7. [Alert Management](#alert-management)
-8. [Troubleshooting](#troubleshooting)
-9. [Emergency Procedures](#emergency-procedures)
-10. [Common Tasks Reference](#common-tasks-reference)
+5. [Customer Fee Configuration](#customer-fee-configuration)
+6. [Customer Support](#customer-support)
+7. [Trading Pipeline Monitoring](#trading-pipeline-monitoring)
+8. [Alert Management](#alert-management)
+9. [Troubleshooting](#troubleshooting)
+10. [Emergency Procedures](#emergency-procedures)
+11. [Common Tasks Reference](#common-tasks-reference)
 
 ---
 
@@ -223,9 +224,15 @@ ORDER BY created_at;
 
 ---
 
-#### Milestone 4: VALR Subaccount & Wallet Setup ⚠️ Requires Admin Action
+#### Milestone 4: VALR Setup & Fee Configuration ⚠️ Requires Admin Action
 
-**Trigger:** Admin approves KYC (M3)  
+**Trigger:** Admin approves KYC (M3)
+
+The M4 workflow differs based on the customer's **account model**. This is set during onboarding and visible in the VALR Setup (M4) table.
+
+---
+
+##### M4 — Subaccount Model Customers
 
 **System Actions (Automated):**
 1. Calls `ef_valr_create_subaccount` edge function
@@ -235,7 +242,18 @@ ORDER BY created_at;
 
 **Admin Actions Required (Manual):**
 
-**Step 1: Create Crypto Wallets in VALR Portal**
+**Step 1: Configure Fees (BEFORE customer goes active)**
+1. Open BitWealth Admin Portal → Customer Maintenance → VALR Setup (M4) tab
+2. Locate customer in setup table
+3. Click **"🔧 Configure Fees"** button
+4. In the modal, set:
+   - **Performance Fee Rate** (default 10%) and **Performance Schedule** (`monthly` or `annual`)
+   - **Platform Fee Rate** (default 0.75%) and **Platform Schedule** (`immediate` or `annual`)
+5. Click **"Save Fee Configuration"**
+
+> ⚠️ **Important:** Set fees now. Once the customer deposits and the account goes active, the pipeline will immediately charge fees at whatever rates are in the system.
+
+**Step 2: Create Crypto Wallets in VALR Portal**
 1. **Log into VALR Portal:** https://www.valr.com/
 2. **Navigate to Subaccounts:**
    - Click "Subaccounts" in main menu
@@ -246,37 +264,93 @@ ORDER BY created_at;
    - Click "Wallets" → "Create Wallet"
    - Select "Bitcoin (BTC)"
    - System generates deposit address (starts with `bc1`, `1`, or `3`)
-   - **Copy the deposit address** (will look like: `bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh`)
+   - **Copy the deposit address**
 
 4. **Create USDT Wallet:**
    - Click "Create Wallet" → Select "Tether (USDT-TRC20)"
    - **IMPORTANT:** Select **TRON (TRC20)** network for lowest fees
    - System generates TRON deposit address (starts with `T`)
-   - **Copy the deposit address** (will look like: `TYaSrzezRzezRzezRzezRzezRzezRzez12`)
-   - ⚠️ **Do NOT use Ethereum (ERC20)** - much higher fees
+   - **Copy the deposit address**
+   - ⚠️ **Do NOT use Ethereum (ERC20)** — much higher fees
 
-**Step 2: Enter All Deposit References in Admin UI**
+**Step 3: Enter All Deposit References in Admin UI**
 1. Open BitWealth Admin Portal → Customer Maintenance → VALR Setup (M4) tab
 2. Locate customer in setup table
 3. Click **"Enter All References"** button
 4. Modal form will appear with 3 required fields:
    - **ZAR Deposit Reference:** Generate unique code (e.g., `BWDEP7K2M9`)
-   - **BTC Wallet Address:** Paste address from VALR portal (from Step 1.3)
-   - **USDT Wallet Address:** Paste TRON address from VALR portal (from Step 1.4)
-5. **Verify addresses are correct** - incorrect addresses = permanent loss of funds
+   - **BTC Wallet Address:** Paste address from VALR portal (from Step 2.3)
+   - **USDT Wallet Address:** Paste TRON address from VALR portal (from Step 2.4)
+5. **Verify addresses are correct** — incorrect addresses = permanent loss of funds
 6. Click **"Save All & Send Email"**
 
-**Step 3: System Sends Deposit Email (Automated)**
+**Step 4: System Sends Deposit Email (Automated)**
 - Customer receives email with **all three deposit options:**
   - ZAR bank transfer (Standard Bank, with unique reference)
   - BTC wallet address (with "BTC only" warning)
   - USDT wallet address (with TRON network emphasis)
 - Status changes to `deposit` (Milestone 5)
-- Customer can choose any deposit method
 
-**Monitoring:**
+---
+
+##### M4 — API Model Customers
+
+API-model customers provide their own VALR API key/secret. There is no automated subaccount creation. The admin completes setup with a **single consolidated modal** that handles both fee configuration and API key storage.
+
+> ⚠️ **Critical:** Fee configuration and API key storage MUST be done in a single step using the consolidated modal below. Do NOT store API keys first and then configure fees — if the customer already has VALR funds, storing keys immediately triggers a deposit scan → pipeline execution → fee charging at default rates before you can change them.
+
+**Admin Actions Required (Manual):**
+
+**Step 1: Use the "🔧 Configure & Enter API Keys" button**
+1. Open BitWealth Admin Portal → Customer Maintenance → VALR Setup (M4) tab
+2. Locate customer in setup table
+3. Click **"🔧 Configure & Enter API Keys"** button
+4. A two-section modal opens:
+
+   **Section 1 — Fee Configuration (fill this first):**
+   - Set **Performance Fee Rate** and **Performance Schedule** (`monthly` or `annual`)
+   - Set **Platform Fee Rate** and **Platform Schedule** (`immediate` or `annual`)
+
+   **Section 2 — VALR API Keys:**
+   - **Label:** Descriptive name (e.g., "Tremyne VALR Key")
+   - **API Key:** Customer's VALR read/write API key
+   - **API Secret:** Customer's VALR API secret
+   - **Key Expiry Date:** Date the key expires (set reminder to renew before expiry)
+
+5. Click **"Save All"**
+
+   The system will:
+   - Save fee rates and schedules to DB **first**
+   - Store API key/secret in Supabase Vault
+   - Check if customer already has VALR funds
+   - If funds found: advance to `active`, trigger pipeline (with correct fee schedule already set)
+
+**Step 2: Enter Wallet Addresses**
+1. After saving API keys, click **"Enter All References"** button for the customer
+2. Enter deposit addresses and ZAR reference (same process as subaccount model Step 3 above)
+3. Click **"Save All & Send Email"** to send deposit instructions
+
+**Monitoring for API model:**
 ```sql
--- Check customers waiting for wallet setup
+-- Check API model customers waiting for setup
+SELECT cd.customer_id, cd.first_name, cd.last_name, cd.email,
+       cs.account_model,
+       cs.registration_status,
+       ea.api_key_label,
+       ea.api_key_expires_at
+FROM customer_details cd
+JOIN customer_strategies cs ON cd.customer_id = cs.customer_id
+LEFT JOIN exchange_accounts ea ON cs.exchange_account_id = ea.exchange_account_id
+WHERE cd.registration_status IN ('subaccount_created','deposit')
+  AND cs.account_model = 'api'
+ORDER BY cd.created_at;
+```
+
+---
+
+**Monitoring (both models):**
+```sql
+-- Check customers waiting for wallet setup (subaccount model)
 SELECT cd.customer_id, cd.first_name, cd.last_name, cd.email,
        ea.subaccount_id,
        ea.deposit_ref,
@@ -295,11 +369,12 @@ ORDER BY ea.created_at;
 - If subaccount creation fails, check VALR API credentials in edge function logs
 - Verify VALR_API_KEY and VALR_API_SECRET environment variables set
 - Check alert events for `ef_valr_create_subaccount` errors
-- **VALR wallet addresses are NOT created via API** - must be done manually in VALR portal
+- **VALR wallet addresses are NOT created via API** — must be done manually in VALR portal
 - If customer reports "wallet address not working", verify:
   - BTC address starts with `bc1`, `1`, or `3`
   - USDT address starts with `T` and is 34 characters
   - Customer selected TRON network (not Ethereum) for USDT deposits
+- **API model:** If fee schedule is wrong after activation, update via Administration → Customer Fee Management → edit the customer row
 
 **SLA:** Complete M4 within 2 hours of KYC approval (including manual wallet creation)
 
@@ -400,10 +475,11 @@ ORDER BY cd.customer_id;
 └────────┬────────┘
          │ (approved)
          ▼
-┌─────────────────┐
-│ M4: VALR SETUP  │ ✅ Auto (creates subaccount)
-│ Create Subacct  │    Sends deposit instructions
-└────────┬────────┘
+┌──────────────────────────┐
+│ M4: VALR SETUP           │ ⚠️  ADMIN ACTION REQUIRED
+│ Subaccount: auto-created │    1. Configure Fees (FIRST)
+│ API model: manual        │    2. Enter wallet addresses / API keys
+└────────┬─────────────────┘
          │
          ▼
 ┌─────────────────┐
@@ -418,7 +494,9 @@ ORDER BY cd.customer_id;
 └─────────────────┘
 ```
 
-**Critical Milestone:** M3 (KYC Approval) - Only manual step in pipeline
+**Critical Milestones:**
+- **M3** (KYC Approval) — Only manual approval gate
+- **M4 Fee Configuration** — Must be done before any deposit arrives to avoid default fee rates being applied
 
 ---
 
@@ -518,6 +596,84 @@ If subaccount_id is NULL after 5 minutes:
 2. Check edge function logs in Supabase dashboard
 3. Verify VALR API credentials are valid
 4. Manually retry: Call `ef_valr_create_subaccount` with customer_id parameter
+
+---
+
+## Customer Fee Configuration
+
+### Overview
+
+Each customer has independently configurable fee rates and billing schedules stored in `public.customer_strategies`. Defaults apply when a customer is onboarded; custom rates are set during M4 setup or changed post-activation via the Admin UI.
+
+| Setting | Column | Default | Valid Values | Effect |
+|---------|--------|---------|--------------|--------|
+| Performance fee rate | `performance_fee_rate` | 10% | 0–100% | % of profit above high-water mark |
+| Performance schedule | `performance_fee_schedule` | `monthly` | `monthly`, `annual` | How often performance fees are calculated |
+| Platform fee rate | `platform_fee_rate` | 0.75% | 0–10% | % of each trade deducted on fill |
+| Platform schedule | `platform_fee_schedule` | `immediate` | `immediate`, `annual` | `immediate` = deduct on fill; `annual` = accrue, invoice annually |
+
+### Setting Fees at Onboarding (M4 — Recommended)
+
+Use the **M4 Consolidated Setup Modal** (`🔧 Configure & Enter API Keys` or `🔧 Configure Fees` button in the VALR Setup tab). This is the safest approach because fees are saved to the DB **before** any deposit scan can activate the customer and trigger the pipeline.
+
+See the [Milestone 4](#milestone-4-valr-setup--fee-configuration--requires-admin-action) section for step-by-step instructions.
+
+### Changing Fees Post-Activation
+
+Use **Administration → Customer Fee Management** to update fee rates and schedules for active customers:
+
+1. Open Admin Portal → Administration module → Customer Fee Management section
+2. Locate the customer row
+3. Click **"Edit"** button
+4. Update any of the four fields:
+   - Performance Fee % (numeric input)
+   - Performance Schedule (dropdown: `monthly` / `annual`)
+   - Platform Fee % (numeric input)
+   - Platform Schedule (dropdown: `immediate` / `annual`)
+5. Click **"Save"**
+
+Changes take effect from the **next trading day**. In-flight trades for the current day are not retroactively affected.
+
+### Fee Schedule Scenarios
+
+**Standard customer (defaults):**
+- Platform fee: 0.75% deducted from USDT on every fill → visible in daily ledger
+- Performance fee: 10% of monthly profit above HWM → charged on the 1st of each month
+
+**High-value / annual billing customer:**
+- Platform fee: 0.75% but schedule = `annual` → no daily deductions; admin invoices annually
+- Performance fee: 10% but schedule = `annual` → not included in monthly cron; admin invoices annually
+
+**Zero-fee / promotional customer:**
+- Set both rates to 0% via Fee Management; schedules are irrelevant
+
+### Monitoring Fee Configuration
+
+```sql
+-- View all customer fee configurations
+SELECT 
+  cd.customer_id,
+  cd.first_name || ' ' || cd.last_name AS customer_name,
+  cs.performance_fee_rate,
+  cs.performance_fee_schedule,
+  cs.platform_fee_rate,
+  cs.platform_fee_schedule,
+  cd.registration_status
+FROM customer_details cd
+JOIN customer_strategies cs ON cd.customer_id = cs.customer_id
+WHERE cd.registration_status != 'cancelled'
+ORDER BY cd.customer_id;
+```
+
+### ⚠️ Race Condition Warning
+
+If you store API keys for an API-model customer (who already has VALR funds) **before** configuring fees:
+1. `ef_store_customer_api_keys` triggers `ef_deposit_scan`
+2. `ef_deposit_scan` detects funds → activates customer → triggers pipeline
+3. `ef_post_ledger_and_balances` charges platform fee at **default `immediate` rate** (0.75% per fill)
+4. By the time you open Fee Management, the fee has already been charged
+
+**Prevention:** Always use the **M4 Consolidated Setup Modal** which saves fees first, then stores the API keys.
 
 ---
 
