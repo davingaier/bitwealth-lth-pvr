@@ -3,11 +3,124 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-17 (v0.6.65)
+**Last updated:** 2026-04-18 (v0.6.66)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.66 – API Key Onboarding Bug Fixes (Customer 49)
+**Date:** 2026-04-18  
+**Purpose:** Fix four bugs that blocked completing the API-model customer onboarding flow for customer 49 (Tremyne Naidoo). All bugs were discovered sequentially during a single onboarding attempt.
+
+**Status:** ✅ COMPLETE
+
+#### Bug 1 — `ef_store_customer_api_keys`: Wrong schema for RPC call
+
+**Symptom:** "Could not find the function public.store_customer_valr_api_keys(...) in the schema cache"
+
+**Root Cause:** In supabase-js v2, `.rpc(fn, params, { schema: "lth_pvr" })` silently ignores the third argument — the `schema` option is not supported on `.rpc()` directly (only `head` and `count` are valid). The call defaulted to the `public` schema where the function does not exist.
+
+**Fix:** Changed to the correct chain syntax:
+```typescript
+// Before
+await sb.rpc("store_customer_valr_api_keys", { ... }, { schema: "lth_pvr" });
+
+// After
+await sb.schema("lth_pvr").rpc("store_customer_valr_api_keys", { ... });
+```
+
+**File:** `supabase/functions/ef_store_customer_api_keys/index.ts`
+
+---
+
+#### Bug 2 — `lth_pvr.store_customer_valr_api_keys`: No exchange account for API-model customers
+
+**Symptom:** "No exchange account found for customer_id=49"
+
+**Root Cause:** Customer 49 had a `customer_strategies` row but `exchange_account_id = NULL` — no exchange account was created during onboarding. The DB function used an `INNER JOIN` to `exchange_accounts`, so it raised an exception when none existed. API-model customers are the first model type that does not get a VALR subaccount auto-created; the onboarding flow omitted exchange account creation for them.
+
+**Fix:** Updated `lth_pvr.store_customer_valr_api_keys()` to auto-create an exchange account when one is missing, then link it back to `customer_strategies`:
+
+1. Changed `JOIN` → `LEFT JOIN` on `exchange_accounts`
+2. When `v_exchange_account_id IS NULL`: inserts a new `public.exchange_accounts` row (`exchange='VALR'`, `is_omnibus=false`, `status='active'`, label = `<CustomerName> API`)
+3. Updates `customer_strategies.exchange_account_id` to point to the new record
+4. Proceeds with vault secret creation as normal
+
+**Migration:** `fix_store_customer_valr_api_keys_auto_create_ea`
+
+---
+
+#### Bug 3 — `ef_send_email`: Legacy environment variable name
+
+**Symptom:** POST to `ef_send_email` returned 500 after wallet addresses were saved.
+
+**Root Cause:** `ef_send_email/index.ts` line 8 used `Deno.env.get("Secret Key")` — the legacy environment variable name from early development. After the `SECRET_KEY_MIGRATION` (documented in `SECRET_KEY_MIGRATION.md`), this variable no longer exists. The Supabase client was initialised with `undefined` as the service role key, causing all DB operations to fail.
+
+**Fix:**
+```typescript
+// Before
+const SECRET_KEY = Deno.env.get("Secret Key");
+
+// After
+const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("Secret Key");
+```
+
+**File:** `supabase/functions/ef_send_email/index.ts`
+
+---
+
+#### Bug 4 — Admin UI: No "Resend Email" button for API-model customers
+
+**Symptom:** The "Resend Email" button was greyed out / absent for customer 49 after API keys and wallet addresses were configured. Clicking the "API Key Active" button did nothing (it is intentionally disabled).
+
+**Root Cause:** The `renderSetupCustomers()` function in the Admin UI had separate rendering branches for `api` and `subaccount` model customers. The "📧 Resend Email" button was only coded in the `subaccount` branch. API-model customers with a stored key only ever saw the disabled "✅ API Key Active" button, with no email option.
+
+**Fix:** Added a `resendBtn` variable in the API-model branch that appears whenever at least one wallet address is present. It is appended after the existing `walletBtn`:
+
+```javascript
+const resendBtn = (customer.btc_wallet_address || customer.usdt_wallet_address)
+  ? `<br><button class="btn btn-secondary-sm"
+               onclick="window.resendDepositEmail(${customer.customer_id}, '${customer.email}')"
+               style="padding:.3rem .6rem;font-size:.8em;margin-top:.3rem;">
+       📧 Resend Email
+     </button>`
+  : '';
+actionButtons = updateBtn + walletBtn + resendBtn;
+```
+
+**File:** `ui/Advanced BTC DCA Strategy.html`
+
+---
+
+#### Additional: SMTP credentials updated
+
+The SMTP password stored in Supabase secrets was stale, causing `535 Incorrect authentication data` from the mail server. Updated all five SMTP secrets (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`) to current values via `supabase secrets set`.
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/ef_store_customer_api_keys/index.ts` | Fixed `.rpc()` schema call (Bug 1) |
+| `supabase/functions/ef_send_email/index.ts` | Fixed legacy env var name (Bug 3) |
+| `ui/Advanced BTC DCA Strategy.html` | Added Resend Email button for API-model customers (Bug 4) |
+
+#### Migrations Applied
+
+| Migration | Purpose |
+|-----------|---------|
+| `fix_store_customer_valr_api_keys_auto_create_ea` | Auto-create exchange account for API-model customers (Bug 2) |
+
+#### Deployments
+
+```powershell
+supabase functions deploy ef_store_customer_api_keys --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_send_email --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
 
 ### v0.6.65 – Public Backtest: Double-Execution Race Condition Fix & Alert Logging
 **Date:** 2026-04-17  
