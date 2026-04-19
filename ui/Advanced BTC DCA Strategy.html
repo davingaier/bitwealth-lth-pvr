@@ -734,6 +734,63 @@
         <div id="prospectsMessage" style="display:none;margin-top:.75rem;padding:.75rem;border-radius:4px;font-size:.9rem;"></div>
       </div>
 
+      <!-- Strategy Setup Modal -->
+      <div id="strategySetupModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+        <div style="background:#fff;border-radius:8px;padding:2rem;max-width:540px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+            <h3 style="margin:0;">Strategy Setup</h3>
+            <button id="strategyModalCloseBtn" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#6c757d;">&times;</button>
+          </div>
+          <p style="margin:0 0 .75rem;color:#6c757d;font-size:.9rem;">Customer: <strong id="strategyModalCustomerName"></strong> (ID: <span id="strategyModalCustomerId"></span>)</p>
+
+          <!-- Strategy Selection -->
+          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+            <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Strategy</legend>
+            <div id="strategyRadioGroup" style="display:flex;flex-direction:column;gap:.5rem;"></div>
+          </fieldset>
+
+          <!-- Strategy Variation (shown only for LTH_PVR) -->
+          <fieldset id="variationFieldset" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;display:none;">
+            <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Strategy Variation</legend>
+            <div id="variationRadioGroup" style="display:flex;flex-direction:column;gap:.5rem;"></div>
+          </fieldset>
+
+          <!-- Fee Configuration -->
+          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+            <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Fee Configuration</legend>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+              <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Rate</label>
+                <input id="strategyModalPlatformRate" type="number" step="0.0025" min="0" max="0.10" value="0.0075" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Schedule</label>
+                <select id="strategyModalPlatformSchedule" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                  <option value="immediate">Immediate</option>
+                  <option value="annual" selected>Annual</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Performance Fee Rate</label>
+                <input id="strategyModalPerfRate" type="number" step="0.0050" min="0" max="0.50" value="0.025" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+              </div>
+              <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Perf. Fee Schedule</label>
+                <select id="strategyModalPerfSchedule" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                  <option value="monthly">Monthly</option>
+                  <option value="annual" selected>Annual</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.25rem;">
+            <button id="strategyModalCancelBtn" class="btn btn-secondary-sm" style="padding:.5rem 1.25rem;">Cancel</button>
+            <button id="strategyModalConfirmBtn" class="btn btn-primary-sm" style="padding:.5rem 1.25rem;">Confirm Strategy</button>
+          </div>
+        </div>
+      </div>
+
       <!-- KYC ID Verification card -->
       <div class="card" id="kycVerificationCard">
         <h3>KYC ID Verification</h3>
@@ -7776,20 +7833,8 @@
         const statusBadge = statusBadges[p.registration_status] || p.registration_status;
         
         let actionButton = '-';
-        if (p.registration_status === 'prospect' && allStrategies.length > 0) {
-          const strategyOptions = allStrategies.map(s => 
-            `<option value="${escapeHtml(s.strategy_code)}">${escapeHtml(s.name)}</option>`
-          ).join('');
-          
-          actionButton = `
-            <div style="display:flex;gap:0.5rem;align-items:center;">
-              <select id="strategy_${p.customer_id}" style="padding:0.4rem;border:1px solid #dee2e6;border-radius:4px;font-size:0.9rem;">
-                <option value="">Select Strategy...</option>
-                ${strategyOptions}
-              </select>
-              <button class="btn btn-primary-sm" onclick="confirmStrategy(${p.customer_id})">Confirm</button>
-            </div>
-          `;
+        if (p.registration_status === 'prospect') {
+          actionButton = `<button class="btn btn-primary-sm" onclick="openStrategySetup(${p.customer_id}, '${escapeHtml(p.first_names)} ${escapeHtml(p.last_name)}')">Strategy Setup</button>`;
         }
 
         return `
@@ -7806,26 +7851,123 @@
       }).join('');
     }
 
-    // Global function for onclick handlers (Milestone 2: Confirm Strategy)
-    window.confirmStrategy = async function(customerId) {
-      const selectElement = document.getElementById(`strategy_${customerId}`);
-      const strategyCode = selectElement?.value;
+    // ---- Strategy Setup Modal Logic ----
+    const modal = document.getElementById('strategySetupModal');
+    const modalCloseBtn = document.getElementById('strategyModalCloseBtn');
+    const modalCancelBtn = document.getElementById('strategyModalCancelBtn');
+    const modalConfirmBtn = document.getElementById('strategyModalConfirmBtn');
+    const strategyRadioGroup = document.getElementById('strategyRadioGroup');
+    const variationFieldset = document.getElementById('variationFieldset');
+    const variationRadioGroup = document.getElementById('variationRadioGroup');
 
-      if (!strategyCode) {
-        showMessage('Please select a strategy first', 'error');
-        return;
+    let allVariations = [];
+    let modalCustomerId = null;
+
+    async function loadVariations() {
+      if (allVariations.length > 0) return;
+      try {
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .select('id, variation_name, display_name, description, is_active, is_production, sort_order')
+          .eq('is_active', true)
+          .order('sort_order');
+        if (error) throw error;
+        allVariations = data || [];
+      } catch (err) {
+        console.error('Error loading variations:', err);
+        allVariations = [];
+      }
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      modalCustomerId = null;
+    }
+
+    window.openStrategySetup = async function(customerId, customerName) {
+      modalCustomerId = customerId;
+      document.getElementById('strategyModalCustomerName').textContent = customerName;
+      document.getElementById('strategyModalCustomerId').textContent = customerId;
+
+      // Load data
+      if (allStrategies.length === 0) await loadStrategies();
+      await loadVariations();
+
+      // Render strategy radio buttons
+      strategyRadioGroup.innerHTML = allStrategies.map((s, i) =>
+        `<label style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;">
+          <input type="radio" name="strategyChoice" value="${escapeHtml(s.strategy_code)}" style="margin-top:3px;" ${i === 0 ? '' : ''}>
+          <div>
+            <strong>${escapeHtml(s.name)}</strong>
+            <div style="font-size:.82rem;color:#6c757d;">${escapeHtml(s.description || '')}</div>
+          </div>
+        </label>`
+      ).join('');
+
+      // Listen for strategy changes to show/hide variation
+      strategyRadioGroup.querySelectorAll('input[name="strategyChoice"]').forEach(r => {
+        r.addEventListener('change', () => {
+          if (r.value === 'LTH_PVR') {
+            renderVariations();
+            variationFieldset.style.display = '';
+          } else {
+            variationFieldset.style.display = 'none';
+          }
+        });
+      });
+
+      variationFieldset.style.display = 'none';
+      modal.style.display = 'flex';
+    };
+
+    function renderVariations() {
+      const productionId = allVariations.find(v => v.is_production)?.id;
+      variationRadioGroup.innerHTML = allVariations.map(v =>
+        `<label style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;">
+          <input type="radio" name="variationChoice" value="${v.id}" style="margin-top:3px;" ${v.id === productionId ? 'checked' : ''}>
+          <div>
+            <strong>${escapeHtml(v.display_name)}</strong>
+            ${v.is_production ? '<span style="background:#28a745;color:#fff;padding:1px 6px;border-radius:3px;font-size:.75rem;margin-left:.5rem;">Production</span>' : ''}
+            <div style="font-size:.82rem;color:#6c757d;">${escapeHtml(v.description || '')}</div>
+          </div>
+        </label>`
+      ).join('');
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modalCancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    modalConfirmBtn.addEventListener('click', async () => {
+      const strategyCode = strategyRadioGroup.querySelector('input[name="strategyChoice"]:checked')?.value;
+      if (!strategyCode) { showMessage('Please select a strategy', 'error'); return; }
+
+      let variationId = null;
+      if (strategyCode === 'LTH_PVR') {
+        variationId = variationRadioGroup.querySelector('input[name="variationChoice"]:checked')?.value;
+        if (!variationId) { showMessage('Please select a strategy variation', 'error'); return; }
       }
 
-      const strategyName = selectElement.options[selectElement.selectedIndex].text;
+      const platformFeeRate = parseFloat(document.getElementById('strategyModalPlatformRate').value);
+      const platformFeeSchedule = document.getElementById('strategyModalPlatformSchedule').value;
+      const performanceFeeRate = parseFloat(document.getElementById('strategyModalPerfRate').value);
+      const performanceFeeSchedule = document.getElementById('strategyModalPerfSchedule').value;
 
-      if (!confirm(`Confirm strategy "${strategyName}" for customer ${customerId}?
+      const strategyName = allStrategies.find(s => s.strategy_code === strategyCode)?.name || strategyCode;
+      const variationName = allVariations.find(v => v.id === variationId)?.display_name;
 
-This will:
-• Create portfolio entry
-• Change status to 'kyc'
-• Send registration email to customer`)) {
-        return;
-      }
+      const confirmMsg = `Confirm strategy setup for customer ${modalCustomerId}?\n\n` +
+        `Strategy: ${strategyName}\n` +
+        (variationName ? `Variation: ${variationName}\n` : '') +
+        `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n` +
+        `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
+        `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
+
+      if (!confirm(confirmMsg)) return;
+
+      modalConfirmBtn.disabled = true;
+      modalConfirmBtn.textContent = 'Confirming...';
 
       try {
         const { data: { session } } = await supabaseClient.auth.getSession();
@@ -7838,8 +7980,13 @@ This will:
             'Authorization': `Bearer ${supabaseClient.supabaseKey}`
           },
           body: JSON.stringify({
-            customer_id: customerId,
+            customer_id: modalCustomerId,
             strategy_code: strategyCode,
+            strategy_variation_id: variationId,
+            platform_fee_rate: platformFeeRate,
+            platform_fee_schedule: platformFeeSchedule,
+            performance_fee_rate: performanceFeeRate,
+            performance_fee_schedule: performanceFeeSchedule,
             admin_email: adminEmail
           })
         });
@@ -7847,7 +7994,8 @@ This will:
         const result = await response.json();
 
         if (response.ok && result.success) {
-          showMessage(`Strategy confirmed for customer ${customerId}. Email ${result.email_sent ? 'sent' : 'queued'} to ${result.email}`, 'success');
+          closeModal();
+          showMessage(`Strategy confirmed for customer ${modalCustomerId}. Email ${result.email_sent ? 'sent' : 'queued'} to ${result.email}`, 'success');
           await loadProspects();
         } else {
           showMessage(`Failed to confirm strategy: ${result.error || 'Unknown error'}`, 'error');
@@ -7855,8 +8003,11 @@ This will:
       } catch (err) {
         console.error('Error confirming strategy:', err);
         showMessage(`Error: ${err.message}`, 'error');
+      } finally {
+        modalConfirmBtn.disabled = false;
+        modalConfirmBtn.textContent = 'Confirm Strategy';
       }
-    };
+    });
 
     // Event listeners
     refreshBtn.addEventListener('click', loadProspects);

@@ -25,6 +25,11 @@ const corsHeaders = {
 interface ConfirmStrategyRequest {
   customer_id: number;
   strategy_code: string;
+  strategy_variation_id?: string;
+  platform_fee_rate?: number;
+  platform_fee_schedule?: string;
+  performance_fee_rate?: number;
+  performance_fee_schedule?: string;
   admin_email?: string;
 }
 
@@ -42,7 +47,9 @@ Deno.serve(async (req) => {
 
   try {
     const body: ConfirmStrategyRequest = await req.json();
-    const { customer_id, strategy_code, admin_email } = body;
+    const { customer_id, strategy_code, strategy_variation_id, admin_email,
+            platform_fee_rate, platform_fee_schedule,
+            performance_fee_rate, performance_fee_schedule } = body;
 
     // Validate inputs
     if (!customer_id || !strategy_code) {
@@ -126,17 +133,24 @@ Deno.serve(async (req) => {
 
       // Create new customer_strategy entry (consolidated table)
       // Note: exchange_account_id will be NULL at this stage (added later at 'setup' status)
+      const insertPayload: Record<string, unknown> = {
+        org_id: customer.org_id,
+        customer_id: customer_id,
+        strategy_code: strategy_code,
+        strategy_version_id: strategyVersion.strategy_version_id,
+        status: "pending", // Will become 'active' when funds deposited
+        label: `${customer.first_names} ${customer.last_name} - ${strategy.name}`,
+      };
+      if (strategy_variation_id) insertPayload.strategy_variation_id = strategy_variation_id;
+      if (platform_fee_rate != null) insertPayload.platform_fee_rate = platform_fee_rate;
+      if (platform_fee_schedule) insertPayload.platform_fee_schedule = platform_fee_schedule;
+      if (performance_fee_rate != null) insertPayload.performance_fee_rate = performance_fee_rate;
+      if (performance_fee_schedule) insertPayload.performance_fee_schedule = performance_fee_schedule;
+
       const { data: newStrategy, error: strategyError } = await supabase
         .schema("public")
         .from("customer_strategies")
-        .insert({
-          org_id: customer.org_id,
-          customer_id: customer_id,
-          strategy_code: strategy_code,
-          strategy_version_id: strategyVersion.strategy_version_id,
-          status: "pending", // Will become 'active' when funds deposited
-          label: `${customer.first_names} ${customer.last_name} - ${strategy.name}`,
-        })
+        .insert(insertPayload)
         .select("customer_strategy_id")
         .single();
 
