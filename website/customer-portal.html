@@ -150,7 +150,7 @@
                             <div class="stat-value" id="navValue">$0.00</div>
                             <div class="stat-change neutral" id="navChange">--</div>
                             <div id="accruedFeesDisplay" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: var(--text-secondary);">
-                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees</div>
+                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees:</div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
                                     <span>Platform Fee</span>
                                     <span id="accruedPlatformFee" style="color: #f59e0b; font-weight: 600;">--</span>
@@ -1494,13 +1494,14 @@
                 // Show message if no months available
                 const downloadBtn = document.querySelector('#statements .btn-gold, #statements button[onclick*="downloadStatement"]');
                 const noMonthsMsg = document.getElementById('noStatementsMsg');
+                const flexRow = monthSelect.closest('div[style*="display: flex"]');
                 if (monthSelect.options.length === 0) {
                     if (!noMonthsMsg) {
                         const msg = document.createElement('div');
                         msg.id = 'noStatementsMsg';
                         msg.style.cssText = 'color: var(--text-secondary); font-size: 13px; margin-top: 8px;';
                         msg.textContent = 'No statements available yet. Statements become available after the first full month of trading.';
-                        monthSelect.parentElement.appendChild(msg);
+                        flexRow.insertAdjacentElement('afterend', msg);
                     }
                     if (downloadBtn) downloadBtn.disabled = true;
                 } else {

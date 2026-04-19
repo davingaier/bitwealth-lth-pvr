@@ -52,6 +52,73 @@ async function getBalances(
   return await response.json();
 }
 
+// Query VALR transaction history for API-model customers to find ZAR→crypto conversions
+// Returns conversion details (fee, ZAR amount, rate) mapped by credited asset
+async function getConversionDetails(
+  apiKey: string,
+  apiSecret: string,
+): Promise<Map<string, { zarAmount: number; fee: number; feeAsset: string; rate: number; txId: string; txType: string; eventAt: string; orderId: string }>> {
+  const conversions = new Map();
+  
+  const timestamp = Date.now().toString();
+  const method = "GET";
+  const path = "/v1/account/transactionhistory?skip=0&limit=200";
+  const signature = await signVALR(timestamp, method, path, "", apiSecret);
+  
+  const response = await fetch(`https://api.valr.com${path}`, {
+    method: "GET",
+    headers: {
+      "X-VALR-API-KEY": apiKey,
+      "X-VALR-SIGNATURE": signature,
+      "X-VALR-TIMESTAMP": timestamp,
+    },
+  });
+  
+  if (!response.ok) {
+    console.error(`Failed to fetch transaction history: ${response.status}`);
+    return conversions;
+  }
+  
+  const data = await response.json();
+  const transactions = Array.isArray(data) ? data : data.transactions || [];
+  
+  // Find ZAR→crypto conversion transactions (SIMPLE_BUY, MARKET_BUY, LIMIT_BUY)
+  for (const tx of transactions) {
+    const txType = tx.transactionType?.type;
+    if (!["SIMPLE_BUY", "MARKET_BUY", "LIMIT_BUY"].includes(txType)) continue;
+    
+    const debitCurrency = tx.debitCurrency;
+    const creditCurrency = tx.creditCurrency;
+    
+    if (debitCurrency !== "ZAR" || !["BTC", "USDT"].includes(creditCurrency)) continue;
+    
+    const zarAmount = parseFloat(tx.debitValue || 0);
+    const creditAmount = parseFloat(tx.creditValue || 0);
+    const fee = parseFloat(tx.feeValue || 0);
+    const feeAsset = tx.feeCurrency || creditCurrency;
+    const rate = tx.additionalInfo?.costPerCoin || (zarAmount / (creditAmount + fee));
+    const orderId = tx.additionalInfo?.orderId || "";
+    
+    // If multiple conversions for same asset, accumulate (take the largest one for now)
+    const existing = conversions.get(creditCurrency);
+    if (!existing || creditAmount > existing.creditAmount) {
+      conversions.set(creditCurrency, {
+        zarAmount,
+        fee,
+        feeAsset,
+        rate,
+        creditAmount,
+        txId: tx.id,
+        txType,
+        eventAt: tx.eventAt,
+        orderId,
+      });
+    }
+  }
+  
+  return conversions;
+}
+
 Deno.serve(async (req) => {
   // CORS headers
   if (req.method === "OPTIONS") {
@@ -307,6 +374,24 @@ Deno.serve(async (req) => {
           // This ensures customer has complete accounting records at activation time
           console.log(`Creating funding events for customer ${customer.customer_id}...`);
           
+          // For API-model customers, query VALR transaction history to find ZAR→crypto conversions
+          // This captures exchange fees, ZAR amounts, and conversion rates
+          let conversionDetails = new Map();
+          if (creds.accountModel === "api") {
+            try {
+              conversionDetails = await getConversionDetails(creds.apiKey, creds.apiSecret);
+              if (conversionDetails.size > 0) {
+                console.log(`✓ Found ${conversionDetails.size} ZAR conversion(s) for API-model customer ${customer.customer_id}`);
+                for (const [asset, details] of conversionDetails) {
+                  console.log(`  ${asset}: R${details.zarAmount.toFixed(2)} → ${details.creditAmount} ${asset}, fee: ${details.fee} ${details.feeAsset}, rate: ${details.rate}`);
+                }
+              }
+            } catch (convErr) {
+              console.error(`Error fetching conversion details for customer ${customer.customer_id}:`, convErr);
+              // Non-fatal: continue without enrichment
+            }
+          }
+
           // Create exchange_funding_event for each non-zero balance
           for (const bal of balances) {
             const available = parseFloat(bal.available || "0");
@@ -315,8 +400,25 @@ Deno.serve(async (req) => {
             const asset = bal.currency;
             if (!["BTC", "USDT"].includes(asset)) continue;
 
-            // Create funding event with idempotency
-            const idempotencyKey = `ACTIVATION:${customer.customer_id}:${asset}:${new Date().toISOString()}`;
+            // Check if we have ZAR conversion details for this asset (API-model)
+            const conversion = conversionDetails.get(asset);
+            
+            // Use VALR tx ID for idempotency if available (prevents duplicate in ef_sync_valr_transactions)
+            const idempotencyKey = conversion?.txId
+              ? `VALR_TX_${conversion.txId}`
+              : `ACTIVATION:${customer.customer_id}:${asset}:${new Date().toISOString()}`;
+            
+            // Build metadata with conversion details if available
+            const metadata = conversion ? {
+              valr_transaction_type: conversion.txType,
+              valr_order_id: conversion.orderId,
+              zar_amount: conversion.zarAmount,
+              conversion_rate: conversion.rate,
+              exchange_fee: conversion.fee,
+              exchange_fee_asset: conversion.feeAsset,
+              conversion_date: conversion.eventAt,
+              source: "ef_deposit_scan_api_enrichment",
+            } : {};
             
             try {
               const { error: fundingError } = await supabase.schema("lth_pvr")
@@ -328,9 +430,10 @@ Deno.serve(async (req) => {
                   kind: "deposit",
                   asset: asset,
                   amount: available,
-                  ext_ref: `initial_deposit_${customer.customer_id}_${asset}`,
+                  ext_ref: conversion?.txId || `initial_deposit_${customer.customer_id}_${asset}`,
                   occurred_at: new Date().toISOString(),
                   idempotency_key: idempotencyKey,
+                  metadata: metadata,
                 });
 
               if (fundingError) {
@@ -339,7 +442,8 @@ Deno.serve(async (req) => {
                   console.error(`Error creating funding event for ${customer.customer_id}:`, fundingError);
                 }
               } else {
-                console.log(`✓ Created funding event: ${asset} ${available}`);
+                const convInfo = conversion ? ` (from R${conversion.zarAmount.toFixed(2)}, fee: ${conversion.fee.toFixed(2)} ${conversion.feeAsset})` : "";
+                console.log(`✓ Created funding event: ${asset} ${available}${convInfo}`);
               }
             } catch (fundingCreateError) {
               console.error(`Exception creating funding event for ${customer.customer_id}:`, fundingCreateError);

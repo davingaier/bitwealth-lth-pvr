@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: funding, error: fundErr } = await sb
       .from("exchange_funding_events")
-      .select("funding_id, customer_id, kind, asset, amount, occurred_at")
+      .select("funding_id, customer_id, kind, asset, amount, occurred_at, metadata")
       .eq("org_id", org_id)
       .gte("occurred_at", fromTs)
       .lt("occurred_at", toTsExclusive);
@@ -384,11 +384,16 @@ Deno.serve(async (req: Request) => {
           kind: isDeposit ? "topup" : "withdrawal",
           amount_btc: amountBtc,
           amount_usdt: amountUsdt,
-          fee_btc: 0, // VALR exchange fees (not applicable to deposits)
-          fee_usdt: 0,
+          // VALR exchange fees from conversion metadata (API-model customers)
+          fee_btc: (f.metadata?.exchange_fee_asset === "BTC" ? f.metadata.exchange_fee : 0) || 0,
+          fee_usdt: (f.metadata?.exchange_fee_asset === "USDT" ? f.metadata.exchange_fee : 0) || 0,
           platform_fee_btc: platformFeeBtc,
           platform_fee_usdt: platformFeeUsdt,
           note,
+          // Conversion details from API-model deposit enrichment
+          ...(f.metadata?.zar_amount ? { zar_amount: f.metadata.zar_amount } : {}),
+          ...(f.metadata?.conversion_rate ? { conversion_rate: f.metadata.conversion_rate } : {}),
+          ...(f.metadata ? { conversion_metadata: f.metadata } : {}),
         });
       }
 
