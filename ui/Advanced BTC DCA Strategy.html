@@ -692,6 +692,36 @@
                 <option value="Suspended">Suspended</option>
               </select>
             </label>
+
+            <!-- Bank Account Details (stored on exchange_accounts) -->
+            <div style="grid-column:1/-1;border-top:1px solid #dee2e6;margin-top:0.5rem;padding-top:0.75rem;">
+              <strong style="font-size:0.9rem;color:var(--muted);">🏦 Bank Account (for ZAR withdrawals)</strong>
+            </div>
+            <label><span class="label-line">Bank name</span>
+              <select name="bank_name">
+                <option value="">-- Select --</option>
+                <option value="ABSA">ABSA</option>
+                <option value="Capitec">Capitec</option>
+                <option value="FNB">FNB</option>
+                <option value="Investec">Investec</option>
+                <option value="Nedbank">Nedbank</option>
+                <option value="Standard Bank">Standard Bank</option>
+                <option value="TymeBank">TymeBank</option>
+                <option value="African Bank">African Bank</option>
+                <option value="Discovery Bank">Discovery Bank</option>
+              </select>
+            </label>
+            <label><span class="label-line">Account holder</span> <input name="bank_account_holder" /></label>
+            <label><span class="label-line">Account number</span> <input name="bank_account_number" inputmode="numeric" /></label>
+            <label><span class="label-line">Branch code</span> <input name="bank_branch_code" inputmode="numeric" /></label>
+            <label><span class="label-line">Account type</span>
+              <select name="bank_account_type">
+                <option value="">-- Select --</option>
+                <option value="current">Current</option>
+                <option value="savings">Savings</option>
+                <option value="transmission">Transmission</option>
+              </select>
+            </label>
           </div>
 
           <div style="display:flex;gap:.5rem;margin-top:.75rem;">
@@ -5807,6 +5837,32 @@
       };
       const { error } = await supabaseClient.from('customer_details').update(row).eq('customer_id', id);
       if(error) throw error;
+
+      // Also save bank account fields to exchange_accounts (if customer has one)
+      const bankFields = {
+        bank_name: payload.bank_name || null,
+        bank_account_holder: payload.bank_account_holder?.trim() || null,
+        bank_account_number: payload.bank_account_number?.trim() || null,
+        bank_branch_code: payload.bank_branch_code?.trim() || null,
+        bank_account_type: payload.bank_account_type || null,
+      };
+      const hasBankData = bankFields.bank_name || bankFields.bank_account_number;
+      if (hasBankData) {
+        bankFields.bank_linked_at = bankFields.bank_linked_at || new Date().toISOString();
+        bankFields.bank_link_method = 'manual';
+      }
+      // Find exchange_account_id via customer_strategies
+      const { data: csRows } = await supabaseClient.from('customer_strategies')
+        .select('exchange_account_id')
+        .eq('customer_id', id)
+        .not('status', 'in', '("closed","terminated")')
+        .limit(1);
+      if (csRows?.[0]?.exchange_account_id) {
+        const { error: bankErr } = await supabaseClient.from('exchange_accounts')
+          .update(bankFields)
+          .eq('exchange_account_id', csRows[0].exchange_account_id);
+        if (bankErr) console.error('Bank account save error:', bankErr);
+      }
     }
 
     async function cmLoadCustomer(id){
@@ -5899,6 +5955,20 @@
             const row = await cmLoadCustomer(id);
             cmFillForm(fEdit, row);
             fEdit.dataset.customerId = String(id);
+            // Load bank account data from exchange_accounts
+            const { data: csRows } = await supabaseClient.from('customer_strategies')
+              .select('exchange_account_id').eq('customer_id', id).not('status','in','("closed","terminated")').limit(1);
+            if (csRows?.[0]?.exchange_account_id) {
+              const { data: ea } = await supabaseClient.from('exchange_accounts')
+                .select('bank_name,bank_account_holder,bank_account_number,bank_branch_code,bank_account_type')
+                .eq('exchange_account_id', csRows[0].exchange_account_id).single();
+              if (ea) {
+                ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'].forEach(k => {
+                  const el = fEdit.querySelector(`[name="${k}"]`);
+                  if (el) el.value = ea[k] || '';
+                });
+              }
+            }
           }catch(err){ cmShowAlert('error', err.message || 'Failed to load client.'); }
         });
         sel._bound = true;

@@ -11,59 +11,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        /* Minimal custom overrides for portal-specific features */
-        .milestone-track {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 30px 0;
-            position: relative;
+        /* ── Onboarding Stepper ─────────────────────────────── */
+        .stepper { display: flex; align-items: flex-start; justify-content: space-between; margin: 24px 0 0; position: relative; }
+        .stepper::before { content: ''; position: absolute; top: 20px; left: 40px; right: 40px; height: 2px; background: rgba(255,255,255,0.08); z-index: 0; }
+        .stepper-progress { position: absolute; top: 20px; left: 40px; height: 2px; background: linear-gradient(90deg, #10b981, #34d399); z-index: 1; transition: width 0.6s cubic-bezier(0.4,0,0.2,1); width: 0; }
+        .step { position: relative; z-index: 2; text-align: center; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .step-icon {
+            width: 40px; height: 40px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700;
+            background: var(--bg-dark); border: 2px solid rgba(255,255,255,0.12);
+            color: var(--text-secondary); transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
         }
-        .milestone {
-            position: relative;
-            z-index: 2;
-            text-align: center;
-            flex: 1;
+        .step.done .step-icon {
+            background: #10b981; border-color: #10b981; color: #fff;
+            box-shadow: 0 0 12px rgba(16,185,129,0.3);
         }
-        .milestone-circle {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 10px;
-            font-weight: bold;
-            transition: all 0.3s;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+        .step.done .step-icon::after { content: '\u2713'; font-size: 18px; font-weight: 700; }
+        .step.done .step-icon span { display: none; }
+        .step.active .step-icon {
+            border-color: var(--gold); color: var(--gold);
+            box-shadow: 0 0 0 4px rgba(255,180,0,0.15);
+            animation: stepPulse 2s infinite;
         }
-        .milestone.complete .milestone-circle {
-            background: var(--gold);
-            color: var(--bg-dark);
-            border-color: var(--gold);
-        }
-        .milestone-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-        .progress-line {
-            position: absolute;
-            top: 25px;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            z-index: 1;
-        }
-        .progress-fill {
-            height: 100%;
-            background: var(--gold);
-            transition: width 0.5s ease;
-        }
+        @keyframes stepPulse { 0%,100%{box-shadow:0 0 0 4px rgba(255,180,0,0.15)} 50%{box-shadow:0 0 0 8px rgba(255,180,0,0.08)} }
+        .step-label { font-size: 11px; font-weight: 500; color: var(--text-secondary); letter-spacing: 0.3px; text-transform: uppercase; transition: color 0.3s; max-width: 80px; line-height: 1.3; }
+        .step.done .step-label { color: #10b981; }
+        .step.active .step-label { color: var(--gold); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -224,42 +203,108 @@
                     </div>
                 </section>
 
+                <!-- Portfolio Performance Section -->
+                <section id="portfolioPerformance" style="margin-top: 32px; display: none;">
+                    <div class="dashboard-card">
+                        <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+                            <h2>📈 Portfolio Performance</h2>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <!-- Chart type selector -->
+                                <select id="perfChartType" onchange="switchPerfChart()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 13px; min-width: 180px;">
+                                    <option value="nav">NAV Over Time</option>
+                                    <option value="roi">ROI %</option>
+                                    <option value="holdings">Asset Holdings</option>
+                                </select>
+                                <!-- NAV sub-options (visible only when NAV chart selected) -->
+                                <select id="perfNavSubOption" onchange="updatePerfChart()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
+                                    <option value="benchmarks">LTH PVR vs Std DCA vs HODL</option>
+                                    <option value="signals">NAV with Buy/Sell/Hold</option>
+                                    <option value="sizes">NAV with Position Sizes</option>
+                                </select>
+                                <!-- ROI benchmark toggles (visible only when ROI chart selected) -->
+                                <div id="perfRoiBenchmarks" style="display: none; gap: 10px; align-items: center;">
+                                    <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="checkbox" id="perfRoiStdDca" checked onchange="updatePerfChart()" style="accent-color: #6B7896;"> Std DCA
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="checkbox" id="perfRoiHodl" checked onchange="updatePerfChart()" style="accent-color: #a855f7;"> HODL
+                                    </label>
+                                </div>
+                                <!-- Controls -->
+                                <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                    <input type="checkbox" id="perfLogScale" onchange="togglePerfLogScale()" style="accent-color: var(--gold);"> Log scale
+                                </label>
+                                <button onclick="resetPerfZoom()" style="padding: 6px 12px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; color: #93c5fd; font-size: 12px; cursor: pointer;">Reset Zoom</button>
+                            </div>
+                        </div>
+                        <div style="padding: 20px; position: relative;">
+                            <div id="perfChartLoading" style="display: none; text-align: center; padding: 60px 0; color: var(--text-secondary);">Loading chart data...</div>
+                            <div id="perfChartEmpty" style="display: none; text-align: center; padding: 60px 0; color: var(--text-secondary);">
+                                <div style="font-size: 40px; margin-bottom: 12px;">📊</div>
+                                <p>No performance data available yet. Charts will appear once trading begins.</p>
+                            </div>
+                            <canvas id="perfChart" style="max-height: 500px;"></canvas>
+                        </div>
+                        <!-- Metrics table -->
+                        <div style="padding: 0 20px 20px;">
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                                <h3 style="margin: 0; font-size: 14px; color: var(--text-secondary); font-weight: 600;">Performance Metrics</h3>
+                                <select id="perfMetricsPeriod" onchange="updatePerfMetricsTable()" style="padding: 5px 10px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: var(--text-primary); font-size: 12px;">
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="annual">Annual</option>
+                                </select>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table id="perfMetricsTable" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                    <thead id="perfMetricsHead"></thead>
+                                    <tbody id="perfMetricsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- Export -->
+                        <div style="padding: 0 20px 20px; display: flex; justify-content: flex-end;">
+                            <button onclick="exportPerfChartPDF()" style="padding: 10px 20px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; color: #93c5fd; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                📄 Export Chart to PDF
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Onboarding Status Section -->
                 <section id="onboarding">
                     <div class="dashboard-card">
                         <div class="card-header">
                             <h2>🎯 Onboarding Status</h2>
                         </div>
-                        <div class="milestone-track">
-                            <div class="progress-line">
-                                <div class="progress-fill" id="progressFill"></div>
+                        <div class="stepper">
+                            <div class="stepper-progress" id="stepperProgress"></div>
+                            <div class="step" id="m1">
+                                <div class="step-icon"><span>1</span></div>
+                                <div class="step-label">Prospect</div>
                             </div>
-                            <div class="milestone" id="m1">
-                                <div class="milestone-circle">1</div>
-                                <div class="milestone-label">Prospect</div>
+                            <div class="step" id="m2">
+                                <div class="step-icon"><span>2</span></div>
+                                <div class="step-label">Strategy</div>
                             </div>
-                            <div class="milestone" id="m2">
-                                <div class="milestone-circle">2</div>
-                                <div class="milestone-label">Strategy</div>
+                            <div class="step" id="m3">
+                                <div class="step-icon"><span>3</span></div>
+                                <div class="step-label">KYC</div>
                             </div>
-                            <div class="milestone" id="m3">
-                                <div class="milestone-circle">3</div>
-                                <div class="milestone-label">KYC</div>
+                            <div class="step" id="m4">
+                                <div class="step-icon"><span>4</span></div>
+                                <div class="step-label" id="m4Label">VALR Setup</div>
                             </div>
-                            <div class="milestone" id="m4">
-                                <div class="milestone-circle">4</div>
-                                <div class="milestone-label" id="m4Label">VALR Setup</div>
+                            <div class="step" id="m5">
+                                <div class="step-icon"><span>5</span></div>
+                                <div class="step-label" id="m5Label">Deposit</div>
                             </div>
-                            <div class="milestone" id="m5">
-                                <div class="milestone-circle">5</div>
-                                <div class="milestone-label" id="m5Label">Deposit</div>
-                            </div>
-                            <div class="milestone" id="m6">
-                                <div class="milestone-circle">6</div>
-                                <div class="milestone-label">Active</div>
+                            <div class="step" id="m6">
+                                <div class="step-icon"><span>6</span></div>
+                                <div class="step-label">Active</div>
                             </div>
                         </div>
-                        <div style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 15px; border-radius: 8px; margin-top: 20px; color: #10b981; font-weight: 500;">
+                        <div id="onboardingStatusBar" style="background: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 15px; border-radius: 8px; margin-top: 20px; color: #10b981; font-weight: 500;">
                             <strong>Status:</strong> <span id="nextAction">Loading...</span>
                         </div>
                     </div>
@@ -679,6 +724,9 @@
                 // Load strategy metrics (dashboard card)
                 await loadStrategyMetrics(customerData.customer_id);
 
+                // Load portfolio performance charts
+                await loadPerformanceData(customerData.customer_id);
+
                 // Load transaction history
                 await loadTransactionHistory(customerData.customer_id);
 
@@ -735,16 +783,25 @@
 
                 if (error) throw error;
 
-                // Update milestone indicators
+                // Update step indicators
                 const milestones = data.milestone_statuses || [false, false, false, false, false, false];
+                let lastComplete = -1;
                 milestones.forEach((complete, index) => {
-                    const milestoneEl = document.getElementById(`m${index + 1}`);
+                    const stepEl = document.getElementById(`m${index + 1}`);
                     if (complete) {
-                        milestoneEl.classList.add('complete');
+                        stepEl.classList.add('done');
+                        lastComplete = index;
                     }
                 });
+                // Mark the next incomplete step as active (pulsing)
+                if (lastComplete < 5) {
+                    const nextStep = document.getElementById(`m${lastComplete + 2}`);
+                    if (nextStep && !nextStep.classList.contains('done')) {
+                        nextStep.classList.add('active');
+                    }
+                }
 
-                // CP3: Update milestone labels for API model customers
+                // CP3: Update labels for API model customers
                 if (customerData?.account_model === 'api') {
                     const m4Label = document.getElementById('m4Label');
                     const m5Label = document.getElementById('m5Label');
@@ -752,18 +809,31 @@
                     if (m5Label) m5Label.textContent = 'Initial Deposit';
                 }
 
-                // Update progress bar
-                const progress = (data.current_milestone / 6) * 100;
-                document.getElementById('progressFill').style.width = `${progress}%`;
+                // Update progress line (spans between first and last step centers)
+                const completedSteps = milestones.filter(Boolean).length;
+                const progressPct = completedSteps === 0 ? 0 : ((completedSteps - 1) / 5) * 100;
+                const stepperBar = document.getElementById('stepperProgress');
+                // Width relative to the track between first and last step
+                const trackSpan = document.querySelector('.stepper');
+                if (stepperBar && trackSpan) {
+                    const totalW = trackSpan.offsetWidth - 80; // 40px padding each side
+                    stepperBar.style.width = `${(progressPct / 100) * totalW}px`;
+                }
+
+                // Conditionally reposition onboarding card
+                const onboardingSection = document.getElementById('onboarding');
+                const isActive = milestones.every(Boolean);
+                if (isActive && onboardingSection) {
+                    // Move to bottom of main content
+                    onboardingSection.parentElement.appendChild(onboardingSection);
+                    onboardingSection.style.marginTop = '32px';
+                }
 
                 // Update status message
                 let statusMessage = data.next_action;
-                
-                // Override message for inactive customers
                 if (customerData.registration_status === 'inactive') {
                     statusMessage = 'Your account is currently inactive. Trading is paused. Contact support to reactivate.';
                 }
-                
                 document.getElementById('nextAction').textContent = statusMessage;
 
             } catch (error) {
@@ -1859,7 +1929,7 @@
                     <tr><td style="padding:8px 0;color:var(--text-secondary);width:40%;">Key Name</td><td style="padding:8px 0;font-weight:600;color:var(--text-primary);">${acct.api_key_label}</td></tr>
                     <tr><td style="padding:8px 0;color:var(--text-secondary);">Status</td><td style="padding:8px 0;">${verifiedDisplay}</td></tr>
                     <tr><td style="padding:8px 0;color:var(--text-secondary);">Expires</td><td style="padding:8px 0;">${expiryDisplay}</td></tr>
-                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Permissions</td><td style="padding:8px 0;color:#10b981;">\u2705 View &nbsp;${acct.api_key_has_trade?'\u2705':'\u274c'} Trade &nbsp;${acct.api_key_has_withdraw?'\u2705':'\u274c'} Withdraw</td></tr>
+                    <tr><td style="padding:8px 0;color:var(--text-secondary);">Permissions</td><td style="padding:8px 0;">${acct.api_key_has_view?'<span style="color:#10b981;">\u2705 View</span>':'<span style="color:#ef4444;">\u274c View</span>'} &nbsp;${acct.api_key_has_trade?'<span style="color:#10b981;">\u2705 Trade</span>':'<span style="color:#ef4444;">\u274c Trade</span>'} &nbsp;${acct.api_key_has_withdraw?'<span style="color:#10b981;">\u2705 Withdraw</span>':'<span style="color:#ef4444;">\u274c Withdraw</span>'} &nbsp;${acct.api_key_has_link_bank?'<span style="color:#10b981;">\u2705 Link Bank</span>':'<span style="color:#ef4444;">\u274c Link Bank</span>'}</td></tr>
                 </table>
                 <button onclick="showApiKeyUpdateForm()" style="padding:10px 20px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:8px;color:#93c5fd;cursor:pointer;font-size:14px;">
                     \ud83d\udd04 Update API Key
@@ -1930,6 +2000,292 @@
             const s = { success: { bg: 'rgba(16,185,129,0.1)', b: '#10b981', c: '#6ee7b7' }, error: { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' } }[type] || { bg: 'rgba(239,68,68,0.1)', b: '#ef4444', c: '#fca5a5' };
             el.style.cssText = `padding:10px;border-radius:6px;display:block;background:${s.bg};border-left:4px solid ${s.b};color:${s.c};`;
             el.textContent = msg;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // PORTFOLIO PERFORMANCE CHARTS ENGINE
+        // ═══════════════════════════════════════════════════════════════════
+        let perfData = null;      // Raw data from RPC
+        let perfChart = null;     // Chart.js instance
+        const PERF_COLORS = {
+            lthPvr: '#FFB400', stdDca: '#6B7896', hodl: '#a855f7',
+            btcPrice: '#FF8C00', contributions: '#334155', navGreen: '#10b981',
+            btcHolding: '#ef4444', usdtHolding: '#3b82f6',
+            buy: '#10b981', sell: '#ef4444', hold: '#64748b'
+        };
+
+        // Register zoom plugin
+        if (window.ChartZoom) Chart.register(window.ChartZoom);
+
+        async function loadPerformanceData(customerId) {
+            const section = document.getElementById('portfolioPerformance');
+            const loading = document.getElementById('perfChartLoading');
+            const empty = document.getElementById('perfChartEmpty');
+            const canvas = document.getElementById('perfChart');
+
+            try {
+                loading.style.display = 'block';
+                canvas.style.display = 'none';
+                empty.style.display = 'none';
+                section.style.display = 'block';
+
+                const orgId = customerData?.org_id;
+                const { data, error } = await sb.schema('lth_pvr').rpc('get_customer_performance_data', {
+                    p_customer_id: customerId,
+                    p_org_id: orgId
+                });
+                if (error) throw error;
+
+                perfData = data;
+                loading.style.display = 'none';
+
+                if (!perfData?.daily || perfData.daily.length === 0) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                canvas.style.display = 'block';
+                switchPerfChart();
+            } catch (err) {
+                console.error('Error loading performance data:', err);
+                loading.style.display = 'none';
+                empty.style.display = 'block';
+            }
+        }
+
+        function switchPerfChart() {
+            const type = document.getElementById('perfChartType').value;
+            document.getElementById('perfNavSubOption').style.display = type === 'nav' ? '' : 'none';
+            document.getElementById('perfRoiBenchmarks').style.display = type === 'roi' ? 'flex' : 'none';
+            updatePerfChart();
+        }
+
+        function getCommonChartOptions(yLabel) {
+            const isLog = document.getElementById('perfLogScale')?.checked;
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#e2e8f0', bodyColor: '#cbd5e1',
+                        borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                        padding: 12, cornerRadius: 8
+                    },
+                    legend: { labels: { color: '#94a3b8', usePointStyle: true, padding: 16, font: { size: 12 } } }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { type: isLog ? 'logarithmic' : 'linear', ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: yLabel, color: '#94a3b8', font: { size: 12 } } }
+                }
+            };
+        }
+
+        function updatePerfChart() {
+            if (!perfData?.daily?.length) return;
+            const type = document.getElementById('perfChartType').value;
+            if (perfChart) { perfChart.destroy(); perfChart = null; }
+
+            const labels = perfData.daily.map(d => d.date);
+            const ctx = document.getElementById('perfChart').getContext('2d');
+            document.getElementById('perfChart').parentElement.style.height = '500px';
+
+            if (type === 'nav') {
+                buildNavChart(ctx, labels);
+            } else if (type === 'roi') {
+                buildRoiChart(ctx, labels);
+            } else if (type === 'holdings') {
+                buildHoldingsChart(ctx, labels);
+            }
+            updatePerfMetricsTable();
+        }
+
+        function buildNavChart(ctx, labels) {
+            const sub = document.getElementById('perfNavSubOption').value;
+            const daily = perfData.daily;
+            let datasets = [];
+
+            if (sub === 'benchmarks') {
+                datasets = [
+                    { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
+                    { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [5,3] },
+                    { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [3,3] },
+                    { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] }
+                ];
+            } else if (sub === 'signals') {
+                // Color each segment by decision
+                const segColors = daily.map(d => d.action === 'buy' ? PERF_COLORS.buy : d.action === 'sell' ? PERF_COLORS.sell : PERF_COLORS.hold);
+                datasets = [{
+                    label: 'NAV (colored by signal)',
+                    data: daily.map(d => d.nav_usd),
+                    segment: { borderColor: ctx2 => segColors[ctx2.p0DataIndex] || PERF_COLORS.hold },
+                    borderWidth: 2, pointRadius: 0, tension: 0.3
+                }];
+            } else if (sub === 'sizes') {
+                // NAV line with buy/sell bubbles
+                datasets = [
+                    { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, borderWidth: 2, pointRadius: 0, tension: 0.3, type: 'line' },
+                    {
+                        label: 'Buy', type: 'bubble',
+                        data: daily.filter(d => d.action === 'buy').map(d => ({ x: d.date, y: d.nav_usd, r: Math.max(3, Math.min(20, (d.amount_pct || 0) / 5)) })),
+                        backgroundColor: 'rgba(16,185,129,0.5)', borderColor: PERF_COLORS.buy
+                    },
+                    {
+                        label: 'Sell', type: 'bubble',
+                        data: daily.filter(d => d.action === 'sell').map(d => ({ x: d.date, y: d.nav_usd, r: Math.max(3, Math.min(20, (d.amount_pct || 0) / 5)) })),
+                        backgroundColor: 'rgba(239,68,68,0.5)', borderColor: PERF_COLORS.sell
+                    }
+                ];
+            }
+
+            const opts = getCommonChartOptions('NAV (USD)');
+            opts.scales.y.ticks.callback = v => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+            perfChart = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: opts });
+        }
+
+        function buildRoiChart(ctx, labels) {
+            const daily = perfData.daily;
+            const showStd = document.getElementById('perfRoiStdDca').checked;
+            const showHodl = document.getElementById('perfRoiHodl').checked;
+
+            // Calculate ROI: (NAV / contrib - 1) × 100
+            const calcRoi = (nav, contrib) => contrib > 0 ? ((nav / contrib) - 1) * 100 : 0;
+            const lthRoi = daily.map(d => calcRoi(d.nav_usd, d.contrib_cum_usd));
+            const stdRoi = daily.map(d => calcRoi(d.std_dca_nav, d.contrib_cum_usd));
+            const hodlRoi = daily.map(d => calcRoi(d.hodl_nav, d.contrib_cum_usd));
+
+            const datasets = [
+                { label: 'LTH PVR ROI', data: lthRoi, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 }
+            ];
+            if (showStd) datasets.push({ label: 'Std DCA ROI', data: stdRoi, borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [5,3] });
+            if (showHodl) datasets.push({ label: 'HODL ROI', data: hodlRoi, borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [3,3] });
+
+            const opts = getCommonChartOptions('ROI (%)');
+            opts.scales.y.ticks.callback = v => (v >= 0 ? '+' : '') + Number(v).toFixed(1) + '%';
+            perfChart = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: opts });
+        }
+
+        function buildHoldingsChart(ctx, labels) {
+            const daily = perfData.daily;
+            const datasets = [
+                { label: 'BTC Price', data: daily.map(d => d.btc_price), borderColor: PERF_COLORS.btcPrice, borderWidth: 1.5, pointRadius: 0, tension: 0.3, yAxisID: 'yPrice' },
+                { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.navGreen, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
+                { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] },
+                { label: 'BTC Value', data: daily.map(d => (d.btc_balance || 0) * (d.btc_price || 0)), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'rgba(239,68,68,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                { label: 'USDT Balance', data: daily.map(d => d.usdt_balance || 0), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
+            ];
+
+            const opts = getCommonChartOptions('Value (USD)');
+            opts.scales.y.ticks.callback = v => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+            opts.scales.yPrice = {
+                type: 'linear', position: 'right', grid: { drawOnChartArea: false },
+                ticks: { color: PERF_COLORS.btcPrice, callback: v => '$' + Number(v).toLocaleString(), font: { size: 11 } },
+                title: { display: true, text: 'BTC Price (USD)', color: PERF_COLORS.btcPrice, font: { size: 12 } }
+            };
+            perfChart = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: opts });
+        }
+
+        function togglePerfLogScale() {
+            if (perfChart) {
+                const isLog = document.getElementById('perfLogScale').checked;
+                perfChart.options.scales.y.type = isLog ? 'logarithmic' : 'linear';
+                perfChart.update();
+            }
+        }
+
+        function resetPerfZoom() {
+            if (perfChart) perfChart.resetZoom();
+        }
+
+        // ── Metrics Table ──────────────────────────────────────────────
+        function updatePerfMetricsTable() {
+            if (!perfData?.daily?.length) return;
+            const period = document.getElementById('perfMetricsPeriod').value;
+            const chartType = document.getElementById('perfChartType').value;
+            const daily = perfData.daily;
+
+            // Group data by period
+            const groups = groupByPeriod(daily, period);
+            const thead = document.getElementById('perfMetricsHead');
+            const tbody = document.getElementById('perfMetricsBody');
+
+            const cellStyle = 'padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;';
+            const headStyle = cellStyle + 'color:var(--text-secondary);font-weight:600;text-align:left;';
+            const valStyle = cellStyle + 'color:var(--text-primary);text-align:right;font-family:monospace;';
+
+            if (chartType === 'nav') {
+                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">Start NAV</th><th style="${headStyle}text-align:right;">End NAV</th><th style="${headStyle}text-align:right;">Change</th><th style="${headStyle}text-align:right;">Std DCA NAV</th><th style="${headStyle}text-align:right;">HODL NAV</th></tr>`;
+                tbody.innerHTML = groups.map(g => {
+                    const startNav = g.rows[0]?.nav_usd || 0;
+                    const endNav = g.rows[g.rows.length-1]?.nav_usd || 0;
+                    const pctChange = startNav > 0 ? ((endNav/startNav - 1) * 100).toFixed(2) : '—';
+                    const stdNav = g.rows[g.rows.length-1]?.std_dca_nav || 0;
+                    const hodlNav = g.rows[g.rows.length-1]?.hodl_nav || 0;
+                    const changeColor = pctChange > 0 ? '#10b981' : pctChange < 0 ? '#ef4444' : 'inherit';
+                    return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">$${fmtNum(startNav)}</td><td style="${valStyle}">$${fmtNum(endNav)}</td><td style="${valStyle}color:${changeColor};">${pctChange}%</td><td style="${valStyle}">$${fmtNum(stdNav)}</td><td style="${valStyle}">$${fmtNum(hodlNav)}</td></tr>`;
+                }).join('');
+            } else if (chartType === 'roi') {
+                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">LTH PVR ROI</th><th style="${headStyle}text-align:right;">Std DCA ROI</th><th style="${headStyle}text-align:right;">HODL ROI</th><th style="${headStyle}text-align:right;">Alpha vs DCA</th></tr>`;
+                tbody.innerHTML = groups.map(g => {
+                    const last = g.rows[g.rows.length-1];
+                    const contrib = last?.contrib_cum_usd || 1;
+                    const lthRoi = ((last?.nav_usd || 0) / contrib - 1) * 100;
+                    const stdRoi = ((last?.std_dca_nav || 0) / contrib - 1) * 100;
+                    const hodlRoi = ((last?.hodl_nav || 0) / contrib - 1) * 100;
+                    const alpha = lthRoi - stdRoi;
+                    const alphaColor = alpha > 0 ? '#10b981' : alpha < 0 ? '#ef4444' : 'inherit';
+                    return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${fmtPct(lthRoi)}</td><td style="${valStyle}">${fmtPct(stdRoi)}</td><td style="${valStyle}">${fmtPct(hodlRoi)}</td><td style="${valStyle}color:${alphaColor};">${fmtPct(alpha)}</td></tr>`;
+                }).join('');
+            } else if (chartType === 'holdings') {
+                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">BTC Held</th><th style="${headStyle}text-align:right;">USDT Held</th><th style="${headStyle}text-align:right;">BTC Price</th><th style="${headStyle}text-align:right;">NAV</th><th style="${headStyle}text-align:right;">Contributions</th></tr>`;
+                tbody.innerHTML = groups.map(g => {
+                    const last = g.rows[g.rows.length-1];
+                    return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${Number(last?.btc_balance||0).toFixed(8)}</td><td style="${valStyle}">$${fmtNum(last?.usdt_balance||0)}</td><td style="${valStyle}">$${fmtNum(last?.btc_price||0)}</td><td style="${valStyle}">$${fmtNum(last?.nav_usd||0)}</td><td style="${valStyle}">$${fmtNum(last?.contrib_cum_usd||0)}</td></tr>`;
+                }).join('');
+            }
+        }
+
+        function groupByPeriod(daily, period) {
+            const groups = [];
+            const map = new Map();
+            for (const d of daily) {
+                const dt = new Date(d.date);
+                let key;
+                if (period === 'monthly') key = d.date.slice(0, 7); // YYYY-MM
+                else if (period === 'quarterly') key = dt.getFullYear() + '-Q' + (Math.floor(dt.getMonth() / 3) + 1);
+                else key = String(dt.getFullYear());
+                if (!map.has(key)) { map.set(key, { label: key, rows: [] }); groups.push(map.get(key)); }
+                map.get(key).rows.push(d);
+            }
+            return groups;
+        }
+
+        function fmtNum(v) { return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function fmtPct(v) { return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
+
+        // ── PDF Export ─────────────────────────────────────────────────
+        async function exportPerfChartPDF() {
+            const card = document.querySelector('#portfolioPerformance .dashboard-card');
+            if (!card) return;
+            try {
+                const canvas = await html2canvas(card, { backgroundColor: '#0f172a', scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                const pdfW = pdf.internal.pageSize.getWidth();
+                const pdfH = (canvas.height * pdfW) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfW, Math.min(pdfH, pdf.internal.pageSize.getHeight()));
+                const chartType = document.getElementById('perfChartType').value;
+                pdf.save(`BitWealth_${chartType}_${new Date().toISOString().slice(0,10)}.pdf`);
+            } catch (err) {
+                console.error('PDF export error:', err);
+                alert('Failed to export PDF. Please try again.');
+            }
         }
 
         // Initialize on page load
