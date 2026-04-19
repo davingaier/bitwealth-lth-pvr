@@ -148,16 +148,16 @@ async function calcInterimFee(
   const { data: stateRows } = await sb
     .schema("lth_pvr")
     .from("customer_state_daily")
-    .select("high_water_mark_usd, hwm_contrib_net_cum, trade_date")
+    .select("high_water_mark_usd, hwm_contrib_net_cum, date")
     .eq("customer_id", customerId)
     .eq("org_id", ORG_ID)
     .order("date", { ascending: false })
     .limit(1);
-  const state = stateRows?.[0] as { high_water_mark_usd: number; hwm_contrib_net_cum: number; trade_date: string } | undefined;
+  const state = stateRows?.[0] as { high_water_mark_usd: number; hwm_contrib_net_cum: number; date: string } | undefined;
 
   const preHwm = state?.high_water_mark_usd ?? 0;
   const preContribNet = state?.hwm_contrib_net_cum ?? 0;
-  const lastStateDate = state?.trade_date ?? "1970-01-01";
+  const lastStateDate = state?.date ?? "1970-01-01";
 
   // ── 3. Recent contributions since last HWM ────────────────────────────────
   const btcSpot = btcBalance > 0 && navUsdt > 0 ? navUsdt / btcBalance : 50000;

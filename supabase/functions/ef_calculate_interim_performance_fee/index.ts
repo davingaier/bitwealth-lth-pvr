@@ -22,7 +22,7 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 interface CustomerState {
   state_id: string;
   customer_id: number;
-  trade_date: string;
+  date: string;
   high_water_mark_usd: number;
   hwm_contrib_net_cum: number;
   last_perf_fee_month: string | null;
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
       .from("customer_state_daily")
       .select("*")
       .eq("customer_id", customerId)
-      .order("trade_date", { ascending: false })
+      .order("date", { ascending: false })
       .limit(1);
 
     if (stateError) {
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
       .eq("org_id", orgId)
       .eq("customer_id", customerId)
       .in("kind", ["topup", "withdrawal"])
-      .gt("trade_date", currentState.trade_date)
+      .gt("trade_date", currentState.date)
       .lte("trade_date", today);
 
     if (recentContribError) throw recentContribError;
@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
     const { error: updateStateError } = await supabase
       .from("customer_state_daily")
       .update({
-        trade_date: today,
+        date: today,
         high_water_mark_usd: newHWM,
         hwm_contrib_net_cum: totalNetContrib - withdrawalAmount, // Withdrawal reduces net contributions
       })

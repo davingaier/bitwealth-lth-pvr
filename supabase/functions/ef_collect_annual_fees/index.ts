@@ -33,7 +33,7 @@ interface AccrualRow {
 interface CustomerState {
   state_id: string;
   customer_id: number;
-  trade_date: string;
+  date: string;
   high_water_mark_usd: number;
   hwm_contrib_net_cum: number;
   last_perf_fee_month: string | null;
@@ -330,7 +330,7 @@ async function calculateAnnualPerformanceFee(
     .from("customer_state_daily")
     .select("*")
     .eq("customer_id", customerId)
-    .order("trade_date", { ascending: false })
+    .order("date", { ascending: false })
     .limit(1);
 
   const currentState = (stateRows?.[0] as CustomerState) ?? null;
@@ -340,26 +340,61 @@ async function calculateAnnualPerformanceFee(
     return 0;
   }
 
-  // Calculate cumulative net contributions since HWM was set
-  const { data: contribData } = await sb
-    .from("ledger_lines")
-    .select("amount_usdt, amount_btc")
-    .eq("org_id", orgId)
-    .eq("customer_id", customerId)
-    .in("kind", ["topup", "withdrawal"])
-    .gt("trade_date", currentState.trade_date)
-    .lte("trade_date", yearEnd);
+  // If state was created by ef_generate_decisions (never fee-initialized), treat
+  // this as the first annual period: NAV must exceed (total deposits) to charge a fee.
+  // We initialize HWM = 0 and contrib = all net deposits so the threshold = total deposits.
+  let effectiveHWM = currentState.high_water_mark_usd;
+  let effectiveContrib = currentState.hwm_contrib_net_cum;
 
-  let additionalContrib = 0;
-  const btcPrice = balance.btc_balance > 0 ? balance.nav_usd / balance.btc_balance : 50000;
+  if (currentState.last_perf_fee_month === null) {
+    // Compute total net contributions up to year-end to use as the baseline threshold
+    const { data: allContribData } = await sb
+      .from("ledger_lines")
+      .select("amount_usdt, amount_btc")
+      .eq("org_id", orgId)
+      .eq("customer_id", customerId)
+      .in("kind", ["topup", "withdrawal"])
+      .lte("trade_date", yearEnd);
 
-  for (const line of (contribData || [])) {
-    additionalContrib += Number(line.amount_usdt || 0);
-    additionalContrib += Number(line.amount_btc || 0) * btcPrice;
+    const btcSpot = balance.btc_balance > 0 ? balance.nav_usd / balance.btc_balance : 50000;
+    let totalContrib = 0;
+    for (const line of (allContribData ?? [])) {
+      totalContrib += Number(line.amount_usdt || 0);
+      totalContrib += Number(line.amount_btc || 0) * btcSpot;
+    }
+    effectiveHWM = 0;
+    effectiveContrib = totalContrib;
   }
 
-  const totalNetContrib = currentState.hwm_contrib_net_cum + additionalContrib;
-  const hwmThreshold = currentState.high_water_mark_usd + totalNetContrib;
+  // When already fee-initialized: calculate additional contributions since last HWM date.
+  // When first-time (effectiveContrib already covers all contributions), additionalContrib = 0
+  // because the query uses currentState.date as the floor — for uninitialized rows we skip
+  // the incremental query and use effectiveContrib directly.
+  let totalNetContrib = effectiveContrib;
+
+  if (currentState.last_perf_fee_month !== null) {
+    // Incremental contributions since last HWM update
+    const { data: contribData } = await sb
+      .from("ledger_lines")
+      .select("amount_usdt, amount_btc")
+      .eq("org_id", orgId)
+      .eq("customer_id", customerId)
+      .in("kind", ["topup", "withdrawal"])
+      .gt("trade_date", currentState.date)
+      .lte("trade_date", yearEnd);
+
+    let additionalContrib = 0;
+    const btcPrice = balance.btc_balance > 0 ? balance.nav_usd / balance.btc_balance : 50000;
+
+    for (const line of (contribData || [])) {
+      additionalContrib += Number(line.amount_usdt || 0);
+      additionalContrib += Number(line.amount_btc || 0) * btcPrice;
+    }
+
+    totalNetContrib = effectiveContrib + additionalContrib;
+  }
+
+  const hwmThreshold = effectiveHWM + totalNetContrib;
 
   console.log(`  Customer ${customerId}: NAV=$${balance.nav_usd.toFixed(2)}, HWM threshold=$${hwmThreshold.toFixed(2)}`);
 
@@ -460,7 +495,7 @@ async function updateHWMAfterAnnualFee(
     .from("customer_state_daily")
     .select("*")
     .eq("customer_id", customerId)
-    .order("trade_date", { ascending: false })
+    .order("date", { ascending: false })
     .limit(1);
 
   const state = stateRows?.[0] as CustomerState | undefined;
@@ -484,9 +519,9 @@ async function updateHWMAfterAnnualFee(
   const { error: updateErr } = await sb
     .from("customer_state_daily")
     .update({
-      trade_date: yearEnd,
+      date: yearEnd,
       high_water_mark_usd: newHWM,
-      last_perf_fee_month: `${yearEnd.substring(0, 4)}-12`, // Mark annual calc done
+      last_perf_fee_month: `${yearEnd.substring(0, 4)}-12-01`, // Mark annual calc done (YYYY-MM-DD)
     })
     .eq("state_id", state.state_id);
 

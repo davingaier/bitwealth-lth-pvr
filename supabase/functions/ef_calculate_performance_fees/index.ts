@@ -22,7 +22,7 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 interface CustomerState {
   state_id: string;
   customer_id: number;
-  trade_date: string;
+  date: string;
   high_water_mark_usd: number;
   hwm_contrib_net_cum: number;
   last_perf_fee_month: string | null;
@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
     // Get previous month (we run on 1st, calculate for previous month)
     const now = new Date();
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthStr = lastMonth.toISOString().substring(0, 7); // YYYY-MM
+    const lastMonthStr = lastMonth.toISOString().substring(0, 7); // YYYY-MM (for comparisons)
+    const lastMonthFirstDay = lastMonthStr + "-01";               // YYYY-MM-01 (for DATE column storage)
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 0);
     const lastDayStr = lastDayOfMonth.toISOString().split('T')[0]; // YYYY-MM-DD
 
@@ -93,7 +94,7 @@ Deno.serve(async (req) => {
           .from("customer_state_daily")
           .select("*")
           .eq("customer_id", customerId)
-          .order("trade_date", { ascending: false })
+          .order("date", { ascending: false })
           .limit(1);
 
         if (stateError) {
@@ -103,10 +104,12 @@ Deno.serve(async (req) => {
 
         const currentState = stateRows?.[0] as CustomerState | undefined;
 
-        if (!currentState) {
-          console.log(`No HWM state found for customer ${customerId}, initializing...`);
+        // Initialize if: no state exists, OR state was created by ef_generate_decisions
+        // (strategy-state rows have last_perf_fee_month = null, meaning HWM was never set).
+        if (!currentState || currentState.last_perf_fee_month === null) {
+          console.log(`No initialized HWM for customer ${customerId}, initializing...`);
           
-          // Initialize HWM state (first month for this customer)
+          // Get balance at month-end for initialization
           const { data: latestBalance, error: balanceError } = await supabase
             .from("balances_daily")
             .select("btc_balance, usdt_balance, nav_usd")
@@ -137,7 +140,7 @@ Deno.serve(async (req) => {
           if (contribError) throw contribError;
 
           let netContribUsd = 0;
-          const btcPrice = balance.nav_usd / balance.btc_balance || 0;
+          const btcPrice = balance.btc_balance > 0 ? balance.nav_usd / balance.btc_balance : 50000;
 
           for (const line of (contribData || [])) {
             netContribUsd += Number(line.amount_usdt || 0);
@@ -147,29 +150,47 @@ Deno.serve(async (req) => {
           // Initial HWM = NAV - net contributions (profit component only)
           const initialHWM = Math.max(0, balance.nav_usd - netContribUsd);
 
-          const { error: insertStateError } = await supabase
-            .from("customer_state_daily")
-            .insert({
-              org_id: orgId,
-              customer_id: customerId,
-              trade_date: lastDayStr,
-              high_water_mark_usd: initialHWM,
-              hwm_contrib_net_cum: netContribUsd,
-              last_perf_fee_month: lastMonthStr,
-            });
+          if (!currentState) {
+            // No row exists yet — insert a new one
+            const { error: insertStateError } = await supabase
+              .from("customer_state_daily")
+              .insert({
+                org_id: orgId,
+                customer_id: customerId,
+                date: lastDayStr,
+                high_water_mark_usd: initialHWM,
+                hwm_contrib_net_cum: netContribUsd,
+                last_perf_fee_month: lastMonthFirstDay,
+              });
 
-          if (insertStateError) {
-            console.error(`Error initializing state for customer ${customerId}:`, insertStateError);
-            throw insertStateError;
+            if (insertStateError) {
+              console.error(`Error initializing state for customer ${customerId}:`, insertStateError);
+              throw insertStateError;
+            }
+          } else {
+            // Row exists (created by ef_generate_decisions) — update HWM fields in place
+            const { error: updateInitError } = await supabase
+              .from("customer_state_daily")
+              .update({
+                high_water_mark_usd: initialHWM,
+                hwm_contrib_net_cum: netContribUsd,
+                last_perf_fee_month: lastMonthFirstDay,
+              })
+              .eq("state_id", currentState.state_id);
+
+            if (updateInitError) {
+              console.error(`Error initializing HWM for customer ${customerId}:`, updateInitError);
+              throw updateInitError;
+            }
           }
 
-          console.log(`Initialized HWM for customer ${customerId}: $${initialHWM.toFixed(2)}`);
+          console.log(`Initialized HWM for customer ${customerId}: $${initialHWM.toFixed(2)}, contrib: $${netContribUsd.toFixed(2)}`);
           results.processed++;
           continue;
         }
 
-        // Check if already processed this month
-        if (currentState.last_perf_fee_month === lastMonthStr) {
+        // Check if already processed this month (stored as YYYY-MM-01; compare via startsWith)
+        if (currentState.last_perf_fee_month?.startsWith(lastMonthStr)) {
           console.log(`Performance fee already calculated for customer ${customerId} in ${lastMonthStr}`);
           results.skipped++;
           continue;
@@ -201,13 +222,13 @@ Deno.serve(async (req) => {
           .eq("org_id", orgId)
           .eq("customer_id", customerId)
           .in("kind", ["topup", "withdrawal"])
-          .gt("trade_date", currentState.trade_date)
+          .gt("trade_date", currentState.date)
           .lte("trade_date", lastDayStr);
 
         if (recentContribError) throw recentContribError;
 
         let additionalContrib = 0;
-        const btcPrice = balance.nav_usd / balance.btc_balance || 50000; // Fallback price
+        const btcPrice = balance.btc_balance > 0 ? balance.nav_usd / balance.btc_balance : 50000; // Fallback price
 
         for (const line of (recentContribData || [])) {
           additionalContrib += Number(line.amount_usdt || 0);
@@ -227,9 +248,9 @@ Deno.serve(async (req) => {
           const { error: updateError } = await supabase
             .from("customer_state_daily")
             .update({
-              trade_date: lastDayStr,
+              date: lastDayStr,
               hwm_contrib_net_cum: totalNetContrib,
-              last_perf_fee_month: lastMonthStr,
+              last_perf_fee_month: lastMonthFirstDay,
             })
             .eq("state_id", currentState.state_id);
 
@@ -393,10 +414,10 @@ Deno.serve(async (req) => {
         const { error: updateStateError } = await supabase
           .from("customer_state_daily")
           .update({
-            trade_date: lastDayStr,
+            date: lastDayStr,
             high_water_mark_usd: newHWM,
             hwm_contrib_net_cum: totalNetContrib,
-            last_perf_fee_month: lastMonthStr,
+            last_perf_fee_month: lastMonthFirstDay,
           })
           .eq("state_id", currentState.state_id);
 
