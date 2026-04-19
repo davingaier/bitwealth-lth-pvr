@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         /* Minimal custom overrides for portal-specific features */
         .milestone-track {
@@ -148,6 +149,17 @@
                             </div>
                             <div class="stat-value" id="navValue">$0.00</div>
                             <div class="stat-change neutral" id="navChange">--</div>
+                            <div id="accruedFeesDisplay" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: var(--text-secondary);">
+                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees</div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span>Platform Fee</span>
+                                    <span id="accruedPlatformFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Performance Fee</span>
+                                    <span id="accruedPerformanceFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="stat-box">
@@ -191,13 +203,22 @@
                             </div>
                         </div>
 
-                        <!-- Strategy Metrics -->
+                        <!-- Strategy Metrics + Allocation Chart -->
                         <div class="dashboard-card">
-                            <div class="card-header">
-                                <h2>Strategy Metrics</h2>
-                            </div>
-                            <div class="metrics-list" id="strategyMetrics">
-                                <!-- Populated by JavaScript -->
+                            <div style="display: flex; gap: 24px; align-items: flex-start;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="card-header">
+                                        <h2>Strategy Metrics</h2>
+                                    </div>
+                                    <div class="metrics-list" id="strategyMetrics">
+                                        <!-- Populated by JavaScript -->
+                                    </div>
+                                </div>
+                                <div id="allocationChartWrapper" style="display: none; width: 180px; flex-shrink: 0; text-align: center; padding-top: 8px;">
+                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Portfolio Allocation</div>
+                                    <canvas id="allocationChart" width="160" height="160"></canvas>
+                                    <div id="allocationLegend" style="margin-top: 10px; font-size: 12px; line-height: 1.6;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -670,8 +691,8 @@
                 // Load API key expiry banner (API model only)
                 await loadApiKeyExpiryBanner(customerData.customer_id);
 
-                // Initialize statement form with customer's account creation date
-                initializeStatementForm();
+                // Initialize statement form with trade start date
+                await initializeStatementForm();
 
                 // Show content
                 document.getElementById('loading').style.display = 'none';
@@ -838,6 +859,27 @@
                     document.getElementById('btcUsd').textContent = btcPrice > 0 ? `@ $${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}` : '--';
                     document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     
+                    // Load accrued fees into NAV card
+                    try {
+                        const { data: fees, error: feesErr } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
+                        if (!feesErr && fees && fees.length > 0) {
+                            const f = fees[0];
+                            const platUsdt = parseFloat(f.platform_fee_usdt || 0);
+                            const platBtc = parseFloat(f.platform_fee_btc || 0);
+                            const perfUsdt = parseFloat(f.performance_fee_usdt || 0);
+                            const hasFees = platUsdt > 0 || platBtc > 0 || perfUsdt > 0;
+                            if (hasFees) {
+                                const platDisplay = platBtc > 0 
+                                    ? `${platBtc.toFixed(8)} BTC` 
+                                    : `$${platUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                const perfDisplay = `$${perfUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                document.getElementById('accruedPlatformFee').textContent = platDisplay;
+                                document.getElementById('accruedPerformanceFee').textContent = perfDisplay;
+                                document.getElementById('accruedFeesDisplay').style.display = 'block';
+                            }
+                        }
+                    } catch (feeErr) { console.error('Accrued fees load error:', feeErr); }
+                    
                     // Calculate ROI if we have contribution data
                     const totalContrib = parseFloat(portfolio.total_contributions || 0);
                     if (totalContrib > 0) {
@@ -1001,17 +1043,25 @@
                 const nav = parseFloat(portfolio.nav_usd || 0);
                 const btcPrice = parseFloat(portfolio.btc_price || 0);
                 const btcBalance = parseFloat(portfolio.btc_balance || 0);
+                const usdtBalance = parseFloat(portfolio.usdt_balance || 0);
                 
                 // Calculate average cost basis (total USDT spent / total BTC bought)
-                // This is a simplified calculation - could be enhanced with actual transaction data
                 let avgCostBasis = 0;
                 if (btcBalance > 0 && totalContrib > 0) {
                     avgCostBasis = totalContrib / btcBalance;
                 }
                 
-                // Calculate unrealized P/L
-                const unrealizedPL = nav - totalContrib;
-                const unrealizedPercent = totalContrib > 0 ? ((unrealizedPL / totalContrib) * 100) : 0;
+                // Calculate CAGR
+                let cagrDisplay = '--';
+                if (totalContrib > 0 && nav > 0 && portfolio.created_at) {
+                    const startDate = new Date(portfolio.created_at);
+                    const now = new Date();
+                    const years = (now - startDate) / (365.25 * 24 * 60 * 60 * 1000);
+                    if (years >= 0.01) { // At least ~4 days
+                        const cagr = (Math.pow(nav / totalContrib, 1 / years) - 1) * 100;
+                        cagrDisplay = `${cagr >= 0 ? '+' : ''}${cagr.toFixed(1)}%`;
+                    }
+                }
                 
                 // Build metrics HTML
                 const metricsHTML = `
@@ -1024,11 +1074,8 @@
                         <div class="metric-value">$${nav.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                     </div>
                     <div class="metric-item">
-                        <div class="metric-label">Unrealized P/L</div>
-                        <div class="metric-value ${unrealizedPL >= 0 ? 'positive' : 'negative'}">
-                            ${unrealizedPL >= 0 ? '+' : ''}$${unrealizedPL.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})} 
-                            (${unrealizedPercent >= 0 ? '+' : ''}${unrealizedPercent.toFixed(1)}%)
-                        </div>
+                        <div class="metric-label">CAGR</div>
+                        <div class="metric-value">${cagrDisplay}</div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">Avg Cost Basis</div>
@@ -1041,6 +1088,65 @@
                 `;
                 
                 metricsList.innerHTML = metricsHTML;
+
+                // Render allocation pie chart
+                const btcValueUsd = btcBalance * btcPrice;
+                const totalValue = btcValueUsd + usdtBalance;
+                const btcPct = totalValue > 0 ? (btcValueUsd / totalValue) * 100 : 0;
+                const usdtPct = totalValue > 0 ? (usdtBalance / totalValue) * 100 : 0;
+
+                const chartWrapper = document.getElementById('allocationChartWrapper');
+                if (totalValue > 0) {
+                    chartWrapper.style.display = 'block';
+                    const ctx = document.getElementById('allocationChart').getContext('2d');
+                    
+                    // Destroy previous chart instance if exists
+                    if (window._allocationChart) window._allocationChart.destroy();
+                    
+                    window._allocationChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['BTC', 'USDT'],
+                            datasets: [{
+                                data: [btcPct, usdtPct],
+                                backgroundColor: ['#FFB400', '#1E3A5F'],
+                                borderColor: ['#FFB400', '#2A4A6F'],
+                                borderWidth: 2,
+                                hoverBorderColor: '#ffffff',
+                                hoverBorderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: false,
+                            cutout: '60%',
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    backgroundColor: '#151B2E',
+                                    titleColor: '#A8B2D1',
+                                    bodyColor: '#ffffff',
+                                    borderColor: 'rgba(255,255,255,0.1)',
+                                    borderWidth: 1,
+                                    callbacks: {
+                                        label: (ctx) => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    // Custom legend
+                    document.getElementById('allocationLegend').innerHTML = `
+                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
+                            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FFB400;"></span>
+                            BTC ${btcPct.toFixed(1)}%
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
+                            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1E3A5F;"></span>
+                            USDT ${usdtPct.toFixed(1)}%
+                        </div>
+                    `;
+                }
 
             } catch (error) {
                 console.error('Error loading metrics:', error);
@@ -1317,21 +1423,28 @@
             statusDiv.textContent = message;
         }
 
-        function initializeStatementForm() {
-            // Populate year dropdown (from account creation year to current year)
+        async function initializeStatementForm() {
+            // Populate year dropdown based on trade start date (effective_from)
             const yearSelect = document.getElementById('statementYear');
             const monthSelect = document.getElementById('statementMonth');
             const currentYear = new Date().getFullYear();
             const currentMonth = new Date().getMonth() + 1; // 1-12
             
-            // Get account creation date from customer data (will be set after login)
-            const accountCreatedYear = customerData?.created_at 
-                ? new Date(customerData.created_at).getFullYear()
-                : currentYear - 2; // Default to 2 years ago if not available
+            // Get trade start date from RPC (effective_from), fall back to created_at
+            let tradeStartDate = null;
+            try {
+                const { data: startDate } = await sb.rpc('get_customer_trade_start_date', { p_customer_id: customerData.customer_id });
+                if (startDate) tradeStartDate = new Date(startDate + 'T00:00:00');
+            } catch { /* fallback below */ }
+            if (!tradeStartDate && customerData?.created_at) {
+                tradeStartDate = new Date(customerData.created_at);
+            }
+            const tradeStartYear = tradeStartDate ? tradeStartDate.getFullYear() : currentYear;
+            const tradeStartMonth = tradeStartDate ? tradeStartDate.getMonth() + 1 : 1;
             
-            // Populate years from account creation to current
+            // Populate years from trade start year to current
             yearSelect.innerHTML = '';
-            for (let year = currentYear; year >= accountCreatedYear; year--) {
+            for (let year = currentYear; year >= tradeStartYear; year--) {
                 const option = document.createElement('option');
                 option.value = year;
                 option.textContent = year;
@@ -1347,7 +1460,6 @@
                 const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
                 const prevMonthYear = thisMonth === 1 ? thisYear - 1 : thisYear;
                 
-                // Define variables that are needed outside the loop
                 const isCurrentYear = selectedYear === thisYear;
                 const isPreviousMonthYear = selectedYear === prevMonthYear;
                 const isFutureYear = selectedYear > thisYear;
@@ -1357,19 +1469,14 @@
                                    'July', 'August', 'September', 'October', 'November', 'December'];
                 
                 for (let m = 1; m <= 12; m++) {
-                    // Skip if future year or future/current month in current year
+                    // Skip future year entirely
                     if (isFutureYear) continue;
+                    // Skip current month and future months (statements only after month end)
                     if (isCurrentYear && m >= thisMonth) continue;
                     
-                    // Skip if before account creation
-                    if (customerData?.created_at) {
-                        const accountCreated = new Date(customerData.created_at);
-                        const accountYear = accountCreated.getFullYear();
-                        const accountMonth = accountCreated.getMonth() + 1;
-                        
-                        if (selectedYear < accountYear) continue;
-                        if (selectedYear === accountYear && m < accountMonth) continue;
-                    }
+                    // Skip months before trade start date
+                    if (selectedYear < tradeStartYear) continue;
+                    if (selectedYear === tradeStartYear && m < tradeStartMonth) continue;
                     
                     const option = document.createElement('option');
                     option.value = m;
@@ -1382,6 +1489,23 @@
                     monthSelect.value = prevMonth;
                 } else if (monthSelect.options.length > 0) {
                     monthSelect.value = monthSelect.options[monthSelect.options.length - 1].value;
+                }
+                
+                // Show message if no months available
+                const downloadBtn = document.querySelector('#statements .btn-gold, #statements button[onclick*="downloadStatement"]');
+                const noMonthsMsg = document.getElementById('noStatementsMsg');
+                if (monthSelect.options.length === 0) {
+                    if (!noMonthsMsg) {
+                        const msg = document.createElement('div');
+                        msg.id = 'noStatementsMsg';
+                        msg.style.cssText = 'color: var(--text-secondary); font-size: 13px; margin-top: 8px;';
+                        msg.textContent = 'No statements available yet. Statements become available after the first full month of trading.';
+                        monthSelect.parentElement.appendChild(msg);
+                    }
+                    if (downloadBtn) downloadBtn.disabled = true;
+                } else {
+                    if (noMonthsMsg) noMonthsMsg.remove();
+                    if (downloadBtn) downloadBtn.disabled = false;
                 }
             }
             
