@@ -3,11 +3,78 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-19 (v0.6.70)
+**Last updated:** 2026-04-19 (v0.6.71)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.71 – Customer Portal: Portfolio Composition as Separate Card; Admin UI Back-Tester New Charts
+**Date:** 2026-04-19  
+**Purpose:** (1) Extract the Portfolio Composition doughnut chart from the Strategy Metrics card into its own card placed side-by-side. (2) Add two new chart types to the Admin UI Back-Tester — "NAV with Buy/Sell/Hold" and "NAV with Position Sizes".
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Customer Portal: Portfolio Composition Separated into Own Card
+
+**Before:** The Portfolio Composition doughnut chart and the Strategy Metrics table shared a single `dashboard-card`. The chart was an internal flex child with no card header.
+
+**After:** The two elements are rendered inside a flex row (`display: flex; gap: 16px`), each wrapped in its own `dashboard-card`:
+- **Strategy Metrics card** — `flex: 1; min-width: 0` (fills available width)
+- **Portfolio Composition card** — `width: 220px; flex-shrink: 0` (fixed width on right)
+
+The Portfolio Composition card gains a proper `<h2>Portfolio Composition</h2>` heading styled via the standard `card-header` class. When `allocationChartWrapper` is hidden (zero total value), the Strategy Metrics card fills the full row width.
+
+**File:** `website/customer-portal.html` — restructured the Strategy Metrics + Allocation Chart section (~lines 186–206).
+
+---
+
+#### 2 — Admin UI Back-Tester: NAV with Buy/Sell/Hold Chart
+
+**New option:** `nav_signals` — "NAV with Buy/Sell/Hold" added to the `btReportTypeSelect` dropdown.
+
+**Chart:** Line chart with three series:
+- BTC Price (left y-axis, orange)
+- LTH PVR DCA NAV with gradient fill (left y-axis, green)
+- Signal markers overlaid on the NAV line:
+  - **Buy** — green upward triangles (`pointStyle: 'triangle'`)
+  - **Sell** — red crosses (`pointStyle: 'crossRot'`)
+  - **Hold** — yellow circles (`pointStyle: 'circle'`)
+
+**Data source:** `bt_results_daily.action` field (`'buy'`/`'sell'`/`'hold'`).
+
+**Function:** `renderBTNavSignalsChart(rows, btRunId)` added to `ui/Advanced BTC DCA Strategy.html`.
+
+---
+
+#### 3 — Admin UI Back-Tester: NAV with Position Sizes Chart
+
+**New option:** `nav_positions` — "NAV with Position Sizes" added to the `btReportTypeSelect` dropdown.
+
+**Chart:** Mixed line + bar chart:
+- BTC Price line (left y-axis)
+- LTH PVR DCA NAV line with gradient fill (left y-axis)
+- Position Size % bar overlay (right y-axis `y1`):
+  - Buy bars: green, positive
+  - Sell bars: red, negative (inverted sign)
+  - Hold bars: faint yellow
+
+**Data source:** `bt_results_daily.amount_pct` (position size percentage) and `bt_results_daily.action` (to determine bar colour/sign).
+
+**Function:** `renderBTNavPositionsChart(rows, btRunId)` added to `ui/Advanced BTC DCA Strategy.html`.
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `website/customer-portal.html` | Split Strategy Metrics + Portfolio Composition into two side-by-side cards |
+| `ui/Advanced BTC DCA Strategy.html` | Added `nav_signals` and `nav_positions` dropdown options; added `renderBTNavSignalsChart()` and `renderBTNavPositionsChart()` functions; updated `renderBtReportForCurrentState()` routing |
+
+---
 
 ### v0.6.70 – Customer Portal UI Polish, Bank Link Fix & Holdings Chart Restructure
 **Date:** 2026-04-19  
