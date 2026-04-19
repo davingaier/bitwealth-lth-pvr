@@ -3,11 +3,167 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-18 (v0.6.69)
+**Last updated:** 2026-04-19 (v0.6.70)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.70 – Customer Portal UI Polish, Bank Link Fix & Holdings Chart Restructure
+**Date:** 2026-04-19  
+**Purpose:** (1) Fix eight customer portal and admin UI visual/functional issues found during customer testing. (2) Fix Admin UI bank form error (non-existent column references). (3) Fix `ef_link_bank_account` schema bug + graceful fallback for all account models. (4) Restructure Holdings chart so BTC Balance shows raw quantity on right y-axis.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Customer Portal: Onboarding Stepper Checkmark Display
+
+**Symptom:** Completed stepper steps showed `u2713` as literal text instead of a tick mark.
+
+**Root Cause:** The CSS `content` property was written with a JavaScript-style unicode escape `\u2713` instead of CSS-style `\2713`.
+
+**Fix:** `website/customer-portal.html` — changed `content: '\u2713'` → `content: '\2713'`.
+
+---
+
+#### 2 — Customer Portal: NAV Chart Data Spread for Sparse Datasets
+
+**Symptom:** For customers with very few data points the chart showed markers bunched at the left edge with empty space to the right.
+
+**Fix:** Two changes to `buildNavChart()`:
+- Added `offset: true` on the x-axis so data is centred across the chart area.
+- Added conditional `pointRadius`: `5` when ≤ 5 data points exist, `0` otherwise, so individual data points are visible when the series is sparse.
+
+---
+
+#### 3 — Customer Portal: Rename Chart Dropdown Option
+
+**Change:** "LTH PVR vs Std DCA vs HODL" → **"LTH PVR vs Benchmarks"** in the `perfChartType` dropdown.
+
+---
+
+#### 4 — Customer Portal: Tooltip Decimal Consistency
+
+**Symptom:** Some tooltip values showed more than 2 decimal places.
+
+**Fix:** Updated the `callbacks.label` function in `getCommonChartOptions()` to format all non-BTC values to exactly 2dp using `toLocaleString(..., { minimumFractionDigits: 2, maximumFractionDigits: 2 })`.
+
+For the Holdings chart specifically, the BTC Balance series (on the `yBtc` axis) now shows 8dp + ` BTC` suffix; all other series show 2dp.
+
+---
+
+#### 5 — Customer Portal: Seed Benchmark Data for Customer 49
+
+**Symptom:** Std DCA and HODL NAV columns were zero in the Metrics table for customer 49.
+
+**Root Cause:** No rows existed in `lth_pvr.std_dca_balances_daily` or `lth_pvr.hodl_balances_daily` for customer 49. The pipeline populates these tables going forward; a seed row was required to show initial figures.
+
+**Fix (manual data seed):**
+- `lth_pvr.std_dca_balances_daily` — inserted row for customer 49, date 2026-04-18: `btc_balance=0`, `usdt_balance=17950.20`, `nav_usd=17950.20`
+- `lth_pvr.hodl_balances_daily` — inserted row for customer 49, date 2026-04-18: `btc_balance=17950.20/75724.32`, `contrib_cum_usd=17950.20`, `nav_usd=17950.20`
+
+---
+
+#### 6 — Customer Portal: PDF Export Double-Download Bug
+
+**Symptom:** Clicking "Export PDF" triggered two PDF downloads.
+
+**Root Cause:** No guard against rapid re-entry; `html2canvas` + `jsPDF` took time and the click handler could be invoked a second time before the first completed.
+
+**Fix:** Added an `_pdfExporting` boolean guard in `exportPerfChartPDF()`:
+```javascript
+let _pdfExporting = false;
+async function exportPerfChartPDF() {
+    if (_pdfExporting) return;
+    _pdfExporting = true;
+    try { /* ... */ } finally { _pdfExporting = false; }
+}
+```
+Also added 10 mm margins and vertical centering of the chart image on the PDF page.
+
+---
+
+#### 7 — Admin UI Bank Form: Column Error Fix
+
+**Symptom:** Saving a customer in the Admin UI threw a PostgreSQL error: `column customer_details.exchange_api_key does not exist`.
+
+**Root Cause:** `cmUpdateCustomer()`, `cmLoadCustomer()`, and `cmFillForm()` all referenced three columns (`exchange_api_key`, `exchange_api_secret`, `exchange_btc_wallet_address`) that do not exist on the `customer_details` table. These fields are stored in Vault / `exchange_accounts` instead.
+
+**Fix:** Removed all three non-existent columns from the SELECT, UPDATE payload, and form-fill list in `ui/Advanced BTC DCA Strategy.html`. The Admin UI bank form (bank_name, bank_account_holder, bank_account_number, bank_branch_code, bank_account_type) was preserved; it now routes through `ef_link_bank_account` instead of direct column writes.
+
+---
+
+#### 8 — `ef_link_bank_account`: Schema Bug & Graceful Fallback
+
+**Symptom 1 (500 error):** Calling `ef_link_bank_account` returned 500: `"Could not find the function public.get_customer_valr_credentials"`.
+
+**Root Cause:** `resolveCustomerCredentials(sb, customerId)` calls `sb.rpc("get_customer_valr_credentials", ...)`. The RPC lives in the `lth_pvr` schema but the `sb` client was initialised without a schema override, so supabase-js looked in `public`.
+
+**Fix:** Added a second Supabase client `sbLthPvr` initialised with `{ db: { schema: "lth_pvr" } }` and passed it to `resolveCustomerCredentials()`.
+
+**Symptom 2 (VALR 404):** After fixing the schema bug, the function reached VALR but received HTTP 404 from the bank-linking endpoint. Four endpoint path variations were tested:
+- `/v1/bankaccounts/ZAR`
+- `/v1/fiat/ZAR/bank-accounts`
+- `/v1/wire/bank-accounts/ZAR`
+- `/v1/fiat/ZAR/banks`
+
+All returned 404. VALR's docs are a Postman SPA that does not render endpoint details via HTTP fetch; the exact path is unknown. Admin should verify the correct path in the VALR Postman collection or contact VALR support.
+
+**Graceful fallback (applied to all account models):** Rather than failing loudly for API-model customers, the function now:
+1. Attempts the VALR API call as before.
+2. If VALR rejects (any 4xx/5xx), logs a `warn` alert via `logAlert()` and **continues** to store the bank details in `exchange_accounts` with `bank_link_method = 'manual'`.
+3. Returns `{ success: true, valr_linked: false, message: "Bank details saved locally. Admin action required to link manually in VALR portal." }`.
+
+**Also fixed:** The `bank_link_method` value was previously `"manual_pending"` which violated the DB check constraint (`CHECK (bank_link_method IN ('manual', 'api'))`). Changed to `"manual"`.
+
+**Verified:** Customer 49's bank details (FNB, 62770568144, TREMYNE NAIDOO) are now saved in `exchange_accounts`.
+
+---
+
+#### 9 — Customer Portal: Holdings Chart BTC Balance → Right Y-Axis
+
+**Symptom:** The "BTC Balance" series in the Holdings chart showed the **USD value** of BTC (quantity × price) on the left y-axis alongside NAV and Contributions, making it difficult to read the actual BTC quantity held.
+
+**Required behaviour (matching Back-test Holdings chart pattern):**
+- Right y-axis (`yBtc`): BTC Balance as raw **quantity** (e.g. `0.23456789 BTC`)
+- Left y-axis (`y`): All USD values — BTC Price, NAV, Contributions, USDT Balance
+
+**Changes to `buildHoldingsChart()` in `website/customer-portal.html`:**
+
+| Before | After |
+|--------|-------|
+| `{ label: 'BTC Balance (USD)', data: d.btc_balance * d.btc_price, yAxisID: 'yPrice' }` | `{ label: 'BTC Balance', data: d.btc_balance, yAxisID: 'yBtc' }` |
+| BTC Price on `yPrice` right axis | BTC Price on left `y` axis (no `yAxisID`) |
+| Right axis: `yPrice` — BTC Price in USD | Right axis: `yBtc` — BTC quantity, 8dp + " BTC" format |
+| Tooltip: 2dp for all series | Tooltip: 8dp + " BTC" for `yBtc` series; 2dp for all others |
+
+**Right axis definition:**
+```javascript
+opts.scales.yBtc = {
+    type: 'linear', position: 'right', grid: { drawOnChartArea: false },
+    ticks: { callback: v => btcFmt.format(v) + ' BTC' },
+    title: { display: true, text: 'BTC' }
+};
+```
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `website/customer-portal.html` | Stepper CSS fix; x-axis offset; pointRadius for sparse data; dropdown rename; tooltip 2dp/8dp; PDF guard + margins; `buildHoldingsChart()` BTC Balance right axis |
+| `ui/Advanced BTC DCA Strategy.html` | Removed non-existent columns from `cmUpdateCustomer`, `cmLoadCustomer`, `cmFillForm`; bank save routed through `ef_link_bank_account` |
+| `supabase/functions/ef_link_bank_account/index.ts` | Added `sbLthPvr` client for `lth_pvr` schema; graceful fallback for all account models; fixed `bank_link_method` value |
+
+#### Deployments
+
+```powershell
+supabase functions deploy ef_link_bank_account --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
 
 ### v0.6.69 – Admin UI: Portal Impersonation, Fee Card Reorganisation & Sync Duplicate Fix
 **Date:** 2026-04-18  
