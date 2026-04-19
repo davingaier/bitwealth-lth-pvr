@@ -111,10 +111,10 @@ Deno.serve(async (req: Request) => {
     
     const stepOrder = [
       { name: "ef_generate_decisions", status: steps.decisions },
-      { name: "ef_create_order_intents", status: steps.order_intents },
-      { name: "ef_execute_orders", status: steps.execute_orders },
+      { name: "ef_create_order_intents", status: steps.intents },
+      { name: "ef_execute_orders", status: steps.orders },
       { name: "ef_poll_orders", status: steps.poll_orders },
-      { name: "ef_post_ledger_and_balances", status: steps.ledger_posted },
+      { name: "ef_post_ledger_and_balances", status: steps.ledger },
     ];
     
     for (const step of stepOrder) {

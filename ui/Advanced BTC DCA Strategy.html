@@ -9498,8 +9498,8 @@ This will:
           statusText.textContent = '⚠️ Pipeline paused - ready to resume';
           statusText.style.color = '#ffc107';
           resumeBtn.classList.add('btn-primary');
-        } else if (data.steps?.decisions_generated) {
-          statusText.textContent = '✅ Pipeline already executed';
+        } else if (data.steps?.decisions) {
+          statusText.textContent = '✅ Pipeline complete';
           statusText.style.color = '#28a745';
           resumeBtn.classList.remove('btn-primary');
         } else if (!data.ci_bands_available) {
