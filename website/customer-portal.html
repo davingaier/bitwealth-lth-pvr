@@ -32,7 +32,7 @@
             background: #10b981; border-color: #10b981; color: #fff;
             box-shadow: 0 0 12px rgba(16,185,129,0.3);
         }
-        .step.done .step-icon::after { content: '\u2713'; font-size: 18px; font-weight: 700; }
+        .step.done .step-icon::after { content: '\2713'; font-size: 18px; font-weight: 700; }
         .step.done .step-icon span { display: none; }
         .step.active .step-icon {
             border-color: var(--gold); color: var(--gold);
@@ -217,7 +217,7 @@
                                 </select>
                                 <!-- NAV sub-options (visible only when NAV chart selected) -->
                                 <select id="perfNavSubOption" onchange="updatePerfChart()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
-                                    <option value="benchmarks">LTH PVR vs Std DCA vs HODL</option>
+                                    <option value="benchmarks">LTH PVR vs Benchmarks</option>
                                     <option value="signals">NAV with Buy/Sell/Hold</option>
                                     <option value="sizes">NAV with Position Sizes</option>
                                 </select>
@@ -2075,12 +2075,20 @@
                         backgroundColor: 'rgba(15, 23, 42, 0.95)',
                         titleColor: '#e2e8f0', bodyColor: '#cbd5e1',
                         borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
-                        padding: 12, cornerRadius: 8
+                        padding: 12, cornerRadius: 8,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) label += Number(context.parsed.y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                return label;
+                            }
+                        }
                     },
                     legend: { labels: { color: '#94a3b8', usePointStyle: true, padding: 16, font: { size: 12 } } }
                 },
                 scales: {
-                    x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    x: { offset: true, ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
                     y: { type: isLog ? 'logarithmic' : 'linear', ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: yLabel, color: '#94a3b8', font: { size: 12 } } }
                 }
             };
@@ -2112,10 +2120,10 @@
 
             if (sub === 'benchmarks') {
                 datasets = [
-                    { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 },
-                    { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [5,3] },
-                    { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [3,3] },
-                    { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] }
+                    { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
+                    { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
+                    { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
+                    { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [8,4] }
                 ];
             } else if (sub === 'signals') {
                 // Color each segment by decision
@@ -2176,7 +2184,7 @@
                 { label: 'BTC Price', data: daily.map(d => d.btc_price), borderColor: PERF_COLORS.btcPrice, borderWidth: 1.5, pointRadius: 0, tension: 0.3, yAxisID: 'yPrice' },
                 { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.navGreen, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
                 { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] },
-                { label: 'BTC Value', data: daily.map(d => (d.btc_balance || 0) * (d.btc_price || 0)), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'rgba(239,68,68,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                { label: 'BTC Balance (USD)', data: daily.map(d => (d.btc_balance || 0) * (d.btc_price || 0)), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'rgba(239,68,68,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
                 { label: 'USDT Balance', data: daily.map(d => d.usdt_balance || 0), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
             ];
 
@@ -2269,22 +2277,31 @@
         function fmtPct(v) { return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
 
         // ── PDF Export ─────────────────────────────────────────────────
+        let _pdfExporting = false;
         async function exportPerfChartPDF() {
+            if (_pdfExporting) return;
+            _pdfExporting = true;
             const card = document.querySelector('#portfolioPerformance .dashboard-card');
-            if (!card) return;
+            if (!card) { _pdfExporting = false; return; }
             try {
                 const canvas = await html2canvas(card, { backgroundColor: '#0f172a', scale: 2 });
                 const imgData = canvas.toDataURL('image/png');
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                const pdfW = pdf.internal.pageSize.getWidth();
-                const pdfH = (canvas.height * pdfW) / canvas.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfW, Math.min(pdfH, pdf.internal.pageSize.getHeight()));
+                const pageW = pdf.internal.pageSize.getWidth();
+                const pageH = pdf.internal.pageSize.getHeight();
+                const margin = 10; // mm
+                const usableW = pageW - margin * 2;
+                const imgH = (canvas.height * usableW) / canvas.width;
+                const yOffset = Math.max(margin, (pageH - imgH) / 2);
+                pdf.addImage(imgData, 'PNG', margin, yOffset, usableW, Math.min(imgH, pageH - margin * 2));
                 const chartType = document.getElementById('perfChartType').value;
                 pdf.save(`BitWealth_${chartType}_${new Date().toISOString().slice(0,10)}.pdf`);
             } catch (err) {
                 console.error('PDF export error:', err);
                 alert('Failed to export PDF. Please try again.');
+            } finally {
+                _pdfExporting = false;
             }
         }
 

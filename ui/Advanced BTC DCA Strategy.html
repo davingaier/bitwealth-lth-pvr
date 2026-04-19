@@ -5830,45 +5830,39 @@
         exchange_api_name: payload.exchange_api_name || null,
         exchange_username: payload.exchange_username || null,
         exchange_password: payload.exchange_password || null,
-        exchange_api_key: payload.exchange_api_key || null,
-        exchange_api_secret: payload.exchange_api_secret || null,
-        exchange_btc_wallet_address: payload.exchange_btc_wallet_address || null,
         customer_status: payload.customer_status || 'Active'
       };
       const { error } = await supabaseClient.from('customer_details').update(row).eq('customer_id', id);
       if(error) throw error;
 
-      // Also save bank account fields to exchange_accounts (if customer has one)
-      const bankFields = {
-        bank_name: payload.bank_name || null,
-        bank_account_holder: payload.bank_account_holder?.trim() || null,
-        bank_account_number: payload.bank_account_number?.trim() || null,
-        bank_branch_code: payload.bank_branch_code?.trim() || null,
-        bank_account_type: payload.bank_account_type || null,
-      };
-      const hasBankData = bankFields.bank_name || bankFields.bank_account_number;
-      if (hasBankData) {
-        bankFields.bank_linked_at = bankFields.bank_linked_at || new Date().toISOString();
-        bankFields.bank_link_method = 'manual';
-      }
-      // Find exchange_account_id via customer_strategies
-      const { data: csRows } = await supabaseClient.from('customer_strategies')
-        .select('exchange_account_id')
-        .eq('customer_id', id)
-        .not('status', 'in', '("closed","terminated")')
-        .limit(1);
-      if (csRows?.[0]?.exchange_account_id) {
-        const { error: bankErr } = await supabaseClient.from('exchange_accounts')
-          .update(bankFields)
-          .eq('exchange_account_id', csRows[0].exchange_account_id);
-        if (bankErr) console.error('Bank account save error:', bankErr);
+      // Link bank account via VALR API (ef_link_bank_account)
+      const bankName = payload.bank_name?.trim();
+      const bankAccNum = payload.bank_account_number?.trim();
+      const bankHolder = payload.bank_account_holder?.trim();
+      if (bankName && bankAccNum && bankHolder) {
+        const bankPayload = {
+          customer_id: Number(id),
+          bank_account_number: bankAccNum,
+          bank_account_holder: bankHolder,
+          bank_name: bankName,
+          bank_branch_code: payload.bank_branch_code?.trim() || null,
+          bank_account_type: payload.bank_account_type || null,
+        };
+        const { data: linkResult, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
+        if (linkErr) {
+          console.error('Bank link error:', linkErr);
+          throw new Error('Customer saved but bank linking failed: ' + (linkErr.message || linkErr));
+        }
+        if (linkResult && !linkResult.success && linkResult.error) {
+          throw new Error('Customer saved but VALR bank link failed: ' + linkResult.error);
+        }
       }
     }
 
     async function cmLoadCustomer(id){
       const { data, error } = await supabaseClient
         .from('customer_details')
-        .select('customer_id, first_names, last_name, email_address, cellphone_number, id_number, trade_start_date, recurring_contribution_frequency, recurring_contribution_zar, upfront_contribution_zar, upfront_contribution_btc, exchange_api_name, exchange_username, exchange_password, exchange_api_key, exchange_api_secret, exchange_btc_wallet_address, customer_status')
+        .select('customer_id, first_names, last_name, email_address, cellphone_number, id_number, trade_start_date, recurring_contribution_frequency, recurring_contribution_zar, upfront_contribution_zar, upfront_contribution_btc, exchange_api_name, exchange_username, exchange_password, customer_status')
         .eq('customer_id', id).single();
       if(error) throw error;
       return data;
@@ -5877,7 +5871,7 @@
     function cmFillForm(formEl, row){
       formEl.reset();
       const set = (name, val) => { const el=formEl.querySelector(`[name="${name}"]`); if(!el) return; if(el.type==='date' && val){ el.value = String(val).slice(0,10); } else { el.value = (val ?? ''); } };
-      ['first_names','last_name','email_address','cellphone_number','id_number','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','exchange_api_name','exchange_username','exchange_password','exchange_api_key','exchange_api_secret','exchange_btc_wallet_address','customer_status'].forEach(k=>set(k,row[k]));
+      ['first_names','last_name','email_address','cellphone_number','id_number','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','exchange_api_name','exchange_username','exchange_password','customer_status'].forEach(k=>set(k,row[k]));
       set('trade_start_date', row.trade_start_date);
       cmWireFrequency(formEl);
     }
