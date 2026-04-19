@@ -182,21 +182,23 @@
                             </div>
                         </div>
 
-                        <!-- Strategy Metrics + Allocation Chart -->
-                        <div class="dashboard-card">
-                            <div style="display: flex; gap: 24px; align-items: flex-start;">
-                                <div style="flex: 1; min-width: 0;">
-                                    <div class="card-header">
-                                        <h2>Strategy Metrics</h2>
-                                    </div>
-                                    <div class="metrics-list" id="strategyMetrics">
-                                        <!-- Populated by JavaScript -->
-                                    </div>
+                        <!-- Strategy Metrics + Allocation Chart (side by side) -->
+                        <div style="display: flex; gap: 16px; align-items: stretch;">
+                            <div class="dashboard-card" style="flex: 1; min-width: 0;">
+                                <div class="card-header">
+                                    <h2>Strategy Metrics</h2>
                                 </div>
-                                <div id="allocationChartWrapper" style="display: none; width: 180px; flex-shrink: 0; text-align: center; padding-top: 8px;">
-                                    <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">Portfolio Composition</div>
+                                <div class="metrics-list" id="strategyMetrics">
+                                    <!-- Populated by JavaScript -->
+                                </div>
+                            </div>
+                            <div id="allocationChartWrapper" class="dashboard-card" style="display: none; width: 220px; flex-shrink: 0; text-align: center;">
+                                <div class="card-header">
+                                    <h2>Portfolio Composition</h2>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 8px 0;">
                                     <canvas id="allocationChart" width="160" height="160"></canvas>
-                                    <div id="allocationLegend" style="margin-top: 10px; font-size: 12px; line-height: 1.6;"></div>
+                                    <div id="allocationLegend" style="margin-top: 12px; font-size: 12px; line-height: 1.6;"></div>
                                 </div>
                             </div>
                         </div>
