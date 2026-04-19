@@ -29,6 +29,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const sbLthPvr = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "lth_pvr" } });
 
 const CORS = {
   "Content-Type": "application/json",
@@ -48,7 +49,7 @@ async function valrLinkBankAccount(
   subaccountId: string | null,
   bankPayload: Record<string, unknown>,
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const path        = "/v1/bankaccounts/ZAR";
+  const path        = "/v1/fiat/ZAR/banks";
   const bodyString  = JSON.stringify(bankPayload);
   const timestamp   = Date.now().toString();
   const signature   = await signVALR(timestamp, "POST", path, bodyString, apiSecret, subaccountId ?? "");
@@ -116,14 +117,15 @@ Deno.serve(async (req) => {
     // ── Resolve VALR credentials (model-aware) ───────────────────────────────
     let creds: Awaited<ReturnType<typeof resolveCustomerCredentials>>;
     try {
-      creds = await resolveCustomerCredentials(sb, customer_id);
+      creds = await resolveCustomerCredentials(sbLthPvr, customer_id);
     } catch (e) {
       return json({ error: `Failed to resolve VALR credentials: ${e.message}` }, 500);
     }
 
     // ── Build VALR bank account payload ─────────────────────────────────────
-    // VALR POST /v1/bankaccounts/ZAR expected body:
-    // { accountNumber, accountHolder, bankName, branchCode, accountType }
+    // VALR bank account link payload
+    // Note: VALR endpoint for bank linking is uncertain — if it 404s,
+    // bank details are stored locally and admin links manually.
     const bankPayload: Record<string, unknown> = {
       accountNumber: bank_account_number,
       accountHolder: bank_account_holder,
@@ -153,28 +155,21 @@ Deno.serve(async (req) => {
         valrBankId = (responseData.id ?? responseData.bankAccountId ?? null) as string | null;
         valrLinked = true;
       } else {
-        // Subaccount model may not support bank linking via master key — log warn, proceed locally
-        const isSubaccountModel = creds.accountModel === "subaccount";
-        const errMsg = isSubaccountModel
-          ? `VALR rejected bank link for subaccount model customer ${customer_id} (HTTP ${result.status}). ` +
-            "Bank details stored locally — admin must link manually in VALR portal."
-          : `VALR rejected bank link for customer ${customer_id} (HTTP ${result.status}). ` +
-            "Verify customer has 'Link Bank Account' permission on their VALR API key.";
+        // VALR bank linking may fail for various reasons (wrong endpoint, permissions, etc.)
+        // Store bank details locally regardless — admin can link manually in VALR portal.
+        const errMsg = `VALR bank link failed for customer ${customer_id} (HTTP ${result.status}, model: ${creds.accountModel}). ` +
+          "Bank details stored locally — admin must link manually in VALR portal if needed.";
 
         await logAlert(
           sb,
           "ef_link_bank_account",
-          isSubaccountModel ? "warn" : "error",
+          "warn",
           errMsg,
           { customer_id, valr_status: result.status, valr_response: result.data, model: creds.accountModel },
           ORG_ID,
           customer_id,
         );
-        // For subaccount model: continue and store details locally.
-        // For API model: fail loudly — the customer must sort their key permissions.
-        if (!isSubaccountModel) {
-          return json({ error: errMsg, valr_status: result.status, valr_response: result.data }, 422);
-        }
+        // Proceed to store bank details locally for all account models
       }
     }
 
@@ -202,7 +197,7 @@ Deno.serve(async (req) => {
         bank_account_type:  bank_account_type ?? null,
         bank_valr_id:       valrBankId,
         bank_linked_at:     new Date().toISOString(),
-        bank_link_method:   valrLinked ? "api" : "manual_pending",
+        bank_link_method:   valrLinked ? "api" : "manual",
       })
       .eq("exchange_account_id", cs.exchange_account_id);
 

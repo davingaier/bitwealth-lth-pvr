@@ -2080,7 +2080,13 @@
                             label: function(context) {
                                 let label = context.dataset.label || '';
                                 if (label) label += ': ';
-                                if (context.parsed.y !== null) label += Number(context.parsed.y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                if (context.parsed.y !== null) {
+                                    if (context.dataset.yAxisID === 'yBtc') {
+                                        label += Number(context.parsed.y).toFixed(8) + ' BTC';
+                                    } else {
+                                        label += Number(context.parsed.y).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    }
+                                }
                                 return label;
                             }
                         }
@@ -2181,19 +2187,20 @@
         function buildHoldingsChart(ctx, labels) {
             const daily = perfData.daily;
             const datasets = [
-                { label: 'BTC Price', data: daily.map(d => d.btc_price), borderColor: PERF_COLORS.btcPrice, borderWidth: 1.5, pointRadius: 0, tension: 0.3, yAxisID: 'yPrice' },
+                { label: 'BTC Price', data: daily.map(d => d.btc_price), borderColor: PERF_COLORS.btcPrice, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
                 { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.navGreen, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
                 { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] },
-                { label: 'BTC Balance (USD)', data: daily.map(d => (d.btc_balance || 0) * (d.btc_price || 0)), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'rgba(239,68,68,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                { label: 'BTC Balance', data: daily.map(d => d.btc_balance || 0), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'transparent', yAxisID: 'yBtc', borderWidth: 2, pointRadius: 0, tension: 0.3 },
                 { label: 'USDT Balance', data: daily.map(d => d.usdt_balance || 0), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
             ];
 
+            const btcFmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 });
             const opts = getCommonChartOptions('Value (USD)');
             opts.scales.y.ticks.callback = v => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
-            opts.scales.yPrice = {
+            opts.scales.yBtc = {
                 type: 'linear', position: 'right', grid: { drawOnChartArea: false },
-                ticks: { color: PERF_COLORS.btcPrice, callback: v => '$' + Number(v).toLocaleString(), font: { size: 11 } },
-                title: { display: true, text: 'BTC Price (USD)', color: PERF_COLORS.btcPrice, font: { size: 12 } }
+                ticks: { color: PERF_COLORS.btcHolding, callback: v => btcFmt.format(v) + ' BTC', font: { size: 11 } },
+                title: { display: true, text: 'BTC', color: PERF_COLORS.btcHolding, font: { size: 12 } }
             };
             perfChart = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: opts });
         }
