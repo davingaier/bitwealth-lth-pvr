@@ -2017,7 +2017,10 @@
         };
 
         // Register zoom plugin
-        if (window.ChartZoom) Chart.register(window.ChartZoom);
+        try {
+            const zoomPlugin = window['chartjs-plugin-zoom'];
+            if (zoomPlugin) Chart.register(zoomPlugin);
+        } catch(e) { console.warn('Zoom plugin registration failed', e); }
 
         async function loadPerformanceData(customerId) {
             const section = document.getElementById('portfolioPerformance');

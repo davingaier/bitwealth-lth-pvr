@@ -3,11 +3,88 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-19 (v0.6.71)
+**Last updated:** 2026-04-20 (v0.6.72)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.72 – Daily Balance Carry-Forward & Zoom Plugin Fix
+**Date:** 2026-04-20  
+**Purpose:** (1) Implement automated daily balance snapshots for all active customers, even on no-trade days. (2) Fix customer portal Reset Zoom button error.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Daily Balance Carry-Forward (`lth_pvr.carry_forward_daily_balances()`)
+
+**Problem:** The pipeline only writes `balances_daily` rows when `ef_post_ledger_and_balances` processes fills. On days with no trades (e.g., SELL decision but 0 BTC, or HOLD), no balance snapshot is created. This causes gaps in the customer portal performance chart.
+
+**Solution:** New SQL function `lth_pvr.carry_forward_daily_balances()` that:
+
+1. **Identifies active customers:** `customer_details.registration_status = 'active'` AND `customer_strategies.live_enabled = true` AND at least one prior row in `balances_daily`.
+2. **Carries forward** the most recent row into today for three tables:
+   - `lth_pvr.balances_daily` — `nav_usd` recalculated as `(btc_balance × btc_price) + usdt_balance`
+   - `lth_pvr.std_dca_balances_daily` — same NAV recalculation
+   - `lth_pvr.hodl_balances_daily` — `nav_usd` = `btc_balance × btc_price` (no USDT component)
+3. **Skips** customers who already have a row for today (pipeline already wrote one).
+4. **Uses latest BTC price** from `ci_bands_daily`.
+5. **Idempotent:** `ON CONFLICT DO NOTHING` + existence checks. Safe to call multiple times.
+
+**Return value:**
+```json
+{
+  "status": "ok",
+  "date": "2026-04-20",
+  "btc_price_used": 73776.97,
+  "carried_forward": {
+    "balances_daily": 5,
+    "std_dca_balances_daily": 1,
+    "hodl_balances_daily": 1
+  }
+}
+```
+
+**Cron schedule (pg_cron):**
+
+| Job Name | Schedule | Purpose |
+|----------|----------|----------|
+| `carry-forward-balances-morning` | `0 6 * * *` (06:00 UTC) | After pipeline resume (05:05 UTC) |
+| `carry-forward-balances-evening` | `0 17 * * *` (17:00 UTC) | End-of-window safety net |
+
+**Migration:** `add_carry_forward_daily_balances`
+
+---
+
+#### 2 — Customer Portal: Reset Zoom Fix
+
+**Symptom:** Clicking "Reset Zoom" on the performance chart threw `TypeError: perfChart.resetZoom is not a function`.
+
+**Root Cause:** The zoom plugin registration used `window.ChartZoom` which doesn't exist. The CDN UMD build of `chartjs-plugin-zoom@2.0.1` exposes itself as `window['chartjs-plugin-zoom']`.
+
+**Fix:** Changed registration in `website/customer-portal.html`:
+```javascript
+// Before
+if (window.ChartZoom) Chart.register(window.ChartZoom);
+
+// After
+try {
+    const zoomPlugin = window['chartjs-plugin-zoom'];
+    if (zoomPlugin) Chart.register(zoomPlugin);
+} catch(e) { console.warn('Zoom plugin registration failed', e); }
+```
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `website/customer-portal.html` | Fixed zoom plugin registration (`window.ChartZoom` → `window['chartjs-plugin-zoom']`) |
+| Migration: `add_carry_forward_daily_balances` | New SQL function + two pg_cron jobs |
+
+---
 
 ### v0.6.71 – Customer Portal: Portfolio Composition as Separate Card; Admin UI Back-Tester New Charts
 **Date:** 2026-04-19  
