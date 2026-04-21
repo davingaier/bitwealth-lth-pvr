@@ -826,18 +826,18 @@
             <!-- =============== Personal =============== -->
             <section class="cm-tabpanel cm-tabpanel--active" data-panel="personal">
               <div class="cm-grid">
-                <label><span class="label-line">First names <span class="req">*</span></span><input name="first_names" required /></label>
+                <label><span class="label-line">First names <span class="req">*</span></span><input name="first_names" data-cm-required /></label>
                 <label><span class="label-line">Middle name</span><input name="middle_name" /></label>
-                <label><span class="label-line">Last name <span class="req">*</span></span><input name="last_name" required /></label>
+                <label><span class="label-line">Last name <span class="req">*</span></span><input name="last_name" data-cm-required /></label>
                 <label><span class="label-line">Date of birth</span><input name="date_of_birth" type="date" /></label>
                 <label><span class="label-line">Gender</span>
                   <select name="gender">
                     <option value="">--</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
                   </select>
                 </label>
-                <label><span class="label-line">Email address <span class="req">*</span></span><input name="email_address" type="email" required /></label>
+                <label><span class="label-line">Email address <span class="req">*</span></span><input name="email_address" type="email" data-cm-required /></label>
                 <label><span class="label-line">Phone country code</span><input name="phone_country_code" placeholder="+27" /></label>
-                <label><span class="label-line">Cellphone number <span class="req">*</span></span><input name="cellphone_number" required /></label>
+                <label><span class="label-line">Cellphone number <span class="req">*</span></span><input name="cellphone_number" data-cm-required /></label>
                 <label><span class="label-line">Country of residence</span><input name="country_of_residence" placeholder="South Africa" /></label>
                 <label><span class="label-line">Country of origin</span><input name="country_of_origin" /></label>
                 <label><span class="label-line">Nationality</span><input name="nationality" /></label>
@@ -855,7 +855,7 @@
                     <option value="">--</option><option value="sa_id">SA ID</option><option value="passport">Passport</option><option value="drivers_license">Driver's License</option>
                   </select>
                 </label>
-                <label><span class="label-line">SA ID number</span><input name="id_number" inputmode="numeric" pattern="\d{13}" title="13-digit SA ID number" /></label>
+                <label><span class="label-line">SA ID number</span><input name="id_number" inputmode="numeric" /></label>
                 <label><span class="label-line">Passport / other ID number</span><input name="id_passport_number" /></label>
                 <label><span class="label-line">ID issuing country</span><input name="id_issuing_country" placeholder="ZA" /></label>
                 <label><span class="label-line">ID issue date</span><input name="id_issue_date" type="date" /></label>
