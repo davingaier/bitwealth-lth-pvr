@@ -42,6 +42,54 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: CORS });
 }
 
+// ── VALR: list bank accounts (used as fallback to recover canonical bank UUID) ──
+async function valrListBankAccounts(
+  apiKey: string,
+  apiSecret: string,
+  subaccountId: string | null,
+): Promise<{ ok: boolean; status: number; data: any[]; path: string; tried: Array<{path:string; status:number}> }> {
+  // VALR's actual list endpoint is undocumented in the public Postman docs; try the
+  // most likely paths in priority order and return the first non-404 hit.
+  const candidatePaths = [
+    "/v1/wallet/fiat/ZAR/accounts",
+    "/v1/wallet/fiat/ZAR/banks",
+    "/v1/fiat/ZAR/accounts",
+    "/v1/fiat/ZAR/banks",
+  ];
+  const tried: Array<{path:string; status:number}> = [];
+  for (const path of candidatePaths) {
+    const timestamp = Date.now().toString();
+    const signature = await signVALR(timestamp, "GET", path, "", apiSecret, subaccountId ?? "");
+    const headers: Record<string, string> = {
+      "X-VALR-API-KEY":   apiKey,
+      "X-VALR-SIGNATURE": signature,
+      "X-VALR-TIMESTAMP": timestamp,
+    };
+    if (subaccountId) headers["X-VALR-SUB-ACCOUNT-ID"] = subaccountId;
+
+    const res = await fetch(`${VALR_BASE}${path}`, { method: "GET", headers });
+    tried.push({ path, status: res.status });
+    if (res.status === 404) continue;
+    let data: any = null;
+    const text = await res.text();
+    try { data = JSON.parse(text); } catch { data = []; }
+    return { ok: res.ok, status: res.status, data: Array.isArray(data) ? data : [], path, tried };
+  }
+  return { ok: false, status: 404, data: [], path: candidatePaths[0], tried };
+}
+
+// Find a bank in VALR's list whose accountNumber matches the supplied one.
+function matchBankByAccountNumber(banks: any[], accountNumber: string): string | null {
+  const normalized = (accountNumber || "").trim();
+  for (const b of banks) {
+    const candidate = String(b.accountNumber ?? b.accountnumber ?? b.account_number ?? "").trim();
+    if (candidate && candidate === normalized) {
+      return String(b.id ?? b.bankAccountId ?? b.bank_account_id ?? "") || null;
+    }
+  }
+  return null;
+}
+
 // ── VALR: link bank account ───────────────────────────────────────────────────
 async function valrLinkBankAccount(
   apiKey: string,
@@ -137,6 +185,7 @@ Deno.serve(async (req) => {
     // ── Call VALR to link bank account ───────────────────────────────────────
     let valrBankId: string | null = null;
     let valrLinked = false;
+    const debug: Record<string, unknown> = { account_model: creds.accountModel };
     const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
     if (testMode) {
@@ -149,6 +198,8 @@ Deno.serve(async (req) => {
         creds.subaccountId,
         bankPayload,
       );
+      debug.post_status = result.status;
+      debug.post_response = result.data;
 
       if (result.ok) {
         const responseData = result.data as Record<string, unknown>;
@@ -170,6 +221,58 @@ Deno.serve(async (req) => {
           customer_id,
         );
         // Proceed to store bank details locally for all account models
+      }
+
+      // GET-fallback: even if POST succeeded we re-list to pick up the canonical id;
+      // and if POST failed (e.g. account was added manually in the VALR portal),
+      // this is the only way to recover bank_valr_id.
+      if (!valrBankId) {
+        try {
+          const list = await valrListBankAccounts(creds.apiKey, creds.apiSecret, creds.subaccountId);
+          debug.list_status = list.status;
+          debug.list_path = list.path;
+          debug.list_tried = list.tried;
+          debug.list_count = list.data.length;
+          debug.list_sample = list.data.slice(0, 5).map((b: any) => ({
+            id: b.id ?? b.bankAccountId ?? null,
+            accountNumber: b.accountNumber ?? b.accountnumber ?? null,
+            bank: b.bank ?? b.bankName ?? null,
+          }));
+          if (list.ok) {
+            const matched = matchBankByAccountNumber(list.data, bank_account_number);
+            if (matched) {
+              valrBankId = matched;
+              valrLinked = true;
+              await logAlert(
+                sb, "ef_link_bank_account", "info",
+                `Recovered bank_valr_id via GET /v1/fiat/ZAR/banks for customer ${customer_id}`,
+                { customer_id, bank_valr_id: matched, bank_account_number },
+                ORG_ID, customer_id,
+              );
+            } else {
+              await logAlert(
+                sb, "ef_link_bank_account", "warn",
+                `GET /v1/fiat/ZAR/banks returned ${list.data.length} bank(s) but none matched account ${bank_account_number}`,
+                { customer_id, bank_account_number, returned_count: list.data.length },
+                ORG_ID, customer_id,
+              );
+            }
+          } else {
+            await logAlert(
+              sb, "ef_link_bank_account", "warn",
+              `GET /v1/fiat/ZAR/banks failed (HTTP ${list.status})`,
+              { customer_id, valr_status: list.status },
+              ORG_ID, customer_id,
+            );
+          }
+        } catch (listErr) {
+          await logAlert(
+            sb, "ef_link_bank_account", "warn",
+            `GET /v1/fiat/ZAR/banks threw: ${(listErr as Error).message}`,
+            { customer_id },
+            ORG_ID, customer_id,
+          );
+        }
       }
     }
 
@@ -209,6 +312,7 @@ Deno.serve(async (req) => {
       success:       true,
       valr_linked:   valrLinked,
       bank_valr_id:  valrBankId,
+      debug,
       message: valrLinked
         ? "Bank account linked with VALR and saved to exchange_accounts."
         : "Bank details saved locally. Admin action required to link manually in VALR portal (subaccount model).",
