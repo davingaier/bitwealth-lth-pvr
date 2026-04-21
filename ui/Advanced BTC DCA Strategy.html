@@ -6212,13 +6212,16 @@
       const bEdit = document.getElementById('cmTabEdit');
       const fNew = document.getElementById('cmFormNew');
       const fEdit = document.getElementById('cmFormEdit');
+      // Legacy tab UI was replaced by the modal-based Customer Management redesign.
+      // If the tab buttons are no longer present, skip silently.
+      if(!bNew || !bEdit || !fNew || !fEdit) return;
       function set(active){
         cmHideAlert();
         if(active==='new'){ bNew.classList.add('cm-tab--active'); bEdit.classList.remove('cm-tab--active'); fNew.style.display='block'; fEdit.style.display='none'; }
         else{ bEdit.classList.add('cm-tab--active'); bNew.classList.remove('cm-tab--active'); fEdit.style.display='block'; fNew.style.display='none'; }
       }
-      if(bNew && !bNew._bound){ bNew.addEventListener('click',()=>set('new')); bNew._bound=true; }
-      if(bEdit && !bEdit._bound){ bEdit.addEventListener('click',()=>set('edit')); bEdit._bound=true; }
+      if(!bNew._bound){ bNew.addEventListener('click',()=>set('new')); bNew._bound=true; }
+      if(!bEdit._bound){ bEdit.addEventListener('click',()=>set('edit')); bEdit._bound=true; }
       set('new');
     }
 
