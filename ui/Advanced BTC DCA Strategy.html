@@ -93,7 +93,7 @@
     }
 
     /* Active tab strictly matches visible :target (uniform style for all modules) */
-    body:not(:has(.module:target)) nav a[href="#import-module"],
+    body:not(:has(.module:target)) nav a[href="#management-module"],
     body:has(#management-module:target) nav a[href="#management-module"],
     body:has(#strategy-maintenance-module:target) nav a[href="#strategy-maintenance-module"],
     body:has(#import-module:target) nav a[href="#import-module"],
@@ -228,7 +228,7 @@
     /* Router: show current :target; default to Import */
     .module{display:none}
     .module:target{display:block}
-    body:not(:has(.module:target)) #import-module{display:block}
+    body:not(:has(.module:target)) #management-module{display:block}
 
     #inlineError,#reportsError,#balancesError{color:#b91c1c;background:#fee2e2;padding:.75em 1em;border:1px solid #fecaca;border-radius:10px;display:none;margin-bottom:1em}
 
@@ -524,6 +524,9 @@
       align-items:center;
       gap:.25rem;
       box-shadow:var(--shadow-sm);
+      position:sticky;
+      top:0;
+      z-index:50;
     }
     nav a{
       color:var(--ink-soft);
@@ -537,7 +540,7 @@
     nav a:hover{ background:var(--bg-soft); color:var(--ink); }
 
     /* Active tab indicator (override legacy orange) */
-    body:not(:has(.module:target)) nav a[href="#import-module"],
+    body:not(:has(.module:target)) nav a[href="#management-module"],
     body:has(#management-module:target) nav a[href="#management-module"],
     body:has(#strategy-maintenance-module:target) nav a[href="#strategy-maintenance-module"],
     body:has(#import-module:target) nav a[href="#import-module"],
@@ -563,7 +566,7 @@
       gap:.5rem;
     }
     .icon-btn{
-      width:36px; height:36px;
+      width:38px; height:38px;
       display:inline-flex; align-items:center; justify-content:center;
       border:1px solid var(--border);
       border-radius:8px;
@@ -571,11 +574,11 @@
       color:var(--ink-soft);
       cursor:pointer;
       transition: background .15s ease, border-color .15s ease, transform .1s ease;
-      font-size:1.05rem;
+      padding:0;
     }
     .icon-btn:hover{ background:var(--bg-soft); border-color:var(--border-strong); }
     .icon-btn:active{ transform:scale(.96); }
-    .icon-btn svg{ width:18px; height:18px; }
+    .icon-btn svg{ width:24px; height:24px; }
     [data-theme="light"] .icon-btn .moon{ display:inline; }
     [data-theme="light"] .icon-btn .sun{ display:none; }
     [data-theme="dark"]  .icon-btn .moon{ display:none; }
@@ -801,6 +804,86 @@
     .section-sep{ border-top-color:var(--border); }
     .subhead{ color:var(--muted); }
 
+    /* ===== Dark-mode select/option contrast hardening (2026-04-21) ===== */
+    [data-theme="dark"] select,
+    [data-theme="dark"] select.context-select,
+    [data-theme="dark"] .reports-controls select{
+      background-color:var(--bg-input) !important;
+      color:var(--ink) !important;
+      border-color:var(--border) !important;
+    }
+    [data-theme="dark"] .reports-controls select{
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    }
+    [data-theme="dark"] select option,
+    [data-theme="dark"] select optgroup{
+      background-color:#172238 !important;
+      color:#e6edf7 !important;
+    }
+    [data-theme="dark"] select option:checked,
+    [data-theme="dark"] select option:hover{
+      background-color:#1e293b !important;
+      color:#ffffff !important;
+    }
+
+    /* Inputs/selects with hard-coded inline white backgrounds */
+    [data-theme="dark"] input[style*="background:#fff"],
+    [data-theme="dark"] input[style*="background: #fff"],
+    [data-theme="dark"] input[style*="background:#ffffff"],
+    [data-theme="dark"] select[style*="background:#fff"],
+    [data-theme="dark"] select[style*="background: #fff"],
+    [data-theme="dark"] textarea[style*="background:#fff"]{
+      background-color:var(--bg-input) !important;
+      color:var(--ink) !important;
+    }
+
+    /* Date/time pickers: invert the calendar icon for visibility */
+    [data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+    [data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+    [data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+      filter: invert(.85);
+      cursor:pointer;
+    }
+
+    /* Choices.js: stronger overrides */
+    [data-theme="dark"] .choices,
+    [data-theme="dark"] .choices__inner{
+      background-color:var(--bg-input) !important;
+      color:var(--ink) !important;
+      border-color:var(--border) !important;
+    }
+    [data-theme="dark"] .choices__list--single .choices__item{ color:var(--ink) !important; }
+    [data-theme="dark"] .choices__placeholder{ color:var(--muted) !important; opacity:1 !important; }
+    [data-theme="dark"] .choices__list--dropdown,
+    [data-theme="dark"] .choices__list[aria-expanded]{
+      background-color:var(--bg-elev) !important;
+      border-color:var(--border) !important;
+      box-shadow:var(--shadow-md) !important;
+    }
+    [data-theme="dark"] .choices__list--dropdown .choices__item,
+    [data-theme="dark"] .choices__list[aria-expanded] .choices__item{ color:var(--ink) !important; }
+    [data-theme="dark"] .choices__list--dropdown .choices__item--selectable.is-highlighted,
+    [data-theme="dark"] .choices__list[aria-expanded] .choices__item--selectable.is-highlighted{
+      background-color:var(--bg-soft) !important;
+      color:#fff !important;
+    }
+    [data-theme="dark"] .choices[data-type*="select-one"]:after{
+      border-color:var(--muted) transparent transparent !important;
+    }
+
+    /* Inline grey text colors that disappear on dark surfaces */
+    [data-theme="dark"] [style*="color:#374151"],
+    [data-theme="dark"] [style*="color: #374151"],
+    [data-theme="dark"] [style*="color:#1f2937"],
+    [data-theme="dark"] [style*="color: #1f2937"]{ color:var(--ink-soft) !important; }
+    [data-theme="dark"] [style*="color:#9ca3af"],
+    [data-theme="dark"] [style*="color: #9ca3af"]{ color:var(--muted) !important; }
+
+    /* Tables/cells with inline whites */
+    [data-theme="dark"] table[style*="background:#fff"],
+    [data-theme="dark"] table[style*="background: #fff"]{ background-color:var(--bg-elev) !important; }
+    [data-theme="dark"] th[style*="background:#f0f0f0"]{ background-color:var(--bg-table-head) !important; color:var(--ink-soft) !important; }
+
     /* ===== End theme polish ===== */
   </style>
 
@@ -842,8 +925,8 @@
   <nav id="topnav">
     <a href="#management-module">Customer Management</a>
     <a href="#strategy-maintenance-module">Strategy Maintenance</a>
-    <a href="#import-module">Import Daily Data</a>
-    <a id="nav-cbm" class="top-tab" href="#balance-maintenance-module">Customer Balance Maintenance</a>
+    <!-- <a href="#import-module">Import Daily Data</a> -->
+    <!-- <a id="nav-cbm" class="top-tab" href="#balance-maintenance-module">Customer Balance Maintenance</a> -->
     <a href="#transactions-module">Customer Transactions</a>
     <a href="#reports-module">Portfolio Performance Reporting</a>
     <a href="#backtest-module">Strategy Back-Testing</a>
