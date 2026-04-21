@@ -313,13 +313,17 @@ Deno.serve(async (req) => {
   const withdrawableUsdt = Number(bal.withdrawable_usdt ?? 0);
   const navUsd = Number(bal.total_usd ?? 0);
 
-  // ── Step 7: Live USDTZAR rate (for ZAR path) ──────────────────────────────
+  // ── Step 7: Live USDTZAR + BTCZAR rates (for ZAR path) ───────────────────
+  // ZAR withdrawals are funded USDT-first then BTC-direct (BTCZAR), so capacity
+  // must consider both legs — see ef_process_withdrawal_queue.
   let usdtzarRate = 0;
+  let btczarRate  = 0;
   if (currency === "ZAR") {
     try {
-      usdtzarRate = TEST_MODE ? 18.50 : await getMarketPrice("USDTZAR");
+      usdtzarRate = TEST_MODE ? 18.50      : await getMarketPrice("USDTZAR");
+      btczarRate  = TEST_MODE ? 1_500_000  : await getMarketPrice("BTCZAR");
     } catch (e) {
-      return json({ error: `Cannot fetch USDTZAR rate: ${(e as Error).message}` }, 502);
+      return json({ error: `Cannot fetch live ZAR rates: ${(e as Error).message}` }, 502);
     }
   }
 
@@ -333,10 +337,12 @@ Deno.serve(async (req) => {
       return json({ error: `Amount ${amount} USDT exceeds withdrawable balance of ${withdrawableUsdt.toFixed(2)} USDT` }, 422);
     }
   } else if (currency === "ZAR") {
-    const withdrawableZar = withdrawableUsdt * usdtzarRate;
+    const usdtCapZar  = withdrawableUsdt * usdtzarRate;
+    const btcCapZar   = withdrawableBtc  * btczarRate;
+    const withdrawableZar = usdtCapZar + btcCapZar;
     if (amount > withdrawableZar) {
       return json({
-        error: `Amount R${amount.toFixed(2)} exceeds withdrawable balance of R${withdrawableZar.toFixed(2)} ZAR`,
+        error: `Amount R${amount.toFixed(2)} exceeds withdrawable capacity of R${withdrawableZar.toFixed(2)} (USDT: R${usdtCapZar.toFixed(2)}${btcCapZar > 0 ? ` + BTC: R${btcCapZar.toFixed(2)}` : ''}).`,
       }, 422);
     }
   }

@@ -1605,6 +1605,7 @@
         let currentWithdrawals = [];
         let withdrawableBalance = { btc: 0, usdt: 0 };
         let liveUsdtZarRate = 0; // populated when withdrawals section loads
+        let liveBtcZarRate  = 0; // populated when withdrawals section loads (used for ZAR shortfall path)
 
         // ── API Key Expiry Banner ─────────────────────────────────────────────
         async function loadApiKeyExpiryBanner(customerId) {
@@ -1647,19 +1648,25 @@
                 if (btcEl) btcEl.textContent = withdrawableBalance.btc.toFixed(8);
                 if (usdtEl) usdtEl.textContent = withdrawableBalance.usdt.toFixed(2);
 
-                // Fetch live USDTZAR for ZAR equivalent display (CoinGecko — CORS safe)
+                // Fetch live USDTZAR + BTCZAR for total ZAR-equivalent display (CoinGecko — CORS safe).
+                // ZAR withdrawals can sell from USDT first and then from BTC direct (BTCZAR),
+                // so the customer's effective ZAR capacity = usdt*rateUSDT + btc*rateBTC.
                 try {
-                    const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=zar');
+                    const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether,bitcoin&vs_currencies=zar');
                     if (rateResp.ok) {
                         const rateData = await rateResp.json();
-                        const rate = parseFloat(rateData?.tether?.zar || 0);
-                        if (rate > 0) {
-                            const zarEl = document.getElementById('wdZarEquiv');
-                            if (zarEl) zarEl.textContent = (withdrawableBalance.usdt * rate).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                            liveUsdtZarRate = rate;
+                        const usdtRate = parseFloat(rateData?.tether?.zar  || 0);
+                        const btcRate  = parseFloat(rateData?.bitcoin?.zar || 0);
+                        if (usdtRate > 0) {
+                            liveUsdtZarRate = usdtRate;
                             const rateEl = document.getElementById('wdLiveRate');
-                            if (rateEl) rateEl.textContent = rate.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            if (rateEl) rateEl.textContent = usdtRate.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
+                        if (btcRate > 0) liveBtcZarRate = btcRate;
+                        const totalZar = (withdrawableBalance.usdt * (usdtRate || 0))
+                                       + (withdrawableBalance.btc  * (btcRate  || 0));
+                        const zarEl = document.getElementById('wdZarEquiv');
+                        if (zarEl && totalZar > 0) zarEl.textContent = totalZar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     }
                 } catch { /* non-critical */ }
 
@@ -1789,14 +1796,28 @@
             if (!amount || amount <= 0) { const el = document.getElementById('wdZarEstimate'); if (el) el.style.display = 'none'; return; }
             try {
                 // CoinGecko public API — CORS safe, no key required
-                const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=zar');
+                const rateResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether,bitcoin&vs_currencies=zar');
                 if (!rateResp.ok) throw new Error('Rate fetch failed');
                 const rateData = await rateResp.json();
-                const rate = parseFloat(rateData?.tether?.zar || 18);
-                const usdtNeeded = amount / rate;
-                const convFeeZar = usdtNeeded * 0.001 * rate;
+                const usdtRate = parseFloat(rateData?.tether?.zar  || 18);
+                const btcRate  = parseFloat(rateData?.bitcoin?.zar || 0);
+
+                // Mirror the queue's USDT-first, BTC-direct sizing so the customer sees what will actually happen.
+                const usdtCapZar = withdrawableBalance.usdt * usdtRate;
+                const zarFromUsdt = Math.min(amount, usdtCapZar);
+                const zarFromBtc  = Math.max(0, amount - zarFromUsdt);
+                const usdtNeeded  = zarFromUsdt / usdtRate;
+                const btcNeeded   = btcRate > 0 ? zarFromBtc / btcRate : 0;
+                // VALR taker fee ~0.10% applied on each leg's gross-ZAR
+                const convFeeZar = (zarFromUsdt + zarFromBtc) * 0.001;
                 const bankFee = 0;
-                document.getElementById('wdUsdtNeeded').textContent = usdtNeeded.toFixed(4) + ' USDT';
+
+                const usdtCell = document.getElementById('wdUsdtNeeded');
+                if (usdtCell) {
+                    usdtCell.textContent = btcNeeded > 0
+                        ? `${usdtNeeded.toFixed(4)} USDT + ${btcNeeded.toFixed(8)} BTC`
+                        : `${usdtNeeded.toFixed(4)} USDT`;
+                }
                 document.getElementById('wdConvFee').textContent = 'R' + convFeeZar.toFixed(2);
                 document.getElementById('wdBankFee').textContent = bankFee > 0 ? 'R' + bankFee.toFixed(2) : 'Free';
                 document.getElementById('wdZarNet').textContent = '~R' + (amount - convFeeZar - bankFee).toFixed(2);
@@ -1815,10 +1836,14 @@
             if (type === 'ZAR') {
                 const amount = parseFloat(document.getElementById('wdZarAmount').value);
                 if (!amount || amount < 100) { showWdFormMessage('Please enter a valid ZAR amount (minimum R100).', 'error'); return; }
+                // ZAR withdrawals are funded USDT-first, then BTC-direct via BTCZAR.
+                // Effective ZAR capacity = usdt*usdtZarRate + btc*btcZarRate.
                 if (liveUsdtZarRate > 0) {
-                    const usdtNeeded = amount / liveUsdtZarRate;
-                    if (usdtNeeded > withdrawableBalance.usdt) {
-                        showWdFormMessage(`Insufficient balance. R${amount.toFixed(2)} requires ~${usdtNeeded.toFixed(2)} USDT but only $${withdrawableBalance.usdt.toFixed(2)} USDT is available.`, 'error');
+                    const usdtCapZar = withdrawableBalance.usdt * liveUsdtZarRate;
+                    const btcCapZar  = withdrawableBalance.btc  * (liveBtcZarRate || 0);
+                    const totalCapZar = usdtCapZar + btcCapZar;
+                    if (amount > totalCapZar) {
+                        showWdFormMessage(`Insufficient balance. R${amount.toFixed(2)} exceeds your withdrawable capacity of R${totalCapZar.toFixed(2)} (USDT: R${usdtCapZar.toFixed(2)}${btcCapZar > 0 ? ` + BTC: R${btcCapZar.toFixed(2)}` : ''}).`, 'error');
                         return;
                     }
                 }
