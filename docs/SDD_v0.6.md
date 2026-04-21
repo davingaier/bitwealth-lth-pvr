@@ -3,11 +3,155 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-21 (v0.6.75)
+**Last updated:** 2026-04-21 (v0.6.80)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.80 – Admin UI: Bug Fixes Round 2 (Logo, Inputs, Strategy Preselect)
+**Date:** 2026-04-21  
+**Purpose:** Follow-up polish pass after browser testing — input heights, Strategy Setup preselection, logo update.
+
+**Status:** ✅ COMPLETE
+
+#### Changes
+
+**1. Input height normalisation**  
+All `<input>` elements globally set to `height: var(--control-height)` (44 px) with `padding: 0 12px` and `box-sizing: border-box`, matching `<select>` height.  `<textarea>` exempted with `height: auto; min-height: 88px`.  This removed the inconsistency visible in all modules where text boxes were taller than dropdowns.
+
+**2. Strategy Setup modal — preselect existing strategy**  
+`openStrategySetup()` now fetches the customer's active `customer_strategies` row before rendering, then:
+- Pre-checks the correct strategy radio button (`strategy_code`).
+- Pre-checks the correct variation radio button (`strategy_variation_id`).
+- Pre-fills all four fee inputs (`platform_fee_rate`, `platform_fee_schedule`, `performance_fee_rate`, `performance_fee_schedule`).
+- Shows the variation fieldset automatically when the customer is already on LTH_PVR.
+
+**3. Strategy Setup Fee Configuration layout**  
+Added `row-gap: 1rem` to the fee configuration 2-column grid and forced consistent `height`/`padding` on its inputs/selects, preventing the overlap seen when the variation list was tall.
+
+**4. Logo replacement**  
+`ui/assets/logo.png` (391 KB legacy logo) replaced with `website/images/logo.png` (5 KB current website logo), so the Admin UI header now matches the public website branding.
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | Input height CSS, Strategy Setup JS preselect, fee grid spacing CSS |
+| `ui/assets/logo.png` | Replaced with website logo |
+
+---
+
+### v0.6.79 – Admin UI: Dark Mode Fixes Round 2
+**Date:** 2026-04-21  
+**Purpose:** Address remaining modules where dark-mode toggle left surfaces unthemed after first full dark-mode pass.
+
+**Status:** ✅ COMPLETE
+
+#### Modules fixed
+| Area | Problem | Fix |
+|------|---------|-----|
+| Strategy Maintenance | "Select a Strategy" empty-state card stayed white | `#noStrategyMessage` and its `h3` explicitly themed via `[data-theme="dark"]` selectors |
+| Finance — Platform Fees table | Total (`<tfoot>`) row and header rows stayed light | `tfoot tr`, `thead tr`, and `tr[style*="background:#f8fafc"]` overridden to `--bg-table-head` |
+| Finance — Info callout block | Light-blue `#eff6ff` info bar stayed white-on-light | Override to sky-tinted dark background + `#bae6fd` text |
+| Strategy Optimizer | Two info panels (`#f8fafc;border:#e2e8f0`) unthemed | Overridden to `--bg-soft` / `--border` |
+| Strategy Optimizer | Yellow `#fef9c3` warning banner unthemed | Override to `rgba(251,191,36,.16)` amber-on-dark |
+| Strategy Optimizer | Coloured bin badges (`#dcfce7`, `#dbeafe`, `#fef3c7`) unthemed | Per-colour dark-mode variants added |
+| Strategy Setup modal | Modal shell, fieldsets, labels, inputs stayed white | `#strategySetupModal > div` and child elements given dark surface vars |
+| All inputs/selects | Inline `style="background:#fff"` overrides ignored dark theme | Added attribute-selector `[style*="background:#fff"]` overrides on `input`, `select`, `textarea` |
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | CSS-only additions appended to theme-polish block |
+
+---
+
+### v0.6.78 – Admin UI: Dark Mode Toggle + Theme Polish
+**Date:** 2026-04-21  
+**Purpose:** Introduce a persistent dark/light mode toggle and modernise the visual design of the entire Admin UI.
+
+**Status:** ✅ COMPLETE
+
+#### Dark-mode toggle
+- Sun/moon SVG icon button added to the far-right of the top nav (`.nav-right` cluster).
+- Clicking toggles `data-theme` attribute on `<html>` between `light` and `dark`.
+- Preference persisted to `localStorage` key `bw-theme`.
+- Initial theme applied from `localStorage` → `prefers-color-scheme` → `light` fallback, before first paint (no FOUC).
+- On toggle, Chart.js `defaults.color` and `defaults.borderColor` are refreshed from CSS variables.
+
+#### CSS token system
+Two token sets defined under `:root / [data-theme="light"]` and `[data-theme="dark"]`:
+
+| Token group | Light | Dark |
+|-------------|-------|------|
+| Surfaces | `#f6f7f9 → #fff` | `#0b1220 → #111a2c` |
+| Ink | `#0f172a` | `#e6edf7` |
+| Muted | `#64748b` | `#94a3b8` |
+| Border | `#e5e7eb` | `#1f2a40` |
+| Accent | `#0ea5e9` | `#38bdf8` |
+| Brand | `#032C48` | `#7dd3fc` |
+
+#### Component polish
+- Header: slimmer padding, subtle shadow, logo 48 px.
+- Nav: sticky (`position:sticky; top:0; z-index:50`), flex layout, modern hover/active states, active tab uses brand underline+tint instead of legacy orange border.
+- Cards: 14 px radius, light shadow, consistent margin.
+- Tables: rounded container, uppercase header text, row hover, no harsh 1 px grey border.
+- Inputs/selects/textareas: consistent focus ring (3 px tinted halo).
+- Status pills, picker badges: dark variants added.
+- Choices.js dropdown: dark-mode colour overrides.
+- Compliance row tints, inline error boxes: dark variants.
+- Inline-style overrides (`[style*="background:#fff"]` etc.) for auto-darkening of dashboard tiles.
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | ~350 lines of CSS (token vars, component polish, dark-mode overrides), toggle button HTML, toggle JS (IIFE after nav) |
+
+---
+
+### v0.6.77 – Admin UI: Nav Cleanup + Sticky Nav
+**Date:** 2026-04-21  
+**Purpose:** Hide unused modules from the top nav bar; pin the nav to the top of the viewport.
+
+**Status:** ✅ COMPLETE
+
+#### Changes
+- **Import Daily Data** tab commented out (`<!-- ... -->`) — module HTML/JS retained.
+- **Customer Balance Maintenance** tab commented out — module HTML/JS retained.
+- **Default module** changed from `#import-module` to `#management-module` (both CSS `:target` fallback and router display rule updated).
+- **Sticky nav**: `position:sticky; top:0; z-index:50` added so nav remains visible while scrolling.
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | Nav link comments, CSS default-module selectors, nav sticky positioning |
+
+---
+
+### v0.6.76 – Admin UI: Bug Fixes Round 1
+**Date:** 2026-04-21  
+**Purpose:** Fix three errors discovered during first browser test of the Customer Management modal redesign.
+
+**Status:** ✅ COMPLETE
+
+#### Bug 1 — `cmBindTabs` crash (TypeError on missing elements)
+`cmBindTabs()` unconditionally called `set('new')` at the end, which tried to access `.classList` on the now-removed `cmTabNew`/`cmTabEdit` buttons.  
+**Fix:** Added early `return` when any of the four legacy elements (`cmTabNew`, `cmTabEdit`, `cmFormNew`, `cmFormEdit`) are absent.
+
+#### Bug 2 — `kyc_source_of_income` DB constraint violation
+The KYC tab's source-of-income `<select>` used legacy short values (`employment`, `business`, etc.) that failed the DB check constraint `chk_kyc_source_of_income`.  
+**Fix:** Option `value` attributes updated to the exact DB-allowed strings: `Employment / Salary`, `Self-employment / Freelance`, `Business income`, `Investments / Dividends`, `Pension / Retirement`, `Inheritance / Gift`.
+
+#### Bug 3 — HTML5 `required` on hidden-tab fields blocks save
+Browser's native form validation refused to submit when a `required` field lived on a non-active (hidden) tab panel, showing an unfocusable error.  
+**Fix:** Replaced `required` on `first_names`, `last_name`, `email_address`, `cellphone_number` with `data-cm-required`; validation still enforced in JS inside `cmSaveAll()`. Also removed strict `pattern="\d{13}"` from `id_number` (passport holders would fail silently).
+
+#### Files Changed
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | `cmBindTabs` null-guard, `kyc_source_of_income` option values, `required` → `data-cm-required` |
+
+---
 
 ### v0.6.75 – Admin Customer Management: Tabbed Modal Redesign
 **Date:** 2026-04-21  
