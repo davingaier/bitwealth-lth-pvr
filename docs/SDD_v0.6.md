@@ -3,11 +3,78 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-21 (v0.6.74)
+**Last updated:** 2026-04-21 (v0.6.75)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.75 – Admin Customer Management: Tabbed Modal Redesign
+**Date:** 2026-04-21  
+**Purpose:** Replace the basic flat Customer Management form with a modern modal-based UX: two action buttons on the main page, a search/filter Picker modal for selecting an existing client, and a tabbed Editor modal that exposes every relevant customer field grouped by concern.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Main page collapsed to two buttons
+
+The "Client Records" card now contains only:
+- **+ Create New Client** → opens the Editor modal in create mode
+- **Edit Existing Client** → opens the Picker modal
+
+The legacy `cmFormNew` / `cmFormEdit` forms are retained inside a `display:none` wrapper so older bindings (`cmBindForms`, `loadCustomers` populating `cmEditSelect`, etc.) continue to function as harmless no-ops.
+
+---
+
+#### 2 — Customer Picker Modal
+
+- Search bar matches first name, last name, email, or ID number (live filter).
+- Status dropdown filters by `registration_status` (prospect / kyc / setup / deposit / active / inactive).
+- Refresh button re-fetches from `customer_details`.
+- Scrollable list of all customers with status badge, ID, name, email.
+- Click a row → closes picker and opens Editor for that customer.
+
+Fetches via direct Supabase query (the existing `list_customers` RPC only returned `customer_id, first_names, last_name`, which is why the previous status filter never worked).
+
+---
+
+#### 3 — Customer Editor Modal (7 tabs)
+
+Single Save button persists changes across all tabs. Tabs:
+
+| Tab | Source table(s) | Editable fields |
+|-----|-----------------|------------------|
+| **Personal** | `customer_details` | first/middle/last name, DOB, gender, email, phone (country code + cell), country of residence/origin, nationality (+ secondary), occupation, tax number |
+| **KYC & Documents** | `customer_details` | `id_type`, `id_number`, `id_passport_number`, issuing country, issue/expiry dates, source of income. Read-only display of the four uploaded document URLs (ID, proof of address, source-of-income, bank confirmation) with view links + upload timestamps. |
+| **Banking** | `exchange_accounts` | bank name, holder, account number, branch code, account type. Read-only: linked-at, link method, VALR bank ID. **Saving these fields invokes `ef_link_bank_account`** for VALR linking. |
+| **Exchange / VALR** | `exchange_accounts` | exchange, subaccount label/ID, deposit reference, BTC/USDT wallet addresses, USDT network, API key label. Read-only: API key created/expires/verified timestamps + permissions (View/Trade/Withdraw/Link Bank). |
+| **Strategy & Contributions** | `customer_strategies` + `customer_details` | strategy label, live_enabled, account model, trade start date, recurrence + recurring/upfront ZAR & BTC, platform/performance fee rates and schedules. "Configure / Change Strategy" button reuses the existing `openStrategySetup()` wizard. |
+| **Portal Access** | `customer_details` | `registration_status`, `customer_status`. Read-only: portal access granted, terms / privacy / disclaimer accepted timestamps. "Advance to Next Stage" button promotes through prospect → kyc → setup → deposit → active. |
+| **Compliance** | `customer_details` | `is_pep`, PEP details, FIC source of funds, `compliance_frozen` + note, `is_test`. Read-only: FIC review timestamp/reviewer, frozen-at timestamp. |
+
+**Save behavior (single button):**
+1. UPSERT `customer_details` (insert in create mode, update in edit mode).
+2. UPDATE active `customer_strategies` row (label, fees, live_enabled).
+3. UPDATE linked `exchange_accounts` row (subaccount, wallet, deposit ref, API key label).
+4. If bank fields are populated, invoke `ef_link_bank_account` edge function for VALR linking.
+
+**Archive button:** Sets `customer_status='Inactive'`, `registration_status='inactive'`, and disables `live_enabled` on all open `customer_strategies`. Soft delete — reversible.
+
+**Onboarding pipeline integration:**
+- Create mode pre-fills `registration_status='prospect'` so new clients automatically appear in the existing Customer Onboarding Pipeline card.
+- After save, the picker rows refresh and (if loaded) the prospects table re-renders.
+- The Strategy tab's "Configure / Change Strategy" button calls the existing `openStrategySetup()` modal (the same one used by the prospects pipeline action).
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `ui/Advanced BTC DCA Strategy.html` | New "Client Records" card (2 buttons), Picker modal, Editor modal (7 tabs), `cm-modal` / `cm-tabstrip` / `cm-picker-list` CSS, `cmModalInit()` + ~350 lines of JS for picker / editor / save-all / archive / advance-stage. Legacy forms hidden but retained for backward-compat. |
+
+---
 
 ### v0.6.74 – Carry-Forward Cron Rescheduled to 03:00 UTC
 **Date:** 2026-04-21  

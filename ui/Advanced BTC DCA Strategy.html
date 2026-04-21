@@ -328,6 +328,40 @@
     .req{color:#dc2626;margin-left:.25rem}
     .label-line{display:inline-flex;align-items:center;gap:.25rem}
 
+    /* ===== Customer Modal styles ===== */
+    .cm-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto}
+    .cm-modal-card{background:#fff;border-radius:14px;width:100%;max-width:1080px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
+    .cm-modal-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border);background:#f8fafc}
+    .cm-modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);line-height:1;padding:0 .25rem}
+    .cm-modal-close:hover{color:#0f172a}
+    .cm-modal-footer{display:flex;gap:.5rem;align-items:center;padding:.85rem 1.25rem;border-top:1px solid var(--border);background:#f8fafc;margin:1rem -1.25rem 0}
+    .cm-tabstrip{display:flex;gap:.25rem;padding:.5rem 1.25rem 0;border-bottom:1px solid var(--border);background:#fff;overflow-x:auto;flex-wrap:nowrap}
+    .cm-tabbtn{padding:.55rem .9rem;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;background:transparent;cursor:pointer;font-size:.9rem;color:var(--muted);white-space:nowrap}
+    .cm-tabbtn:hover{color:#0f172a;background:#f1f5f9}
+    .cm-tabbtn--active{color:#0f172a;background:#fff;border-color:var(--border);font-weight:600;position:relative;top:1px}
+    .cm-tabpanel{display:none;padding:.5rem 0 .5rem;overflow-y:auto;max-height:calc(90vh - 220px)}
+    .cm-tabpanel--active{display:block}
+    .cm-doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem}
+    .cm-doc-tile{border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;background:#fafafa;font-size:.85rem;display:flex;flex-direction:column;gap:.25rem}
+    .cm-doc-tile a{color:#0f172a;text-decoration:underline}
+    .cm-doc-tile.missing{background:#fef2f2;border-color:#fecaca;color:#7f1d1d}
+
+    /* Picker modal */
+    .cm-picker-list{max-height:55vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fff}
+    .cm-picker-row{display:grid;grid-template-columns:60px 1fr 1fr 110px;gap:.75rem;padding:.55rem .75rem;border-bottom:1px solid #f1f5f9;cursor:pointer;align-items:center;font-size:.9rem}
+    .cm-picker-row:hover{background:#f8fafc}
+    .cm-picker-row:last-child{border-bottom:none}
+    .cm-picker-row .pid{color:var(--muted);font-variant-numeric:tabular-nums}
+    .cm-picker-row .pname{font-weight:600;color:#0f172a}
+    .cm-picker-row .pemail{color:var(--muted);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cm-picker-badge{display:inline-block;padding:.15rem .5rem;border-radius:999px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;text-align:center}
+    .cm-pb-prospect{background:#fef3c7;color:#92400e}
+    .cm-pb-kyc{background:#dbeafe;color:#1e40af}
+    .cm-pb-setup{background:#e0e7ff;color:#3730a3}
+    .cm-pb-deposit{background:#fce7f3;color:#9d174d}
+    .cm-pb-active{background:#dcfce7;color:#166534}
+    .cm-pb-inactive{background:#f1f5f9;color:#475569}
+
     /* Small sub-section heading + separators inside Transactions */
     .subhead{
       font-size:1.05rem;
@@ -508,14 +542,17 @@
       </div>
 
       <div class="card" style="max-width:980px">
-        <nav style="display:flex;gap:.5rem;margin-bottom:.75rem;">
-          <button id="cmTabNew"  type="button" class="cm-tab cm-tab--active">Create New Client</button>
-          <button id="cmTabEdit" type="button" class="cm-tab">Edit Existing Client</button>
-        </nav>
+        <h3 style="margin:0 0 .5rem;">Client Records</h3>
+        <p class="small-muted" style="margin:0 0 1rem;">Create a new client (added as a prospect to the Onboarding Pipeline) or edit an existing client across all data tabs.</p>
+        <div id="cmAlert" style="display:none;margin:.5rem 0 1rem;padding:.7rem 1rem;border-radius:10px;border:1px solid"></div>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+          <button id="cmBtnNewClient" type="button" class="btn btn-primary-sm" style="padding:.65rem 1.25rem;font-size:1rem;">+ Create New Client</button>
+          <button id="cmBtnEditClient" type="button" class="btn btn-secondary-sm" style="padding:.65rem 1.25rem;font-size:1rem;">Edit Existing Client</button>
+        </div>
+      </div>
 
-        <div id="cmAlert" style="display:none;margin:.5rem 0;padding:.7rem 1rem;border-radius:10px;border:1px solid"></div>
-
-        <!-- ===== New Client ===== -->
+      <!-- Legacy hidden forms retained as no-op anchors so older code paths don't error -->
+      <div style="display:none;" aria-hidden="true">
         <form id="cmFormNew" class="cm-form">
           <h3 style="margin:.25rem 0 1rem">New Client Details</h3>
 
@@ -730,6 +767,289 @@
           </div>
         </form>
       </div>
+      <!-- /Legacy hidden forms -->
+
+      <!-- ===================== Customer Picker Modal ===================== -->
+      <div id="customerPickerModal" class="cm-modal" style="display:none;">
+        <div class="cm-modal-card" style="max-width:760px;">
+          <div class="cm-modal-header">
+            <h3 style="margin:0;">Select a Client to Edit</h3>
+            <button type="button" class="cm-modal-close" data-close-picker aria-label="Close">&times;</button>
+          </div>
+          <div style="padding:1rem 1.25rem;">
+            <div style="display:grid;grid-template-columns:1fr 180px auto;gap:.75rem;align-items:end;margin-bottom:.75rem;">
+              <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem;">
+                <span>Search</span>
+                <input id="cmPickerSearch" type="text" placeholder="Name, email, or ID number…" autocomplete="off" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem;">
+                <span>Status</span>
+                <select id="cmPickerStatus">
+                  <option value="">All statuses</option>
+                  <option value="prospect">Prospect</option>
+                  <option value="kyc">KYC Verification</option>
+                  <option value="setup">Account Setup</option>
+                  <option value="deposit">Awaiting Deposit</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <button type="button" id="cmPickerRefresh" class="btn btn-secondary-sm">Refresh</button>
+            </div>
+            <div id="cmPickerCount" style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">Loading…</div>
+            <div id="cmPickerList" class="cm-picker-list">
+              <div style="padding:1rem;text-align:center;color:var(--muted);">Loading customers…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== Customer Editor Modal ===================== -->
+      <div id="customerEditorModal" class="cm-modal" style="display:none;">
+        <div class="cm-modal-card" style="max-width:1080px;">
+          <div class="cm-modal-header">
+            <h3 style="margin:0;" id="cmEditorTitle">Customer Details</h3>
+            <button type="button" class="cm-modal-close" data-close-editor aria-label="Close">&times;</button>
+          </div>
+          <div id="cmEditorAlert" style="display:none;margin:.5rem 1.25rem;padding:.6rem .9rem;border-radius:8px;border:1px solid;font-size:.9rem;"></div>
+          <nav class="cm-tabstrip" id="cmEditorTabs" role="tablist">
+            <button type="button" class="cm-tabbtn cm-tabbtn--active" data-tab="personal">Personal</button>
+            <button type="button" class="cm-tabbtn" data-tab="kyc">KYC &amp; Documents</button>
+            <button type="button" class="cm-tabbtn" data-tab="banking">Banking</button>
+            <button type="button" class="cm-tabbtn" data-tab="exchange">Exchange / VALR</button>
+            <button type="button" class="cm-tabbtn" data-tab="strategy">Strategy &amp; Contributions</button>
+            <button type="button" class="cm-tabbtn" data-tab="portal">Portal Access</button>
+            <button type="button" class="cm-tabbtn" data-tab="compliance">Compliance</button>
+          </nav>
+          <form id="cmEditorForm" class="cm-form" style="padding:1rem 1.25rem 0;">
+
+            <!-- =============== Personal =============== -->
+            <section class="cm-tabpanel cm-tabpanel--active" data-panel="personal">
+              <div class="cm-grid">
+                <label><span class="label-line">First names <span class="req">*</span></span><input name="first_names" required /></label>
+                <label><span class="label-line">Middle name</span><input name="middle_name" /></label>
+                <label><span class="label-line">Last name <span class="req">*</span></span><input name="last_name" required /></label>
+                <label><span class="label-line">Date of birth</span><input name="date_of_birth" type="date" /></label>
+                <label><span class="label-line">Gender</span>
+                  <select name="gender">
+                    <option value="">--</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Email address <span class="req">*</span></span><input name="email_address" type="email" required /></label>
+                <label><span class="label-line">Phone country code</span><input name="phone_country_code" placeholder="+27" /></label>
+                <label><span class="label-line">Cellphone number <span class="req">*</span></span><input name="cellphone_number" required /></label>
+                <label><span class="label-line">Country of residence</span><input name="country_of_residence" placeholder="South Africa" /></label>
+                <label><span class="label-line">Country of origin</span><input name="country_of_origin" /></label>
+                <label><span class="label-line">Nationality</span><input name="nationality" /></label>
+                <label><span class="label-line">Secondary nationality</span><input name="nationality_secondary" /></label>
+                <label><span class="label-line">Occupation</span><input name="occupation" /></label>
+                <label><span class="label-line">Tax number</span><input name="tax_number" /></label>
+              </div>
+            </section>
+
+            <!-- =============== KYC & Documents =============== -->
+            <section class="cm-tabpanel" data-panel="kyc">
+              <div class="cm-grid">
+                <label><span class="label-line">ID type</span>
+                  <select name="id_type">
+                    <option value="">--</option><option value="sa_id">SA ID</option><option value="passport">Passport</option><option value="drivers_license">Driver's License</option>
+                  </select>
+                </label>
+                <label><span class="label-line">SA ID number</span><input name="id_number" inputmode="numeric" pattern="\d{13}" title="13-digit SA ID number" /></label>
+                <label><span class="label-line">Passport / other ID number</span><input name="id_passport_number" /></label>
+                <label><span class="label-line">ID issuing country</span><input name="id_issuing_country" placeholder="ZA" /></label>
+                <label><span class="label-line">ID issue date</span><input name="id_issue_date" type="date" /></label>
+                <label><span class="label-line">ID expiry date</span><input name="id_expiry_date" type="date" /></label>
+                <label><span class="label-line">Source of income</span>
+                  <select name="kyc_source_of_income">
+                    <option value="">--</option>
+                    <option value="employment">Employment / Salary</option>
+                    <option value="business">Business income</option>
+                    <option value="investments">Investments</option>
+                    <option value="pension">Pension</option>
+                    <option value="inheritance">Inheritance</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+              </div>
+              <div style="margin-top:.75rem;">
+                <strong style="font-size:.9rem;color:var(--muted);">Uploaded Documents</strong>
+                <div class="cm-doc-grid" id="cmEditorDocs" style="margin-top:.5rem;">
+                  <!-- populated by JS -->
+                </div>
+              </div>
+              <div style="margin-top:.75rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+                <span style="font-size:.85rem;color:var(--muted);">KYC verified at: <strong data-readonly="kyc_id_verified_at">—</strong></span>
+                <span style="font-size:.85rem;color:var(--muted);">Verified by: <strong data-readonly="kyc_verified_by">—</strong></span>
+              </div>
+            </section>
+
+            <!-- =============== Banking =============== -->
+            <section class="cm-tabpanel" data-panel="banking">
+              <p class="small-muted" style="margin:0 0 .5rem;">Bank details are linked to VALR via the <code>ef_link_bank_account</code> edge function when saved.</p>
+              <div class="cm-grid">
+                <label><span class="label-line">Bank name</span>
+                  <select name="bank_name">
+                    <option value="">--</option>
+                    <option>ABSA</option><option>Capitec</option><option>FNB</option><option>Investec</option>
+                    <option>Nedbank</option><option>Standard Bank</option><option>TymeBank</option>
+                    <option>African Bank</option><option>Discovery Bank</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Account holder</span><input name="bank_account_holder" /></label>
+                <label><span class="label-line">Account number</span><input name="bank_account_number" inputmode="numeric" /></label>
+                <label><span class="label-line">Branch code</span><input name="bank_branch_code" inputmode="numeric" /></label>
+                <label><span class="label-line">Account type</span>
+                  <select name="bank_account_type">
+                    <option value="">--</option><option value="current">Current</option><option value="savings">Savings</option><option value="transmission">Transmission</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Linked at (read-only)</span><input data-readonly="bank_linked_at" disabled /></label>
+                <label><span class="label-line">Link method (read-only)</span><input data-readonly="bank_link_method" disabled /></label>
+                <label><span class="label-line">VALR bank ID (read-only)</span><input data-readonly="bank_valr_id" disabled /></label>
+              </div>
+            </section>
+
+            <!-- =============== Exchange / VALR =============== -->
+            <section class="cm-tabpanel" data-panel="exchange">
+              <p class="small-muted" style="margin:0 0 .5rem;">Wallet addresses and API key metadata are populated by VALR setup edge functions; admins generally only edit deposit reference and labels here.</p>
+              <div class="cm-grid">
+                <label><span class="label-line">Exchange</span>
+                  <select name="exchange">
+                    <option value="VALR">VALR</option><option value="Binance">Binance</option><option value="Luno">Luno</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Subaccount label</span><input name="subaccount_ref" /></label>
+                <label><span class="label-line">Subaccount ID</span><input name="subaccount_id" /></label>
+                <label><span class="label-line">Deposit reference</span><input name="deposit_ref" /></label>
+                <label><span class="label-line">BTC wallet address</span><input name="btc_wallet_address" /></label>
+                <label><span class="label-line">USDT wallet address</span><input name="usdt_wallet_address" /></label>
+                <label><span class="label-line">USDT deposit network</span><input name="usdt_deposit_network" placeholder="TRC20 / ERC20" /></label>
+                <label><span class="label-line">API key label</span><input name="api_key_label" /></label>
+                <label><span class="label-line">API key created (read-only)</span><input data-readonly="api_key_created_at" disabled /></label>
+                <label><span class="label-line">API key expires (read-only)</span><input data-readonly="api_key_expires_at" disabled /></label>
+                <label><span class="label-line">API key verified (read-only)</span><input data-readonly="api_key_verified_at" disabled /></label>
+                <label style="display:flex;flex-direction:column;gap:.25rem;">
+                  <span class="label-line">API key permissions</span>
+                  <div style="display:flex;gap:.75rem;flex-wrap:wrap;font-size:.85rem;padding-top:.4rem;">
+                    <span data-readonly="api_key_has_view">View: —</span>
+                    <span data-readonly="api_key_has_trade">Trade: —</span>
+                    <span data-readonly="api_key_has_withdraw">Withdraw: —</span>
+                    <span data-readonly="api_key_has_link_bank">Link Bank: —</span>
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            <!-- =============== Strategy & Contributions =============== -->
+            <section class="cm-tabpanel" data-panel="strategy">
+              <div class="cm-grid">
+                <label><span class="label-line">Strategy code (read-only)</span><input data-readonly="strategy_code" disabled /></label>
+                <label><span class="label-line">Strategy label</span><input name="strategy_label" /></label>
+                <label><span class="label-line">Live enabled</span>
+                  <select name="live_enabled">
+                    <option value="false">No</option><option value="true">Yes</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Account model</span>
+                  <select name="account_model">
+                    <option value="omnibus">Omnibus</option><option value="subaccount">Subaccount</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Trade start date</span><input name="trade_start_date" type="date" /></label>
+                <label><span class="label-line">Recurrence</span>
+                  <select name="recurring_contribution_frequency">
+                    <option value="None">None</option><option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option><option value="Annually">Annually</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Recurring contribution (ZAR)</span><input name="recurring_contribution_zar" type="number" min="0" step="0.01" /></label>
+                <label><span class="label-line">Upfront contribution (ZAR)</span><input name="upfront_contribution_zar" type="number" min="0" step="0.01" /></label>
+                <label><span class="label-line">Upfront contribution (BTC)</span><input name="upfront_contribution_btc" type="number" min="0" step="0.00000001" /></label>
+                <label><span class="label-line">Platform fee rate</span><input name="platform_fee_rate" type="number" step="0.0025" min="0" max="0.10" /></label>
+                <label><span class="label-line">Platform fee schedule</span>
+                  <select name="platform_fee_schedule">
+                    <option value="immediate">Immediate</option><option value="annual">Annual</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Performance fee rate</span><input name="performance_fee_rate" type="number" step="0.005" min="0" max="0.5" /></label>
+                <label><span class="label-line">Performance fee schedule</span>
+                  <select name="performance_fee_schedule">
+                    <option value="monthly">Monthly</option><option value="annual">Annual</option>
+                  </select>
+                </label>
+              </div>
+              <div style="margin-top:.75rem;">
+                <button type="button" id="cmEditorOpenStrategySetup" class="btn btn-secondary-sm">Configure / Change Strategy →</button>
+                <span class="small-muted" style="margin-left:.5rem;">Opens the strategy selection wizard.</span>
+              </div>
+            </section>
+
+            <!-- =============== Portal Access =============== -->
+            <section class="cm-tabpanel" data-panel="portal">
+              <div class="cm-grid">
+                <label><span class="label-line">Registration status</span>
+                  <select name="registration_status">
+                    <option value="prospect">Prospect</option>
+                    <option value="kyc">KYC Verification</option>
+                    <option value="setup">Account Setup</option>
+                    <option value="deposit">Awaiting Deposit</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Customer status</span>
+                  <select name="customer_status">
+                    <option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Suspended">Suspended</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Portal access granted (read-only)</span><input data-readonly="portal_access_granted_at" disabled /></label>
+                <label><span class="label-line">Terms accepted (read-only)</span><input data-readonly="terms_accepted_at" disabled /></label>
+                <label><span class="label-line">Privacy accepted (read-only)</span><input data-readonly="privacy_accepted_at" disabled /></label>
+                <label><span class="label-line">Disclaimer signed (read-only)</span><input data-readonly="disclaimer_signed_at" disabled /></label>
+              </div>
+              <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+                <button type="button" id="cmEditorAdvanceStage" class="btn btn-secondary-sm">Advance to Next Stage →</button>
+              </div>
+            </section>
+
+            <!-- =============== Compliance =============== -->
+            <section class="cm-tabpanel" data-panel="compliance">
+              <div class="cm-grid">
+                <label><span class="label-line">PEP (Politically Exposed Person)</span>
+                  <select name="is_pep">
+                    <option value="false">No</option><option value="true">Yes</option>
+                  </select>
+                </label>
+                <label><span class="label-line">PEP details</span><input name="pep_details" /></label>
+                <label><span class="label-line">FIC source of funds</span><input name="fic_source_of_funds" /></label>
+                <label><span class="label-line">Compliance frozen</span>
+                  <select name="compliance_frozen">
+                    <option value="false">No</option><option value="true">Yes</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Compliance frozen note</span><input name="compliance_frozen_note" /></label>
+                <label><span class="label-line">Test account</span>
+                  <select name="is_test">
+                    <option value="false">No</option><option value="true">Yes</option>
+                  </select>
+                </label>
+                <label><span class="label-line">FIC KYC reviewed (read-only)</span><input data-readonly="fic_kyc_reviewed_at" disabled /></label>
+                <label><span class="label-line">FIC reviewer (read-only)</span><input data-readonly="fic_kyc_reviewed_by" disabled /></label>
+                <label><span class="label-line">Compliance frozen at (read-only)</span><input data-readonly="compliance_frozen_at" disabled /></label>
+              </div>
+            </section>
+
+            <div class="cm-modal-footer">
+              <button type="button" id="cmEditorArchive" class="btn" style="background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;">Archive Client</button>
+              <div style="flex:1;"></div>
+              <button type="button" data-close-editor class="btn btn-secondary-sm">Cancel</button>
+              <button type="submit" id="cmEditorSave" class="btn btn-primary-sm">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <!-- /Customer Editor Modal -->
 
       <!-- Customer Onboarding Pipeline (Milestone 2: Strategy Selection) -->
       <div class="card" id="onboardingPipelineCard">
@@ -6222,9 +6542,484 @@
         clearInterval(interval);
         cmBindTabs();
         cmBindForms();
+        cmModalInit(); // New modal-based Customer Management
         loadDashboardMetrics(); // Load dashboard metrics after customers loaded
       }, 200);
     })();
+
+    /* =================== Customer Management — Modal Edition =================== */
+    /* Two-button entry on main page → Picker modal (search/list) → Editor modal (7 tabs).
+       Backed by public.customer_details + customer_strategies + exchange_accounts. */
+    const CM_MODAL_FIELDS = {
+      personal: ['first_names','middle_name','last_name','date_of_birth','gender','email_address','phone_country_code','cellphone_number','country_of_residence','country_of_origin','nationality','nationality_secondary','occupation','tax_number'],
+      kyc:      ['id_type','id_number','id_passport_number','id_issuing_country','id_issue_date','id_expiry_date','kyc_source_of_income'],
+      portal:   ['registration_status','customer_status'],
+      compliance:['is_pep','pep_details','fic_source_of_funds','compliance_frozen','compliance_frozen_note','is_test'],
+      strategyOnDetails: ['account_model','trade_start_date','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc']
+    };
+    const CM_BANK_FIELDS = ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'];
+    const CM_EX_FIELDS   = ['exchange','subaccount_ref','subaccount_id','deposit_ref','btc_wallet_address','usdt_wallet_address','usdt_deposit_network','api_key_label'];
+    const CM_STRAT_FIELDS= ['strategy_label','live_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
+    const CM_RO_FIELDS   = ['kyc_id_verified_at','kyc_verified_by','bank_linked_at','bank_link_method','bank_valr_id','api_key_created_at','api_key_expires_at','api_key_verified_at','api_key_has_view','api_key_has_trade','api_key_has_withdraw','api_key_has_link_bank','strategy_code','portal_access_granted_at','terms_accepted_at','privacy_accepted_at','disclaimer_signed_at','fic_kyc_reviewed_at','fic_kyc_reviewed_by','compliance_frozen_at'];
+    const CM_REG_NEXT = { prospect:'kyc', kyc:'setup', setup:'deposit', deposit:'active', active:'active', inactive:'inactive' };
+
+    function cmEditorAlert(type, msg){
+      const el = document.getElementById('cmEditorAlert');
+      if(!el) return;
+      el.style.display='block';
+      el.textContent = msg;
+      el.style.borderColor = type==='error' ? '#fecaca' : '#bbf7d0';
+      el.style.background  = type==='error' ? '#fee2e2' : '#ecfdf5';
+      el.style.color       = type==='error' ? '#7f1d1d' : '#065f46';
+    }
+    function cmEditorAlertHide(){
+      const el = document.getElementById('cmEditorAlert');
+      if(el){ el.style.display='none'; el.textContent=''; }
+    }
+    function cmFmtDateTime(v){ if(!v) return '—'; try{ return new Date(v).toLocaleString(); }catch(e){ return String(v); } }
+    function cmFmtBool(v){ return v===true ? 'Yes' : v===false ? 'No' : '—'; }
+
+    let cmEditorState = { customerId: null, profile: null };
+
+    /* ---------- Picker ---------- */
+    async function cmFetchPickerRows(){
+      const { data, error } = await supabaseClient
+        .from('customer_details')
+        .select('customer_id, first_names, last_name, email_address, email, cellphone_number, id_number, registration_status, customer_status, created_at')
+        .order('customer_id', { ascending: false });
+      if(error) throw error;
+      return data || [];
+    }
+    function cmRenderPickerList(rows){
+      const list = document.getElementById('cmPickerList');
+      const count = document.getElementById('cmPickerCount');
+      const term = (document.getElementById('cmPickerSearch')?.value || '').toLowerCase().trim();
+      const status = document.getElementById('cmPickerStatus')?.value || '';
+      const filtered = rows.filter(r => {
+        if(status && String(r.registration_status||'').toLowerCase() !== status) return false;
+        if(!term) return true;
+        const hay = [r.first_names, r.last_name, r.email_address, r.email, r.id_number, r.customer_id]
+          .map(x=>String(x||'').toLowerCase()).join(' ');
+        return hay.includes(term);
+      });
+      count.textContent = `${filtered.length} of ${rows.length} customers`;
+      if(!filtered.length){
+        list.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);">No matches</div>';
+        return;
+      }
+      list.innerHTML = filtered.map(r => {
+        const status = String(r.registration_status||'').toLowerCase() || 'inactive';
+        const badge = `<span class="cm-picker-badge cm-pb-${status}">${status}</span>`;
+        const name = `${r.last_name||''}, ${r.first_names||''}`.trim().replace(/^,\s*/,'');
+        const email = r.email_address || r.email || '';
+        return `<div class="cm-picker-row" data-cid="${r.customer_id}">
+          <div class="pid">#${r.customer_id}</div>
+          <div class="pname">${name||'(no name)'}</div>
+          <div class="pemail" title="${email}">${email}</div>
+          <div>${badge}</div>
+        </div>`;
+      }).join('');
+      list.querySelectorAll('.cm-picker-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const id = row.getAttribute('data-cid');
+          cmClosePicker();
+          cmOpenEditor(Number(id));
+        });
+      });
+    }
+    let _cmPickerRows = [];
+    async function cmOpenPicker(){
+      const m = document.getElementById('customerPickerModal');
+      m.style.display = 'flex';
+      try{
+        _cmPickerRows = await cmFetchPickerRows();
+        cmRenderPickerList(_cmPickerRows);
+      }catch(e){
+        document.getElementById('cmPickerList').innerHTML =
+          `<div style="padding:1rem;color:#b91c1c;">Failed to load customers: ${e.message||e}</div>`;
+      }
+    }
+    function cmClosePicker(){ document.getElementById('customerPickerModal').style.display='none'; }
+
+    /* ---------- Editor: fetch + fill ---------- */
+    async function cmFetchFullProfile(customerId){
+      const { data: cust, error: e1 } = await supabaseClient
+        .from('customer_details').select('*').eq('customer_id', customerId).single();
+      if(e1) throw e1;
+      let strat = null, exa = null;
+      const { data: stratRows } = await supabaseClient
+        .from('customer_strategies')
+        .select('*')
+        .eq('customer_id', customerId)
+        .not('status', 'in', '("closed","terminated")')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      strat = stratRows?.[0] || null;
+      if(strat?.exchange_account_id){
+        const { data: exa1 } = await supabaseClient
+          .from('exchange_accounts').select('*').eq('exchange_account_id', strat.exchange_account_id).single();
+        exa = exa1 || null;
+      }
+      return { cust, strat, exa };
+    }
+
+    function cmSetField(name, value){
+      const form = document.getElementById('cmEditorForm');
+      const el = form.querySelector(`[name="${name}"]`);
+      if(!el) return;
+      if(el.tagName === 'SELECT'){
+        el.value = value === null || value === undefined ? '' : String(value);
+      } else if(el.type === 'date'){
+        el.value = value ? String(value).slice(0,10) : '';
+      } else {
+        el.value = (value === null || value === undefined) ? '' : String(value);
+      }
+    }
+    function cmSetReadOnly(name, value, formatter){
+      const form = document.getElementById('cmEditorForm');
+      const el = form.querySelector(`[data-readonly="${name}"]`);
+      if(!el) return;
+      const txt = formatter ? formatter(value) : (value ?? '—');
+      if(el.tagName === 'INPUT'){ el.value = (value==null?'':String(txt)); }
+      else { el.textContent = txt; }
+    }
+
+    function cmFillEditor({cust, strat, exa}){
+      const form = document.getElementById('cmEditorForm');
+      form.reset();
+      cust = cust || {};
+      strat = strat || {};
+      exa = exa || {};
+
+      // Personal + KYC + Portal + Compliance + a few from customer_details
+      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
+        .forEach(k => cmSetField(k, cust[k]));
+
+      // Email backfill
+      if(!cust.email_address && cust.email) cmSetField('email_address', cust.email);
+
+      // Banking + Exchange (from exchange_accounts)
+      CM_BANK_FIELDS.forEach(k => cmSetField(k, exa[k]));
+      CM_EX_FIELDS.forEach(k => cmSetField(k, exa[k]));
+
+      // Strategy (from customer_strategies)
+      cmSetField('strategy_label', strat.label);
+      cmSetField('live_enabled', strat.live_enabled);
+      cmSetField('platform_fee_rate', strat.platform_fee_rate);
+      cmSetField('platform_fee_schedule', strat.platform_fee_schedule);
+      cmSetField('performance_fee_rate', strat.performance_fee_rate);
+      cmSetField('performance_fee_schedule', strat.performance_fee_schedule);
+
+      // Read-only
+      cmSetReadOnly('strategy_code', strat.strategy_code);
+      cmSetReadOnly('kyc_id_verified_at', cust.kyc_id_verified_at, cmFmtDateTime);
+      cmSetReadOnly('kyc_verified_by', cust.kyc_verified_by);
+      cmSetReadOnly('bank_linked_at', exa.bank_linked_at, cmFmtDateTime);
+      cmSetReadOnly('bank_link_method', exa.bank_link_method);
+      cmSetReadOnly('bank_valr_id', exa.bank_valr_id);
+      cmSetReadOnly('api_key_created_at', exa.api_key_created_at, cmFmtDateTime);
+      cmSetReadOnly('api_key_expires_at', exa.api_key_expires_at, cmFmtDateTime);
+      cmSetReadOnly('api_key_verified_at', exa.api_key_verified_at, cmFmtDateTime);
+      cmSetReadOnly('api_key_has_view', `View: ${cmFmtBool(exa.api_key_has_view)}`);
+      cmSetReadOnly('api_key_has_trade', `Trade: ${cmFmtBool(exa.api_key_has_trade)}`);
+      cmSetReadOnly('api_key_has_withdraw', `Withdraw: ${cmFmtBool(exa.api_key_has_withdraw)}`);
+      cmSetReadOnly('api_key_has_link_bank', `Link Bank: ${cmFmtBool(exa.api_key_has_link_bank)}`);
+      cmSetReadOnly('portal_access_granted_at', cust.portal_access_granted_at, cmFmtDateTime);
+      cmSetReadOnly('terms_accepted_at', cust.terms_accepted_at, cmFmtDateTime);
+      cmSetReadOnly('privacy_accepted_at', cust.privacy_accepted_at, cmFmtDateTime);
+      cmSetReadOnly('disclaimer_signed_at', cust.disclaimer_signed_at, cmFmtDateTime);
+      cmSetReadOnly('fic_kyc_reviewed_at', cust.fic_kyc_reviewed_at, cmFmtDateTime);
+      cmSetReadOnly('fic_kyc_reviewed_by', cust.fic_kyc_reviewed_by);
+      cmSetReadOnly('compliance_frozen_at', cust.compliance_frozen_at, cmFmtDateTime);
+
+      // KYC document tiles
+      const docs = [
+        { label:'ID Document', url: cust.kyc_id_document_url, ts: cust.kyc_id_uploaded_at },
+        { label:'Proof of Address', url: cust.kyc_proof_address_url, ts: cust.kyc_proof_address_uploaded_at },
+        { label:'Source of Income', url: cust.kyc_source_of_income_doc_url, ts: cust.kyc_source_of_income_doc_uploaded_at },
+        { label:'Bank Confirmation', url: cust.kyc_bank_confirmation_url, ts: cust.kyc_bank_confirmation_uploaded_at },
+      ];
+      const docsHost = document.getElementById('cmEditorDocs');
+      docsHost.innerHTML = docs.map(d => {
+        if(!d.url){
+          return `<div class="cm-doc-tile missing"><strong>${d.label}</strong><span>Not uploaded</span></div>`;
+        }
+        return `<div class="cm-doc-tile">
+          <strong>${d.label}</strong>
+          <a href="${d.url}" target="_blank" rel="noopener">View document</a>
+          <span style="color:var(--muted);font-size:.75rem;">${cmFmtDateTime(d.ts)}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function cmCollectEditorPayload(){
+      const form = document.getElementById('cmEditorForm');
+      const fd = new FormData(form);
+      const obj = {};
+      for(const [k,v] of fd.entries()){ obj[k] = v; }
+      // Coerce booleans
+      ['live_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
+        if(k in obj) obj[k] = obj[k] === 'true';
+      });
+      // Numbers (keep '' as null)
+      ['recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','platform_fee_rate','performance_fee_rate']
+        .forEach(k => {
+          const v = String(obj[k] ?? '').trim();
+          obj[k] = (v === '' ? null : Number(v));
+        });
+      return obj;
+    }
+
+    /* ---------- Editor: open/close + tabs ---------- */
+    function cmSetActiveTab(tabName){
+      document.querySelectorAll('#cmEditorTabs .cm-tabbtn').forEach(b => {
+        b.classList.toggle('cm-tabbtn--active', b.dataset.tab === tabName);
+      });
+      document.querySelectorAll('#cmEditorForm .cm-tabpanel').forEach(p => {
+        p.classList.toggle('cm-tabpanel--active', p.dataset.panel === tabName);
+      });
+    }
+    function cmShowEditor(){
+      document.getElementById('customerEditorModal').style.display = 'flex';
+      cmSetActiveTab('personal');
+      cmEditorAlertHide();
+    }
+    function cmCloseEditor(){
+      document.getElementById('customerEditorModal').style.display = 'none';
+      cmEditorState = { customerId: null, profile: null };
+    }
+    async function cmOpenEditor(customerId){
+      const titleEl = document.getElementById('cmEditorTitle');
+      const archiveBtn = document.getElementById('cmEditorArchive');
+      cmShowEditor();
+      if(!customerId){
+        // Create mode
+        cmEditorState = { customerId: null, profile: null };
+        titleEl.textContent = 'Create New Client';
+        if(archiveBtn) archiveBtn.style.display = 'none';
+        document.getElementById('cmEditorForm').reset();
+        cmFillEditor({ cust: { registration_status: 'prospect', customer_status: 'Active', account_model: 'subaccount', recurring_contribution_frequency: 'Monthly', is_pep: false, compliance_frozen: false, is_test: false }, strat: {}, exa: {} });
+        return;
+      }
+      titleEl.textContent = `Edit Client #${customerId}`;
+      if(archiveBtn) archiveBtn.style.display = '';
+      try{
+        const profile = await cmFetchFullProfile(customerId);
+        cmEditorState = { customerId, profile };
+        cmFillEditor(profile);
+      }catch(e){
+        cmEditorAlert('error', `Failed to load client: ${e.message||e}`);
+      }
+    }
+
+    /* ---------- Save All ---------- */
+    async function cmSaveAll(){
+      cmEditorAlertHide();
+      const payload = cmCollectEditorPayload();
+      // Required fields
+      if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email_address||'').trim() || !String(payload.cellphone_number||'').trim()){
+        throw new Error('First name, last name, email, and cellphone are required.');
+      }
+
+      // 1) Build customer_details patch
+      const custPatch = {};
+      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
+        .forEach(k => { if(k in payload) custPatch[k] = payload[k] === '' ? null : payload[k]; });
+      // Numerics already coerced
+      // Trim strings
+      ['first_names','last_name','email_address','cellphone_number'].forEach(k => {
+        if(typeof custPatch[k] === 'string') custPatch[k] = custPatch[k].trim();
+      });
+      // email shadow column kept in sync
+      if(custPatch.email_address) custPatch.email = custPatch.email_address;
+
+      let custId = cmEditorState.customerId;
+      if(custId){
+        const { error } = await supabaseClient.from('customer_details').update(custPatch).eq('customer_id', custId);
+        if(error) throw error;
+      } else {
+        const { data, error } = await supabaseClient.from('customer_details').insert(custPatch).select('customer_id').single();
+        if(error) throw error;
+        custId = data.customer_id;
+      }
+
+      // 2) Strategy patch (only if there's an active strategy row)
+      const strat = cmEditorState.profile?.strat;
+      if(strat?.customer_strategy_id){
+        const stratPatch = {
+          label: payload.strategy_label || strat.label,
+          live_enabled: !!payload.live_enabled,
+          platform_fee_rate: payload.platform_fee_rate,
+          platform_fee_schedule: payload.platform_fee_schedule || strat.platform_fee_schedule,
+          performance_fee_rate: payload.performance_fee_rate,
+          performance_fee_schedule: payload.performance_fee_schedule || strat.performance_fee_schedule,
+        };
+        const { error } = await supabaseClient.from('customer_strategies').update(stratPatch).eq('customer_strategy_id', strat.customer_strategy_id);
+        if(error) throw error;
+      }
+
+      // 3) Exchange account patch (deposit ref, BTC wallet, USDT wallet, api key label, subaccount)
+      const exa = cmEditorState.profile?.exa;
+      if(exa?.exchange_account_id){
+        const exaPatch = {};
+        CM_EX_FIELDS.forEach(k => {
+          const v = payload[k];
+          if(v !== undefined) exaPatch[k] = (v === '' ? null : v);
+        });
+        if(Object.keys(exaPatch).length){
+          const { error } = await supabaseClient.from('exchange_accounts').update(exaPatch).eq('exchange_account_id', exa.exchange_account_id);
+          if(error) throw error;
+        }
+      }
+
+      // 4) Bank account: if customer is editing existing record AND has all required bank fields → call ef_link_bank_account
+      if(cmEditorState.customerId && payload.bank_name && payload.bank_account_number && payload.bank_account_holder){
+        try{
+          const { data: linkRes, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', {
+            body: {
+              customer_id: Number(custId),
+              bank_account_number: String(payload.bank_account_number).trim(),
+              bank_account_holder: String(payload.bank_account_holder).trim(),
+              bank_name: payload.bank_name,
+              bank_branch_code: payload.bank_branch_code || null,
+              bank_account_type: payload.bank_account_type || null,
+            }
+          });
+          if(linkErr) throw new Error(linkErr.message || String(linkErr));
+          if(linkRes && linkRes.success === false && linkRes.error) throw new Error(linkRes.error);
+        }catch(bankErr){
+          cmEditorAlert('error', `Saved customer details, but bank link failed: ${bankErr.message||bankErr}`);
+          return custId; // partial success
+        }
+      }
+      return custId;
+    }
+
+    /* ---------- Archive + Advance Stage ---------- */
+    async function cmArchiveCurrent(){
+      const id = cmEditorState.customerId;
+      if(!id) return;
+      if(!confirm('Archive this client? They will be set to Inactive and trading will be disabled.')) return;
+      try{
+        const { error: e1 } = await supabaseClient.from('customer_details')
+          .update({ customer_status: 'Inactive', registration_status: 'inactive' })
+          .eq('customer_id', id);
+        if(e1) throw e1;
+        await supabaseClient.from('customer_strategies')
+          .update({ live_enabled: false })
+          .eq('customer_id', id)
+          .not('status','in','("closed","terminated")');
+        cmEditorAlert('success', 'Client archived.');
+        if(typeof loadCustomers === 'function') await loadCustomers();
+        setTimeout(cmCloseEditor, 800);
+      }catch(e){
+        cmEditorAlert('error', `Archive failed: ${e.message||e}`);
+      }
+    }
+    async function cmAdvanceStage(){
+      const form = document.getElementById('cmEditorForm');
+      const sel = form.querySelector('[name="registration_status"]');
+      if(!sel) return;
+      const cur = sel.value || 'prospect';
+      const next = CM_REG_NEXT[cur] || cur;
+      if(next === cur){ cmEditorAlert('error', 'Already at final stage.'); return; }
+      sel.value = next;
+      cmEditorAlert('success', `Stage will move to "${next}" on Save.`);
+    }
+
+    /* ---------- Init / wiring ---------- */
+    function cmModalInit(){
+      const btnNew  = document.getElementById('cmBtnNewClient');
+      const btnEdit = document.getElementById('cmBtnEditClient');
+      if(btnNew && !btnNew._bound){ btnNew.addEventListener('click', () => cmOpenEditor(null)); btnNew._bound = true; }
+      if(btnEdit && !btnEdit._bound){ btnEdit.addEventListener('click', cmOpenPicker); btnEdit._bound = true; }
+
+      // Picker controls
+      const pSearch = document.getElementById('cmPickerSearch');
+      const pStatus = document.getElementById('cmPickerStatus');
+      const pRefresh = document.getElementById('cmPickerRefresh');
+      if(pSearch && !pSearch._bound){ pSearch.addEventListener('input', () => cmRenderPickerList(_cmPickerRows)); pSearch._bound = true; }
+      if(pStatus && !pStatus._bound){ pStatus.addEventListener('change', () => cmRenderPickerList(_cmPickerRows)); pStatus._bound = true; }
+      if(pRefresh && !pRefresh._bound){ pRefresh.addEventListener('click', cmOpenPicker); pRefresh._bound = true; }
+
+      // Close buttons
+      document.querySelectorAll('[data-close-picker]').forEach(b => b.addEventListener('click', cmClosePicker));
+      document.querySelectorAll('[data-close-editor]').forEach(b => b.addEventListener('click', cmCloseEditor));
+
+      // Click-outside-to-close
+      const pickerModal = document.getElementById('customerPickerModal');
+      const editorModal = document.getElementById('customerEditorModal');
+      if(pickerModal && !pickerModal._bound){
+        pickerModal.addEventListener('click', (e) => { if(e.target === pickerModal) cmClosePicker(); });
+        pickerModal._bound = true;
+      }
+      if(editorModal && !editorModal._bound){
+        editorModal.addEventListener('click', (e) => { if(e.target === editorModal) cmCloseEditor(); });
+        editorModal._bound = true;
+      }
+
+      // Tab buttons
+      document.querySelectorAll('#cmEditorTabs .cm-tabbtn').forEach(b => {
+        if(b._bound) return;
+        b.addEventListener('click', () => cmSetActiveTab(b.dataset.tab));
+        b._bound = true;
+      });
+
+      // Save / Archive / Advance / Strategy setup
+      const form = document.getElementById('cmEditorForm');
+      if(form && !form._bound){
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const saveBtn = document.getElementById('cmEditorSave');
+          const orig = saveBtn?.textContent;
+          if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+          try{
+            const id = await cmSaveAll();
+            cmEditorAlert('success', `Saved (client #${id}).`);
+            if(typeof loadCustomers === 'function') await loadCustomers();
+            // Refresh local state if editing
+            if(cmEditorState.customerId){
+              cmEditorState.profile = await cmFetchFullProfile(cmEditorState.customerId);
+              cmFillEditor(cmEditorState.profile);
+            } else {
+              cmEditorState.customerId = id;
+              cmEditorState.profile = await cmFetchFullProfile(id);
+              cmFillEditor(cmEditorState.profile);
+              document.getElementById('cmEditorTitle').textContent = `Edit Client #${id}`;
+              document.getElementById('cmEditorArchive').style.display = '';
+            }
+            // Refresh prospects pipeline if it's loaded
+            if(typeof loadProspects === 'function'){ try{ await loadProspects(); }catch(_){} }
+          }catch(err){
+            cmEditorAlert('error', err.message || 'Save failed.');
+          } finally {
+            if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = orig || 'Save Changes'; }
+          }
+        });
+        form._bound = true;
+      }
+      const archiveBtn = document.getElementById('cmEditorArchive');
+      if(archiveBtn && !archiveBtn._bound){ archiveBtn.addEventListener('click', cmArchiveCurrent); archiveBtn._bound = true; }
+      const advanceBtn = document.getElementById('cmEditorAdvanceStage');
+      if(advanceBtn && !advanceBtn._bound){ advanceBtn.addEventListener('click', cmAdvanceStage); advanceBtn._bound = true; }
+      const stratBtn = document.getElementById('cmEditorOpenStrategySetup');
+      if(stratBtn && !stratBtn._bound){
+        stratBtn.addEventListener('click', () => {
+          const id = cmEditorState.customerId;
+          if(!id){ cmEditorAlert('error', 'Save the client first, then configure the strategy.'); return; }
+          // Reuse the existing prospect-pipeline strategy setup modal if available
+          if(typeof openStrategySetup === 'function'){
+            const cust = cmEditorState.profile?.cust;
+            const name = `${cust?.first_names||''} ${cust?.last_name||''}`.trim();
+            try{ openStrategySetup(id, name); }catch(_){ window.location.hash = '#management-module'; }
+          } else {
+            cmEditorAlert('error', 'Strategy setup is initialised after the Onboarding Pipeline loads. Close this modal, click an action in the Pipeline, then retry.');
+          }
+        });
+        stratBtn._bound = true;
+      }
+    }
+    /* =================== /Customer Management — Modal Edition =================== */
 
     /* ------------------ INIT ------------------ */
     (async function init(){
