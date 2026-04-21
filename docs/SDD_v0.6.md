@@ -3,11 +3,27 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-21 (v0.6.73)
+**Last updated:** 2026-04-21 (v0.6.74)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.74 – Carry-Forward Cron Rescheduled to 03:00 UTC
+**Date:** 2026-04-21  
+**Purpose:** Align the morning carry-forward cron with the rest of the daily pipeline (which runs from 03:00 UTC). Previously ran at 06:00 UTC, creating a 3-hour window where the portal showed yesterday's NAV if visited before 06:00.
+
+**Status:** ✅ COMPLETE
+
+**Change:**
+
+| Job Name | Old Schedule | New Schedule |
+|----------|-------------|-------------|
+| `carry-forward-balances-morning` | `0 6 * * *` (06:00 UTC) | `0 3 * * *` (03:00 UTC) |
+
+Applied via `cron.alter_job(68, schedule := '0 3 * * *')`. Evening job (`carry-forward-balances-evening`, `0 17 * * *`) unchanged.
+
+---
 
 ### v0.6.73 – Std DCA Recompute, BTC Price Carry-Back & Performance Chart Polish
 **Date:** 2026-04-21  
@@ -121,7 +137,7 @@ Applies to both the Benchmarks chart and the Asset Holdings chart.
 
 | Job Name | Schedule | Purpose |
 |----------|----------|----------|
-| `carry-forward-balances-morning` | `0 6 * * *` (06:00 UTC) | After pipeline resume (05:05 UTC) |
+| `carry-forward-balances-morning` | `0 3 * * *` (03:00 UTC) | Aligned with pipeline start (rescheduled in v0.6.74) |
 | `carry-forward-balances-evening` | `0 17 * * *` (17:00 UTC) | End-of-window safety net |
 
 **Migration:** `add_carry_forward_daily_balances`
