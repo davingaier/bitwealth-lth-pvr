@@ -652,10 +652,13 @@
       color:var(--ink);
       border:1px solid var(--border);
       border-radius:var(--radius-sm);
-      padding:8px 12px;
+      height:var(--control-height);
+      padding:0 12px;
+      box-sizing:border-box;
       font:inherit;
       transition: border-color .15s ease, box-shadow .15s ease;
     }
+    textarea{ height:auto; min-height:calc(var(--control-height) * 2); padding:8px 12px; }
     input:focus, select:focus, textarea:focus{
       outline:none;
       border-color:var(--accent);
@@ -883,6 +886,102 @@
     [data-theme="dark"] table[style*="background:#fff"],
     [data-theme="dark"] table[style*="background: #fff"]{ background-color:var(--bg-elev) !important; }
     [data-theme="dark"] th[style*="background:#f0f0f0"]{ background-color:var(--bg-table-head) !important; color:var(--ink-soft) !important; }
+
+    /* Module-specific inline-style overrides for dark mode */
+
+    /* Strategy Maintenance "Select a Strategy" empty-state card */
+    [data-theme="dark"] #noStrategyMessage{
+      background:var(--bg-soft) !important;
+      border-color:var(--border) !important;
+      color:var(--muted) !important;
+    }
+    [data-theme="dark"] #noStrategyMessage h3{ color:var(--ink) !important; }
+
+    /* Finance: Accumulated Platform Fees table header/footer & info block */
+    [data-theme="dark"] tr[style*="background: #f8fafc"],
+    [data-theme="dark"] tr[style*="background:#f8fafc"]{
+      background-color:var(--bg-table-head) !important;
+      border-color:var(--border) !important;
+    }
+    [data-theme="dark"] tr[style*="background: #f8fafc"] th,
+    [data-theme="dark"] tr[style*="background: #f8fafc"] td,
+    [data-theme="dark"] tr[style*="background:#f8fafc"] th,
+    [data-theme="dark"] tr[style*="background:#f8fafc"] td{
+      color:var(--ink-soft) !important;
+    }
+    /* Info / callout blocks (light-blue background bars) */
+    [data-theme="dark"] [style*="background: #eff6ff"],
+    [data-theme="dark"] [style*="background:#eff6ff"]{
+      background-color:rgba(56,189,248,.10) !important;
+      color:#bae6fd !important;
+      border-left-color:var(--accent) !important;
+    }
+    [data-theme="dark"] [style*="color: #1e40af"],
+    [data-theme="dark"] [style*="color:#1e40af"]{ color:#93c5fd !important; }
+
+    /* Optimizer info card (slate) and warning panel (yellow) */
+    [data-theme="dark"] [style*="background:#f8fafc"][style*="border:1px solid #e2e8f0"],
+    [data-theme="dark"] [style*="background: #f8fafc"][style*="border:1px solid #e2e8f0"]{
+      background-color:var(--bg-soft) !important;
+      border-color:var(--border) !important;
+      color:var(--ink-soft) !important;
+    }
+    [data-theme="dark"] [style*="background:#f8fafc"] span[style*="color:#374151"],
+    [data-theme="dark"] [style*="background:#f8fafc"] span[style*="color:#6b7280"]{
+      color:var(--ink-soft) !important;
+    }
+    [data-theme="dark"] [style*="background:#fef9c3"]{
+      background-color:rgba(251,191,36,.16) !important;
+      color:#fde68a !important;
+      border-color:rgba(251,191,36,.35) !important;
+    }
+    [data-theme="dark"] [style*="background:#dcfce7"]{
+      background-color:rgba(34,197,94,.16) !important;
+      color:#86efac !important;
+      border-color:rgba(34,197,94,.35) !important;
+    }
+    [data-theme="dark"] [style*="background:#dbeafe"]{
+      background-color:rgba(96,165,250,.16) !important;
+      color:#93c5fd !important;
+    }
+    [data-theme="dark"] [style*="background:#fef3c7"]{
+      background-color:rgba(251,191,36,.14) !important;
+      color:#fde68a !important;
+    }
+    /* Generic catch-all: any inline tfoot/thead row with #f8fafc */
+    [data-theme="dark"] tfoot tr,
+    [data-theme="dark"] thead tr{ background-color:var(--bg-table-head) !important; }
+    [data-theme="dark"] tfoot tr td{ color:var(--ink) !important; }
+
+    /* Strategy Setup modal — inline-styled white surface + slate fieldset borders */
+    [data-theme="dark"] #strategySetupModal > div{
+      background:var(--bg-modal) !important;
+      color:var(--ink) !important;
+      box-shadow:var(--shadow-modal) !important;
+    }
+    [data-theme="dark"] #strategySetupModal fieldset{ border-color:var(--border) !important; }
+    [data-theme="dark"] #strategySetupModal label{ color:var(--ink-soft); }
+    [data-theme="dark"] #strategySetupModal label[style*="border:1px solid #dee2e6"]{
+      border-color:var(--border) !important;
+      background:var(--bg-soft) !important;
+    }
+    [data-theme="dark"] #strategySetupModal input[style*="border:1px solid #dee2e6"],
+    [data-theme="dark"] #strategySetupModal select[style*="border:1px solid #dee2e6"]{
+      background:var(--bg-input) !important;
+      color:var(--ink) !important;
+      border-color:var(--border) !important;
+    }
+
+    /* Fix Strategy Setup Fee Configuration row spacing — explicit row-gap */
+    #strategySetupModal fieldset > div[style*="grid-template-columns:1fr 1fr"]{
+      row-gap:1rem !important;
+    }
+    #strategySetupModal fieldset input,
+    #strategySetupModal fieldset select{
+      height:var(--control-height);
+      padding:0 12px;
+      box-sizing:border-box;
+    }
 
     /* ===== End theme polish ===== */
   </style>
@@ -9406,22 +9505,41 @@
       if (allStrategies.length === 0) await loadStrategies();
       await loadVariations();
 
-      // Render strategy radio buttons
-      strategyRadioGroup.innerHTML = allStrategies.map((s, i) =>
-        `<label style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;">
-          <input type="radio" name="strategyChoice" value="${escapeHtml(s.strategy_code)}" style="margin-top:3px;" ${i === 0 ? '' : ''}>
+      // --- Fetch the customer's currently configured strategy (if any) ---
+      let existing = null;
+      try{
+        const { data } = await supabaseClient
+          .from('customer_strategies')
+          .select('strategy_code, strategy_variation_id, platform_fee_rate, platform_fee_schedule, performance_fee_rate, performance_fee_schedule, status, live_enabled')
+          .eq('customer_id', customerId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        existing = data || null;
+      }catch(_){ existing = null; }
+
+      const preselectStrategyCode = existing?.strategy_code || null;
+      const preselectVariationId  = existing?.strategy_variation_id ? String(existing.strategy_variation_id) : null;
+
+      // Render strategy radio buttons (preselect existing, else first)
+      strategyRadioGroup.innerHTML = allStrategies.map((s, i) => {
+        const checked = preselectStrategyCode
+          ? (s.strategy_code === preselectStrategyCode)
+          : (i === 0);
+        return `<label style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;">
+          <input type="radio" name="strategyChoice" value="${escapeHtml(s.strategy_code)}" style="margin-top:3px;" ${checked ? 'checked' : ''}>
           <div>
             <strong>${escapeHtml(s.name)}</strong>
             <div style="font-size:.82rem;color:#6c757d;">${escapeHtml(s.description || '')}</div>
           </div>
-        </label>`
-      ).join('');
+        </label>`;
+      }).join('');
 
       // Listen for strategy changes to show/hide variation
       strategyRadioGroup.querySelectorAll('input[name="strategyChoice"]').forEach(r => {
         r.addEventListener('change', () => {
           if (r.value === 'LTH_PVR') {
-            renderVariations();
+            renderVariations(preselectVariationId);
             variationFieldset.style.display = '';
           } else {
             variationFieldset.style.display = 'none';
@@ -9429,15 +9547,35 @@
         });
       });
 
-      variationFieldset.style.display = 'none';
+      // Pre-fill fee inputs from existing record (if any)
+      if (existing){
+        const pr = document.getElementById('strategyModalPlatformRate');
+        const ps = document.getElementById('strategyModalPlatformSchedule');
+        const fr = document.getElementById('strategyModalPerfRate');
+        const fs = document.getElementById('strategyModalPerfSchedule');
+        if (pr && existing.platform_fee_rate != null) pr.value = existing.platform_fee_rate;
+        if (ps && existing.platform_fee_schedule)    ps.value = existing.platform_fee_schedule;
+        if (fr && existing.performance_fee_rate != null) fr.value = existing.performance_fee_rate;
+        if (fs && existing.performance_fee_schedule) fs.value = existing.performance_fee_schedule;
+      }
+
+      // Initial variation panel visibility
+      const initialCode = preselectStrategyCode || allStrategies[0]?.strategy_code;
+      if (initialCode === 'LTH_PVR'){
+        renderVariations(preselectVariationId);
+        variationFieldset.style.display = '';
+      } else {
+        variationFieldset.style.display = 'none';
+      }
       modal.style.display = 'flex';
     };
 
-    function renderVariations() {
+    function renderVariations(preselectId) {
       const productionId = allVariations.find(v => v.is_production)?.id;
+      const targetId = preselectId || productionId;
       variationRadioGroup.innerHTML = allVariations.map(v =>
         `<label style="display:flex;align-items:flex-start;gap:.5rem;padding:.5rem;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;">
-          <input type="radio" name="variationChoice" value="${v.id}" style="margin-top:3px;" ${v.id === productionId ? 'checked' : ''}>
+          <input type="radio" name="variationChoice" value="${v.id}" style="margin-top:3px;" ${String(v.id) === String(targetId) ? 'checked' : ''}>
           <div>
             <strong>${escapeHtml(v.display_name)}</strong>
             ${v.is_production ? '<span style="background:#28a745;color:#fff;padding:1px 6px;border-radius:3px;font-size:.75rem;margin-left:.5rem;">Production</span>' : ''}
