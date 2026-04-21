@@ -27,6 +27,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const sbLthPvr = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "lth_pvr" } });
 
 const CORS = {
   "Content-Type": "application/json",
@@ -295,10 +296,10 @@ Deno.serve(async (req) => {
 
   // ── Step 5: Validate VALR credentials are resolvable (do not store creds) ─
   try {
-    await resolveCustomerCredentials(sb, customerId);
+    await resolveCustomerCredentials(sbLthPvr, customerId);
   } catch (e) {
-    await logAlert(sb, "ef_request_withdrawal", "error", `Credential failure: ${(e as Error).message}`, { customerId }, ORG_ID, customerId);
-    return json({ error: "Failed to resolve VALR credentials" }, 500);
+    await logAlert(sbLthPvr, "ef_request_withdrawal", "error", `Credential failure: ${(e as Error).message}`, { customerId }, ORG_ID, customerId);
+    return json({ error: `Failed to resolve VALR credentials: ${(e as Error).message}` }, 500);
   }
 
   // ── Step 6: Fetch withdrawable balance ────────────────────────────────────
