@@ -1,0 +1,1 @@
+{"query":"SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'lth_pvr.withdrawal_requests'::regclass;"}

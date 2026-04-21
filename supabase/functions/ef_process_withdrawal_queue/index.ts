@@ -44,6 +44,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const sbLthPvr = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "lth_pvr" } });
 
 const CORS = {
   "Content-Type": "application/json",
@@ -121,11 +122,11 @@ async function loadCustomerCtx(row: Row): Promise<CustomerCtx | null> {
   let creds: { apiKey: string; apiSecret: string };
   let subaccountId: string | null;
   try {
-    const r = await resolveCustomerCredentials(sb, row.customer_id);
+    const r = await resolveCustomerCredentials(sbLthPvr, row.customer_id);
     creds = { apiKey: r.apiKey, apiSecret: r.apiSecret };
     subaccountId = r.subaccountId;
   } catch (e) {
-    await logAlert(sb, "ef_process_withdrawal_queue", "error",
+    await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "error",
       `Credential resolution failed: ${(e as Error).message}`,
       { request_id: row.request_id, customer_id: row.customer_id }, ORG_ID, row.customer_id);
     return null;
@@ -143,8 +144,7 @@ async function loadCustomerCtx(row: Row): Promise<CustomerCtx | null> {
 }
 
 async function markPayingOut(row: Row, valrWithdrawalId: string | undefined, extras: Record<string, unknown> = {}) {
-  await sb
-    .schema("lth_pvr")
+  await sbLthPvr
     .from("withdrawal_requests")
     .update({
       status: "paying_out",
@@ -156,8 +156,7 @@ async function markPayingOut(row: Row, valrWithdrawalId: string | undefined, ext
 }
 
 async function markConverting(row: Row, extras: Record<string, unknown>) {
-  await sb
-    .schema("lth_pvr")
+  await sbLthPvr
     .from("withdrawal_requests")
     .update({
       status: "converting",
@@ -168,8 +167,7 @@ async function markConverting(row: Row, extras: Record<string, unknown>) {
 }
 
 async function markFailed(row: Row, ctx: CustomerCtx | null, reason: string, valrResponse?: unknown) {
-  await sb
-    .schema("lth_pvr")
+  await sbLthPvr
     .from("withdrawal_requests")
     .update({
       status: "failed",
@@ -179,7 +177,7 @@ async function markFailed(row: Row, ctx: CustomerCtx | null, reason: string, val
     })
     .eq("request_id", row.request_id);
 
-  await logAlert(sb, "ef_process_withdrawal_queue", "error",
+  await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "error",
     `Withdrawal ${row.request_id} failed: ${reason}`,
     {
       request_id: row.request_id,
@@ -208,8 +206,7 @@ async function markFailed(row: Row, ctx: CustomerCtx | null, reason: string, val
 }
 
 async function bumpAttempt(row: Row) {
-  await sb
-    .schema("lth_pvr")
+  await sbLthPvr
     .from("withdrawal_requests")
     .update({
       queue_attempts: (row.queue_attempts ?? 0) + 1,
@@ -245,9 +242,11 @@ async function processCryptoPending(row: Row, ctx: CustomerCtx) {
 
 // ────────────────────────────────────────────────────────────────────────────
 // ZAR path step 1: pending → converting (place sell orders)
-async function processZarPending(row: Row, ctx: CustomerCtx) {
+async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
+  trace.push(`zar_pending:start targetZar=${row.amount_zar}`);
   const targetZar = Number(row.amount_zar ?? 0);
   if (!ctx.bankValrId || targetZar <= 0) {
+    trace.push(`zar_pending:missing_bank_or_amount bank=${ctx.bankValrId} target=${targetZar}`);
     return await markFailed(row, ctx, "Missing bank_valr_id or amount_zar");
   }
 
@@ -258,17 +257,20 @@ async function processZarPending(row: Row, ctx: CustomerCtx) {
     btczar  = TEST_MODE ? 1_350_000 : await getMarketPrice("BTCZAR");
     btcUsdtBid = btczar / usdtzar;
     void btcUsdtBid;
+    trace.push(`zar_pending:rates usdtzar=${usdtzar} btczar=${btczar}`);
   } catch (e) {
+    trace.push(`zar_pending:rate_fetch_failed ${(e as Error).message}`);
     return await markFailed(row, ctx, `Rate fetch failed: ${(e as Error).message}`);
   }
 
   // 2. Live withdrawable balance (USDT/BTC)
-  const { data: bal } = await sb
-    .schema("lth_pvr")
+  const { data: bal, error: balErr } = await sbLthPvr
     .rpc("get_withdrawable_balance", { p_customer_id: row.customer_id });
+  if (balErr) trace.push(`zar_pending:bal_rpc_err ${balErr.message}`);
   const b = Array.isArray(bal) ? bal[0] : bal;
   const availUsdt = Number(b?.withdrawable_usdt ?? 0);
   const availBtc  = Number(b?.withdrawable_btc ?? 0);
+  trace.push(`zar_pending:bal availUsdt=${availUsdt} availBtc=${availBtc}`);
 
   // 3. Compute split: USDT first, BTC for shortfall
   const convFeeRate = Number(row.valr_conversion_fee_usdt ?? 0) > 0 ? 0.0018 : 0.0018;
@@ -280,13 +282,17 @@ async function processZarPending(row: Row, ctx: CustomerCtx) {
   const btcToSell  = btcToSellZar  > 0 ? btcToSellZar / btczar : 0;
 
   if (btcToSell > 0 && btcToSell > availBtc) {
+    trace.push(`zar_pending:insufficient_btc need=${btcToSell} have=${availBtc}`);
     return await markFailed(row, ctx,
       `Insufficient BTC after USDT exhaustion: need ${btcToSell.toFixed(8)} BTC, have ${availBtc.toFixed(8)}`);
   }
 
-  const sourceAsset = btcToSell > 0
-    ? (usdtToSell > 0 ? "BTC+USDT" : "BTC")
-    : "USDT";
+  // NOTE: wr_source_asset_check constraint currently does NOT include 'BTC+USDT'.
+  // For mixed sales we record 'BTC' (the leg that determines settlement timing) and
+  // rely on usdt_sold / btc_sold columns to capture the true split.
+  // TODO: once migration to extend the check constraint is applied, restore 'BTC+USDT'.
+  const sourceAsset = btcToSell > 0 ? "BTC" : "USDT";
+  trace.push(`zar_pending:split usdtToSell=${usdtToSell} btcToSell=${btcToSell} src=${sourceAsset}`);
 
   // 4. Place LIMIT SELL orders at best bid
   const updates: Record<string, unknown> = { source_asset: sourceAsset };
@@ -303,7 +309,9 @@ async function processZarPending(row: Row, ctx: CustomerCtx) {
             { side: "SELL", pair: "USDTZAR", price: bid.toFixed(4), quantity: usdtToSell.toFixed(6), customerOrderId },
             ctx.subaccountId, ctx.creds);
       updates.conversion_order_id_usdt = (res?.id ?? res?.orderId ?? customerOrderId);
+      trace.push(`zar_pending:usdt_order_placed id=${updates.conversion_order_id_usdt}`);
     } catch (e) {
+      trace.push(`zar_pending:usdt_order_failed ${(e as Error).message}`);
       return await markFailed(row, ctx, `USDTZAR limit order failed: ${(e as Error).message}`);
     }
   }
@@ -320,7 +328,9 @@ async function processZarPending(row: Row, ctx: CustomerCtx) {
             { side: "SELL", pair: "BTCZAR", price: bid.toFixed(2), quantity: btcToSell.toFixed(8), customerOrderId },
             ctx.subaccountId, ctx.creds);
       updates.conversion_order_id_btc = (res?.id ?? res?.orderId ?? customerOrderId);
+      trace.push(`zar_pending:btc_order_placed id=${updates.conversion_order_id_btc}`);
     } catch (e) {
+      trace.push(`zar_pending:btc_order_failed ${(e as Error).message}`);
       // Best-effort cancel of the USDT leg if it was placed
       if (updates.conversion_order_id_usdt && !TEST_MODE) {
         try {
@@ -331,7 +341,16 @@ async function processZarPending(row: Row, ctx: CustomerCtx) {
     }
   }
 
-  await markConverting(row, updates);
+  const { error: convErr } = await sbLthPvr
+    .from("withdrawal_requests")
+    .update({
+      status: "converting",
+      conversion_status: "limit_placed",
+      ...updates,
+    })
+    .eq("request_id", row.request_id);
+  if (convErr) trace.push(`zar_pending:mark_converting_err ${convErr.message}`);
+  else trace.push(`zar_pending:mark_converting_ok`);
   console.log(`🔄 ZAR withdrawal converting: ${row.request_id} (USDT=${usdtToSell.toFixed(6)}, BTC=${btcToSell.toFixed(8)})`);
 }
 
@@ -444,7 +463,7 @@ async function processZarConverting(row: Row, ctx: CustomerCtx) {
     if (!usdtRes.filled && row.conversion_order_id_usdt) upd.conversion_order_id_usdt = `wd-usdt-mkt-${row.request_id}`;
     if (!btcRes.filled  && row.conversion_order_id_btc)  upd.conversion_order_id_btc  = `wd-btc-mkt-${row.request_id}`;
     if (Object.keys(upd).length > 0) {
-      await sb.schema("lth_pvr").from("withdrawal_requests").update(upd).eq("request_id", row.request_id);
+      await sbLthPvr.from("withdrawal_requests").update(upd).eq("request_id", row.request_id);
     }
   } else {
     console.log(`⌛ ${row.request_id} still converting (USDT=${usdtRes.filled}, BTC=${btcRes.filled}, attempt=${attemptsAfterDispatch})`);
@@ -456,8 +475,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   // Pull rows that need processing
-  const { data: rows, error } = await sb
-    .schema("lth_pvr")
+  const { data: rows, error } = await sbLthPvr
     .from("withdrawal_requests")
     .select(
       "request_id, org_id, customer_id, currency, amount_usdt, amount_zar, withdrawal_address, status, source_asset, " +
@@ -496,9 +514,12 @@ Deno.serve(async (req) => {
           results.skipped++;
         }
       } else if (row.currency === "ZAR") {
-        if (row.status === "pending")        await processZarPending(row, ctx);
+        const trace: string[] = [];
+        if (row.status === "pending")        await processZarPending(row, ctx, trace);
         else if (row.status === "converting") await processZarConverting(row, ctx);
         results.processed++;
+        results.details.push({ request_id: row.request_id, currency: row.currency, prior_status: row.status, trace });
+        continue;
       } else {
         results.skipped++;
       }

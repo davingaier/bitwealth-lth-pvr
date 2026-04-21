@@ -87,7 +87,7 @@ export async function getOrderBook(pair: string): Promise<{
   Bids: Array<{ price: string; quantity: string }>;
 }> {
   const p = normalisePair(pair);
-  const res = await fetch(`${VALR_API_URL}/v1/marketdata/${p}/orderbook`);
+  const res = await fetch(`${VALR_API_URL}/v1/public/${p}/orderbook`);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`VALR GET orderbook ${p} failed: ${res.status} – ${text}`);
