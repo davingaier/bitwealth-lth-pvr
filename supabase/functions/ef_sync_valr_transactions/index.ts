@@ -218,6 +218,71 @@ Deno.serve(async (req) => {
         }
         console.log(`\n  Transaction type summary:`, Object.fromEntries(transactionTypeCounts));
 
+        // ════════════════════════════════════════════════════════════════════
+        // WITHDRAWAL COMPLETION DETECTION
+        // For each customer in this sync cycle, look up withdrawal_requests rows
+        // in status='paying_out' and try to match against fresh VALR transactions.
+        // On a match → flip status to 'completed' + set completed_at + send email.
+        // ════════════════════════════════════════════════════════════════════
+        try {
+          const { data: payingOut } = await supabase
+            .from("withdrawal_requests")
+            .select("request_id, currency, amount_zar, amount_usdt, valr_withdrawal_id, processed_at, customer_id")
+            .eq("org_id", orgId)
+            .eq("customer_id", customerId)
+            .eq("status", "paying_out");
+
+          for (const wd of (payingOut ?? [])) {
+            // Look for a settling VALR transaction newer than (or near) processed_at
+            const dispatchedAt = wd.processed_at ? new Date(wd.processed_at).getTime() : 0;
+            const matched = transactions.find((tx: any) => {
+              const txType = tx.transactionType?.type;
+              const txTs   = new Date(tx.eventAt).getTime();
+              if (txTs < dispatchedAt - 60_000) return false; // must be at-or-after dispatch
+              if (wd.currency === "ZAR") {
+                if (txType !== "FIAT_WITHDRAWAL" && txType !== "SIMPLE_SELL") return false;
+                if (tx.debitCurrency !== "ZAR") return false;
+                // Match by valr_withdrawal_id if available, else by amount within R0.50
+                if (wd.valr_withdrawal_id && tx.additionalInfo?.withdrawalId) {
+                  return String(tx.additionalInfo.withdrawalId) === String(wd.valr_withdrawal_id);
+                }
+                const target = Number(wd.amount_zar ?? 0);
+                return Math.abs(parseFloat(tx.debitValue ?? 0) - target) <= 0.5;
+              } else if (wd.currency === "BTC" || wd.currency === "USDT") {
+                if (txType !== "BLOCKCHAIN_SEND") return false;
+                if (tx.debitCurrency !== wd.currency) return false;
+                if (wd.valr_withdrawal_id && tx.additionalInfo?.withdrawalId) {
+                  return String(tx.additionalInfo.withdrawalId) === String(wd.valr_withdrawal_id);
+                }
+                const target = Number(wd.amount_usdt ?? 0);
+                const tolerance = wd.currency === "BTC" ? 0.00000001 : 0.01;
+                return Math.abs(parseFloat(tx.debitValue ?? 0) - target) <= tolerance;
+              }
+              return false;
+            });
+
+            if (matched) {
+              console.log(`  ✅ Withdrawal ${wd.request_id} settled by VALR tx ${matched.id}`);
+              await supabase
+                .from("withdrawal_requests")
+                .update({
+                  status:        "completed",
+                  completed_at:  new Date(matched.eventAt).toISOString(),
+                  valr_withdrawal_id: wd.valr_withdrawal_id ?? matched.additionalInfo?.withdrawalId ?? null,
+                })
+                .eq("request_id", wd.request_id);
+              await logAlert(
+                supabase, "ef_sync_valr_transactions", "info",
+                `Withdrawal ${wd.request_id} completed (settled by VALR tx ${matched.id})`,
+                { request_id: wd.request_id, customer_id: customerId, currency: wd.currency },
+                orgId, customerId,
+              );
+            }
+          }
+        } catch (settleErr) {
+          console.warn(`  ⚠️  Withdrawal-completion check failed for ${customerName}:`, (settleErr as Error).message);
+        }
+
         // Filter for funding-related transactions (deposits, withdrawals, conversions)
         // AND only include transactions after sinceDatetime
         // Transaction types handled:

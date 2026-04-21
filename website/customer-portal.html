@@ -1712,14 +1712,14 @@
                 area.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No withdrawal requests yet.</p>';
                 return;
             }
-            const now = new Date();
             const statusBadge = (status) => {
                 const badges = {
-                    pending:    { label: '\u23f3 Pending',    bg: '#6b7280' },
-                    processing: { label: '\ud83d\udd04 Processing', bg: '#3b82f6' },
-                    completed:  { label: '\u2705 Completed',  bg: '#10b981' },
-                    failed:     { label: '\u274c Failed',     bg: '#ef4444' },
-                    cancelled:  { label: '\u2296 Cancelled',  bg: '#f59e0b' },
+                    pending:    { label: '\u23f3 Pending',     bg: '#6b7280' },
+                    converting: { label: '\ud83d\udd04 Converting', bg: '#3b82f6' },
+                    paying_out: { label: '\ud83d\udcb8 Paying Out', bg: '#8b5cf6' },
+                    completed:  { label: '\u2705 Completed',   bg: '#10b981' },
+                    failed:     { label: '\u274c Failed',      bg: '#ef4444' },
+                    cancelled:  { label: '\u2296 Cancelled',   bg: '#f59e0b' },
                 };
                 const b = badges[status] || { label: status, bg: '#6b7280' };
                 return `<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;color:white;background:${b.bg};">${b.label}</span>`;
@@ -1727,16 +1727,17 @@
             const rows = withdrawals.map(w => {
                 const date = w.requested_at ? new Date(w.requested_at).toLocaleDateString('en-ZA') : '--';
                 const decimals = w.currency === 'BTC' ? 8 : 2;
-                const gross = parseFloat(w.gross_amount || 0);
-                const net = parseFloat(w.net_amount || gross);
-                const fee = parseFloat(w.interim_fee_usdt || 0);
+                // amount_usdt holds USDT/BTC amounts; amount_zar holds ZAR amounts
+                const gross = w.currency === 'ZAR' ? parseFloat(w.amount_zar || 0) : parseFloat(w.amount_usdt || 0);
+                const net   = parseFloat(w.net_amount || gross);
+                const fee   = parseFloat(w.interim_performance_fee_usdt || 0);
                 const prefix = w.currency === 'ZAR' ? 'R' : (w.currency === 'USDT' ? '$' : '');
-                let rowStyle = w.status === 'processing' && w.requested_at && (now - new Date(w.requested_at)) / 60000 > 30
-                    ? 'background: rgba(245,158,11,0.08);' : '';
-                const cancelBtn = w.status === 'pending'
-                    ? `<button onclick="cancelWithdrawal('${w.withdrawal_id}')" style="margin-left:6px;padding:4px 10px;background:#ef4444;border:none;border-radius:4px;color:white;font-size:12px;cursor:pointer;">Cancel</button>`
+                // Cancellable while pending OR converting (server enforces zero-fill check on converting)
+                const canCancel = w.status === 'pending' || w.status === 'converting';
+                const cancelBtn = canCancel
+                    ? `<button onclick="cancelWithdrawal('${w.request_id}')" style="margin-left:6px;padding:4px 10px;background:#ef4444;border:none;border-radius:4px;color:white;font-size:12px;cursor:pointer;">Cancel</button>`
                     : '';
-                return `<tr style="${rowStyle} border-bottom: 1px solid rgba(255,255,255,0.05);">
+                return `<tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                     <td style="padding:10px 12px;font-size:13px;color:#1e3a8a;">${date}</td>
                     <td style="padding:10px 12px;font-size:13px;">${w.currency || '--'}</td>
                     <td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:13px;">${prefix}${gross.toFixed(decimals)}</td>
@@ -1744,7 +1745,7 @@
                     <td style="padding:10px 12px;text-align:right;font-family:monospace;font-size:13px;color:#10b981;">${prefix}${net.toFixed(decimals)}</td>
                     <td style="padding:10px 12px;">${statusBadge(w.status)}</td>
                     <td style="padding:10px 12px;">
-                        <button onclick="viewWithdrawalDetails('${w.withdrawal_id}')" style="padding:4px 10px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:4px;color:#93c5fd;font-size:12px;cursor:pointer;">View</button>
+                        <button onclick="viewWithdrawalDetails('${w.request_id}')" style="padding:4px 10px;background:rgba(59,130,246,0.15);border:1px solid #3b82f6;border-radius:4px;color:#93c5fd;font-size:12px;cursor:pointer;">View</button>
                         ${cancelBtn}
                     </td>
                 </tr>`;
@@ -1766,11 +1767,12 @@
                 </div>`;
         }
 
-        function viewWithdrawalDetails(withdrawalId) {
-            const w = currentWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+        function viewWithdrawalDetails(requestId) {
+            const w = currentWithdrawals.find(x => x.request_id === requestId);
             if (!w) return;
             const json = w.valr_response ? JSON.stringify(w.valr_response, null, 2) : 'No VALR response recorded.';
-            alert(`Withdrawal Details\n\nID: ${w.withdrawal_id}\nCurrency: ${w.currency}\nAmount: ${w.gross_amount}\nNet: ${w.net_amount}\nStatus: ${w.status}\nRequested: ${w.requested_at || '--'}\nCompleted: ${w.completed_at || '--'}\nError: ${w.error_message || '--'}\n\nVALR Response:\n${json}`);
+            const grossAmt = w.currency === 'ZAR' ? w.amount_zar : w.amount_usdt;
+            alert(`Withdrawal Details\n\nID: ${w.request_id}\nCurrency: ${w.currency}\nAmount: ${grossAmt}\nNet: ${w.net_amount}\nStatus: ${w.status}\nRequested: ${w.requested_at || '--'}\nCompleted: ${w.completed_at || '--'}\nFailure Reason: ${w.failure_reason || '--'}\n\nVALR Response:\n${json}`);
         }
 
         function switchWithdrawalType(type) {
@@ -1863,17 +1865,25 @@
             }
         }
 
-        async function cancelWithdrawal(withdrawalId) {
-            if (!confirm('Are you sure you want to cancel this withdrawal request? This cannot be undone.')) return;
+        async function cancelWithdrawal(requestId) {
+            if (!confirm('Are you sure you want to cancel this withdrawal request? If conversion is already in progress, this will only succeed if no portion has been filled yet.')) return;
             try {
                 const { data: { session } } = await sb.auth.getSession();
                 const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_revert_withdrawal`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
-                    body: JSON.stringify({ withdrawal_id: withdrawalId })
+                    body: JSON.stringify({ request_id: requestId, reason: 'customer_cancelled_via_portal' })
                 });
                 const result = await resp.json();
-                if (!resp.ok) throw new Error(result.error || 'Cancel failed');
+                if (!resp.ok) {
+                    // 409 = order already filled / partially filled
+                    if (resp.status === 409) {
+                        alert('This withdrawal can no longer be cancelled — the conversion order has already been (partially) filled. ' + (result.error || ''));
+                    } else {
+                        throw new Error(result.error || 'Cancel failed');
+                    }
+                    return;
+                }
                 alert('Withdrawal cancelled successfully.');
                 await loadWithdrawals(customerData.customer_id);
             } catch (e) { alert('Error cancelling withdrawal: ' + e.message); }

@@ -1,4 +1,22 @@
 # BitWealth Customer Portal - Build Plan
+## Version 2.3 - WITHDRAWALS COMPLETE (Async State Machine)
+
+> **2026-05-02 — Withdrawals workstream closed.**  
+> The withdrawal subsystem is now feature-complete under the asynchronous state-machine design ratified by the team:
+> - Auto-execute model retained (no manual admin approval step).
+> - Subaccount Model and API Model use the **identical** code path; credentials resolved per row.
+> - State machine: `pending → converting → paying_out → completed | failed | cancelled`.
+> - New 5-minute cron processor `ef_process_withdrawal_queue` drives all conversion + payout work asynchronously, so `ef_request_withdrawal` is now pure intake and the customer's submit click returns instantly.
+> - ZAR shortfall path uses **USDT first, then BTC direct (BTCZAR)** — never BTC→USDT→ZAR.
+> - Cancellation: always available while `pending`; available while `converting` only if VALR confirms zero fills (server-side check + on-success cancels VALR orders); refused with friendly 409 once any fill has occurred.
+> - Failure handling: `markFailed()` → `severity=error` alert via `logAlert()` + customer failure email.
+> - Settlement detection: `ef_sync_valr_transactions` flips `paying_out → completed` when the matching `BLOCKCHAIN_SEND` / `FIAT_WITHDRAWAL` shows up in VALR transaction history.
+> - Admin UI: new statuses + new Details fields; `failed` row highlight is now a plain `failed` (the old "`processing` >30 min" rule has been dropped).
+> - Test coverage: see [docs/Withdrawal_Test_Cases.md](Withdrawal_Test_Cases.md) (TC-W01 … TC-W32).
+> - Schema details, deployment commands and full design rationale: see SDD §0.6.81.
+
+---
+
 ## Version 2.2 - INTEGRATION TESTING COMPLETE
 
 **Project:** Customer Lifecycle Platform & Portal  

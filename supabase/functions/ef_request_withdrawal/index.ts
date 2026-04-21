@@ -1,20 +1,18 @@
 // Edge Function: ef_request_withdrawal (EF10)
-// Purpose: Customer-triggered withdrawal — auto-executes immediately with HWM fee deduction.
+// Purpose: Customer-triggered withdrawal INTAKE — validates, sizes, snapshots HWM,
+//          inserts a `pending` withdrawal_requests row, and returns immediately.
+//          The actual VALR I/O is performed asynchronously by ef_process_withdrawal_queue
+//          (5-min cron). Settlement is detected by ef_sync_valr_transactions.
 // Auth: JWT-enabled (Supabase verifies token; we extract email from payload to identify caller).
 //
-// Supported currencies: BTC, USDT (crypto withdraw), ZAR (fiat via bank account)
+// Supported currencies: BTC, USDT (on-chain crypto withdraw), ZAR (fiat via bank account)
 // Deployed with: supabase functions deploy ef_request_withdrawal  (JWT verification ON)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
-import { cryptoWithdraw, getMarketPrice } from "../_shared/valrClient.ts";
-import { convertUsdtToZar } from "../_shared/zarWithdrawal.ts";
-import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
+import { getMarketPrice } from "../_shared/valrClient.ts";
 import { sendEmail } from "../_shared/smtp.ts";
-import {
-  getWithdrawalSubmittedEmail,
-  getWithdrawalOutcomeEmail,
-} from "../_shared/email-templates.ts";
+import { getWithdrawalSubmittedEmail } from "../_shared/email-templates.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 // ── Environment ───────────────────────────────────────────────────────────────
@@ -295,13 +293,9 @@ Deno.serve(async (req) => {
 
   const portfolioId: string | null = exAcct?.portfolio_id ?? null;
 
-  // ── Step 5: Resolve VALR credentials ──────────────────────────────────────
-  let creds: { apiKey: string; apiSecret: string } | null = null;
-  let subaccountId: string | null = null;
+  // ── Step 5: Validate VALR credentials are resolvable (do not store creds) ─
   try {
-    const resolved = await resolveCustomerCredentials(sb, customerId);
-    creds = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret };
-    subaccountId = resolved.subaccountId;
+    await resolveCustomerCredentials(sb, customerId);
   } catch (e) {
     await logAlert(sb, "ef_request_withdrawal", "error", `Credential failure: ${(e as Error).message}`, { customerId }, ORG_ID, customerId);
     return json({ error: "Failed to resolve VALR credentials" }, 500);
@@ -414,7 +408,7 @@ Deno.serve(async (req) => {
       interim_fee_settled_btc: feeCalc.feeShortfallBtc,
       interim_fee_btc_price: feeCalc.btcSpotPrice > 0 ? feeCalc.btcSpotPrice : null,
       net_amount: netAmount,
-      source_asset: currency === "ZAR" ? (feeCalc.feeShortfallBtc > 0 ? "BTC+USDT" : "USDT") : currency,
+      source_asset: currency === "ZAR" ? null : currency, // queue processor will set BTC/USDT/BTC+USDT once it knows the conversion split
       valr_conversion_fee_usdt: currency === "ZAR" ? (amount / usdtzarRate) * valrConvFeeRate : null,
       valr_withdrawal_fee_zar: currency === "ZAR" ? valrWithdrawalFeeZar : null,
       is_first_free_withdrawal: null, // computed in calcValrZarFees implicitly
@@ -460,29 +454,12 @@ Deno.serve(async (req) => {
       .limit(1);
   }
 
-  // ── Step 16: Mark processing ──────────────────────────────────────────────
-  await sb
-    .schema("lth_pvr")
-    .from("withdrawal_requests")
-    .update({ status: "processing" })
-    .eq("request_id", requestId);
+  // ── Step 16: Send "Submission" email and return — queue handles VALR I/O ──
+  // Status remains 'pending' until ef_process_withdrawal_queue picks it up
+  // (runs every 5 min via pg_cron). The customer can still cancel while
+  // status='pending' (and conditionally while status='converting' if VALR
+  // shows zero fills on the conversion order).
 
-  // ── Step 17: Collect BTC interim fee portion (Option A) ───────────────────
-  if (feeCalc.feeShortfallBtc > 0 && !TEST_MODE) {
-    const btcFeeResult = await withdrawFeeFromCustomerAccount(
-      sb,
-      customerId,
-      "BTC",
-      feeCalc.feeShortfallBtc,
-      undefined,
-      "performance_fee",
-    );
-    if (!btcFeeResult.success) {
-      await logAlert(sb, "ef_request_withdrawal", "warn", `BTC fee transfer failed (non-blocking): ${btcFeeResult.errorMessage}`, { requestId, customerId, amount: feeCalc.feeShortfallBtc }, ORG_ID, customerId);
-    }
-  }
-
-  // ── Step 18: Send "Submission" email early (before VALR execution) ─────────
   const submittedTemplate = getWithdrawalSubmittedEmail(
     firstName, currency, amount, netAmount,
     feeCalc.performanceFeeUsdt, valrFeesDisplay, requestId,
@@ -490,107 +467,19 @@ Deno.serve(async (req) => {
   await sendEmail({
     to: customerEmail,
     from: FROM_EMAIL,
-    subject: "Your Withdrawal Request is Being Processed — BitWealth",
+    subject: "Your Withdrawal Request Has Been Received — BitWealth",
     html: submittedTemplate.html,
     text: submittedTemplate.text,
   }).catch((e: Error) => console.warn("Submission email failed:", e.message));
 
-  // ── Step 19: Execute withdrawal ────────────────────────────────────────────
-  let valrWithdrawalId: string | undefined;
-  let executionError: string | undefined;
-
-  try {
-    if (currency === "BTC" || currency === "USDT") {
-      // Direct crypto withdrawal via VALR
-      const wdRes: any = TEST_MODE
-        ? { id: "test-crypto-withdrawal-id" }
-        : await cryptoWithdraw(currency, amount.toFixed(currency === "BTC" ? 8 : 2), withdrawalAddress!, subaccountId, creds);
-      valrWithdrawalId = wdRes?.id ?? wdRes?.withdrawalId;
-    } else {
-      // ZAR: convert USDT → ZAR, then fiat withdraw
-      const usdtNeeded = amount / usdtzarRate;
-      const convResult = await convertUsdtToZar(
-        sb,
-        ORG_ID!,
-        requestId,
-        customerId,
-        usdtNeeded * (1 + valrConvFeeRate), // send slightly more to account for conversion fee
-        exchAcct!.bank_valr_id!,
-        amount - valrWithdrawalFeeZar, // net ZAR after withdrawal fee
-        withdrawalType === "fast",
-        subaccountId,
-        creds,
-        TEST_MODE,
-      );
-      if (!convResult.success) {
-        throw new Error(convResult.error ?? "ZAR conversion failed");
-      }
-      valrWithdrawalId = convResult.valrWithdrawalId;
-    }
-  } catch (e) {
-    executionError = (e as Error).message;
-  }
-
-  // ── Step 20: Update final status + send outcome email ─────────────────────
-  if (!executionError) {
-    await sb
-      .schema("lth_pvr")
-      .from("withdrawal_requests")
-      .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
-        valr_withdrawal_id: valrWithdrawalId,
-        processed_at: new Date().toISOString(),
-      })
-      .eq("request_id", requestId);
-
-    const completedTemplate = getWithdrawalOutcomeEmail(
-      firstName, currency, netAmount, "completed", new Date(), undefined, valrWithdrawalId,
-    );
-    await sendEmail({
-      to: customerEmail,
-      from: FROM_EMAIL,
-      subject: "Withdrawal Complete — BitWealth",
-      html: completedTemplate.html,
-      text: completedTemplate.text,
-    }).catch((e: Error) => console.warn("Outcome email failed:", e.message));
-
-    return json({
-      success: true,
-      request_id: requestId,
-      status: "completed",
-      valr_withdrawal_id: valrWithdrawalId,
-      net_amount: netAmount,
-      currency,
-    });
-  } else {
-    // Mark failed — do NOT revert HWM (fee was earned regardless of VALR status)
-    await sb
-      .schema("lth_pvr")
-      .from("withdrawal_requests")
-      .update({
-        status: "failed",
-        valr_response: { error: executionError },
-        processed_at: new Date().toISOString(),
-      })
-      .eq("request_id", requestId);
-
-    await logAlert(sb, "ef_request_withdrawal", "error", `Withdrawal execution failed: ${executionError}`, { requestId, customerId, currency, amount }, ORG_ID, customerId);
-
-    const failedTemplate = getWithdrawalOutcomeEmail(firstName, currency, netAmount, "failed", undefined, executionError);
-    await sendEmail({
-      to: customerEmail,
-      from: FROM_EMAIL,
-      subject: "Withdrawal Failed — BitWealth",
-      html: failedTemplate.html,
-      text: failedTemplate.text,
-    }).catch((e: Error) => console.warn("Failed outcome email failed:", e.message));
-
-    return json({
-      success: false,
-      request_id: requestId,
-      status: "failed",
-      error: executionError,
-    }, 500);
-  }
+  return json({
+    success: true,
+    request_id: requestId,
+    status: "pending",
+    currency,
+    amount,
+    net_amount: netAmount,
+    interim_performance_fee_usdt: feeCalc.performanceFeeUsdt,
+    message: "Withdrawal queued for processing. You will receive an email when it completes.",
+  });
 });

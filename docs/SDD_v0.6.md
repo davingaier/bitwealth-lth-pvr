@@ -9,6 +9,104 @@
 
 ## 0. Change Log
 
+### v0.6.81 – Withdrawal State Machine v2 (Async Auto-Execute)
+**Date:** 2026-05-02  
+**Purpose:** Make the customer-portal withdrawal flow non-blocking, cancellable, and observable. Replace the synchronous `ef_request_withdrawal` (which executed conversion + payout inline) with an asynchronous queue driven by a new 5-minute cron processor. Status semantics, alerting and the cancellation contract are now uniform across the Subaccount Model and the API Model.
+
+**Status:** ✅ COMPLETE (pending E2E test sign-off — see [docs/Withdrawal_Test_Cases.md](Withdrawal_Test_Cases.md)).
+
+#### State machine
+
+```
+pending ─→ converting ─→ paying_out ─→ completed
+   │            │              │
+   └─────┬──────┘              └──→ failed
+         ↓
+     cancelled
+```
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Intake row inserted by `ef_request_withdrawal`. No VALR side-effects yet. |
+| `converting` | (ZAR only) Queue placed LIMIT SELL(s) on USDTZAR / BTCZAR. Awaiting fills. |
+| `paying_out` | VALR `cryptoWithdraw` / `zarWithdraw` accepted; `valr_withdrawal_id` stored. Awaiting on-chain or banking settlement. |
+| `completed` | `ef_sync_valr_transactions` matched a corresponding `BLOCKCHAIN_SEND` / `FIAT_WITHDRAWAL` transaction in VALR history. |
+| `failed` | Any irrecoverable error along the path. `failure_reason` populated, `severity='error'` alert raised, failure email sent. |
+| `cancelled` | Customer cancelled while still cancellable (see Cancel contract). HWM reverted. |
+
+#### Schema changes (`withdrawal_state_machine_v2` migration)
+
+`lth_pvr.withdrawal_requests` extended:
+- New `status` CHECK: `pending|converting|paying_out|completed|failed|cancelled` (legacy `processing` rows mapped to `paying_out`).
+- New `source_asset` CHECK: `USDT|BTC|BTC+USDT|N/A` (queue may now defer assignment until conversion sizing).
+- New columns: `dispatched_at`, `cancellation_attempted_at`, `conversion_order_id_btc`, `conversion_order_id_usdt`, `usdt_sold`, `btc_sold`, `zar_received_from_usdt`, `zar_received_from_btc`, `failure_reason`, `queue_attempts INTEGER DEFAULT 0`.
+- Indexes: `idx_withdrawal_requests_status_currency`, `idx_withdrawal_requests_paying_out_lookup`.
+
+#### Edge functions
+
+| Function | Change |
+| --- | --- |
+| `ef_request_withdrawal` | **Refactored to pure intake.** Validates, snapshots HWM, sends submission email, inserts row with `status='pending'`, returns `{status:'pending'}` immediately. No VALR calls. |
+| `ef_process_withdrawal_queue` | **NEW.** 5-minute cron-driven state-machine driver. Picks up `pending` and `converting` rows in `requested_at` order (LIMIT 50). Routes by currency: crypto → `cryptoWithdraw` → `paying_out`; ZAR → place LIMIT SELLs (USDT-first, BTC direct shortfall) → on fills compute `payoutZar = min(grossZar - fees, requested netZar)` → `zarWithdraw` → `paying_out`. After 3 attempts on a `converting` ZAR row (~15 min), cancels stale LIMITs and replaces with MARKET orders (`customerOrderId` re-prefixed `wd-{usdt|btc}-mkt-{request_id}`). Errors → `markFailed()` (status, failure_reason, error alert, failure email). |
+| `ef_revert_withdrawal` | Status guard relaxed to allow `pending` OR `converting`. For `converting`: resolves customer credentials, calls `getOrderSummaryByCustomerOrderId` for each `conversion_order_id_*`. If any order shows `Filled` or `filledQty > 0` → returns HTTP **409** with explanatory reason; row stays `converting`. If all open with zero fills → calls `cancelOrderById` for each VALR order, then proceeds to HWM revert + `cancelled` + email. Always stamps `cancellation_attempted_at` (audit trail). Also fixed `first_name` → `first_names` in customer lookup. |
+| `ef_sync_valr_transactions` | Added per-customer settlement-detection block. For each `paying_out` row owned by the customer being synced, scans the freshly-fetched VALR transaction list for a matching `BLOCKCHAIN_SEND` (crypto) or `FIAT_WITHDRAWAL` (ZAR). Match precedence: VALR `withdrawalId` if known, else currency + amount within tolerance + occurred-at ≥ `processed_at`. On match → flips row to `completed` with `completed_at = matched.eventAt` and logs an info alert. |
+
+#### `pg_cron` schedule
+
+```
+SELECT cron.schedule(
+  'lthpvr_withdrawal_queue', '*/5 * * * *',
+  $$select lth_pvr.call_edge('ef_process_withdrawal_queue', '{}'::jsonb);$$
+);
+```
+
+#### UI changes
+
+**Customer portal (`website/customer-portal.html`)**
+- `renderWithdrawalHistory` now renders new statuses (`pending|converting|paying_out|completed|failed|cancelled`) with appropriate badges.
+- Cancel button shown when `status IN ('pending','converting')`.
+- `cancelWithdrawal()` now sends `{request_id, reason}` (was `{withdrawal_id}`) and surfaces HTTP 409 with: *"This withdrawal can no longer be cancelled — the conversion order has already been (partially) filled."*
+- Fixed long-standing column-name bugs: `withdrawal_id` → `request_id`, `gross_amount` → `amount_zar`/`amount_usdt`, `interim_fee_usdt` → `interim_performance_fee_usdt`, `error_message` → `failure_reason`.
+
+**Admin UI (`ui/Advanced BTC DCA Strategy.html` — Withdrawal History card)**
+- Row highlight simplified: only rows with `status='failed'` are highlighted yellow (the old "`processing` >30 min" rule is removed).
+- Status filter dropdown updated with new enum values.
+- Details modal extended with: Source Asset, Failure Reason, Dispatched at, Conversion Order IDs (USDT/BTC), Queue Attempts.
+- Retry button on failed rows now resets `status='pending'`, clears `failure_reason`, zeroes `queue_attempts` so the queue picks the row up on its next pass.
+
+#### Cancel contract (operational reference)
+
+| Status when Cancel is clicked | Outcome |
+| --- | --- |
+| `pending` | Always succeeds. HWM reverted, row → `cancelled`, email sent. |
+| `converting`, all conversion orders open with zero fills | Server cancels VALR orders, then succeeds as above. |
+| `converting`, any conversion order partially or fully filled | HTTP 409 with reason. Row remains `converting`; queue will continue. |
+| `paying_out` | Cancel button hidden in UI; direct call returns 409. (VALR withdrawal already in flight.) |
+| `completed` / `failed` / `cancelled` | 409 — terminal. |
+
+#### Files changed
+
+- `supabase/functions/ef_request_withdrawal/index.ts` (refactored)
+- `supabase/functions/ef_process_withdrawal_queue/index.ts` (new, ~430 LOC)
+- `supabase/functions/ef_revert_withdrawal/index.ts` (extended)
+- `supabase/functions/ef_sync_valr_transactions/index.ts` (extended)
+- `website/customer-portal.html` (render + cancel + column fixes)
+- `ui/Advanced BTC DCA Strategy.html` (status filter, badges, details modal, retry, drop 30-min rule)
+- Migration `withdrawal_state_machine_v2` (applied)
+- Migration `withdrawal_queue_processor_cron` (applied — `lthpvr_withdrawal_queue` job)
+- `docs/Withdrawal_Test_Cases.md` (new — 32 cases TC-W01…TC-W32)
+
+#### Deployment
+
+```powershell
+supabase functions deploy ef_request_withdrawal           --project-ref wqnmxpooabmedvtackji
+supabase functions deploy ef_process_withdrawal_queue     --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_revert_withdrawal            --project-ref wqnmxpooabmedvtackji
+supabase functions deploy ef_sync_valr_transactions       --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
+
 ### v0.6.80 – Admin UI: Bug Fixes Round 2 (Logo, Inputs, Strategy Preselect)
 **Date:** 2026-04-21  
 **Purpose:** Follow-up polish pass after browser testing — input heights, Strategy Setup preselection, logo update.

@@ -3861,7 +3861,8 @@
             <select id="wdStatusFilter" class="context-select" style="height:32px;">
               <option value="">All Statuses</option>
               <option value="pending">⏳ Pending</option>
-              <option value="processing">🔄 Processing</option>
+              <option value="converting">🔄 Converting</option>
+              <option value="paying_out">💸 Paying Out</option>
               <option value="completed">✅ Completed</option>
               <option value="failed">❌ Failed</option>
               <option value="cancelled">⊘ Cancelled</option>
@@ -11699,7 +11700,8 @@
     function statusBadge(status) {
       const cfg = {
         pending:    { icon: '⏳', bg: '#e5e7eb', color: '#374151' },
-        processing: { icon: '🔄', bg: '#dbeafe', color: '#1e40af' },
+        converting: { icon: '🔄', bg: '#dbeafe', color: '#1e40af' },
+        paying_out: { icon: '💸', bg: '#ede9fe', color: '#5b21b6' },
         completed:  { icon: '✅', bg: '#d1fae5', color: '#065f46' },
         failed:     { icon: '❌', bg: '#fee2e2', color: '#991b1b' },
         cancelled:  { icon: '⊘',  bg: '#fef3c7', color: '#92400e' },
@@ -11717,18 +11719,16 @@
         return;
       }
 
-      const now = Date.now();
       tableBody.innerHTML = filtered.map(w => {
         const cd = w.customer_details;
         const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
         const reqDate = new Date(w.requested_at).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' });
-        const amount = Number(w.gross_amount ?? w.amount_requested ?? 0).toFixed(2);
-        const net    = Number(w.net_amount ?? w.amount_requested ?? 0).toFixed(2);
+        const grossRaw = w.currency === 'ZAR' ? w.amount_zar : w.amount_usdt;
+        const amount = Number(grossRaw ?? 0).toFixed(w.currency === 'BTC' ? 8 : 2);
+        const net    = Number(w.net_amount ?? grossRaw ?? 0).toFixed(w.currency === 'BTC' ? 8 : 2);
 
-        // Highlight: failed more than 30 min ago
-        const isStuck = w.status === 'failed' ||
-          (w.status === 'processing' && (now - new Date(w.requested_at).getTime()) > 30 * 60_000);
-        const rowStyle = isStuck ? 'background:#fff3cd;' : '';
+        // Plain "failed" highlight (drops the old >30min stuck-processing rule)
+        const rowStyle = w.status === 'failed' ? 'background:#fff3cd;' : '';
 
         return `
           <tr style="${rowStyle}">
@@ -11739,12 +11739,12 @@
             <td style="text-align:right;font-size:.9em;">${net}</td>
             <td>${statusBadge(w.status)}</td>
             <td style="white-space:nowrap;">
-              <button onclick="window.viewWithdrawalDetails('${w.withdrawal_id}')"
+              <button onclick="window.viewWithdrawalDetails('${w.request_id}')"
                       style="padding:.3rem .55rem;font-size:.8em;border:1px solid #6c757d;background:#fff;border-radius:4px;cursor:pointer;">
                 👁 Details
               </button>
               ${w.status === 'failed' ? `
-                <button onclick="window.retryWithdrawal('${w.withdrawal_id}')"
+                <button onclick="window.retryWithdrawal('${w.request_id}')"
                         style="padding:.3rem .55rem;font-size:.8em;border:none;background:#dc3545;color:#fff;border-radius:4px;cursor:pointer;margin-left:.3rem;">
                   ↺ Retry
                 </button>` : ''}
@@ -11794,13 +11794,14 @@
     }
 
     // Details modal
-    window.viewWithdrawalDetails = function(withdrawalId) {
-      const w = allWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+    window.viewWithdrawalDetails = function(requestId) {
+      const w = allWithdrawals.find(x => x.request_id === requestId);
       if (!w) return;
 
       const cd = w.customer_details;
       const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
       const valrJson = w.valr_response ? JSON.stringify(w.valr_response, null, 2) : 'None';
+      const grossRaw = w.currency === 'ZAR' ? w.amount_zar : w.amount_usdt;
 
       const modalHtml = `
         <div id="wdDetailModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;">
@@ -11808,17 +11809,24 @@
             <h3 style="margin:0 0 16px 0;color:#1e3a8a;">💸 Withdrawal Details</h3>
             <table style="width:100%;font-size:.9em;border-collapse:collapse;">
               ${[
-                ['ID', w.withdrawal_id],
+                ['Request ID', w.request_id],
                 ['Customer', `${fname} (${cd?.email || ''})`],
                 ['Currency', w.currency],
-                ['Gross Amount', w.gross_amount ?? w.amount_requested],
-                ['Fee', w.fee_amount ?? '—'],
+                ['Gross Amount', grossRaw ?? '—'],
+                ['Perf. Fee (USDT)', w.interim_performance_fee_usdt ?? '—'],
                 ['Net Amount', w.net_amount ?? '—'],
+                ['Source Asset', w.source_asset ?? '—'],
                 ['Status', w.status],
+                ['Failure Reason', w.failure_reason ?? '—'],
                 ['Requested', new Date(w.requested_at).toLocaleString('en-ZA')],
+                ['Dispatched', w.dispatched_at ? new Date(w.dispatched_at).toLocaleString('en-ZA') : '—'],
                 ['Processed', w.processed_at ? new Date(w.processed_at).toLocaleString('en-ZA') : '—'],
+                ['Completed', w.completed_at ? new Date(w.completed_at).toLocaleString('en-ZA') : '—'],
                 ['VALR Withdrawal ID', w.valr_withdrawal_id ?? '—'],
-                ['Destination', w.destination_address ?? w.bank_account_id ?? '—'],
+                ['Conversion Order (USDT)', w.conversion_order_id_usdt ?? '—'],
+                ['Conversion Order (BTC)', w.conversion_order_id_btc ?? '—'],
+                ['Destination', w.crypto_address ?? w.bank_account_id ?? '—'],
+                ['Queue Attempts', w.queue_attempts ?? 0],
               ].map(([k, v]) => `
                 <tr style="border-bottom:1px solid #f3f4f6;">
                   <td style="padding:.4rem;font-weight:600;color:#374151;width:40%;">${k}</td>
@@ -11842,36 +11850,25 @@
       document.body.insertAdjacentHTML('beforeend', modalHtml);
     };
 
-    // Retry failed withdrawal
-    window.retryWithdrawal = async function(withdrawalId) {
-      const w = allWithdrawals.find(x => x.withdrawal_id === withdrawalId);
+    // Retry failed withdrawal: reset status back to 'pending' so the queue picks it up.
+    window.retryWithdrawal = async function(requestId) {
+      const w = allWithdrawals.find(x => x.request_id === requestId);
       if (!w) return;
       const cd = w.customer_details;
       const fname = cd ? `${cd.first_names} ${cd.last_name}` : `Customer ${w.customer_id}`;
 
-      if (!confirm(`Retry failed withdrawal for ${fname}?\n\nThis will call ef_request_withdrawal again with the same parameters.`)) return;
+      if (!confirm(`Re-queue failed withdrawal for ${fname}?\n\nThis will reset status to 'pending'. The 5-minute processor will retry on its next run.`)) return;
 
       try {
-        showMsg(`Retrying withdrawal for ${fname}…`, 'info');
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_request_withdrawal`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || SUPABASE_PUBLISHABLE_KEY}`
-          },
-          body: JSON.stringify({
-            withdrawal_id: withdrawalId,
-            retry: true
-          })
-        });
-        const result = await response.json();
-        if (response.ok && result.success) {
-          showMsg(`✓ Retry submitted for ${fname}`, 'success');
-          setTimeout(loadWithdrawals, 2000);
-        } else {
-          showMsg(`Retry failed: ${result.error || result.message || 'Unknown error'}`, 'error');
-        }
+        showMsg(`Re-queuing withdrawal for ${fname}…`, 'info');
+        const { error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('withdrawal_requests')
+          .update({ status: 'pending', failure_reason: null, queue_attempts: 0 })
+          .eq('request_id', requestId);
+        if (error) throw error;
+        showMsg(`✓ Withdrawal re-queued for ${fname}`, 'success');
+        setTimeout(loadWithdrawals, 1500);
       } catch (err) {
         showMsg(`Error: ${err.message}`, 'error');
       }
