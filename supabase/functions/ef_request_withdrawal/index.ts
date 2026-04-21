@@ -426,8 +426,8 @@ Deno.serve(async (req) => {
     .single();
 
   if (wdInsErr || !wdRecord) {
-    await logAlert(sb, "ef_request_withdrawal", "error", `Failed to create withdrawal record: ${wdInsErr?.message}`, { customerId, currency, amount }, ORG_ID, customerId);
-    return json({ error: "Failed to create withdrawal request" }, 500);
+    await logAlert(sbLthPvr, "ef_request_withdrawal", "error", `Failed to create withdrawal record: ${wdInsErr?.message}`, { customerId, currency, amount }, ORG_ID, customerId);
+    return json({ error: `Failed to create withdrawal request: ${wdInsErr?.message ?? "unknown"}` }, 500);
   }
 
   const requestId: string = wdRecord.request_id;
