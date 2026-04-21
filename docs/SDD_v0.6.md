@@ -3,11 +3,82 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-20 (v0.6.72)
+**Last updated:** 2026-04-21 (v0.6.73)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.73 – Std DCA Recompute, BTC Price Carry-Back & Performance Chart Polish
+**Date:** 2026-04-21  
+**Purpose:** (1) Properly compute the Standard DCA benchmark from deposits + prices instead of carrying forward a flat balance. (2) Make BTC price always reflect the prior day's close (used for today's trade). (3) Visual polish on customer-portal performance charts.
+
+**Status:** ✅ COMPLETE
+
+---
+
+#### 1 — Standard DCA Recompute (`lth_pvr.recompute_std_dca_balances`)
+
+**Problem:** `std_dca_balances_daily` was being carried forward as a flat USDT balance with 0 BTC — it never reflected the actual standard DCA strategy.
+
+**Solution:** New SQL function `lth_pvr.recompute_std_dca_balances(p_customer_id, p_org_id)` that:
+
+1. Wipes existing `std_dca_balances_daily` rows for the customer.
+2. Walks forward day by day from the first `topup` deposit to today.
+3. For each deposit, splits the amount evenly across **remaining days in the deposit's month** (deposit_date + 1 → last day of month).
+4. Each daily buy:
+   - Charges an **8 bps exchange fee** (configurable in function as `fee_rate`).
+   - Buys BTC at the **prior day's closing price** from `ci_bands_daily`.
+5. Records end-of-day `btc_balance`, `usdt_balance`, `nav_usd` for each day.
+
+**Verified for customer 49** ($17,950.20 deposited 2026-04-18):
+- Days in period (Apr 19 → Apr 30) = 12 days
+- Daily buy = $1,495.85 (gross), $1,494.65 net of 8 bps fee
+- Apr 19 BTC purchased = $1,494.65 / $75,730.99 = **0.01973635 BTC** ✅
+
+**Integration:** `lth_pvr.carry_forward_daily_balances()` now invokes `recompute_std_dca_balances()` for every active customer on each run. Idempotent.
+
+**Migrations:**
+- `add_recompute_std_dca_balances`
+- `carry_forward_invokes_std_dca_recompute`
+
+---
+
+#### 2 — BTC Price = Prior Day's Close
+
+**Problem:** All trades are based on the previous day's BTC closing price, but `get_customer_performance_data()` was joining `ci_bands_daily ON ci.date = b.date` (exact match), causing today's row to show `$0` until tomorrow's bands are fetched.
+
+**Fix:** Changed the join in `get_customer_performance_data()` to a `LEFT JOIN LATERAL` selecting the most recent `ci_bands_daily` row where `cb.date < b.date`. This guarantees each balance date displays the prior day's BTC price.
+
+**Migration:** `fix_perf_data_use_prior_day_price`
+
+---
+
+#### 3 — Customer Portal Chart Visual Polish
+
+**Changes in `website/customer-portal.html`:**
+
+| Change | Before | After |
+|--------|--------|-------|
+| Standard DCA line color | `#6B7896` (dark blue-grey) | `#cbd5e1` (light grey, better contrast) |
+| Contributions line color | `#334155` (dark slate) | `#000000` (solid black) |
+| Contributions line style | Dashed `[8,4]`, `borderWidth: 1` | Solid, `borderWidth: 2` (matches LTH PVR NAV) |
+| NAV with Buy/Sell/Hold line | `borderWidth: 2`, no points | `borderWidth: 4`, **colored point dots** (green=buy, red=sell, grey=hold) |
+
+Applies to both the Benchmarks chart and the Asset Holdings chart.
+
+---
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `website/customer-portal.html` | `PERF_COLORS` updated; benchmarks `Contributions` made solid black borderWidth 2; signals chart thickened + per-point dots |
+| Migration: `fix_perf_data_use_prior_day_price` | RPC now uses prior-day price via `LEFT JOIN LATERAL` |
+| Migration: `add_recompute_std_dca_balances` | New SQL function for proper Std DCA computation |
+| Migration: `carry_forward_invokes_std_dca_recompute` | `carry_forward_daily_balances()` invokes recompute per active customer |
+
+---
 
 ### v0.6.72 – Daily Balance Carry-Forward & Zoom Plugin Fix
 **Date:** 2026-04-20  

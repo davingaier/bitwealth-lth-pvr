@@ -2010,8 +2010,8 @@
         let perfData = null;      // Raw data from RPC
         let perfChart = null;     // Chart.js instance
         const PERF_COLORS = {
-            lthPvr: '#FFB400', stdDca: '#6B7896', hodl: '#a855f7',
-            btcPrice: '#FF8C00', contributions: '#334155', navGreen: '#10b981',
+            lthPvr: '#FFB400', stdDca: '#cbd5e1', hodl: '#a855f7',
+            btcPrice: '#FF8C00', contributions: '#000000', navGreen: '#10b981',
             btcHolding: '#ef4444', usdtHolding: '#3b82f6',
             buy: '#10b981', sell: '#ef4444', hold: '#64748b'
         };
@@ -2134,16 +2134,22 @@
                     { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
                     { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
                     { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
-                    { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [8,4] }
+                    { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 }
                 ];
             } else if (sub === 'signals') {
-                // Color each segment by decision
+                // Color each segment by decision; mark each point with a colored dot
                 const segColors = daily.map(d => d.action === 'buy' ? PERF_COLORS.buy : d.action === 'sell' ? PERF_COLORS.sell : PERF_COLORS.hold);
+                const ptColors  = daily.map(d => d.action === 'buy' ? PERF_COLORS.buy : d.action === 'sell' ? PERF_COLORS.sell : PERF_COLORS.hold);
                 datasets = [{
                     label: 'NAV (colored by signal)',
                     data: daily.map(d => d.nav_usd),
                     segment: { borderColor: ctx2 => segColors[ctx2.p0DataIndex] || PERF_COLORS.hold },
-                    borderWidth: 2, pointRadius: 0, tension: 0.3
+                    borderWidth: 4,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: ptColors,
+                    pointBorderColor: ptColors,
+                    tension: 0.3
                 }];
             } else if (sub === 'sizes') {
                 // NAV line with buy/sell bubbles
@@ -2194,7 +2200,7 @@
             const datasets = [
                 { label: 'BTC Price', data: daily.map(d => d.btc_price), borderColor: PERF_COLORS.btcPrice, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
                 { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.navGreen, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
-                { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 1, pointRadius: 0, tension: 0.3, borderDash: [8,4] },
+                { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 2, pointRadius: 0, tension: 0.3 },
                 { label: 'BTC Balance', data: daily.map(d => d.btc_balance || 0), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'transparent', yAxisID: 'yBtc', borderWidth: 2, pointRadius: 0, tension: 0.3 },
                 { label: 'USDT Balance', data: daily.map(d => d.usdt_balance || 0), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
             ];
