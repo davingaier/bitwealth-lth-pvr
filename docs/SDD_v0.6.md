@@ -3,11 +3,183 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-21 (v0.6.80)
+**Last updated:** 2026-04-22 (v0.6.82)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.82 – ZAR-First Withdrawal Sizing, Queue Hardening & Admin RLS Fix
+**Date:** 2026-04-22  
+**Purpose:** Three interrelated improvements: (1) queue safety hardening after a retry-loop incident that produced duplicate VALR sell orders; (2) ZAR-wallet-first sizing so available ZAR is consumed before converting USDT/BTC; (3) RLS policy allowing org admins to view all customers' withdrawal history in the Admin UI.
+
+**Status:** ✅ COMPLETE (deployed).
+
+---
+
+#### Part A — Queue Safety Hardening
+
+**Incident:** A schema-client misconfiguration caused the queue to silently fail status updates, creating a retry loop that placed 7 duplicate VALR SELL orders across 109 queue attempts for a single withdrawal row.
+
+**Root cause analysis:**
+
+| # | Root cause | Fix |
+|---|---|---|
+| 1 | `.schema("lth_pvr").update()` in supabase-js v2 does **not** reliably set the `Content-Profile` header for writes — the row status was never updated, so the row kept being re-processed. | All writes in `ef_process_withdrawal_queue` now use a dedicated `sbLthPvr` client initialised with `{ db: { schema: "lth_pvr" } }` — no `.schema()` chaining for writes. |
+| 2 | `wr_source_asset_check` constraint rejected `'BTC+USDT'`, causing a DB error on multi-leg rows. The error was silently swallowed; the row status remained `pending`. | Migration `fix_wr_status_and_source_asset_checks` extended both CHECK constraints to include all new values (see below). |
+| 3 | No idempotency check before placing VALR orders — each queue pass placed a fresh order. | Added pre-flight `getOrderSummaryByCustomerOrderId` probe. If an order already exists for `wd-usdt-{request_id}` / `wd-btc-{request_id}`, the queue re-uses it instead of creating a new one. |
+| 4 | No retry cap — the queue could loop indefinitely. | `MAX_QUEUE_ATTEMPTS = 6`. On the 7th pass the row is auto-failed (`markFailed()`) and a `critical` severity alert is raised. |
+| 5 | `getOrderBook` used wrong VALR path (`/v1/marketdata/…`) returning HTTP 403. | Fixed to public path `/v1/public/{pair}/orderbook`. |
+
+**Schema fixes (migration `fix_wr_status_and_source_asset_checks`):**
+```sql
+alter table lth_pvr.withdrawal_requests
+  drop constraint if exists wr_status_check,
+  add constraint wr_status_check check (
+    status in ('pending','converting','paying_out','completed','failed','cancelled')
+  );
+alter table lth_pvr.withdrawal_requests
+  drop constraint if exists wr_source_asset_check,
+  add constraint wr_source_asset_check check (
+    source_asset is null or
+    source_asset in ('USDT','BTC','BTC+USDT','ZAR','N/A')
+  );
+```
+
+**`ef_process_withdrawal_queue` hardening summary:**
+- `const sbLthPvr = createClient(URL, KEY, { db: { schema: "lth_pvr" } })` — all writes use this client.
+- `processZarPending`: idempotency probe before each `placeLimitOrder`; each `conversion_order_id_*` persisted immediately after VALR accepts the order (persist-on-place).
+- `processZarConverting`: same idempotency approach for market fallback leg.
+- `MAX_QUEUE_ATTEMPTS = 6` — auto-fail + critical alert.
+- Trace diagnostic array returned in `response.details` for debugging.
+
+---
+
+#### Part B — ZAR-First Withdrawal Sizing
+
+**Purpose:** When a customer's VALR account already holds a ZAR wallet balance (e.g. from prior BTC→ZAR conversions or deposits), that balance should be consumed **first** before selling USDT or BTC, reducing conversion fees and slippage.
+
+##### New helpers — `supabase/functions/_shared/valrClient.ts`
+
+| Helper | Signature | Description |
+|---|---|---|
+| `getAccountBalances` | `(subaccountId, credentials) → Array<{currency,available,…}>` | Calls VALR `GET /v1/account/balances` with HMAC auth and subaccount header. |
+| `pickAvailable` | `(balances, currency) → number` | Extracts `Number(row?.available ?? 0)` for the given currency symbol. |
+
+##### `ef_process_withdrawal_queue` — `processZarPending` rewrite
+
+New sizing flow (replaces USDT-first sizing):
+
+```
+1. Fetch live VALR ZAR wallet balance  (getAccountBalances / pickAvailable)
+2. zarFromWallet = min(targetZar, availZar)
+3. remainingZar  = max(0, targetZar − zarFromWallet)
+4. if remainingZar == 0:
+     → zarWithdraw(targetZar, source_asset='ZAR')   [no converting state]
+     → return
+5. else:
+     → size USDT sell against remainingZar  (USDT-first)
+     → size BTC  sell against shortfall       (BTC-direct)
+     → persist status=converting, source_asset based on which legs are non-zero
+     → place LIMIT orders (with idempotency probe)
+```
+
+`source_asset` taxonomy:
+
+| Value | Meaning |
+|---|---|
+| `'ZAR'` | Full amount covered by wallet — no conversion needed |
+| `'USDT'` | Only USDT sell required |
+| `'BTC'` | Only BTC sell required |
+| `'BTC+USDT'` | Both legs required |
+
+##### `ef_process_withdrawal_queue` — `processZarConverting` payout fix
+
+The old payout formula `min(grossZar − fees, netZar)` under-paid because `grossZar` (sum of SELL fill proceeds) only covered `remainingZar`, not `targetZar` — the wallet portion was excluded.
+
+New approach:
+1. After both SELL legs fill, re-fetch the live VALR ZAR balance (`getAccountBalances`).
+2. `payoutZar = min(targetZar − fee, availZarNow − fee)`  
+   — guaranteed ≥ `targetZar − fee` if fills landed correctly; capped by actual wallet to prevent overdraw on price slippage.
+
+##### `ef_request_withdrawal` — capacity check update
+
+Capacity for ZAR withdrawals now includes live wallet ZAR:
+```
+capacity = availableZarWallet + (withdrawableUsdt × usdtzarRate) + (withdrawableBtc × btczarRate)
+```
+- Imports `getAccountBalances`, `pickAvailable` from `_shared/valrClient.ts`.
+- Credentials are now captured (not discarded) at Step 5 for reuse in the balance probe.
+- VALR balance probe is non-fatal (falls back to 0 if it fails).
+- Error messages itemise each component (ZAR wallet / USDT / BTC).
+
+##### Customer portal (`website/customer-portal.html`) — estimator update
+
+- `withdrawableBalance` now carries a `zar` field, populated by calling the `valr-balances` edge function when the Withdrawals section loads.
+- Total ZAR-equivalent display ("Available to withdraw") includes wallet ZAR.
+- `recalculateZarEstimate()` uses ZAR-wallet-first breakdown:
+  - "What you need" shows: `R{x} ZAR (wallet) + N USDT + M BTC` as applicable.
+  - Conversion fee is applied only to the USDT/BTC legs (no fee on wallet ZAR).
+- `submitWithdrawal()` client-side capacity gate includes wallet ZAR; error message itemises each leg.
+
+##### DB migration — `extend_wr_source_asset_check_zar`
+
+```sql
+alter table lth_pvr.withdrawal_requests
+  drop constraint if exists wr_source_asset_check;
+alter table lth_pvr.withdrawal_requests
+  add constraint wr_source_asset_check
+  check (source_asset is null or source_asset in ('USDT','BTC','BTC+USDT','ZAR','N/A'));
+```
+
+---
+
+#### Part C — Admin UI: Withdrawal History RLS Fix
+
+**Problem:** The Withdrawal History card in the Administration module showed "No withdrawals" because the only SELECT policy on `lth_pvr.withdrawal_requests` was `wr_authenticated_select`, which filters to the authenticated user's own `customer_id`. The admin session belongs to a user who has no withdrawal rows of their own, so all rows were filtered out.
+
+**Fix (migration `wr_org_admin_select`):**
+```sql
+create policy wr_org_admin_select
+  on lth_pvr.withdrawal_requests
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.customer_details cd
+      join public.org_members om
+        on om.org_id = cd.org_id
+       and om.user_id = auth.uid()
+       and om.role in ('owner','admin')
+      where cd.customer_id = withdrawal_requests.customer_id
+    )
+  );
+```
+Any `owner` or `admin` member of the org can now read all withdrawal rows for customers in that org. The existing per-customer self-service policy (`wr_authenticated_select`) is unchanged.
+
+---
+
+#### Files changed
+
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/valrClient.ts` | Fixed `getOrderBook` endpoint; added `getAccountBalances`, `pickAvailable` |
+| `supabase/functions/ef_process_withdrawal_queue/index.ts` | Schema-client fix; idempotency probe; `MAX_QUEUE_ATTEMPTS=6`; ZAR-first sizing in `processZarPending`; ZAR-only early-return path; live-balance payout in `processZarConverting` |
+| `supabase/functions/ef_request_withdrawal/index.ts` | Imports `getAccountBalances`/`pickAvailable`; captures credentials for balance probe; capacity includes live ZAR wallet |
+| `website/customer-portal.html` | `withdrawableBalance.zar` via `valr-balances` call; ZAR-wallet-first estimator; capacity gate includes wallet ZAR |
+| Migration `fix_wr_status_and_source_asset_checks` | Extended `wr_status_check` and `wr_source_asset_check` constraints |
+| Migration `extend_wr_source_asset_check_zar` | Added `'ZAR'` to `wr_source_asset_check` |
+| Migration `wr_org_admin_select` | New SELECT policy for org admins on `lth_pvr.withdrawal_requests` |
+
+#### Deployment
+
+```powershell
+supabase functions deploy ef_process_withdrawal_queue --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_request_withdrawal       --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+
+---
 
 ### v0.6.81 – Withdrawal State Machine v2 (Async Auto-Execute)
 **Date:** 2026-05-02  
