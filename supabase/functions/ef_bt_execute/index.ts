@@ -296,11 +296,29 @@ Deno.serve(async (req)=>{
     let stdExchangeFeesBtcCum = 0;  // VALR BTC/USDT fees
     let stdExchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees
     let stdFirstContribDate = null;
+    // HODL benchmark state — single lump-sum buy on day 1, never sells, never adds.
+    // Lump sum = upfront + monthly x distinct_months_in_prices_window. Same VALR
+    // exchange fees as Std DCA (18 bps conversion + 8 bps trading), no BitWealth fees.
+    const hodlMonthCount = (() => {
+      const months = new Set();
+      for (const r of prices) months.add(String(r.close_date).slice(0, 7));
+      return months.size;
+    })();
+    const hodlLumpSumGross = toNum(upfront, 0) + toNum(monthly, 0) * hodlMonthCount;
+    let hodlBtcBal = 0;
+    let hodlContribGrossCum = 0;
+    let hodlContribFeeCum = 0;
+    let hodlContribNetCum = 0;
+    let hodlExchangeFeesBtcCum = 0;
+    let hodlExchangeFeesUsdtCum = 0;
+    let hodlFirstContribDate = null;
     const resultsDaily = [];
     const ledgerRows = [];
     const orderRows = [];
     const stdBalances = [];
     const stdLedger = [];
+    const hodlBalances = [];
+    const hodlLedger = [];
     let lthState = {
       bear_pause: false,
       was_above_p1: false,
@@ -412,6 +430,8 @@ Deno.serve(async (req)=>{
     await sbBt.from("bt_orders").delete().eq("bt_run_id", bt_run_id);
     await sbBt.from("bt_std_dca_balances").delete().eq("bt_run_id", bt_run_id);
     await sbBt.from("bt_std_dca_ledger").delete().eq("bt_run_id", bt_run_id);
+    await sbBt.from("bt_hodl_balances").delete().eq("bt_run_id", bt_run_id);
+    await sbBt.from("bt_hodl_ledger").delete().eq("bt_run_id", bt_run_id);
     // Main loop over CI close_date (simulation date)
     for(let i = 0; i < prices.length; i++){
       const row = prices[i];
@@ -452,6 +472,35 @@ Deno.serve(async (req)=>{
             btc_bought: btcNet,
             price_used: px,
             fee_btc: feeBtc
+          });
+        }
+      }
+      // HODL benchmark: single lump-sum buy on day 1 (i === 0) only.
+      // Lump sum = upfront + monthly x months_in_window. Same VALR fees as Std DCA.
+      if (i === 0 && hodlLumpSumGross > 0 && px > 0) {
+        const hodlExchangeFeeUsdt = hodlLumpSumGross * contribFeeRate;  // VALR USDT/ZAR fee
+        const hodlNetUsdt = hodlLumpSumGross - hodlExchangeFeeUsdt;
+        if (hodlNetUsdt > 0) {
+          const hodlTradeBtcGross = hodlNetUsdt / px;
+          const hodlFeeBtc = hodlTradeBtcGross * tradeFeeRate;          // VALR BTC/USDT fee
+          const hodlBtcNet = hodlTradeBtcGross - hodlFeeBtc;
+          hodlBtcBal += hodlBtcNet;
+          hodlContribGrossCum += hodlLumpSumGross;
+          hodlContribFeeCum += hodlExchangeFeeUsdt;
+          hodlContribNetCum += hodlNetUsdt;
+          hodlExchangeFeesUsdtCum += hodlExchangeFeeUsdt;
+          hodlExchangeFeesBtcCum += hodlFeeBtc;
+          hodlFirstContribDate = tradeDate;
+          hodlLedger.push({
+            bt_run_id,
+            org_id,
+            trade_date: tradeDate,
+            close_date: closeDate,
+            usdt_spent: hodlNetUsdt,
+            btc_bought: hodlBtcNet,
+            price_used: px,
+            fee_btc: hodlFeeBtc,
+            fee_usdt: hodlExchangeFeeUsdt
           });
         }
       }
@@ -689,6 +738,26 @@ Deno.serve(async (req)=>{
         total_exchange_fees_btc: stdExchangeFeeBtcToday,
         total_exchange_fees_usdt: stdExchangeFeeUsdtToday
       });
+      // HODL benchmark daily mark-to-market
+      const hodlNav = hodlBtcBal * px;
+      const hodlRoi = computeRoi(hodlNav, hodlContribGrossCum);
+      const hodlCagr = computeCagr(hodlNav, hodlContribGrossCum, hodlFirstContribDate, tradeDate);
+      hodlBalances.push({
+        bt_run_id,
+        org_id,
+        close_date: closeDate,
+        trade_date: tradeDate,
+        btc_balance: hodlBtcBal,
+        usdt_balance: 0,
+        nav_usd: hodlNav,
+        contrib_gross_usdt_cum: hodlContribGrossCum,
+        contrib_fee_usdt_cum: hodlContribFeeCum,
+        contrib_net_usdt_cum: hodlContribNetCum,
+        total_roi_percent: hodlRoi,
+        cagr_percent: hodlCagr,
+        total_exchange_fees_btc: hodlExchangeFeesBtcCum,
+        total_exchange_fees_usdt: hodlExchangeFeesUsdtCum
+      });
     }
     // Persist all results
     await bulkInsert(sbBt, "bt_ledger", ledgerRows);
@@ -696,8 +765,11 @@ Deno.serve(async (req)=>{
     await bulkInsert(sbBt, "bt_results_daily", resultsDaily);
     await bulkInsert(sbBt, "bt_std_dca_ledger", stdLedger);
     await bulkInsert(sbBt, "bt_std_dca_balances", stdBalances);
+    await bulkInsert(sbBt, "bt_hodl_ledger", hodlLedger);
+    await bulkInsert(sbBt, "bt_hodl_balances", hodlBalances);
     const lastDaily = resultsDaily[resultsDaily.length - 1];
     const lastStd = stdBalances[stdBalances.length - 1];
+    const lastHodl = hodlBalances[hodlBalances.length - 1];
     await sbBt.from("bt_runs").update({
       status: "ok",
       finished_at: new Date().toISOString(),
@@ -713,6 +785,12 @@ Deno.serve(async (req)=>{
         final_nav_usd: lastStd.nav_usd,
         final_roi_percent: lastStd.total_roi_percent,
         final_cagr_percent: lastStd.cagr_percent
+      } : null,
+      hodl: lastHodl ? {
+        final_nav_usd: lastHodl.nav_usd,
+        final_roi_percent: lastHodl.total_roi_percent,
+        final_cagr_percent: lastHodl.cagr_percent,
+        total_contrib_gross_usdt: lastHodl.contrib_gross_usdt_cum
       } : null
     };
     return new Response(JSON.stringify({

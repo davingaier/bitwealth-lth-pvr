@@ -275,6 +275,17 @@ Deno.serve(async (req) => {
       daily: firstResult.std_dca_daily
     } : null;
 
+    // Hoist hodl benchmark from first result (same for all variations)
+    const hodl = firstResult ? {
+      final_nav_usd: firstResult.hodl_final_nav_usd,
+      final_roi_percent: firstResult.hodl_final_roi_percent,
+      final_cagr_percent: firstResult.hodl_final_cagr_percent,
+      max_drawdown_percent: firstResult.hodl_max_drawdown_percent,
+      sharpe_ratio: firstResult.hodl_sharpe_ratio,
+      total_contrib_gross_usdt: firstResult.hodl_total_contrib_gross_usdt,
+      daily: firstResult.hodl_daily
+    } : null;
+
     // Return results
     return new Response(
       JSON.stringify({
@@ -288,6 +299,7 @@ Deno.serve(async (req) => {
           monthly_usd
         },
         std_dca,
+        hodl,
         results
       }),
       {

@@ -181,6 +181,16 @@ export interface SimulationResult {
   std_dca_sharpe_ratio: number;
   std_dca_total_contrib_gross_usdt: number;
   std_dca_daily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[];
+
+  // HODL benchmark (lump-sum buy-and-hold: deposit the FULL scheduled contribution PV on day 1,
+  // pay the same VALR exchange fees (contrib + trade) once, never sell. No platform/performance fees.)
+  hodl_final_nav_usd: number;
+  hodl_final_roi_percent: number;
+  hodl_final_cagr_percent: number;
+  hodl_max_drawdown_percent: number;
+  hodl_sharpe_ratio: number;
+  hodl_total_contrib_gross_usdt: number;
+  hodl_daily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[];
 }
 
 // =============================================================================
@@ -356,6 +366,15 @@ export function runSimulation(
   let stdFirstContribDate: string | null = null;
   const stdDcaDaily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[] = [];
 
+  // HODL benchmark state (lump-sum on day 1 = sum of upfront + all scheduled monthly contributions,
+  // same exchange fees as other strategies, never sells, no platform/performance fees).
+  // Total contributions = upfront + monthly_usd × number_of_months_in_window.
+  // We compute the month count from the financial window (sim_start_date → end of ciData).
+  let hodlBtcBal = 0;
+  let hodlContribGrossCum = 0;
+  let hodlFirstContribDate: string | null = null;
+  const hodlDaily: { trade_date: string; nav_usd: number; contrib_gross_usdt_cum: number; }[] = [];
+
   const daily: DailyResult[] = [];
   const ledger: LedgerEntry[] = [];
   
@@ -371,6 +390,16 @@ export function runSimulation(
   const financialRows = simStartDate
     ? ciData.filter(r => r.close_date >= simStartDate)
     : ciData;
+
+  // Pre-compute HODL lump-sum: upfront + (monthly × number of distinct months in financial window).
+  // This represents the total nominal cash an investor would deposit on day 1 to replicate the
+  // scheduled contribution stream of the LTH PVR / Std DCA participants.
+  const hodlMonthCount = (() => {
+    const months = new Set<string>();
+    for (const r of financialRows) months.add(r.close_date.slice(0, 7));
+    return months.size;
+  })();
+  const hodlLumpSumUsdt = (params.upfront_usd ?? 0) + (params.monthly_usd ?? 0) * hodlMonthCount;
 
   for (let i = 0; i < financialRows.length; i++) {
     const row = financialRows[i];
@@ -405,6 +434,19 @@ export function runSimulation(
         stdBtcBal += stdTradeBtcGross - stdFeeBtc;
         stdContribGrossCum += grossContribToday;
         if (!stdFirstContribDate) stdFirstContribDate = tradeDate;
+      }
+    }
+
+    // --- HODL benchmark: single lump-sum buy on day 1, then never trades again ---
+    if (i === 0 && hodlLumpSumUsdt > 0 && px > 0) {
+      const hodlExchangeFee = hodlLumpSumUsdt * contribFeeRate;
+      const hodlNet = hodlLumpSumUsdt - hodlExchangeFee;
+      if (hodlNet > 0) {
+        const hodlTradeBtcGross = hodlNet / px;
+        const hodlFeeBtc = hodlTradeBtcGross * tradeFeeRate;
+        hodlBtcBal += hodlTradeBtcGross - hodlFeeBtc;
+        hodlContribGrossCum += hodlLumpSumUsdt;
+        hodlFirstContribDate = tradeDate;
       }
     }
 
@@ -669,6 +711,13 @@ export function runSimulation(
       nav_usd: stdBtcBal * px,
       contrib_gross_usdt_cum: stdContribGrossCum
     });
+
+    // HODL daily NAV (lump-sum was bought on day 0; just mark-to-market)
+    hodlDaily.push({
+      trade_date: tradeDate,
+      nav_usd: hodlBtcBal * px,
+      contrib_gross_usdt_cum: hodlContribGrossCum
+    });
   }
   
   // Calculate final metrics
@@ -690,6 +739,24 @@ export function runSimulation(
     }
   }
   const stdSharpe = stdMaxDrawdown > 0 ? stdFinalCagr / stdMaxDrawdown : 0;
+
+  // Compute HODL summary metrics (lump-sum on day 1, never sold).
+  // Note: ROI/CAGR are measured against the lump-sum nominal cash deposit
+  // (= upfront + monthly × months), so apples-to-apples vs the other strategies.
+  const hodlLastDay = hodlDaily[hodlDaily.length - 1];
+  const hodlFinalNav = hodlLastDay?.nav_usd ?? 0;
+  const hodlFinalRoi = hodlContribGrossCum > 0 ? (hodlFinalNav / hodlContribGrossCum - 1) * 100 : 0;
+  const hodlFinalCagr = computeCagr(hodlFinalNav, hodlContribGrossCum, hodlFirstContribDate, hodlLastDay?.trade_date ?? "");
+  let hodlPeak = 0;
+  let hodlMaxDrawdown = 0;
+  for (const d of hodlDaily) {
+    if (d.nav_usd > hodlPeak) hodlPeak = d.nav_usd;
+    if (hodlPeak > 0) {
+      const dd = (hodlPeak - d.nav_usd) / hodlPeak * 100;
+      if (dd > hodlMaxDrawdown) hodlMaxDrawdown = dd;
+    }
+  }
+  const hodlSharpe = hodlMaxDrawdown > 0 ? hodlFinalCagr / hodlMaxDrawdown : 0;
   
   // Debug logging: Compare first 5 and last 5 days
   console.log("🔬 Simulator Debug - First 5 days:");
@@ -753,7 +820,16 @@ export function runSimulation(
     std_dca_max_drawdown_percent: stdMaxDrawdown,
     std_dca_sharpe_ratio: stdSharpe,
     std_dca_total_contrib_gross_usdt: stdContribGrossCum,
-    std_dca_daily: stdDcaDaily
+    std_dca_daily: stdDcaDaily,
+
+    // HODL benchmark (lump-sum on day 1, never sold)
+    hodl_final_nav_usd: hodlFinalNav,
+    hodl_final_roi_percent: hodlFinalRoi,
+    hodl_final_cagr_percent: hodlFinalCagr,
+    hodl_max_drawdown_percent: hodlMaxDrawdown,
+    hodl_sharpe_ratio: hodlSharpe,
+    hodl_total_contrib_gross_usdt: hodlContribGrossCum,
+    hodl_daily: hodlDaily
   };
 }
 
