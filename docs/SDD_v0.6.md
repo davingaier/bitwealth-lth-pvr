@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-22 (v0.6.82)
+**Last updated:** 2026-04-22 (v0.6.83)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.83 – Persistent ZAR Balance Tracking (Option A)
+**Date:** 2026-04-22  
+**Purpose:** Promote ZAR from an unrecorded by-product of conversions to a first-class asset balance with the same audit trail as BTC and USDT, eliminating residual-cash leaks (e.g. ~R59 stranded after a partial ZAR withdrawal) and silencing duplicate "deposit received" emails.
+
+**Status:** ✅ COMPLETE (deployed).
+
+**Root cause:** `lth_pvr.balances_daily` only tracked `btc_balance` and `usdt_balance`; ZAR conversion proceeds were skipped in `ef_post_ledger_and_balances`. Withdrawable-ZAR capacity therefore depended on a live VALR wallet probe, which (a) drifted from system-of-record values, (b) caused `ef_sync_valr_transactions` to misclassify conversion proceeds as new deposits and emit "deposit received" emails for every BTC/USDT→ZAR sell.
+
+**Schema changes** (migration `add_zar_balance_and_amount_zar`):
+- `lth_pvr.balances_daily.zar_balance numeric(38,2) default 0`
+- `lth_pvr.ledger_lines.amount_zar numeric(38,2) default 0`
+
+**RPC** (`lth_pvr.get_withdrawable_balance`): now returns `recorded_zar` and `withdrawable_zar` alongside BTC/USDT (drop-and-recreate due to changed return signature).
+
+**Edge functions:**
+- `ef_post_ledger_and_balances`: writes ZAR funding events into `ledger_lines.amount_zar` and rolls them into `balances_daily.zar_balance`. `nav_usd` deliberately excludes ZAR to avoid a daily USDTZAR rate dependency.
+- `ef_request_withdrawal`: now reads `withdrawable_zar` from the RPC instead of probing VALR live; capacity = `withdrawable_zar + (withdrawable_usdt × usdtzar) + (withdrawable_btc × btczar)`. Removes `getAccountBalances`/`pickAvailable`/credential resolution from the request path.
+- `ef_sync_valr_transactions`: email gate widened to suppress "deposit received" notifications for any conversion proceeds (`fundingKind === "zar_balance" || metadata.zar_deposit_id || metadata.conversion_from`). DEPLOYED earlier in session.
+
+**UI:**
+- `website/customer-portal.html`: withdrawable-balance card now shows `R{zar_balance}` as a first-class line. The live VALR probe is retained only as a drift detector (logs a warning) — recorded balance is the source of truth for sizing.
+
+**Backfill:** Historical ZAR funding events (`exchange_funding_events.asset='ZAR'`) replayed into `ledger_lines` via insert-where-not-exists; cumulative ZAR delta then re-applied to every `balances_daily` row using a window sum. Customer 31 verified: `zar_balance=159.52` reconciles to recorded events (R87.61 USDT sell + R71.91 BTC sells + R100 deposit − R100 withdrawal).
+
+**Known limitation:** Unrecorded ZAR internal transfers (e.g. a R25 transfer not synced into `exchange_funding_events`) cause drift between recorded `zar_balance` and the live VALR wallet. The portal logs this drift to the browser console; resolution is out of scope and tracked separately under transaction-sync coverage.
+
+---
 
 ### v0.6.82 – ZAR-First Withdrawal Sizing, Queue Hardening & Admin RLS Fix
 **Date:** 2026-04-22  

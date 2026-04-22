@@ -898,9 +898,18 @@ Deno.serve(async (req) => {
               console.log(`  ✅ Created funding event: ${fundingKind} ${amount} ${currency}`);
               newTransactions++;
 
-              // Send email notification for deposits (only for ACTIVE customers, not conversions)
-              // Exclude ZAR→USDT conversions (which have zar_deposit_id) to avoid confusing customers
-              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email && !metadata.zar_deposit_id) {
+              // Send email notification for deposits (only for ACTIVE customers).
+              // Suppress for any conversion proceeds — these are internal balance shuffling
+              // triggered by withdrawal sizing or ZAR→USDT conversions, NOT customer deposits.
+              // Suppression rules (any one is sufficient):
+              //   - fundingKind === "zar_balance"           → BTC/USDT → ZAR proceeds (withdrawal sizing)
+              //   - metadata.zar_deposit_id is set          → legacy ZAR → USDT conversion linkage
+              //   - metadata.conversion_from is set         → any cross-asset conversion proceeds
+              const isConversionProceeds =
+                fundingKind === "zar_balance" ||
+                !!metadata.zar_deposit_id ||
+                !!metadata.conversion_from;
+              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && customer.email && !isConversionProceeds) {
                 try {
                   const depositDate = new Date(timestamp).toLocaleDateString("en-ZA", { 
                     year: "numeric", 

@@ -9,8 +9,7 @@
 // Deployed with: supabase functions deploy ef_request_withdrawal  (JWT verification ON)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
-import { getMarketPrice, getAccountBalances, pickAvailable } from "../_shared/valrClient.ts";
+import { getMarketPrice } from "../_shared/valrClient.ts";
 import { sendEmail } from "../_shared/smtp.ts";
 import { getWithdrawalSubmittedEmail } from "../_shared/email-templates.ts";
 import { logAlert } from "../_shared/alerting.ts";
@@ -294,17 +293,7 @@ Deno.serve(async (req) => {
 
   const portfolioId: string | null = exAcct?.portfolio_id ?? null;
 
-  // ── Step 5: Resolve VALR credentials (kept for live balance probe below) ──
-  let valrCreds: { apiKey: string; apiSecret: string; subaccountId: string | null };
-  try {
-    const c = await resolveCustomerCredentials(sbLthPvr, customerId);
-    valrCreds = { apiKey: c.apiKey, apiSecret: c.apiSecret, subaccountId: c.subaccountId };
-  } catch (e) {
-    await logAlert(sbLthPvr, "ef_request_withdrawal", "error", `Credential failure: ${(e as Error).message}`, { customerId }, ORG_ID, customerId);
-    return json({ error: `Failed to resolve VALR credentials: ${(e as Error).message}` }, 500);
-  }
-
-  // ── Step 6: Fetch withdrawable balance ────────────────────────────────────
+  // ── Step 5: Fetch withdrawable balance ────────────────────────────────────
   const { data: balData, error: balErr } = await sb
     .schema("lth_pvr")
     .rpc("get_withdrawable_balance", { p_customer_id: customerId });
@@ -314,29 +303,20 @@ Deno.serve(async (req) => {
   const bal = Array.isArray(balData) ? balData[0] : balData;
   const withdrawableBtc = Number(bal.withdrawable_btc ?? 0);
   const withdrawableUsdt = Number(bal.withdrawable_usdt ?? 0);
+  const withdrawableZar  = Number(bal.withdrawable_zar  ?? 0);
   const navUsd = Number(bal.total_usd ?? 0);
 
-  // ── Step 7: Live USDTZAR + BTCZAR rates + live ZAR wallet balance ZAR-path
-  // ZAR withdrawals are funded ZAR-wallet-first, then USDT, then BTC — capacity
-  // must consider all three legs.
+  // ── Step 7: Live USDTZAR + BTCZAR rates (for ZAR-equivalent capacity calc) ─
+  // ZAR-wallet capacity is sourced from get_withdrawable_balance (system of record)
+  // — never from a live VALR probe — so customers can only spend funds we have booked.
   let usdtzarRate = 0;
   let btczarRate  = 0;
-  let availableZarWallet = 0;
   if (currency === "ZAR") {
     try {
       usdtzarRate = TEST_MODE ? 18.50      : await getMarketPrice("USDTZAR");
       btczarRate  = TEST_MODE ? 1_500_000  : await getMarketPrice("BTCZAR");
     } catch (e) {
       return json({ error: `Cannot fetch live ZAR rates: ${(e as Error).message}` }, 502);
-    }
-    try {
-      if (!TEST_MODE) {
-        const valrBalances = await getAccountBalances(valrCreds.subaccountId, valrCreds);
-        availableZarWallet = pickAvailable(valrBalances, "ZAR");
-      }
-    } catch (e) {
-      // Non-fatal — fall back to assuming zero ZAR in wallet
-      console.warn(`ef_request_withdrawal: VALR ZAR balance probe failed: ${(e as Error).message}`);
     }
   }
 
@@ -352,14 +332,14 @@ Deno.serve(async (req) => {
   } else if (currency === "ZAR") {
     const usdtCapZar  = withdrawableUsdt * usdtzarRate;
     const btcCapZar   = withdrawableBtc  * btczarRate;
-    const withdrawableZar = availableZarWallet + usdtCapZar + btcCapZar;
-    if (amount > withdrawableZar) {
+    const totalZarCapacity = withdrawableZar + usdtCapZar + btcCapZar;
+    if (amount > totalZarCapacity) {
       const parts: string[] = [];
-      if (availableZarWallet > 0) parts.push(`ZAR wallet: R${availableZarWallet.toFixed(2)}`);
-      if (usdtCapZar > 0)         parts.push(`USDT: R${usdtCapZar.toFixed(2)}`);
-      if (btcCapZar > 0)          parts.push(`BTC: R${btcCapZar.toFixed(2)}`);
+      if (withdrawableZar > 0) parts.push(`ZAR wallet: R${withdrawableZar.toFixed(2)}`);
+      if (usdtCapZar > 0)      parts.push(`USDT: R${usdtCapZar.toFixed(2)}`);
+      if (btcCapZar > 0)       parts.push(`BTC: R${btcCapZar.toFixed(2)}`);
       return json({
-        error: `Amount R${amount.toFixed(2)} exceeds withdrawable capacity of R${withdrawableZar.toFixed(2)} (${parts.join(' + ') || 'no funds'}).`,
+        error: `Amount R${amount.toFixed(2)} exceeds withdrawable capacity of R${totalZarCapacity.toFixed(2)} (${parts.join(' + ') || 'no funds'}).`,
       }, 422);
     }
   }

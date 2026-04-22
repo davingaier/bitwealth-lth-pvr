@@ -427,7 +427,8 @@
                             <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: baseline;">
                                 <div><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdBtcBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">BTC</span></div>
                                 <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">$</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdtBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
-                                <div><span style="font-size: 17px; color: var(--text-secondary);">≈ R</span><span style="font-size: 17px; font-weight: 600; color: var(--text-secondary);" id="wdZarEquiv">--</span> <span style="font-size: 12px; color: var(--text-secondary);">ZAR equiv.</span></div>
+                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">R</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdZarBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">ZAR</span></div>
+                                <div><span style="font-size: 17px; color: var(--text-secondary);">≈ R</span><span style="font-size: 17px; font-weight: 600; color: var(--text-secondary);" id="wdZarEquiv">--</span> <span style="font-size: 12px; color: var(--text-secondary);">total ZAR equiv.</span></div>
                                 <div style="margin-left: auto; font-size: 12px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 2px;">Rate: <span style="color: #93c5fd; font-weight: 600;" id="wdLiveRate">--</span> <span style="opacity:0.7;">USDT/ZAR (live)</span></div>
                             </div>
                         </div>
@@ -1640,11 +1641,14 @@
                 // Load withdrawable balance
                 const { data: wb } = await sb.schema('lth_pvr').rpc('get_withdrawable_balance', { p_customer_id: customerId });
                 if (wb && wb.length > 0) {
-                    withdrawableBalance.btc = parseFloat(wb[0].withdrawable_btc || 0);
+                    withdrawableBalance.btc  = parseFloat(wb[0].withdrawable_btc  || 0);
                     withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
+                    withdrawableBalance.zar  = parseFloat(wb[0].withdrawable_zar  || 0);
                 }
-                // Probe live VALR ZAR wallet balance (already-converted ZAR is consumed first
-                // by the withdrawal queue, so capacity must include it).
+                // Optional live-VALR probe — only used to detect drift between recorded balance
+                // and the actual VALR ZAR wallet (e.g. unsynced internal transfers). The recorded
+                // value from get_withdrawable_balance remains the source of truth for sizing and
+                // capacity checks so the customer can never spend funds we have not yet booked.
                 try {
                     const { data: { session } } = await sb.auth.getSession();
                     const balResp = await fetch(`${SUPABASE_URL}/functions/v1/valr-balances`, {
@@ -1654,14 +1658,18 @@
                     });
                     if (balResp.ok) {
                         const balJson = await balResp.json();
-                        const zarAvail = parseFloat(balJson?.zar?.available ?? 0);
-                        if (!Number.isNaN(zarAvail) && zarAvail > 0) withdrawableBalance.zar = zarAvail;
+                        const zarLive = parseFloat(balJson?.zar?.available ?? 0);
+                        if (!Number.isNaN(zarLive) && Math.abs(zarLive - withdrawableBalance.zar) > 1) {
+                            console.warn(`ZAR drift detected: recorded R${withdrawableBalance.zar.toFixed(2)} vs VALR R${zarLive.toFixed(2)}`);
+                        }
                     }
                 } catch { /* non-critical */ }
                 const btcEl = document.getElementById('wdBtcBalance');
                 const usdtEl = document.getElementById('wdUsdtBalance');
-                if (btcEl) btcEl.textContent = withdrawableBalance.btc.toFixed(8);
+                const zarEl  = document.getElementById('wdZarBalance');
+                if (btcEl)  btcEl.textContent  = withdrawableBalance.btc.toFixed(8);
                 if (usdtEl) usdtEl.textContent = withdrawableBalance.usdt.toFixed(2);
+                if (zarEl)  zarEl.textContent  = withdrawableBalance.zar.toFixed(2);
 
                 // Fetch live USDTZAR + BTCZAR for total ZAR-equivalent display (CoinGecko — CORS safe).
                 // ZAR withdrawals can sell from USDT first and then from BTC direct (BTCZAR),

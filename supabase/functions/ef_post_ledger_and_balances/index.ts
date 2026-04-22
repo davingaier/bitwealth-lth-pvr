@@ -367,10 +367,27 @@ Deno.serve(async (req: Request) => {
             amountUsdt = amount;
           }
         } else if (asset === "ZAR") {
-          // ZAR transactions (zar_deposit, zar_balance, zar_withdrawal) are informational only
-          // They track fiat movement but don't affect crypto ledger balances
-          // Crypto withdrawals are recorded separately via paired USDT/BTC withdrawal events
-          console.log(`  ℹ️  Skipping ZAR transaction (informational only): ${kind} ${amount} ZAR`);
+          // ZAR funding events (zar_deposit, zar_balance, zar_withdrawal) update the
+          // customer's ZAR wallet balance. The funding event amount is already signed:
+          //   +ve  → ZAR in   (customer EFT, conversion proceeds)
+          //   -ve  → ZAR out  (fiat withdrawal)
+          // No platform/exchange fee handling on the ZAR leg — fees are charged on the
+          // crypto leg of any conversion (recorded separately via the paired BTC/USDT line).
+          toInsertFunding.push({
+            org_id,
+            customer_id: f.customer_id,
+            trade_date: tradeDate,
+            kind: amount >= 0 ? "topup" : "withdrawal",
+            amount_btc: 0,
+            amount_usdt: 0,
+            amount_zar: amount,
+            fee_btc: 0,
+            fee_usdt: 0,
+            platform_fee_btc: 0,
+            platform_fee_usdt: 0,
+            note,
+            ...(f.metadata ? { conversion_metadata: f.metadata } : {}),
+          });
           continue;
         } else {
           console.warn("Skipping funding event with unsupported asset", f);
@@ -1075,7 +1092,7 @@ Deno.serve(async (req: Request) => {
           // previous balance
           const { data: prevRows, error: prevErr } = await sb
             .from("balances_daily")
-            .select("btc_balance, usdt_balance")
+            .select("btc_balance, usdt_balance, zar_balance")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .lt("date", dateStr)
@@ -1095,12 +1112,12 @@ Deno.serve(async (req: Request) => {
           }
 
           const prev =
-            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number };
+            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number, zar_balance: 0 as number };
 
           // today deltas (including fees)
           const { data: sums, error: sumsErr } = await sb
             .from("ledger_lines")
-            .select("amount_btc, amount_usdt, fee_btc, fee_usdt")
+            .select("amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .eq("trade_date", dateStr);
@@ -1119,18 +1136,23 @@ Deno.serve(async (req: Request) => {
 
           let dBtc = 0,
             dUsdt = 0,
+            dZar = 0,
             fBtc = 0,
             fUsdt = 0;
 
           for (const s of (sums ?? []) as any[]) {
             dBtc += Number(s.amount_btc ?? 0);
             dUsdt += Number(s.amount_usdt ?? 0);
+            dZar += Number(s.amount_zar ?? 0);
             fBtc += Number(s.fee_btc ?? 0);
             fUsdt += Number(s.fee_usdt ?? 0);
           }
 
           const btc = Number(prev.btc_balance ?? 0) + dBtc - fBtc;
           const usdt = Number(prev.usdt_balance ?? 0) + dUsdt - fUsdt;
+          const zar = Number(prev.zar_balance ?? 0) + dZar;
+          // ZAR is tracked separately from nav_usd to avoid needing a daily USDT/ZAR rate.
+          // Reporting layers can convert ZAR → USD on demand if a unified NAV is required.
           const nav = btc * px + usdt;
 
           const { error: upErr } = await sb.from("balances_daily").upsert(
@@ -1140,6 +1162,7 @@ Deno.serve(async (req: Request) => {
               date: dateStr,
               btc_balance: btc,
               usdt_balance: usdt,
+              zar_balance: zar,
               nav_usd: nav,
             },
             { onConflict: "org_id,customer_id,date" },
