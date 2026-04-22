@@ -182,7 +182,7 @@
                             </div>
                         </div>
 
-                        <div class="stat-box" id="zarTile" style="display: none;">
+                        <div class="stat-box" id="zarTile">
                             <div class="stat-header">
                                 <span>Cash (ZAR)
                                     <span title="South African customers can deposit and withdraw in ZAR. ZAR balances are not part of the LTH PVR strategy and are excluded from portfolio performance metrics." style="cursor: help; color: var(--text-secondary); margin-left: 4px; font-size: 12px;">ⓘ</span>
@@ -1134,13 +1134,12 @@
                     document.getElementById('btcUsd').textContent = btcPrice > 0 ? `@ $${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}` : '--';
                     document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
-                    // ZAR tile — only show for customers that have a ZAR balance recorded.
+                    // ZAR tile — always shown so the 5-up grid stays consistent;
+                    // displays R0,00 when the customer has no ZAR balance.
                     const zarTile = document.getElementById('zarTile');
-                    if (zar !== 0) {
+                    if (zarTile) {
                         zarTile.style.display = '';
                         document.getElementById('zarValue').textContent = `R${zar.toLocaleString('en-ZA', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                    } else {
-                        zarTile.style.display = 'none';
                     }
                     
                     // Load accrued fees and split BTC/USDT into the corresponding asset tile.

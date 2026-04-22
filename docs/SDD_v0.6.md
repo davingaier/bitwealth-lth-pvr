@@ -3,11 +3,119 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-22 (v0.6.84)
+**Last updated:** 2026-04-23 (v0.6.85)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.85 – Support Ticket System + Dashboard Tile Polish
+**Date:** 2026-04-23  
+**Purpose:** Ship a full in-product support workflow (customer ticket creation, threaded messaging, admin inbox with SLA tracking) and resolve four dashboard polish issues raised during portal validation.
+
+**Status:** ✅ COMPLETE (deployed).
+
+---
+
+#### Part A — Support Ticket System (Phases 1–3)
+
+**Goal:** Replace ad-hoc email-based support with a system-of-record ticketing workflow that covers all 12 customer-facing concern categories (account/login, KYC, bank account, VALR exchange, deposits, withdrawals, trading strategy, fees/statements, performance/reporting, compliance/privacy, bug report, other).
+
+##### Schema (migration `support_tickets_schema`, `public` schema)
+
+| Object | Purpose |
+|---|---|
+| `public.support_tickets` | Ticket header. Columns: `ticket_id uuid PK`, `ticket_number text unique` (format `SUP-YYYY-000001`), `org_id`, `customer_id`, `category`, `priority` (low/normal/high/urgent), `subject`, `status` (open/in_progress/waiting_customer/resolved/closed), `assigned_to uuid → auth.users.id`, `context jsonb` (page, user_agent, account_model snapshot), `source`, `first_response_at`, `resolved_at`, `closed_at`, `created_at`, `updated_at`. |
+| `public.support_ticket_messages` | Thread entries. Columns: `message_id uuid PK`, `ticket_id`, `author_id`, `author_role` (customer/admin/system), `body`, `attachments jsonb`, `is_internal boolean` (admin-only notes), `created_at`. |
+| `public.support_ticket_seq` | Per-year sequence backing `next_support_ticket_number()`. |
+
+**Triggers:**
+- `support_tickets_touch` — maintains `updated_at`; stamps `resolved_at` / `closed_at` on status transitions.
+- `support_messages_after_insert` — stamps `first_response_at` on the first admin reply; auto-flips status (`open → in_progress` on admin reply, `waiting_customer|resolved → in_progress` on customer reply).
+
+**RLS helpers (security definer):**
+- `public.is_org_admin(uuid) → boolean` — `org_members.role IN ('admin','owner')`.
+- `public.is_ticket_owner(bigint) → boolean` — joins `customer_details.email|email_address` to `auth.users.email` (no direct `user_id` column on `customer_details`).
+
+**RLS policies:**
+- Customers see own tickets; cannot see `is_internal=true` messages; can insert messages on their own tickets only.
+- Org admins see/modify all tickets in their org.
+
+**RPCs:**
+- `list_support_tickets(p_status, p_priority, p_category, p_limit)` — returns tickets with customer name/email, message count, and SLA `age_seconds`.
+- `get_support_ticket(p_ticket_id)` — returns `{ticket, messages}` jsonb (filters internal messages for non-admin callers).
+- `next_support_ticket_number()` — returns `SUP-2026-000123` style identifier from `support_ticket_seq`.
+
+##### Storage
+
+Bucket `support-attachments` (private), 10MB per-file cap, MIME whitelist: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `application/pdf`, `text/plain`, `application/zip`. Path layout: `tickets/<ticket_id>/<filename>`.
+
+RLS on `storage.objects`:
+- Customers may upload/read objects under `tickets/<ticket_id>/…` only when `is_ticket_owner(ticket_id)` returns true.
+- Org admins have full read/write within their org's tickets.
+
+##### Edge Functions (all deployed with `--no-verify-jwt`; functions validate Bearer JWT internally)
+
+| Function | Responsibility |
+|---|---|
+| `ef_create_support_ticket` | Validates category/priority/subject (3–200 chars)/description (5–10 000). Resolves customer by `user.email` matching `customer_details.email|email_address`. Generates `ticket_number`. Inserts header + first message. Sends customer ack email (`sendHTMLEmail`) and admin notification to `SUPPORT_ADMIN_EMAIL` (default `info@bitwealth.co.za`). Posts Slack alert via `SLACK_SUPPORT_WEBHOOK` for `urgent` priority. Auto-attaches `{user_agent, ip_hint, page, account_model}` to `context`. |
+| `ef_post_ticket_reply` | Resolves `author_role` from session — admin if caller is `org_members.role IN (admin,owner)` for the ticket's org; otherwise customer if email matches. Customers cannot post `is_internal=true`. Sends notification email to the other party (admins get reply email; customers get email with portal deep link). |
+| `ef_update_support_ticket` | Admin-only bulk update (status, priority, assigned_to, category). Validates caller is admin in every affected ticket's org. Writes a system audit message on status change. Optional `notify_customer` flag emails the customer when status changes. Substitutes `assigned_to: '__me__'` with the calling `user.id` for self-assign. |
+
+##### UI
+
+**Customer portal — `website/customer-portal.html`:**
+- New 🛟 **Support** sidebar nav item.
+- Ticket list table with status/priority badges and SLA age.
+- **New Ticket modal** — 12-category dropdown, priority selector, subject (3–200 chars), description (5–10 000), multi-file upload (max 3 × 10MB) uploaded to the `support-attachments` bucket before ticket creation.
+- **Thread modal** — chat-style timeline (oldest → newest), reply composer, attachment download.
+- Calls `sb.rpc('list_support_tickets')` and `sb.rpc('get_support_ticket')`; POSTs to edge functions with the user's Bearer JWT.
+
+**Admin UI — `ui/Advanced BTC DCA Strategy.html`:**
+- Top-nav 🛟 **Support** badge (`#supportBadge`) showing active ticket count, refreshes every 60s.
+- New `#support-module` with:
+  - Filters: status (default `active` = open + in_progress + waiting_customer), priority, category, free-text search.
+  - Inbox table (9 columns: select, Ticket, Customer, Subject, Cat., Priority, Status, SLA, Last activity).
+  - Detail panel: status/priority dropdowns, customer-context aside, full thread, reply composer with **internal note** checkbox.
+  - Bulk actions: mark resolved, close, assign-to-me.
+- SLA targets per priority: urgent 4h / high 8h / normal 24h / low 72h. Badge colour shifts from green → amber → red as the unanswered ticket ages past the target.
+
+##### Security & Operational Notes
+
+- All customer-side reads/writes are gated by RLS policies that resolve identity through `auth.users.email`. No code path trusts a client-supplied `customer_id`.
+- Internal notes are filtered out at the RPC layer (`get_support_ticket`) in addition to the storage RLS, providing defence-in-depth against accidental client-side leakage.
+- Email notifications use the existing `supabase/functions/_shared/smtp.ts` (`sendHTMLEmail`) — no new SMTP dependency.
+
+---
+
+#### Part B — Dashboard Tile Polish
+
+Four UX issues addressed in `website/customer-portal.html`:
+
+1. **BTC/USDT cards now display total holdings** (recorded balance) rather than only the strategy-allocated portion, matching customer expectation that the cards represent the full wallet.
+2. **Stat grid widened to 5 columns** (`grid-template-columns: repeat(5, minmax(0,1fr))`) with reduced padding/font in an inline `<style>` to preserve a single-row layout: NAV · BTC · USDT · Cash (ZAR) · Strategy Return (TWR).
+3. **Total Invested** in the Strategy Metrics panel now correctly nets withdrawals from deposits (was previously gross deposits).
+4. **Withdrawal History column header** "Actions" renamed to **"Details"** to better reflect the click-through behaviour (open detail modal — no destructive actions exposed).
+
+---
+
+#### Part C — Cash (ZAR) Tile: Always Visible
+
+**Issue:** The Cash (ZAR) card was hidden via `display:none` whenever `recorded_zar === 0`, leaving an empty grid slot in column 4 (TWR floated alone in column 5). Visible to customers with USDT-only balances such as customer 49 (Tremyne Naidoo).
+
+**Fix:** Removed the conditional hide in `loadDashboard()`. The tile now always renders (`R0,00` for customers with no ZAR), keeping the 5-up grid layout consistent across all customer dashboards. The default `style="display:none"` was also removed from the tile's markup so first-paint matches steady-state.
+
+```js
+// website/customer-portal.html — loadDashboard()
+const zarTile = document.getElementById('zarTile');
+if (zarTile) {
+    zarTile.style.display = '';
+    document.getElementById('zarValue').textContent =
+        `R${zar.toLocaleString('en-ZA', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+}
+```
+
+---
 
 ### v0.6.84 – Balance Reconciliation: Conversion Outflows + ZAR Internal Transfers
 **Date:** 2026-04-22  
