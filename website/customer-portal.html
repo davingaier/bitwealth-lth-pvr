@@ -123,22 +123,13 @@
                     <div class="dashboard-stats" id="dashboardStats" style="display: none;">
                         <div class="stat-box">
                             <div class="stat-header">
-                                <span>Net Asset Value</span>
+                                <span>Net Asset Value
+                                    <span title="Net Asset Value reflects the BTC + USDT held by the LTH PVR strategy (which trades the BTC/USDT pair). ZAR balances and cash deposits/withdrawals are excluded from all portfolio performance metrics." style="cursor: help; color: var(--text-secondary); margin-left: 4px; font-size: 12px;">ⓘ</span>
+                                </span>
                                 <span class="stat-icon">💰</span>
                             </div>
                             <div class="stat-value" id="navValue">$0.00</div>
                             <div class="stat-change neutral" id="navChange">--</div>
-                            <div id="accruedFeesDisplay" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: var(--text-secondary);">
-                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees:</div>
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                                    <span>Platform Fee</span>
-                                    <span id="accruedPlatformFee" style="color: #f59e0b; font-weight: 600;">--</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between;">
-                                    <span>Performance Fee</span>
-                                    <span id="accruedPerformanceFee" style="color: #f59e0b; font-weight: 600;">--</span>
-                                </div>
-                            </div>
                         </div>
 
                         <div class="stat-box">
@@ -148,6 +139,17 @@
                             </div>
                             <div class="stat-value" id="btcValue">0.00000000</div>
                             <div class="stat-change neutral" id="btcUsd">--</div>
+                            <div id="btcAccruedFeesDisplay" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: var(--text-secondary);">
+                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees (BTC):</div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span>Platform Fee</span>
+                                    <span id="btcAccruedPlatformFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Performance Fee</span>
+                                    <span id="btcAccruedPerformanceFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="stat-box">
@@ -157,11 +159,35 @@
                             </div>
                             <div class="stat-value" id="usdtValue">$0.00</div>
                             <div class="stat-change neutral">Cash reserves</div>
+                            <div id="usdtAccruedFeesDisplay" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; color: var(--text-secondary);">
+                                <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-secondary);">Accrued Fees (USDT):</div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span>Platform Fee</span>
+                                    <span id="usdtAccruedPlatformFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>Performance Fee</span>
+                                    <span id="usdtAccruedPerformanceFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="stat-box" id="zarTile" style="display: none;">
+                            <div class="stat-header">
+                                <span>Cash (ZAR)
+                                    <span title="South African customers can deposit and withdraw in ZAR. ZAR balances are not part of the LTH PVR strategy and are excluded from portfolio performance metrics." style="cursor: help; color: var(--text-secondary); margin-left: 4px; font-size: 12px;">ⓘ</span>
+                                </span>
+                                <span class="stat-icon">🇿🇦</span>
+                            </div>
+                            <div class="stat-value" id="zarValue">R0.00</div>
+                            <div class="stat-change neutral" style="font-size: 11px; font-style: italic;">Excluded from strategy performance</div>
                         </div>
 
                         <div class="stat-box">
                             <div class="stat-header">
-                                <span>Total Returns</span>
+                                <span>Strategy Return (TWR)
+                                    <span title="Time-Weighted Return measures strategy performance independently of deposit/withdrawal timing. Calculated from daily NAV changes adjusted for net contribution flows." style="cursor: help; color: var(--text-secondary); margin-left: 4px; font-size: 12px;">ⓘ</span>
+                                </span>
                                 <span class="stat-icon">📈</span>
                             </div>
                             <div class="stat-value" id="roiValue">--</div>
@@ -616,6 +642,18 @@
         </main> <!-- End dashboard-main -->
     </div> <!-- End dashboard-container -->
 
+    <!-- Idle warning modal: appears at 25 minutes of inactivity, 5 minutes before auto-logout. -->
+    <div id="idleWarningModal" style="display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.65); align-items: center; justify-content: center;">
+        <div style="background: var(--bg-dark, #0f172a); color: var(--text-primary, #e2e8f0); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 24px; max-width: 420px; width: 92%; box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center;">
+            <div style="font-size: 36px; margin-bottom: 8px;">⏳</div>
+            <h3 style="margin: 0 0 8px; font-size: 18px;">Are you still there?</h3>
+            <p style="margin: 0 0 16px; color: var(--text-secondary, #94a3b8); font-size: 14px;">
+                You'll be signed out in 5 minutes for security. Click below to stay signed in.
+            </p>
+            <button onclick="resetIdleTimers()" style="padding: 10px 24px; background: linear-gradient(90deg,#fbbf24,#f59e0b); color: #000; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Stay signed in</button>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
@@ -627,6 +665,59 @@
         let currentUser = null;
         let customerData = null;
         let isAdminPreview = false;
+
+        // ── Live prices (refreshed every 5 minutes while logged in) ──────────
+        const livePrices = { btcUsd: 0, usdtZar: 0, lastUpdated: 0 };
+        let _priceTimer = null;
+        async function refreshLivePrices() {
+            try {
+                const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,tether&vs_currencies=usd,zar', { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data?.bitcoin?.usd)  livePrices.btcUsd  = Number(data.bitcoin.usd);
+                if (data?.tether?.zar)   livePrices.usdtZar = Number(data.tether.zar);
+                livePrices.lastUpdated = Date.now();
+                // Repaint BTC + Strategy Metrics tiles so the displayed price stays fresh.
+                if (customerData?.customer_id) {
+                    try { await loadDashboard(customerData.customer_id); } catch (_) {}
+                    try { await loadStrategyMetrics(customerData.customer_id); } catch (_) {}
+                }
+            } catch (e) { console.warn('Live price refresh failed:', e); }
+        }
+        function startPriceTicker() {
+            if (_priceTimer) return;
+            refreshLivePrices();
+            _priceTimer = setInterval(refreshLivePrices, 5 * 60 * 1000);
+        }
+
+        // ── Idle auto-logout (30 min, with warning at 25 min) ─────────────────
+        const IDLE_WARN_MS   = 25 * 60 * 1000;
+        const IDLE_LOGOUT_MS = 30 * 60 * 1000;
+        let _idleWarnTimer = null;
+        let _idleLogoutTimer = null;
+        function resetIdleTimers() {
+            if (isAdminPreview) return; // never auto-logout in admin preview
+            const warnEl = document.getElementById('idleWarningModal');
+            if (warnEl) warnEl.style.display = 'none';
+            if (_idleWarnTimer)   clearTimeout(_idleWarnTimer);
+            if (_idleLogoutTimer) clearTimeout(_idleLogoutTimer);
+            _idleWarnTimer   = setTimeout(showIdleWarning, IDLE_WARN_MS);
+            _idleLogoutTimer = setTimeout(idleSignOut,    IDLE_LOGOUT_MS);
+        }
+        function showIdleWarning() {
+            const el = document.getElementById('idleWarningModal');
+            if (el) el.style.display = 'flex';
+        }
+        async function idleSignOut() {
+            try { await sb.auth.signOut(); } catch (_) {}
+            window.location.href = 'login.html?reason=idle';
+        }
+        function bindIdleListeners() {
+            ['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(ev =>
+                window.addEventListener(ev, resetIdleTimers, { passive: true })
+            );
+            resetIdleTimers();
+        }
 
         // Check for admin impersonation param
         const urlParams = new URLSearchParams(window.location.search);
@@ -749,6 +840,10 @@
                 // Show content
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
+
+                // Start the live-price refresher and idle-logout watchdog (skipped in admin preview).
+                startPriceTicker();
+                if (!isAdminPreview) bindIdleListeners();
 
                 // Admin preview mode: show banner and disable mutations
                 if (isAdminPreview) {
@@ -905,11 +1000,14 @@
                 if (canViewDashboard) {
                     // Calculate values
                     const nav = parseFloat(portfolio.nav_usd);
-                    const btcPrice = parseFloat(portfolio.btc_price || 0);
+                    // Prefer live price (refreshed every 5 min); fall back to portfolio's stored price.
+                    const livePrice = (typeof livePrices !== 'undefined' && livePrices.btcUsd > 0) ? livePrices.btcUsd : 0;
+                    const btcPrice = livePrice > 0 ? livePrice : parseFloat(portfolio.btc_price || 0);
                     
                     // Get withdrawable balance (excludes accumulated fees - customer only sees what they can withdraw)
                     let btc = parseFloat(portfolio.btc_balance || 0);
                     let usdt = parseFloat(portfolio.usdt_balance || 0);
+                    let zar = 0;
                     
                     try {
                         const { data: withdrawable, error: wErr } = await sb
@@ -918,9 +1016,11 @@
                         
                         if (!wErr && withdrawable && withdrawable.length > 0) {
                             const wb = withdrawable[0];
-                            // Use withdrawable amounts (excludes BitWealth's accumulated fees)
-                            btc = parseFloat(wb.withdrawable_btc || 0);
+                            // Use withdrawable amounts (excludes BitWealth's accumulated fees and the
+                            // VALR USDT/ZAR conversion buffer).
+                            btc  = parseFloat(wb.withdrawable_btc  || 0);
                             usdt = parseFloat(wb.withdrawable_usdt || 0);
+                            zar  = parseFloat(wb.withdrawable_zar  || 0);
                         }
                     } catch (wbErr) {
                         console.error('Error fetching withdrawable balance:', wbErr);
@@ -932,43 +1032,44 @@
                     document.getElementById('btcValue').textContent = `${btc.toFixed(8)}`;
                     document.getElementById('btcUsd').textContent = btcPrice > 0 ? `@ $${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}` : '--';
                     document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+                    // ZAR tile — only show for customers that have a ZAR balance recorded.
+                    const zarTile = document.getElementById('zarTile');
+                    if (zar !== 0) {
+                        zarTile.style.display = '';
+                        document.getElementById('zarValue').textContent = `R${zar.toLocaleString('en-ZA', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    } else {
+                        zarTile.style.display = 'none';
+                    }
                     
-                    // Load accrued fees into NAV card
+                    // Load accrued fees and split BTC/USDT into the corresponding asset tile.
                     try {
                         const { data: fees, error: feesErr } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
                         if (!feesErr && fees && fees.length > 0) {
                             const f = fees[0];
                             const platUsdt = parseFloat(f.platform_fee_usdt || 0);
-                            const platBtc = parseFloat(f.platform_fee_btc || 0);
+                            const platBtc  = parseFloat(f.platform_fee_btc  || 0);
                             const perfUsdt = parseFloat(f.performance_fee_usdt || 0);
-                            const hasFees = platUsdt > 0 || platBtc > 0 || perfUsdt > 0;
-                            if (hasFees) {
-                                const platDisplay = platBtc > 0 
-                                    ? `${platBtc.toFixed(8)} BTC` 
-                                    : `$${platUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                                const perfDisplay = `$${perfUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                                document.getElementById('accruedPlatformFee').textContent = platDisplay;
-                                document.getElementById('accruedPerformanceFee').textContent = perfDisplay;
-                                document.getElementById('accruedFeesDisplay').style.display = 'block';
+                            const perfBtc  = parseFloat(f.performance_fee_btc  || 0);
+                            // BTC tile
+                            if (platBtc > 0 || perfBtc > 0) {
+                                document.getElementById('btcAccruedPlatformFee').textContent    = `${platBtc.toFixed(8)} BTC`;
+                                document.getElementById('btcAccruedPerformanceFee').textContent = `${perfBtc.toFixed(8)} BTC`;
+                                document.getElementById('btcAccruedFeesDisplay').style.display = 'block';
+                            }
+                            // USDT tile
+                            if (platUsdt > 0 || perfUsdt > 0) {
+                                document.getElementById('usdtAccruedPlatformFee').textContent    = `$${platUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                document.getElementById('usdtAccruedPerformanceFee').textContent = `$${perfUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                document.getElementById('usdtAccruedFeesDisplay').style.display = 'block';
                             }
                         }
                     } catch (feeErr) { console.error('Accrued fees load error:', feeErr); }
                     
-                    // Calculate ROI if we have contribution data
-                    const totalContrib = parseFloat(portfolio.total_contributions || 0);
-                    if (totalContrib > 0) {
-                        const profit = nav - totalContrib;
-                        const roi = ((profit / totalContrib) * 100);
-                        document.getElementById('roiValue').textContent = `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`;
-                        document.getElementById('roiProfit').textContent = `${profit >= 0 ? '+' : ''}$${Math.abs(profit).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})} profit`;
-                        
-                        // Update stat-change class based on positive/negative
-                        const roiChangeEl = document.getElementById('roiProfit');
-                        roiChangeEl.className = roi >= 0 ? 'stat-change positive' : 'stat-change negative';
-                    } else {
-                        document.getElementById('roiValue').textContent = '--';
-                        document.getElementById('roiProfit').textContent = '--';
-                    }
+                    // Strategy Return: TWR + dollar P&L is computed in updateReturnsTile() once
+                    // performance data has loaded. Show a placeholder in the meantime.
+                    document.getElementById('roiValue').textContent = '--';
+                    document.getElementById('roiProfit').textContent = '--';
 
                     // Show dashboard stats
                     document.getElementById('dashboardStats').style.display = 'grid';
@@ -1047,32 +1148,58 @@
                 let activityHTML = '';
                 transactions.forEach(tx => {
                     const action = tx.kind;
-                    const btcAmount = parseFloat(tx.amount_btc || 0);
+                    const btcAmount  = parseFloat(tx.amount_btc  || 0);
                     const usdtAmount = parseFloat(tx.amount_usdt || 0);
-                    const timestamp = tx.trade_date;
-                    
+                    const zarAmount  = parseFloat(tx.amount_zar  || 0);
+                    // Prefer ledger_lines.created_at (actual processing time) over the
+                    // trade_date so the "Xh ago" labels look professional and current.
+                    const timestamp = tx.created_at || tx.trade_date;
+
+                    const meta = tx.conversion_metadata || {};
+                    const isConv = action === 'conversion' || !!(meta.conversion_to || meta.conversion_from);
+
+                    // Pick the dominant asset for the activity line. ZAR is shown if it's
+                    // the only non-zero leg (e.g. ZAR deposit/withdrawal), otherwise we
+                    // describe BTC/USDT moves since those drive the strategy.
+                    const fmtBtc  = v => Math.abs(v).toFixed(8) + ' BTC';
+                    const fmtUsd  = v => '$' + Math.abs(v).toFixed(2) + ' USDT';
+                    const fmtZar  = v => 'R' + Math.abs(v).toFixed(2);
+
                     let icon = '💰';
                     let description = '';
-                    
-                    if (action === 'deposit' || action === 'topup') {
+
+                    if (isConv) {
+                        icon = '🔁';
+                        const cryptoLeg = btcAmount !== 0 ? fmtBtc(btcAmount) : (usdtAmount !== 0 ? fmtUsd(usdtAmount) : '');
+                        const zarLeg    = zarAmount !== 0 ? fmtZar(zarAmount) : '';
+                        // Sign tells us direction (crypto out → ZAR in is the typical case).
+                        if (cryptoLeg && zarLeg) description = `Conversion ${cryptoLeg} ↔ ${zarLeg}`;
+                        else if (cryptoLeg)      description = `Conversion ${cryptoLeg}`;
+                        else if (zarLeg)         description = `Conversion ${zarLeg}`;
+                        else                     description = 'Conversion';
+                    } else if (action === 'deposit' || action === 'topup') {
                         icon = '💵';
-                        description = `Deposit $${Math.abs(usdtAmount).toFixed(2)} USDT`;
-                    } else if (action === 'buy') {
-                        icon = '📈';
-                        description = `Bought ${Math.abs(btcAmount).toFixed(8)} BTC`;
-                    } else if (action === 'sell') {
-                        icon = '📉';
-                        description = `Sold ${Math.abs(btcAmount).toFixed(8)} BTC`;
+                        if (zarAmount > 0)        description = `Deposit ${fmtZar(zarAmount)}`;
+                        else if (btcAmount > 0)   description = `Deposit ${fmtBtc(btcAmount)}`;
+                        else if (usdtAmount > 0)  description = `Deposit ${fmtUsd(usdtAmount)}`;
+                        else                      description = 'Deposit';
                     } else if (action === 'withdrawal') {
                         icon = '💸';
-                        description = `Withdrawal $${Math.abs(usdtAmount).toFixed(2)} USDT`;
+                        if (zarAmount < 0)        description = `Withdrawal ${fmtZar(zarAmount)}`;
+                        else if (btcAmount < 0)   description = `Withdrawal ${fmtBtc(btcAmount)}`;
+                        else if (usdtAmount < 0)  description = `Withdrawal ${fmtUsd(usdtAmount)}`;
+                        else                      description = 'Withdrawal';
+                    } else if (action === 'buy') {
+                        icon = '📈';
+                        description = `Bought ${fmtBtc(btcAmount)}`;
+                    } else if (action === 'sell') {
+                        icon = '📉';
+                        description = `Sold ${fmtBtc(btcAmount)}`;
                     } else {
-                        // Generic fallback
-                        if (btcAmount !== 0) {
-                            description = `${action} ${Math.abs(btcAmount).toFixed(8)} BTC`;
-                        } else {
-                            description = `${action} $${Math.abs(usdtAmount).toFixed(2)} USDT`;
-                        }
+                        if (btcAmount !== 0)       description = `${action} ${fmtBtc(btcAmount)}`;
+                        else if (usdtAmount !== 0) description = `${action} ${fmtUsd(usdtAmount)}`;
+                        else if (zarAmount !== 0)  description = `${action} ${fmtZar(zarAmount)}`;
+                        else                       description = action;
                     }
                     
                     activityHTML += `
@@ -1115,15 +1242,17 @@
                 // Calculate metrics
                 const totalContrib = parseFloat(portfolio.total_contributions || 0);
                 const nav = parseFloat(portfolio.nav_usd || 0);
-                const btcPrice = parseFloat(portfolio.btc_price || 0);
+                const livePrice = (typeof livePrices !== 'undefined' && livePrices.btcUsd > 0) ? livePrices.btcUsd : 0;
+                const btcPrice = livePrice > 0 ? livePrice : parseFloat(portfolio.btc_price || 0);
                 const btcBalance = parseFloat(portfolio.btc_balance || 0);
                 const usdtBalance = parseFloat(portfolio.usdt_balance || 0);
-                
-                // Calculate average cost basis (total USDT spent / total BTC bought)
+
+                // Avg cost basis derived from BUY decisions only (Σ usdt_spent / Σ btc_bought).
                 let avgCostBasis = 0;
-                if (btcBalance > 0 && totalContrib > 0) {
-                    avgCostBasis = totalContrib / btcBalance;
-                }
+                try {
+                    const { data: bm } = await sb.schema('lth_pvr').rpc('get_customer_buy_metrics', { p_customer_id: customerId });
+                    if (bm && bm.length > 0) avgCostBasis = parseFloat(bm[0].avg_cost_basis_usd || 0);
+                } catch (e) { console.warn('buy metrics RPC unavailable:', e); }
                 
                 // Calculate CAGR
                 let cagrDisplay = '--';
@@ -1145,7 +1274,7 @@
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">Current Value</div>
-                        <div class="metric-value">$${nav.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                        <div class="metric-value">$${nav.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">CAGR</div>
@@ -1157,17 +1286,25 @@
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">Current BTC Price</div>
-                        <div class="metric-value">$${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                        <div class="metric-value">${btcPrice > 0 ? '$' + btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '--'}</div>
                     </div>
                 `;
                 
                 metricsList.innerHTML = metricsHTML;
 
-                // Render allocation pie chart
+                // Render allocation pie chart — include ZAR slice (converted via live USDT/ZAR rate).
                 const btcValueUsd = btcBalance * btcPrice;
-                const totalValue = btcValueUsd + usdtBalance;
-                const btcPct = totalValue > 0 ? (btcValueUsd / totalValue) * 100 : 0;
+                let zarBalance = 0;
+                try {
+                    const { data: wb } = await sb.schema('lth_pvr').rpc('get_withdrawable_balance', { p_customer_id: customerId });
+                    if (wb && wb.length > 0) zarBalance = parseFloat(wb[0].recorded_zar || 0);
+                } catch (e) { /* fallback */ }
+                const usdtZar = (typeof livePrices !== 'undefined' && livePrices.usdtZar > 0) ? livePrices.usdtZar : 18.5;
+                const zarValueUsd = zarBalance > 0 && usdtZar > 0 ? zarBalance / usdtZar : 0;
+                const totalValue = btcValueUsd + usdtBalance + zarValueUsd;
+                const btcPct  = totalValue > 0 ? (btcValueUsd / totalValue) * 100 : 0;
                 const usdtPct = totalValue > 0 ? (usdtBalance / totalValue) * 100 : 0;
+                const zarPct  = totalValue > 0 ? (zarValueUsd / totalValue) * 100 : 0;
 
                 const chartWrapper = document.getElementById('allocationChartWrapper');
                 if (totalValue > 0) {
@@ -1177,14 +1314,25 @@
                     // Destroy previous chart instance if exists
                     if (window._allocationChart) window._allocationChart.destroy();
                     
+                    const labels   = ['BTC', 'USDT'];
+                    const dataArr  = [btcPct, usdtPct];
+                    const bgColors = ['#FFB400', '#1E3A5F'];
+                    const bdColors = ['#FFB400', '#2A4A6F'];
+                    if (zarPct > 0) {
+                        labels.push('ZAR');
+                        dataArr.push(zarPct);
+                        bgColors.push('#10b981');
+                        bdColors.push('#10b981');
+                    }
+
                     window._allocationChart = new Chart(ctx, {
                         type: 'doughnut',
                         data: {
-                            labels: ['BTC', 'USDT'],
+                            labels,
                             datasets: [{
-                                data: [btcPct, usdtPct],
-                                backgroundColor: ['#FFB400', '#1E3A5F'],
-                                borderColor: ['#FFB400', '#2A4A6F'],
+                                data: dataArr,
+                                backgroundColor: bgColors,
+                                borderColor: bdColors,
                                 borderWidth: 2,
                                 hoverBorderColor: '#ffffff',
                                 hoverBorderWidth: 2
@@ -1210,7 +1358,7 @@
                     });
 
                     // Custom legend
-                    document.getElementById('allocationLegend').innerHTML = `
+                    let legendHTML = `
                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
                             <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FFB400;"></span>
                             BTC ${btcPct.toFixed(1)}%
@@ -1218,8 +1366,15 @@
                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
                             <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1E3A5F;"></span>
                             USDT ${usdtPct.toFixed(1)}%
-                        </div>
-                    `;
+                        </div>`;
+                    if (zarPct > 0) {
+                        legendHTML += `
+                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
+                            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981;"></span>
+                            ZAR ${zarPct.toFixed(1)}%
+                        </div>`;
+                    }
+                    document.getElementById('allocationLegend').innerHTML = legendHTML;
                 }
 
             } catch (error) {
@@ -2208,11 +2363,56 @@
 
                 canvas.style.display = 'block';
                 switchPerfChart();
+                updateReturnsTile();
             } catch (err) {
                 console.error('Error loading performance data:', err);
                 loading.style.display = 'none';
                 empty.style.display = 'block';
             }
+        }
+
+        // Compute Time-Weighted Return from the daily NAV series and per-day net
+        // contribution flows. TWR neutralises the impact of deposit/withdrawal
+        // timing so the headline reflects strategy performance only. We also
+        // compute the dollar P&L (NAV − cumulative net contributions) and use it
+        // to drive a dynamic "profit / loss" caption.
+        function updateReturnsTile() {
+            const valueEl = document.getElementById('roiValue');
+            const changeEl = document.getElementById('roiProfit');
+            if (!valueEl || !changeEl) return;
+            if (!perfData?.daily?.length) return;
+
+            // Aggregate net USD flow per date from the contributions list.
+            const flowByDate = new Map();
+            for (const c of perfData.contributions || []) {
+                const v = parseFloat(c.amount_usdt || 0);
+                if (!v) continue;
+                flowByDate.set(c.date, (flowByDate.get(c.date) || 0) + v);
+            }
+
+            // Walk daily NAV and link sub-period returns: r_t = (NAV_t − flow_t) / NAV_{t−1}.
+            const daily = perfData.daily;
+            let twr = 1;
+            let netContribCum = 0;
+            let prevNav = null;
+            for (const d of daily) {
+                const nav  = parseFloat(d.nav_usd || 0);
+                const flow = flowByDate.get(d.date) || 0;
+                netContribCum += flow;
+                if (prevNav !== null && prevNav > 0) {
+                    const denom = prevNav + flow;        // capital available at start of period
+                    if (denom > 0) twr *= (nav / denom);
+                }
+                prevNav = nav;
+            }
+            const twrPct = (twr - 1) * 100;
+            const lastNav = parseFloat(daily[daily.length - 1].nav_usd || 0);
+            const profit = lastNav - netContribCum;
+
+            valueEl.textContent = `${twrPct >= 0 ? '+' : ''}${twrPct.toFixed(1)}%`;
+            const word = profit >= 0 ? 'profit' : 'loss';
+            changeEl.textContent = `${profit >= 0 ? '+' : '−'}$${Math.abs(profit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ${word}`;
+            changeEl.className = profit >= 0 ? 'stat-change positive' : 'stat-change negative';
         }
 
         function switchPerfChart() {
