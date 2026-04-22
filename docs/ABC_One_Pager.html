@@ -761,6 +761,7 @@
           <div class="chart-legend">
             <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $46,982</div>
             <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $23,355</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $17,512</div>
           </div>
         </div>
         <div class="chart-box">
@@ -769,6 +770,7 @@
           <div class="chart-legend">
             <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $5,972,799</div>
             <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $835,333</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $4,515,512</div>
           </div>
         </div>
       </div>
@@ -1094,7 +1096,8 @@
             labels: _lth5.map(function(d){return d[0];}),
             datasets: [
               { data: _lth5.map(function(d){return d[1];}), borderColor: '#FFB400', backgroundColor: 'transparent' },
-              { data: _std5.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' }
+              { data: _std5.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' },
+              { data: (typeof _hodl5 !== 'undefined' ? _hodl5.map(function(d){return d[1];}) : []), borderColor: '#A855F7', backgroundColor: 'transparent' }
             ]
           },
           options: chartOpts
@@ -1105,7 +1108,8 @@
             labels: _lth10.map(function(d){return d[0];}),
             datasets: [
               { data: _lth10.map(function(d){return d[1];}), borderColor: '#FFB400', backgroundColor: 'transparent' },
-              { data: _std10.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' }
+              { data: _std10.map(function(d){return d[1];}), borderColor: '#6B7896', backgroundColor: 'transparent' },
+              { data: (typeof _hodl10 !== 'undefined' ? _hodl10.map(function(d){return d[1];}) : []), borderColor: '#A855F7', backgroundColor: 'transparent' }
             ]
           },
           options: chartOpts
