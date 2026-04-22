@@ -112,6 +112,28 @@ export async function getMarketPrice(pair: string): Promise<number> {
   return price;
 }
 
+// ── Account balances (private) ────────────────────────────────────────────────
+// Returns the full balances payload from /v1/account/balances. Each entry has
+// at least { currency, available, reserved, total }.
+export async function getAccountBalances(
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<Array<{ currency: string; available: string; reserved?: string; total?: string }>> {
+  const data = await valrPrivateRequest("GET", "/v1/account/balances", undefined, subaccountId, credentials);
+  return Array.isArray(data) ? data as any[] : [];
+}
+
+// Convenience: extract `available` for a given currency (case-insensitive).
+export function pickAvailable(
+  balances: Array<{ currency: string; available: string }>,
+  currency: string,
+): number {
+  const c = currency.toUpperCase();
+  const row = balances.find(b => (b.currency ?? "").toUpperCase() === c);
+  const n = Number(row?.available ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ── LIMIT order ───────────────────────────────────────────────────────────────
 export async function placeLimitOrder(
   payload: {

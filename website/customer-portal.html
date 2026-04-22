@@ -1603,7 +1603,7 @@
         // ── Globals for new sections ──────────────────────────────────────────
         let exchangeAccountData = null;
         let currentWithdrawals = [];
-        let withdrawableBalance = { btc: 0, usdt: 0 };
+        let withdrawableBalance = { btc: 0, usdt: 0, zar: 0 };
         let liveUsdtZarRate = 0; // populated when withdrawals section loads
         let liveBtcZarRate  = 0; // populated when withdrawals section loads (used for ZAR shortfall path)
 
@@ -1643,6 +1643,21 @@
                     withdrawableBalance.btc = parseFloat(wb[0].withdrawable_btc || 0);
                     withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
                 }
+                // Probe live VALR ZAR wallet balance (already-converted ZAR is consumed first
+                // by the withdrawal queue, so capacity must include it).
+                try {
+                    const { data: { session } } = await sb.auth.getSession();
+                    const balResp = await fetch(`${SUPABASE_URL}/functions/v1/valr-balances`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
+                        body: JSON.stringify({ customer_id: customerId })
+                    });
+                    if (balResp.ok) {
+                        const balJson = await balResp.json();
+                        const zarAvail = parseFloat(balJson?.zar?.available ?? 0);
+                        if (!Number.isNaN(zarAvail) && zarAvail > 0) withdrawableBalance.zar = zarAvail;
+                    }
+                } catch { /* non-critical */ }
                 const btcEl = document.getElementById('wdBtcBalance');
                 const usdtEl = document.getElementById('wdUsdtBalance');
                 if (btcEl) btcEl.textContent = withdrawableBalance.btc.toFixed(8);
@@ -1663,7 +1678,8 @@
                             if (rateEl) rateEl.textContent = usdtRate.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
                         if (btcRate > 0) liveBtcZarRate = btcRate;
-                        const totalZar = (withdrawableBalance.usdt * (usdtRate || 0))
+                        const totalZar = withdrawableBalance.zar
+                                       + (withdrawableBalance.usdt * (usdtRate || 0))
                                        + (withdrawableBalance.btc  * (btcRate  || 0));
                         const zarEl = document.getElementById('wdZarEquiv');
                         if (zarEl && totalZar > 0) zarEl.textContent = totalZar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1802,21 +1818,26 @@
                 const usdtRate = parseFloat(rateData?.tether?.zar  || 18);
                 const btcRate  = parseFloat(rateData?.bitcoin?.zar || 0);
 
-                // Mirror the queue's USDT-first, BTC-direct sizing so the customer sees what will actually happen.
-                const usdtCapZar = withdrawableBalance.usdt * usdtRate;
-                const zarFromUsdt = Math.min(amount, usdtCapZar);
-                const zarFromBtc  = Math.max(0, amount - zarFromUsdt);
-                const usdtNeeded  = zarFromUsdt / usdtRate;
-                const btcNeeded   = btcRate > 0 ? zarFromBtc / btcRate : 0;
-                // VALR taker fee ~0.10% applied on each leg's gross-ZAR
+                // Mirror the queue's ZAR-wallet-first, USDT-then-BTC sizing so the customer
+                // sees what will actually happen on the exchange.
+                const zarFromWallet = Math.min(amount, withdrawableBalance.zar || 0);
+                const remainingZar  = Math.max(0, amount - zarFromWallet);
+                const usdtCapZar    = withdrawableBalance.usdt * usdtRate;
+                const zarFromUsdt   = Math.min(remainingZar, usdtCapZar);
+                const zarFromBtc    = Math.max(0, remainingZar - zarFromUsdt);
+                const usdtNeeded    = zarFromUsdt / usdtRate;
+                const btcNeeded     = btcRate > 0 ? zarFromBtc / btcRate : 0;
+                // VALR taker fee ~0.10% applied on each leg's gross-ZAR (wallet ZAR has no conv fee)
                 const convFeeZar = (zarFromUsdt + zarFromBtc) * 0.001;
                 const bankFee = 0;
 
                 const usdtCell = document.getElementById('wdUsdtNeeded');
                 if (usdtCell) {
-                    usdtCell.textContent = btcNeeded > 0
-                        ? `${usdtNeeded.toFixed(4)} USDT + ${btcNeeded.toFixed(8)} BTC`
-                        : `${usdtNeeded.toFixed(4)} USDT`;
+                    const parts = [];
+                    if (zarFromWallet > 0) parts.push(`R${zarFromWallet.toFixed(2)} ZAR (wallet)`);
+                    if (usdtNeeded > 0)    parts.push(`${usdtNeeded.toFixed(4)} USDT`);
+                    if (btcNeeded > 0)     parts.push(`${btcNeeded.toFixed(8)} BTC`);
+                    usdtCell.textContent = parts.length ? parts.join(' + ') : '—';
                 }
                 document.getElementById('wdConvFee').textContent = 'R' + convFeeZar.toFixed(2);
                 document.getElementById('wdBankFee').textContent = bankFee > 0 ? 'R' + bankFee.toFixed(2) : 'Free';
@@ -1841,9 +1862,14 @@
                 if (liveUsdtZarRate > 0) {
                     const usdtCapZar = withdrawableBalance.usdt * liveUsdtZarRate;
                     const btcCapZar  = withdrawableBalance.btc  * (liveBtcZarRate || 0);
-                    const totalCapZar = usdtCapZar + btcCapZar;
+                    const zarWallet  = withdrawableBalance.zar || 0;
+                    const totalCapZar = zarWallet + usdtCapZar + btcCapZar;
                     if (amount > totalCapZar) {
-                        showWdFormMessage(`Insufficient balance. R${amount.toFixed(2)} exceeds your withdrawable capacity of R${totalCapZar.toFixed(2)} (USDT: R${usdtCapZar.toFixed(2)}${btcCapZar > 0 ? ` + BTC: R${btcCapZar.toFixed(2)}` : ''}).`, 'error');
+                        const parts = [];
+                        if (zarWallet > 0)   parts.push(`ZAR wallet: R${zarWallet.toFixed(2)}`);
+                        if (usdtCapZar > 0)  parts.push(`USDT: R${usdtCapZar.toFixed(2)}`);
+                        if (btcCapZar > 0)   parts.push(`BTC: R${btcCapZar.toFixed(2)}`);
+                        showWdFormMessage(`Insufficient balance. R${amount.toFixed(2)} exceeds your withdrawable capacity of R${totalCapZar.toFixed(2)} (${parts.join(' + ') || 'no funds'}).`, 'error');
                         return;
                     }
                 }

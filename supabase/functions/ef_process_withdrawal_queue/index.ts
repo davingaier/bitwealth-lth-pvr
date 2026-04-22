@@ -22,6 +22,8 @@ import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import {
   cryptoWithdraw,
   getMarketPrice,
+  getAccountBalances,
+  pickAvailable,
   getOrderBook,
   placeLimitOrder,
   placeMarketOrder,
@@ -263,20 +265,35 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
     return await markFailed(row, ctx, `Rate fetch failed: ${(e as Error).message}`);
   }
 
-  // 2. Live withdrawable balance (USDT/BTC)
+  // 2. Live withdrawable balance (USDT/BTC) and live VALR ZAR wallet balance.
+  // ZAR already sitting in the customer's VALR wallet (e.g. residual from a prior
+  // over-conversion) is consumed FIRST so that we only sell as much USDT/BTC as
+  // strictly needed to cover the remaining ZAR target.
   const { data: bal, error: balErr } = await sbLthPvr
     .rpc("get_withdrawable_balance", { p_customer_id: row.customer_id });
   if (balErr) trace.push(`zar_pending:bal_rpc_err ${balErr.message}`);
   const b = Array.isArray(bal) ? bal[0] : bal;
   const availUsdt = Number(b?.withdrawable_usdt ?? 0);
   const availBtc  = Number(b?.withdrawable_btc ?? 0);
-  trace.push(`zar_pending:bal availUsdt=${availUsdt} availBtc=${availBtc}`);
 
-  // 3. Compute split: USDT first, BTC for shortfall
-  const convFeeRate = Number(row.valr_conversion_fee_usdt ?? 0) > 0 ? 0.0018 : 0.0018;
+  let availZar = 0;
+  try {
+    const valrBalances = TEST_MODE
+      ? [{ currency: "ZAR", available: "0" }]
+      : await getAccountBalances(ctx.subaccountId, ctx.creds);
+    availZar = pickAvailable(valrBalances, "ZAR");
+  } catch (e) {
+    trace.push(`zar_pending:zar_bal_fetch_failed ${(e as Error).message}`);
+  }
+  trace.push(`zar_pending:bal availUsdt=${availUsdt} availBtc=${availBtc} availZar=${availZar}`);
+
+  // 3. Compute split: ZAR wallet first, then USDT, then BTC for any remaining shortfall.
+  const zarFromWallet  = Math.min(targetZar, availZar);
+  const remainingZar   = Math.max(0, targetZar - zarFromWallet);
+  const convFeeRate    = 0.0018;
   const usdtZarCovered = availUsdt * usdtzar; // gross ZAR achievable from selling all USDT
-  const usdtToSellZar  = Math.min(targetZar, usdtZarCovered);
-  const btcToSellZar   = Math.max(0, targetZar - usdtToSellZar);
+  const usdtToSellZar  = Math.min(remainingZar, usdtZarCovered);
+  const btcToSellZar   = Math.max(0, remainingZar - usdtToSellZar);
 
   const usdtToSell = usdtToSellZar > 0 ? (usdtToSellZar / usdtzar) * (1 + convFeeRate) : 0;
   const btcToSell  = btcToSellZar  > 0 ? btcToSellZar / btczar : 0;
@@ -287,17 +304,38 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
       `Insufficient BTC after USDT exhaustion: need ${btcToSell.toFixed(8)} BTC, have ${availBtc.toFixed(8)}`);
   }
 
-  // NOTE: wr_source_asset_check constraint currently does NOT include 'BTC+USDT'.
-  // For mixed sales we record 'BTC' (the leg that determines settlement timing) and
-  // rely on usdt_sold / btc_sold columns to capture the true split.
-  // TODO: once migration to extend the check constraint is applied, restore 'BTC+USDT'.
-  const sourceAsset = btcToSell > 0 ? "BTC" : "USDT";
-  const sourceAsset = btcToSell > 0
-    ? (usdtToSell > 0 ? "BTC+USDT" : "BTC")
-    : "USDT";
-  trace.push(`zar_pending:split usdtToSell=${usdtToSell} btcToSell=${btcToSell} src=${sourceAsset}`);
+  // source_asset taxonomy:
+  //   ZAR        — fully covered from existing ZAR wallet, no conversion needed
+  //   USDT       — covered from ZAR wallet + USDT only
+  //   BTC        — covered from ZAR wallet + BTC only (no USDT used)
+  //   BTC+USDT   — both crypto legs needed in addition to ZAR wallet
+  let sourceAsset: string;
+  if (usdtToSell <= 0 && btcToSell <= 0)        sourceAsset = "ZAR";
+  else if (btcToSell > 0 && usdtToSell > 0)     sourceAsset = "BTC+USDT";
+  else if (btcToSell > 0)                       sourceAsset = "BTC";
+  else                                          sourceAsset = "USDT";
+  trace.push(`zar_pending:split zarFromWallet=${zarFromWallet} usdtToSell=${usdtToSell} btcToSell=${btcToSell} src=${sourceAsset}`);
 
-  // 4. Place LIMIT SELL orders at best bid.
+  // 4a. ZAR-only path: enough ZAR already in the wallet, no conversion needed.
+  // Skip straight to fiat withdrawal and mark paying_out. processZarConverting
+  // will not be called because the row will not be in 'converting' state.
+  if (sourceAsset === "ZAR") {
+    const wdCustomerOrderId = `wd-fiat-${row.request_id}`;
+    try {
+      const wdRes: any = TEST_MODE
+        ? { id: `test-fiat-${row.request_id}` }
+        : await zarWithdraw(ctx.bankValrId!, targetZar.toFixed(2), false, ctx.subaccountId, ctx.creds);
+      const valrWithdrawalId = wdRes?.id ?? wdRes?.withdrawalId ?? wdRes?.transactionId ?? wdCustomerOrderId;
+      await markPayingOut(row, valrWithdrawalId, { source_asset: "ZAR" });
+      trace.push(`zar_pending:zar_only_dispatched valr_id=${valrWithdrawalId}`);
+      return;
+    } catch (e) {
+      trace.push(`zar_pending:zar_only_dispatch_failed ${(e as Error).message}`);
+      return await markFailed(row, ctx, `ZAR-only fiat withdraw failed: ${(e as Error).message}`);
+    }
+  }
+
+  // 4b. Mixed/crypto path: place LIMIT SELL orders at best bid.
   // CRITICAL idempotency rule: each leg's customerOrderId is deterministic
   // (`wd-usdt-{request_id}` / `wd-btc-{request_id}`). Before placing we probe
   // VALR's order summary by customerOrderId; if it already exists we reuse it
@@ -433,12 +471,26 @@ async function processZarConverting(row: Row, ctx: CustomerCtx) {
   if (usdtRes.filled && btcRes.filled) {
     const zarFromUsdt = (usdtRes.fillQty ?? 0) * (usdtRes.fillPrice ?? 0);
     const zarFromBtc  = (btcRes.fillQty  ?? 0) * (btcRes.fillPrice  ?? 0);
-    const grossZar    = zarFromUsdt + zarFromBtc;
-    const netZar      = Number(row.amount_zar ?? 0) - Number(row.valr_withdrawal_fee_zar ?? 0);
-    // Use the smaller of (grossZar - fees, requested netZar) so we never overdraw
-    const payoutZar   = Math.min(grossZar - Number(row.valr_withdrawal_fee_zar ?? 0), netZar);
+    const targetZar   = Number(row.amount_zar ?? 0);
+    const feeZar      = Number(row.valr_withdrawal_fee_zar ?? 0);
+
+    // Payout = requested amount minus fee. The wallet already contains pre-existing
+    // ZAR plus the proceeds of the freshly-filled SELL legs, sized so that the
+    // total covers `targetZar`. Cap the payout against the current available ZAR
+    // wallet to avoid an overdraw if the fills slipped slightly.
+    let availZarNow = targetZar; // fallback if balance probe fails
+    try {
+      if (!TEST_MODE) {
+        const valrBalances = await getAccountBalances(ctx.subaccountId, ctx.creds);
+        availZarNow = pickAvailable(valrBalances, "ZAR");
+      }
+    } catch { /* best effort */ }
+
+    const requestedNet = targetZar - feeZar;
+    const payoutZar    = Math.min(requestedNet, availZarNow - feeZar);
     if (payoutZar <= 0) {
-      return await markFailed(row, ctx, `Computed payout amount is non-positive (gross=${grossZar.toFixed(2)})`);
+      return await markFailed(row, ctx,
+        `Computed payout amount is non-positive (target=${targetZar.toFixed(2)}, availZar=${availZarNow.toFixed(2)}, fee=${feeZar.toFixed(2)})`);
     }
 
     try {
