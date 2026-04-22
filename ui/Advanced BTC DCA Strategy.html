@@ -1032,6 +1032,7 @@
     <a href="#finance-module">Finance</a>
     <a href="#optimizer-module">Strategy Optimizer</a>
     <a href="#compliance-module">🛡️ Compliance<span class="alert-badge zero" id="complianceBadge" style="background:#dc2626;">0</span></a>
+    <a href="#support-module">🛟 Support<span class="alert-badge zero" id="supportBadge">0</span></a>
     <a href="#admin-module">Administration<span class="alert-badge zero" id="alertBadge">0</span></a>
     <span class="nav-right">
       <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
@@ -3709,6 +3710,130 @@
       </div>
     </div>
     
+    <!-- ===================== Support (admin inbox) ===================== -->
+    <div id="support-module" class="module">
+      <h2>🛟 Support Inbox</h2>
+      <div class="card" style="max-width:1400px;">
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin-bottom:.75rem;">
+          <label>Status
+            <select id="supFilterStatus">
+              <option value="active" selected>Active (open + in-progress + waiting)</option>
+              <option value="">All</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="waiting_customer">Waiting customer</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+          </label>
+          <label>Priority
+            <select id="supFilterPriority">
+              <option value="">All</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <label>Category
+            <select id="supFilterCategory">
+              <option value="">All</option>
+              <option value="account_login">Account &amp; Login</option>
+              <option value="kyc">KYC / Verification</option>
+              <option value="bank_account">Bank Account</option>
+              <option value="valr_exchange">VALR / Exchange</option>
+              <option value="deposits">Deposits</option>
+              <option value="withdrawals">Withdrawals</option>
+              <option value="trading_strategy">Trading &amp; Strategy</option>
+              <option value="fees_statements">Fees &amp; Statements</option>
+              <option value="performance_reporting">Performance &amp; Reporting</option>
+              <option value="compliance_privacy">Compliance &amp; Privacy</option>
+              <option value="bug_report">Bug report</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>Search
+            <input id="supFilterSearch" type="text" placeholder="ticket #, subject, customer">
+          </label>
+          <button type="button" onclick="loadSupportInbox()">🔄 Refresh</button>
+          <span style="margin-left:auto;">
+            <button type="button" id="supBulkResolveBtn" onclick="bulkUpdateSupport('resolved')">Mark resolved</button>
+            <button type="button" id="supBulkCloseBtn" onclick="bulkUpdateSupport('closed')">Close</button>
+            <button type="button" id="supBulkAssignBtn" onclick="bulkAssignSupport()">Assign to me</button>
+          </span>
+        </div>
+
+        <div style="overflow:auto;max-height:560px;border:1px solid var(--border,rgba(0,0,0,.08));border-radius:6px;">
+          <table id="supInboxTable" style="width:100%;border-collapse:collapse;">
+            <thead style="position:sticky;top:0;background:var(--bg-card,#fff);z-index:1;">
+              <tr>
+                <th style="padding:8px 10px;text-align:left;width:32px;"><input type="checkbox" id="supSelectAll" onclick="toggleSupSelectAll(this.checked)"></th>
+                <th style="padding:8px 10px;text-align:left;">Ticket</th>
+                <th style="padding:8px 10px;text-align:left;">Customer</th>
+                <th style="padding:8px 10px;text-align:left;">Subject</th>
+                <th style="padding:8px 10px;text-align:left;">Cat.</th>
+                <th style="padding:8px 10px;text-align:left;">Priority</th>
+                <th style="padding:8px 10px;text-align:left;">Status</th>
+                <th style="padding:8px 10px;text-align:left;">SLA</th>
+                <th style="padding:8px 10px;text-align:left;">Last activity</th>
+              </tr>
+            </thead>
+            <tbody id="supInboxBody"><tr><td colspan="9" style="padding:14px;color:#888;">Sign in via Administration to view support tickets.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Ticket detail panel -->
+      <div id="supDetailPanel" class="card" style="display:none;max-width:1400px;margin-top:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+          <div>
+            <div style="font-family:monospace;color:#888;font-size:12px;" id="supDetailNumber"></div>
+            <h3 id="supDetailSubject" style="margin:.25rem 0;"></h3>
+            <div id="supDetailMeta" style="font-size:12px;color:#888;"></div>
+          </div>
+          <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+            <label style="font-size:12px;">Status
+              <select id="supDetailStatus" onchange="updateCurrentTicket({status:this.value, notify_customer:true})">
+                <option value="open">Open</option>
+                <option value="in_progress">In progress</option>
+                <option value="waiting_customer">Waiting customer</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+            </label>
+            <label style="font-size:12px;">Priority
+              <select id="supDetailPriority" onchange="updateCurrentTicket({priority:this.value})">
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </label>
+            <button type="button" onclick="updateCurrentTicket({assigned_to:'__me__'})">Assign to me</button>
+            <button type="button" onclick="closeSupDetail()">✕ Close panel</button>
+          </div>
+        </div>
+        <hr style="margin:.6rem 0;">
+        <div style="display:grid;grid-template-columns: 1fr 280px;gap:1rem;">
+          <div>
+            <div id="supDetailMessages" style="display:flex;flex-direction:column;gap:.5rem;max-height:460px;overflow:auto;padding:.4rem;border:1px solid var(--border,rgba(0,0,0,.08));border-radius:6px;background:var(--bg-soft,#fafafa);"></div>
+            <div style="margin-top:.6rem;">
+              <textarea id="supReplyBody" rows="3" placeholder="Type your reply (markdown supported by some email clients)…" maxlength="10000" style="width:100%;padding:8px;box-sizing:border-box;"></textarea>
+              <div style="display:flex;gap:.5rem;align-items:center;margin-top:.4rem;">
+                <label style="font-size:12px;"><input type="checkbox" id="supReplyInternal"> Internal note (admins only)</label>
+                <span id="supReplyMsg" style="font-size:12px;color:#888;margin-left:auto;"></span>
+                <button type="button" id="supReplyBtn" onclick="postAdminReply()">Send reply</button>
+              </div>
+            </div>
+          </div>
+          <aside style="font-size:12px;color:#444;">
+            <h4 style="margin:0 0 .4rem;">Customer context</h4>
+            <div id="supCustomerContext">—</div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
     <!-- ===================== Administration (owner-only) ===================== -->
     <div id="admin-module" class="module">
       <h2>Administration</h2>
@@ -15002,6 +15127,232 @@ self.onmessage = function(e) {
         setupObserver();
       }
     }, 300);
+  })();
+  </script>
+
+  <!-- ===================== Support Inbox (admin) ===================== -->
+  <script>
+  (() => {
+    const SB_URL_S = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const STATUS_BG = { open:'#3b82f6', in_progress:'#8b5cf6', waiting_customer:'#f59e0b', resolved:'#10b981', closed:'#64748b' };
+    const PRI_BG    = { low:'#9ca3af', normal:'#64748b', high:'#f59e0b', urgent:'#ef4444' };
+    const CAT_LABEL = {
+      account_login:'Login', kyc:'KYC', bank_account:'Bank', valr_exchange:'VALR', deposits:'Deposit',
+      withdrawals:'Withdraw', trading_strategy:'Trading', fees_statements:'Fees', performance_reporting:'Perf',
+      compliance_privacy:'Compliance', bug_report:'Bug', other:'Other'
+    };
+    const SLA_HOURS = { urgent:4, high:8, normal:24, low:72 };
+    let _allTickets = [];
+    let _curTicket  = null;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]));
+    const fmtRel = (iso) => {
+      if (!iso) return '';
+      const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return Math.floor(diff/60)+'m';
+      if (diff < 86400) return Math.floor(diff/3600)+'h';
+      return Math.floor(diff/86400)+'d';
+    };
+    function slaBadge(t) {
+      const target = SLA_HOURS[t.priority] ?? 24;
+      const ageH = (t.age_seconds || 0) / 3600;
+      const breached = !t.first_response_at && ageH > target && t.status !== 'closed' && t.status !== 'resolved';
+      const warn = !t.first_response_at && ageH > target * 0.5 && !breached;
+      const color = breached ? '#ef4444' : warn ? '#f59e0b' : '#10b981';
+      const label = t.first_response_at ? 'OK' : `${ageH.toFixed(1)}h / ${target}h`;
+      return `<span style="background:${color};color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;font-weight:600;">${label}</span>`;
+    }
+
+    async function loadSupportInbox() {
+      const tbody = $('supInboxBody');
+      const sb = window.supabaseClient;
+      if (!sb) { tbody.innerHTML = '<tr><td colspan="9" class="muted">Sign in via Administration first.</td></tr>'; return; }
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session?.user) { tbody.innerHTML = '<tr><td colspan="9" class="muted">Sign in via Administration first.</td></tr>'; return; }
+      tbody.innerHTML = '<tr><td colspan="9">Loading…</td></tr>';
+      const status   = $('supFilterStatus').value || null;
+      const priority = $('supFilterPriority').value || null;
+      const category = $('supFilterCategory').value || null;
+      const search   = ($('supFilterSearch').value || '').trim().toLowerCase();
+      const { data, error } = await sb.rpc('list_support_tickets', { p_status: status, p_priority: priority, p_category: category, p_limit: 200 });
+      if (error) { tbody.innerHTML = `<tr><td colspan="9" class="error">${esc(error.message)}</td></tr>`; return; }
+      let list = data ?? [];
+      if (search) list = list.filter(t => (t.ticket_number||'').toLowerCase().includes(search) || (t.subject||'').toLowerCase().includes(search) || (t.customer_name||'').toLowerCase().includes(search) || (t.customer_email||'').toLowerCase().includes(search));
+      _allTickets = list;
+      // Update navbar badge with active count
+      const badge = $('supportBadge');
+      const activeCount = list.filter(t => t.status !== 'closed' && t.status !== 'resolved').length;
+      if (badge) { badge.textContent = String(activeCount); badge.classList.toggle('zero', activeCount === 0); }
+
+      if (list.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="muted">No tickets match.</td></tr>'; return; }
+
+      tbody.innerHTML = list.map(t => {
+        const sb_ = STATUS_BG[t.status] ?? '#64748b';
+        const pb  = PRI_BG[t.priority]   ?? '#64748b';
+        return `<tr style="cursor:pointer;border-top:1px solid var(--border,rgba(0,0,0,.06));" data-id="${t.ticket_id}">
+          <td style="padding:6px 10px;" onclick="event.stopPropagation();"><input type="checkbox" class="supRowCheck" value="${t.ticket_id}"></td>
+          <td style="padding:6px 10px;font-family:monospace;font-size:11px;" onclick="openSupTicket('${t.ticket_id}')">${esc(t.ticket_number)}</td>
+          <td style="padding:6px 10px;font-size:12px;" onclick="openSupTicket('${t.ticket_id}')">${esc(t.customer_name)}<div style="font-size:10px;color:#888;">${esc(t.customer_email||'')}</div></td>
+          <td style="padding:6px 10px;font-size:12px;" onclick="openSupTicket('${t.ticket_id}')">${esc(t.subject)}<div style="font-size:10px;color:#888;">${t.message_count} msg</div></td>
+          <td style="padding:6px 10px;font-size:11px;" onclick="openSupTicket('${t.ticket_id}')">${esc(CAT_LABEL[t.category] ?? t.category)}</td>
+          <td style="padding:6px 10px;" onclick="openSupTicket('${t.ticket_id}')"><span style="background:${pb};color:#fff;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;text-transform:uppercase;">${t.priority}</span></td>
+          <td style="padding:6px 10px;" onclick="openSupTicket('${t.ticket_id}')"><span style="background:${sb_};color:#fff;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;">${(t.status||'').replace('_',' ')}</span></td>
+          <td style="padding:6px 10px;" onclick="openSupTicket('${t.ticket_id}')">${slaBadge(t)}</td>
+          <td style="padding:6px 10px;font-size:11px;color:#888;" onclick="openSupTicket('${t.ticket_id}')">${fmtRel(t.last_activity_at)} ago</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function toggleSupSelectAll(checked) {
+      document.querySelectorAll('.supRowCheck').forEach(cb => cb.checked = checked);
+    }
+    function getSelectedIds() {
+      return Array.from(document.querySelectorAll('.supRowCheck:checked')).map(cb => cb.value);
+    }
+
+    async function openSupTicket(ticketId) {
+      const sb = window.supabaseClient;
+      const panel = $('supDetailPanel');
+      panel.style.display = 'block';
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('supDetailMessages').innerHTML = '<div class="muted">Loading…</div>';
+      const { data, error } = await sb.rpc('get_support_ticket', { p_ticket_id: ticketId });
+      if (error || !data?.ticket) { $('supDetailMessages').innerHTML = `<div class="error">${esc(error?.message||'Not found')}</div>`; return; }
+      _curTicket = data.ticket;
+      const t = data.ticket;
+      $('supDetailNumber').textContent   = t.ticket_number;
+      $('supDetailSubject').textContent  = t.subject;
+      $('supDetailMeta').innerHTML       = `${esc(CAT_LABEL[t.category] ?? t.category)} · ${esc(t.customer_name)} · opened ${fmtRel(t.created_at)} ago`;
+      $('supDetailStatus').value         = t.status;
+      $('supDetailPriority').value       = t.priority;
+      const ctxRows = [
+        ['Customer', `${esc(t.customer_name)} (#${t.customer_id})`],
+        ['Email',    esc(t.customer_email || '—')],
+        ['Phone',    esc(t.customer_phone || '—')],
+        ['Created',  new Date(t.created_at).toLocaleString()],
+        ['Updated',  new Date(t.updated_at).toLocaleString()],
+        ['First reply', t.first_response_at ? new Date(t.first_response_at).toLocaleString() : '—'],
+        ['Source',   esc(t.source || 'portal')]
+      ];
+      $('supCustomerContext').innerHTML = ctxRows.map(([k,v]) => `<div style="margin-bottom:4px;"><b>${k}:</b> ${v}</div>`).join('')
+        + (t.context && Object.keys(t.context).length ? `<details style="margin-top:8px;"><summary>Context snapshot</summary><pre style="white-space:pre-wrap;font-size:11px;">${esc(JSON.stringify(t.context, null, 2))}</pre></details>` : '');
+
+      const msgs = data.messages ?? [];
+      $('supDetailMessages').innerHTML = msgs.length ? msgs.map(m => {
+        const role = m.author_role;
+        const bg = role === 'customer' ? '#ffffff' : role === 'admin' ? '#dbeafe' : role === 'system' ? '#f3f4f6' : '#fff';
+        const tag = m.is_internal ? '<span style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;border-radius:6px;margin-left:6px;">INTERNAL</span>' : '';
+        const att = (m.attachments || []).length
+          ? `<div style="margin-top:6px;font-size:11px;">📎 ${m.attachments.map(a => `<a href="#" onclick="downloadSupAttachment('${esc(a.storage_path)}','${esc(a.filename)}'); return false;">${esc(a.filename)}</a>`).join(', ')}</div>`
+          : '';
+        return `<div style="background:${bg};border:1px solid var(--border,rgba(0,0,0,.06));border-radius:6px;padding:8px 12px;">
+          <div style="font-size:10px;color:#666;text-transform:uppercase;margin-bottom:4px;">${role}${tag} · ${new Date(m.created_at).toLocaleString()}</div>
+          <div style="white-space:pre-wrap;font-size:13px;">${esc(m.body)}</div>${att}
+        </div>`;
+      }).join('') : '<div class="muted">No messages.</div>';
+    }
+    function closeSupDetail() {
+      $('supDetailPanel').style.display = 'none';
+      _curTicket = null;
+    }
+
+    async function downloadSupAttachment(path, filename) {
+      const sb = window.supabaseClient;
+      const { data, error } = await sb.storage.from('support-attachments').createSignedUrl(path, 60);
+      if (error) { alert('Failed: ' + error.message); return; }
+      const a = document.createElement('a');
+      a.href = data.signedUrl; a.download = filename; a.target = '_blank';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    async function _callUpdate(ticket_ids, payload) {
+      const sb = window.supabaseClient;
+      const { data: { session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Sign in first.'); return null; }
+      // Substitute __me__ with current user id
+      if (payload.assigned_to === '__me__') payload.assigned_to = session.user.id;
+      const res = await fetch(`${SB_URL_S}/functions/v1/ef_update_support_ticket`, {
+        method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+        body: JSON.stringify({ ticket_ids, ...payload })
+      });
+      const j = await res.json();
+      if (!res.ok || !j.success) { alert('Update failed: ' + (j.error || res.status)); return null; }
+      return j;
+    }
+
+    async function updateCurrentTicket(payload) {
+      if (!_curTicket) return;
+      const r = await _callUpdate([_curTicket.ticket_id], payload);
+      if (r) { await openSupTicket(_curTicket.ticket_id); loadSupportInbox(); }
+    }
+    async function bulkUpdateSupport(status) {
+      const ids = getSelectedIds();
+      if (ids.length === 0) { alert('Select tickets first.'); return; }
+      if (!confirm(`Set ${ids.length} ticket(s) to "${status}"?`)) return;
+      const r = await _callUpdate(ids, { status, notify_customer: true });
+      if (r) loadSupportInbox();
+    }
+    async function bulkAssignSupport() {
+      const ids = getSelectedIds();
+      if (ids.length === 0) { alert('Select tickets first.'); return; }
+      const r = await _callUpdate(ids, { assigned_to: '__me__' });
+      if (r) loadSupportInbox();
+    }
+
+    async function postAdminReply() {
+      if (!_curTicket) return;
+      const body = $('supReplyBody').value.trim();
+      const internal = $('supReplyInternal').checked;
+      const msg = $('supReplyMsg');
+      if (!body) { msg.textContent = 'Type a message.'; return; }
+      const sb = window.supabaseClient;
+      const { data: { session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { msg.textContent = 'Sign in first.'; return; }
+      $('supReplyBtn').disabled = true; msg.textContent = 'Sending…';
+      try {
+        const res = await fetch(`${SB_URL_S}/functions/v1/ef_post_ticket_reply`, {
+          method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+          body: JSON.stringify({ ticket_id: _curTicket.ticket_id, body, is_internal: internal })
+        });
+        const j = await res.json();
+        if (!res.ok || !j.success) throw new Error(j.error || res.status);
+        $('supReplyBody').value = '';
+        $('supReplyInternal').checked = false;
+        msg.textContent = 'Sent.';
+        await openSupTicket(_curTicket.ticket_id);
+        loadSupportInbox();
+      } catch (e) { msg.textContent = 'Error: ' + (e.message ?? e); }
+      finally { $('supReplyBtn').disabled = false; }
+    }
+
+    // Wire filter changes
+    ['supFilterStatus','supFilterPriority','supFilterCategory'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', loadSupportInbox);
+    });
+    const search = document.getElementById('supFilterSearch');
+    if (search) search.addEventListener('input', () => { clearTimeout(window._supSearchT); window._supSearchT = setTimeout(loadSupportInbox, 250); });
+
+    // Auto-load when navigating to #support-module or after admin sign-in
+    function maybeAutoLoad() {
+      if (location.hash === '#support-module' && window.supabaseClient) loadSupportInbox();
+    }
+    window.addEventListener('hashchange', maybeAutoLoad);
+    const t = setInterval(() => { if (window.supabaseClient) { clearInterval(t); maybeAutoLoad(); setInterval(loadSupportInbox, 60000); } }, 400);
+
+    // Expose
+    window.loadSupportInbox     = loadSupportInbox;
+    window.openSupTicket        = openSupTicket;
+    window.closeSupDetail       = closeSupDetail;
+    window.toggleSupSelectAll   = toggleSupSelectAll;
+    window.bulkUpdateSupport    = bulkUpdateSupport;
+    window.bulkAssignSupport    = bulkAssignSupport;
+    window.postAdminReply       = postAdminReply;
+    window.updateCurrentTicket  = updateCurrentTicket;
+    window.downloadSupAttachment= downloadSupAttachment;
   })();
   </script>
 
