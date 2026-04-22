@@ -292,65 +292,99 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
   // rely on usdt_sold / btc_sold columns to capture the true split.
   // TODO: once migration to extend the check constraint is applied, restore 'BTC+USDT'.
   const sourceAsset = btcToSell > 0 ? "BTC" : "USDT";
+  const sourceAsset = btcToSell > 0
+    ? (usdtToSell > 0 ? "BTC+USDT" : "BTC")
+    : "USDT";
   trace.push(`zar_pending:split usdtToSell=${usdtToSell} btcToSell=${btcToSell} src=${sourceAsset}`);
 
-  // 4. Place LIMIT SELL orders at best bid
-  const updates: Record<string, unknown> = { source_asset: sourceAsset };
+  // 4. Place LIMIT SELL orders at best bid.
+  // CRITICAL idempotency rule: each leg's customerOrderId is deterministic
+  // (`wd-usdt-{request_id}` / `wd-btc-{request_id}`). Before placing we probe
+  // VALR's order summary by customerOrderId; if it already exists we reuse it
+  // instead of double-placing. Each placed order is persisted IMMEDIATELY so
+  // that even if the next step fails the row carries the order ID and the next
+  // tick will pick it up via processZarConverting.
+
+  // Persist source_asset + initial converting state up front so that even a
+  // crash mid-way leaves the row in a recoverable state.
+  await sbLthPvr
+    .from("withdrawal_requests")
+    .update({ status: "converting", conversion_status: "limit_placed", source_asset: sourceAsset })
+    .eq("request_id", row.request_id);
 
   if (usdtToSell > 0) {
-    try {
-      const book = await getOrderBook("USDTZAR");
-      const bid  = Number(book.Bids?.[0]?.price);
-      if (!bid || bid <= 0) throw new Error("USDTZAR no bid");
-      const customerOrderId = `wd-usdt-${row.request_id}`;
-      const res: any = TEST_MODE
-        ? { id: `test-usdt-${row.request_id}` }
-        : await placeLimitOrder(
-            { side: "SELL", pair: "USDTZAR", price: bid.toFixed(4), quantity: usdtToSell.toFixed(6), customerOrderId },
-            ctx.subaccountId, ctx.creds);
-      updates.conversion_order_id_usdt = (res?.id ?? res?.orderId ?? customerOrderId);
-      trace.push(`zar_pending:usdt_order_placed id=${updates.conversion_order_id_usdt}`);
-    } catch (e) {
-      trace.push(`zar_pending:usdt_order_failed ${(e as Error).message}`);
-      return await markFailed(row, ctx, `USDTZAR limit order failed: ${(e as Error).message}`);
+    const customerOrderId = `wd-usdt-${row.request_id}`;
+    let orderId: string | null = row.conversion_order_id_usdt ?? null;
+    if (!orderId) {
+      // Idempotency probe: did a previous tick already place this leg?
+      try {
+        const existing: any = await getOrderSummaryByCustomerOrderId(customerOrderId, "USDTZAR", ctx.subaccountId, ctx.creds);
+        if (existing?.orderId || existing?.id) {
+          orderId = existing.orderId ?? existing.id;
+          trace.push(`zar_pending:usdt_already_exists id=${orderId} status=${existing.orderStatusType}`);
+        }
+      } catch { /* 404 = doesn't exist, continue to place */ }
     }
+    if (!orderId) {
+      try {
+        const book = await getOrderBook("USDTZAR");
+        const bid  = Number(book.Bids?.[0]?.price);
+        if (!bid || bid <= 0) throw new Error("USDTZAR no bid");
+        const res: any = TEST_MODE
+          ? { id: `test-usdt-${row.request_id}` }
+          : await placeLimitOrder(
+              { side: "SELL", pair: "USDTZAR", price: bid.toFixed(4), quantity: usdtToSell.toFixed(6), customerOrderId },
+              ctx.subaccountId, ctx.creds);
+        orderId = (res?.id ?? res?.orderId ?? customerOrderId);
+        trace.push(`zar_pending:usdt_order_placed id=${orderId}`);
+      } catch (e) {
+        trace.push(`zar_pending:usdt_order_failed ${(e as Error).message}`);
+        return await markFailed(row, ctx, `USDTZAR limit order failed: ${(e as Error).message}`);
+      }
+    }
+    // Persist order id IMMEDIATELY before placing the next leg.
+    await sbLthPvr
+      .from("withdrawal_requests")
+      .update({ conversion_order_id_usdt: orderId })
+      .eq("request_id", row.request_id);
   }
 
   if (btcToSell > 0) {
-    try {
-      const book = await getOrderBook("BTCZAR");
-      const bid  = Number(book.Bids?.[0]?.price);
-      if (!bid || bid <= 0) throw new Error("BTCZAR no bid");
-      const customerOrderId = `wd-btc-${row.request_id}`;
-      const res: any = TEST_MODE
-        ? { id: `test-btc-${row.request_id}` }
-        : await placeLimitOrder(
-            { side: "SELL", pair: "BTCZAR", price: bid.toFixed(2), quantity: btcToSell.toFixed(8), customerOrderId },
-            ctx.subaccountId, ctx.creds);
-      updates.conversion_order_id_btc = (res?.id ?? res?.orderId ?? customerOrderId);
-      trace.push(`zar_pending:btc_order_placed id=${updates.conversion_order_id_btc}`);
-    } catch (e) {
-      trace.push(`zar_pending:btc_order_failed ${(e as Error).message}`);
-      // Best-effort cancel of the USDT leg if it was placed
-      if (updates.conversion_order_id_usdt && !TEST_MODE) {
-        try {
-          await cancelOrderById(String(updates.conversion_order_id_usdt), "USDTZAR", ctx.subaccountId, ctx.creds);
-        } catch { /* ignore */ }
-      }
-      return await markFailed(row, ctx, `BTCZAR limit order failed: ${(e as Error).message}`);
+    const customerOrderId = `wd-btc-${row.request_id}`;
+    let orderId: string | null = row.conversion_order_id_btc ?? null;
+    if (!orderId) {
+      try {
+        const existing: any = await getOrderSummaryByCustomerOrderId(customerOrderId, "BTCZAR", ctx.subaccountId, ctx.creds);
+        if (existing?.orderId || existing?.id) {
+          orderId = existing.orderId ?? existing.id;
+          trace.push(`zar_pending:btc_already_exists id=${orderId} status=${existing.orderStatusType}`);
+        }
+      } catch { /* 404 = doesn't exist, continue to place */ }
     }
+    if (!orderId) {
+      try {
+        const book = await getOrderBook("BTCZAR");
+        const bid  = Number(book.Bids?.[0]?.price);
+        if (!bid || bid <= 0) throw new Error("BTCZAR no bid");
+        const res: any = TEST_MODE
+          ? { id: `test-btc-${row.request_id}` }
+          : await placeLimitOrder(
+              { side: "SELL", pair: "BTCZAR", price: bid.toFixed(2), quantity: btcToSell.toFixed(8), customerOrderId },
+              ctx.subaccountId, ctx.creds);
+        orderId = (res?.id ?? res?.orderId ?? customerOrderId);
+        trace.push(`zar_pending:btc_order_placed id=${orderId}`);
+      } catch (e) {
+        trace.push(`zar_pending:btc_order_failed ${(e as Error).message}`);
+        return await markFailed(row, ctx, `BTCZAR limit order failed: ${(e as Error).message}`);
+      }
+    }
+    await sbLthPvr
+      .from("withdrawal_requests")
+      .update({ conversion_order_id_btc: orderId })
+      .eq("request_id", row.request_id);
   }
 
-  const { error: convErr } = await sbLthPvr
-    .from("withdrawal_requests")
-    .update({
-      status: "converting",
-      conversion_status: "limit_placed",
-      ...updates,
-    })
-    .eq("request_id", row.request_id);
-  if (convErr) trace.push(`zar_pending:mark_converting_err ${convErr.message}`);
-  else trace.push(`zar_pending:mark_converting_ok`);
+  trace.push(`zar_pending:done`);
   console.log(`🔄 ZAR withdrawal converting: ${row.request_id} (USDT=${usdtToSell.toFixed(6)}, BTC=${btcToSell.toFixed(8)})`);
 }
 
@@ -495,6 +529,28 @@ Deno.serve(async (req) => {
   const results = { processed: 0, failed: 0, skipped: 0, details: [] as unknown[] };
 
   for (const row of (rows ?? []) as Row[]) {
+    // Hard retry cap: if a row keeps re-entering the queue without progressing
+    // (e.g. silent DB failure), auto-fail it so we never retry-loop and
+    // accidentally place duplicate exchange orders.
+    const MAX_QUEUE_ATTEMPTS = 6;
+    if ((row.queue_attempts ?? 0) >= MAX_QUEUE_ATTEMPTS) {
+      await sbLthPvr
+        .from("withdrawal_requests")
+        .update({
+          status: "failed",
+          failure_reason: `Auto-failed after ${row.queue_attempts} queue attempts without progress`,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("request_id", row.request_id);
+      await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "critical",
+        `Withdrawal ${row.request_id} auto-failed after ${row.queue_attempts} attempts`,
+        { request_id: row.request_id, customer_id: row.customer_id, status: row.status, queue_attempts: row.queue_attempts },
+        ORG_ID, row.customer_id);
+      results.failed++;
+      results.details.push({ request_id: row.request_id, outcome: "retry_cap_exceeded" });
+      continue;
+    }
+
     const ctx = await loadCustomerCtx(row);
     if (!ctx) {
       results.failed++;
