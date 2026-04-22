@@ -1247,9 +1247,40 @@
                     return;
                 }
 
+                // Merge paired conversion legs into a single row.
+                // VALR Simple Sell / Simple Buy emits two funding events sharing the same
+                // ext_ref (one for the crypto debit, one for the ZAR credit). They are
+                // booked as two ledger_lines; here we collapse them so the customer sees
+                // one row with negative crypto + positive ZAR (or vice-versa).
+                const mergedById = new Map();
+                const ordered = [];
+                for (const raw of transactions) {
+                    const meta = raw.conversion_metadata || {};
+                    const isConv = !!(meta.conversion_to || meta.conversion_from);
+                    if (isConv && raw.ext_ref) {
+                        const existing = mergedById.get(raw.ext_ref);
+                        if (existing) {
+                            existing.amount_btc  = (parseFloat(existing.amount_btc  || 0) + parseFloat(raw.amount_btc  || 0)).toString();
+                            existing.amount_usdt = (parseFloat(existing.amount_usdt || 0) + parseFloat(raw.amount_usdt || 0)).toString();
+                            existing.amount_zar  = (parseFloat(existing.amount_zar  || 0) + parseFloat(raw.amount_zar  || 0)).toString();
+                            existing.fee_btc          = (parseFloat(existing.fee_btc          || 0) + parseFloat(raw.fee_btc          || 0)).toString();
+                            existing.fee_usdt         = (parseFloat(existing.fee_usdt         || 0) + parseFloat(raw.fee_usdt         || 0)).toString();
+                            existing.platform_fee_btc  = (parseFloat(existing.platform_fee_btc  || 0) + parseFloat(raw.platform_fee_btc  || 0)).toString();
+                            existing.platform_fee_usdt = (parseFloat(existing.platform_fee_usdt || 0) + parseFloat(raw.platform_fee_usdt || 0)).toString();
+                            existing.kind = 'conversion';
+                            continue;
+                        }
+                        const cloned = { ...raw, kind: 'conversion' };
+                        mergedById.set(raw.ext_ref, cloned);
+                        ordered.push(cloned);
+                    } else {
+                        ordered.push(raw);
+                    }
+                }
+
                 // Populate table
                 const tbody = document.getElementById('transactionTableBody');
-                tbody.innerHTML = transactions.map(tx => {
+                tbody.innerHTML = ordered.map(tx => {
                     // Format date as DD/MM/YYYY
                     const dateObj = new Date(tx.trade_date);
                     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -1265,7 +1296,7 @@
                     // Simple Sell / Simple Buy). The funding-event metadata sets either
                     // `conversion_to` (crypto-out leg) or `conversion_from` (ZAR-in leg).
                     const convMeta = tx.conversion_metadata || {};
-                    const isConversion = !!(convMeta.conversion_to || convMeta.conversion_from);
+                    const isConversion = tx.kind === 'conversion' || !!(convMeta.conversion_to || convMeta.conversion_from);
 
                     // Map "topup" to "Deposit" for display
                     if (tx.kind === 'topup') {
@@ -1291,7 +1322,12 @@
                     let btcColor = '#64748b'; // gray default
                     let usdtColor = '#64748b'; // gray default
                     
-                    if (tx.kind === 'deposit' || tx.kind === 'topup') {
+                    if (isConversion) {
+                        // Merged conversion row — colour each leg by sign so the customer
+                        // can see which side moved which way.
+                        btcColor  = btcAmountRaw  > 0 ? '#10b981' : (btcAmountRaw  < 0 ? '#ef4444' : '#64748b');
+                        usdtColor = usdtAmountRaw > 0 ? '#10b981' : (usdtAmountRaw < 0 ? '#ef4444' : '#64748b');
+                    } else if (tx.kind === 'deposit' || tx.kind === 'topup') {
                         // Check which asset was deposited based on amounts
                         if (btcAmountRaw > 0 && usdtAmountRaw === 0) {
                             // BTC deposit: BTC green, USDT gray
