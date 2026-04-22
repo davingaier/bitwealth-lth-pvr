@@ -119,8 +119,14 @@
                         <a href="#settings" onclick="scrollToSection('settings'); return false;" style="color: #ef4444; font-weight: 600; margin-left: 8px; font-size: 14px;">Go to Settings →</a>
                     </div>
 
-                    <!-- Stats Grid -->
-                    <div class="dashboard-stats" id="dashboardStats" style="display: none;">
+                    <!-- Stats Grid (5-up: NAV, BTC, USDT, ZAR, TWR) -->
+                    <div class="dashboard-stats" id="dashboardStats" style="display: none; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
+                        <style>
+                            #dashboardStats .stat-box  { padding: 16px; }
+                            #dashboardStats .stat-value { font-size: 22px; }
+                            #dashboardStats .stat-header { margin-bottom: 10px; font-size: 12px; }
+                            #dashboardStats .stat-icon { font-size: 18px; }
+                        </style>
                         <div class="stat-box">
                             <div class="stat-header">
                                 <span>Net Asset Value
@@ -1016,11 +1022,12 @@
                         
                         if (!wErr && withdrawable && withdrawable.length > 0) {
                             const wb = withdrawable[0];
-                            // Use withdrawable amounts (excludes BitWealth's accumulated fees and the
-                            // VALR USDT/ZAR conversion buffer).
-                            btc  = parseFloat(wb.withdrawable_btc  || 0);
-                            usdt = parseFloat(wb.withdrawable_usdt || 0);
-                            zar  = parseFloat(wb.withdrawable_zar  || 0);
+                            // Show TOTAL holdings on the cards (accrued fees are surfaced
+                            // separately in each tile's footer); ZAR comes straight from
+                            // recorded ZAR balance.
+                            btc  = parseFloat(wb.recorded_btc  || 0);
+                            usdt = parseFloat(wb.recorded_usdt || 0);
+                            zar  = parseFloat(wb.recorded_zar  || 0);
                         }
                     } catch (wbErr) {
                         console.error('Error fetching withdrawable balance:', wbErr);
@@ -1976,7 +1983,7 @@
                             <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Perf. Fee</th>
                             <th style="padding:10px 12px;text-align:right;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Net Amount</th>
                             <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Status</th>
-                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Actions</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;">Details</th>
                         </tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
