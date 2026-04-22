@@ -403,14 +403,14 @@ Deno.serve(async (req) => {
               // - OUT OF subaccount (debitValue > 0) = could be either:
               //   a) Automated platform fee transfer (tracked in valr_transfer_log)
               //   b) Manual customer withdrawal (should record as withdrawal)
-              if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT")) {
+              if (creditValue > 0 && (creditCurrency === "BTC" || creditCurrency === "USDT" || creditCurrency === "ZAR")) {
                 // Money coming INTO subaccount = DEPOSIT
                 currency = creditCurrency;
                 amount = creditValue;
                 isDeposit = true;
-                fundingKind = "deposit";
+                fundingKind = currency === "ZAR" ? "zar_deposit" : "deposit";
                 console.log(`  💰 INTERNAL_TRANSFER IN (deposit): ${amount} ${currency}`);
-              } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT")) {
+              } else if (debitValue > 0 && (debitCurrency === "BTC" || debitCurrency === "USDT" || debitCurrency === "ZAR")) {
                 // Money going OUT of subaccount - check if it's automated or manual
                 // Query valr_transfer_log to see if this is an automated platform fee transfer
                 const { data: transferLog, error: transferLogError } = await supabase
@@ -437,7 +437,7 @@ Deno.serve(async (req) => {
                   currency = debitCurrency;
                   amount = debitValue;
                   isDeposit = false; // No platform fee on withdrawals
-                  fundingKind = "withdrawal";
+                  fundingKind = currency === "ZAR" ? "zar_withdrawal" : "withdrawal";
                   console.log(`  💸 INTERNAL_TRANSFER OUT (customer withdrawal): ${amount} ${currency}`);
                   
                   // Log alert for admin notification

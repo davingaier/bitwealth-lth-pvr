@@ -3,11 +3,34 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-22 (v0.6.83)
+**Last updated:** 2026-04-22 (v0.6.84)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.84 – Balance Reconciliation: Conversion Outflows + ZAR Internal Transfers
+**Date:** 2026-04-22  
+**Purpose:** Resolve a material discrepancy between `lth_pvr.balances_daily` and the actual VALR wallet for customer 31, where the DB showed BTC 0.00006441 / USDT 5.32416699 / ZAR 159.52 versus the true wallet BTC 0.00000657 / USDT 0.03 / ZAR 184.51. Three independent gaps combined to produce the drift.
+
+**Status:** ✅ COMPLETE (deployed).
+
+**Gap 1 — `ef_post_ledger_and_balances` is not on a recurring cron.** The function only ran as part of the once-daily pipeline (`ef_resume_pipeline`), so any mid-day fills, conversions or transfers stayed outside `ledger_lines` and `balances_daily` until the following day's pipeline run.  
+**Fix:** Added cron job `ef_post_ledger_and_balances_30min` (`5,35 * * * *`) that re-rolls up the previous and current trade dates every 30 minutes — five minutes after each `ef_sync_valr_transactions` run so newly captured funding events are picked up promptly.
+
+**Gap 2 — `ledger_lines.conversion_rate` was `numeric(10,4)`.** BTC/ZAR rates exceed 1,000,000 and triggered `numeric field overflow` whenever the function tried to record a BTC→ZAR conversion's metadata, halting the entire batch insert.  
+**Fix:** Migration `widen_conversion_rate_precision` widens the column to `numeric(20,8)`.
+
+**Gap 3 — `ef_sync_valr_transactions` dropped ZAR `INTERNAL_TRANSFER` events.** The handler only matched `creditCurrency === "BTC" || "USDT"` for inflows and the same pair for outflows, so an internal ZAR transfer between sub-accounts fell through to `Skipping unexpected INTERNAL_TRANSFER` and was never persisted in `exchange_funding_events`.  
+**Fix:** Extended both branches to accept `ZAR` and emit `fundingKind = "zar_deposit" | "zar_withdrawal"`. The email-suppression gate already excludes these kinds.
+
+**Reconciliation actions for customer 31:**
+1. Inserted the missing R25.00 ZAR internal transfer event manually (`MANUAL_RECONCILE_C31_20260421_R25_TRANSFER`) since the corrupted sync window sits before the 1-hour safety buffer.
+2. Re-ran `ef_post_ledger_and_balances` for `2026-04-21..2026-04-22`. Result: BTC 0.00000658 / USDT 0.03046699 / ZAR 184.52, all within sub-cent rounding of the live VALR wallet.
+
+**Operational guarantee going forward:** with the cron in place, the maximum lag between a VALR-side event and the booked balance is ~30–35 minutes. Any future drift larger than that is a true bug and should fail an alerting check.
+
+---
 
 ### v0.6.83 – Persistent ZAR Balance Tracking (Option A)
 **Date:** 2026-04-22  
