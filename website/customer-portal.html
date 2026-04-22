@@ -1645,25 +1645,6 @@
                     withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
                     withdrawableBalance.zar  = parseFloat(wb[0].withdrawable_zar  || 0);
                 }
-                // Optional live-VALR probe — only used to detect drift between recorded balance
-                // and the actual VALR ZAR wallet (e.g. unsynced internal transfers). The recorded
-                // value from get_withdrawable_balance remains the source of truth for sizing and
-                // capacity checks so the customer can never spend funds we have not yet booked.
-                try {
-                    const { data: { session } } = await sb.auth.getSession();
-                    const balResp = await fetch(`${SUPABASE_URL}/functions/v1/valr-balances`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}` },
-                        body: JSON.stringify({ customer_id: customerId })
-                    });
-                    if (balResp.ok) {
-                        const balJson = await balResp.json();
-                        const zarLive = parseFloat(balJson?.zar?.available ?? 0);
-                        if (!Number.isNaN(zarLive) && Math.abs(zarLive - withdrawableBalance.zar) > 1) {
-                            console.warn(`ZAR drift detected: recorded R${withdrawableBalance.zar.toFixed(2)} vs VALR R${zarLive.toFixed(2)}`);
-                        }
-                    }
-                } catch { /* non-critical */ }
                 const btcEl = document.getElementById('wdBtcBalance');
                 const usdtEl = document.getElementById('wdUsdtBalance');
                 const zarEl  = document.getElementById('wdZarBalance');
