@@ -344,6 +344,7 @@
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Type</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">BTC</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">USDT</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">ZAR</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Exchange Fee (BTC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Exchange Fee (USDT)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (BTC)</th>
@@ -1259,23 +1260,32 @@
                     // Determine type display and color
                     let typeDisplay = tx.kind.charAt(0).toUpperCase() + tx.kind.slice(1);
                     let typeColor = '#64748b'; // default gray
-                    
+
+                    // Detect conversion legs (paired BTC/USDT ↔ ZAR rows produced by VALR
+                    // Simple Sell / Simple Buy). The funding-event metadata sets either
+                    // `conversion_to` (crypto-out leg) or `conversion_from` (ZAR-in leg).
+                    const convMeta = tx.conversion_metadata || {};
+                    const isConversion = !!(convMeta.conversion_to || convMeta.conversion_from);
+
                     // Map "topup" to "Deposit" for display
                     if (tx.kind === 'topup') {
                         typeDisplay = 'Deposit';
                     }
-                    
-                    if (tx.kind === 'buy' || tx.kind === 'deposit' || tx.kind === 'topup') {
+                    if (isConversion) {
+                        typeDisplay = 'Conversion';
+                        typeColor = '#3b82f6'; // blue
+                    } else if (tx.kind === 'buy' || tx.kind === 'deposit' || tx.kind === 'topup') {
                         typeColor = '#10b981'; // green
                     } else if (tx.kind === 'sell' || tx.kind === 'withdrawal') {
                         typeColor = '#ef4444'; // red
                     } else if (tx.kind === 'fee') {
                         typeColor = '#f59e0b'; // orange
                     }
-                    
+
                     // Parse raw amounts for color logic
                     const btcAmountRaw = parseFloat(tx.amount_btc || 0);
                     const usdtAmountRaw = parseFloat(tx.amount_usdt || 0);
+                    const zarAmountRaw = parseFloat(tx.amount_zar || 0);
                     
                     // Color code amounts based on transaction type and actual amounts
                     let btcColor = '#64748b'; // gray default
@@ -1328,6 +1338,8 @@
                     // Format amounts
                     const btcAmount = btcAmountRaw.toFixed(8);
                     const usdtAmount = usdtAmountRaw.toFixed(2);
+                    const zarAmount = zarAmountRaw.toFixed(2);
+                    const zarColor = zarAmountRaw > 0 ? '#10b981' : (zarAmountRaw < 0 ? '#ef4444' : '#64748b');
                     const feeBtc = parseFloat(tx.fee_btc || 0).toFixed(8);
                     const feeUsdt = parseFloat(tx.fee_usdt || 0).toFixed(2);
                     
@@ -1355,6 +1367,7 @@
                             </td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${btcColor}; font-weight: 500;">${btcAmount}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${usdtColor}; font-weight: 500;">${usdtAmount}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${zarColor}; font-weight: 500;">${zarAmount}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${feeBtcColor};">${feeBtc}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${feeUsdtColor};">${feeUsdt}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeBtcColor};">${platformFeeBtc}</td>
