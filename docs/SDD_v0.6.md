@@ -3,11 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-23 (v0.6.86)
+**Last updated:** 2026-04-23 (v0.6.87)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.87 – Generalised funding-event dedup trigger
+**Date:** 2026-04-23
+**Purpose:** Prevent the v0.6.86 post-backfill regression (live `ef_sync_valr_transactions` re-inserting ZAR-side legs of crypto-buy fills under different idempotency keys) from recurring.
+
+**Status:** ✅ COMPLETE (migration `extend_prevent_duplicate_to_all_kinds`).
+
+`lth_pvr.trg_prevent_duplicate_deposit()` previously only covered `kind = 'deposit'` for `BTC`/`USDT`. After the historical backfill (which used `VALR_BF_<order_id>_DEBIT_NNN` keys) the live sync cron re-imported the same physical events under `VALR_TX_<tx_id>_ZAR_OUT` / `_CRYPTO_OUT` keys, creating duplicate `zar_withdrawal` and `withdrawal` rows. The unique-key constraint did not catch them because the keys differed, and the trigger's kind/asset filter let them through.
+
+The trigger now matches across **all** `kind`/`asset` combinations:
+- BTC/USDT deposits keep the original 7-day cross-source window (activation scan vs sync detect the same physical deposit at very different timestamps).
+- All other kinds use a tight **5-minute** window. Two legitimate identical-amount events for the same customer/asset within 5 minutes are vanishingly rare, while same-amount events ingested via two different idempotency keys within seconds of each other are exactly the duplicate pattern we need to suppress.
+
+A `idempotency_key IS DISTINCT FROM NEW.idempotency_key` clause was added so the trigger never blocks legitimate re-tries that hit the same key (those are already idempotent via the unique index).
+
+Smoke-tested by attempting to re-insert one of the cleaned C31 ZAR-out legs under a new `VALR_TX_*` key — suppressed as expected, while a same-timestamp event with a different amount was allowed.
+
+---
 
 ### v0.6.86 – Historical VALR Backfill + Carry-Forward Bug Fixes
 **Date:** 2026-04-23
