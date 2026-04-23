@@ -495,7 +495,52 @@ Deno.serve(async (req) => {
                   console.log(`  ⏭️  Skipping already processed conversion: ${transactionId}`);
                   continue;
                 }
-                
+
+                // BUG FIX (v0.6.86): record the ZAR debit leg of the conversion
+                // so the customer's ZAR balance is reduced by the amount consumed.
+                // Without this, ZAR balances drift higher than the live VALR wallet
+                // by the cumulative conversion amount.
+                const zarOutIdempotencyKey = `VALR_TX_${transactionId}_ZAR_OUT`;
+                const { data: existingZarOut, error: zarOutCheckErr } = await supabase
+                  .from("exchange_funding_events")
+                  .select("funding_id")
+                  .eq("idempotency_key", zarOutIdempotencyKey)
+                  .maybeSingle();
+                if (zarOutCheckErr) {
+                  console.error(`  Error checking idempotency for ZAR out leg:`, zarOutCheckErr);
+                  throw zarOutCheckErr;
+                }
+                if (!existingZarOut) {
+                  const { error: zarOutInsertErr } = await supabase
+                    .from("exchange_funding_events")
+                    .insert({
+                      org_id: orgId,
+                      customer_id: customerId,
+                      exchange_account_id: account.exchange_account_id,
+                      kind: "zar_withdrawal",
+                      asset: "ZAR",
+                      amount: -debitValue,                         // Negative = ZAR consumed by conversion
+                      ext_ref: transactionId,
+                      occurred_at: new Date(timestamp).toISOString(),
+                      idempotency_key: zarOutIdempotencyKey,
+                      metadata: {
+                        conversion_to: creditCurrency,
+                        conversion_to_amount: creditValue,
+                        conversion_rate: debitValue / creditValue,
+                        conversion_fee_asset: tx.feeCurrency || "",
+                        conversion_fee_amount: parseFloat(tx.feeValue || 0),
+                        original_transaction_id: transactionId,
+                      },
+                    });
+                  if (zarOutInsertErr) {
+                    console.error(`  Error inserting ZAR out funding event:`, zarOutInsertErr);
+                    results.errors++;
+                  } else {
+                    console.log(`  💸 Recorded ZAR out leg: -R${debitValue.toFixed(2)} (consumed by ${creditCurrency} conversion)`);
+                    newTransactions++;
+                  }
+                }
+
                 // SMART ALLOCATION: Distribute ZAR conversion across pendings with overflow
                 const totalZar = debitValue;
                 const totalUsdt = creditValue;

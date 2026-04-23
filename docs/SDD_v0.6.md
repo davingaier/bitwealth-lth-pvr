@@ -3,11 +3,52 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-23 (v0.6.85)
+**Last updated:** 2026-04-23 (v0.6.86)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.86 – Historical VALR Backfill + Carry-Forward Bug Fixes
+**Date:** 2026-04-23
+**Purpose:** Reconcile customer ledgers with VALR exchange-side history for the three active customer subaccounts (C31, C48, C999), and fix two related bugs that surfaced during the reconciliation work.
+
+**Status:** ✅ COMPLETE.
+
+#### Bug 1 — `carry_forward_daily_balances()` zeroed ZAR balances
+
+`lth_pvr.carry_forward_daily_balances()` was writing `zar_balance = 0` for the new day instead of carrying forward the previous day's ZAR. Patched the function to source `zar_balance` from the latest prior `balances_daily` row (mirroring the BTC/USDT carry logic). Re-deployed via migration; subsequent invocations correctly preserve ZAR.
+
+#### Bug 2 — `ef_sync_valr_transactions` missed the ZAR-out leg of crypto-buy fills
+
+When syncing crypto buys (e.g. `Limit Buy USDTZAR`), the function inserted only the USDT-credit leg but skipped the ZAR-debit leg, so ZAR balances drifted high. Patched `supabase/functions/ef_sync_valr_transactions/index.ts` to emit both `deposit USDT` (credit) and `zar_withdrawal ZAR` (debit) events with paired `_CREDIT_n` / `_DEBIT_n` idempotency keys derived from the VALR order id, and deployed.
+
+#### Backfill — One-shot CSV importer
+
+User exported full transaction history per active subaccount to `data/valr_exports/`. New script `scripts/backfill_from_valr_exports.py` parses the CSVs and emits per-customer SQL chunks under `scripts/_backfill_chunks/`. Each event is written via `WITH ins AS (INSERT INTO lth_pvr.exchange_funding_events … RETURNING funding_id) INSERT INTO lth_pvr.ledger_lines … FROM ins;` so the corresponding ledger line is created in the same statement and the platform-fee logic in `ef_post_ledger_and_balances` is bypassed for historical events.
+
+Idempotency keys for conversion legs include a per-row index (`_CREDIT_001` / `_DEBIT_001`) so multi-fill orders sharing one VALR `order_id` do not collide.
+
+**Apply procedure (one-shot, performed against production):**
+
+1. Disabled triggers `prevent_duplicate_deposit` and `trg_auto_post_ledger` on `lth_pvr.exchange_funding_events` for the duration of the backfill.
+2. Wiped existing balances/ledger/funding rows for C31/C48/C999 (`scripts/_backfill_chunks/00_wipe.sql`).
+3. Applied per-customer chunks (`01_customer_31.sql`, `01_customer_48.sql`, `01_customer_999.sql`) inside transactional migrations.
+4. Deleted duplicate `VALR_TX_*` events that the live sync cron had inserted while the dedup trigger was disabled.
+5. Re-enabled both triggers.
+6. Ran `lth_pvr.carry_forward_daily_balances()` and seeded `balances_daily` for C999 (which had no historical row to carry forward from).
+
+**Reconciled funding-event totals (post-backfill):**
+
+| Customer | BTC | USDT | ZAR |
+|---|---|---|---|
+| C31 | 0.00002163 | 0.03046699 | 164.53 |
+| C48 | 0.00000905 | 6.11457600 | 0.00 |
+| C999 | 0.00000000 | 1122.57215070 | 9.17 |
+
+**Operational lesson:** Always disable both `prevent_duplicate_deposit` and `trg_auto_post_ledger` triggers before bulk historical inserts on `lth_pvr.exchange_funding_events`, and pause the `ef_sync_valr_transactions` cron (or be ready to clean up `VALR_TX_*` duplicates afterwards) to avoid the live sync racing with the backfill.
+
+---
 
 ### v0.6.85 – Support Ticket System + Dashboard Tile Polish
 **Date:** 2026-04-23  
