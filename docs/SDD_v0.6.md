@@ -3,11 +3,32 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-23 (v0.6.87)
+**Last updated:** 2026-04-23 (v0.6.88)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.88 – Daily-balance gap fill + self-healing carry-forward
+**Date:** 2026-04-23
+**Purpose:** Restore the customer-portal `Portfolio Performance` chart (LTH PVR NAV / HODL / Contributions series were showing only a handful of points with long linear-interpolated gaps) and prevent the same regression recurring after future backfills or missed cron runs.
+
+**Status:** ✅ COMPLETE (migrations `backfill_step7_fill_daily_balance_gaps`, `carry_forward_fill_gaps`, `carry_forward_fill_internal_gaps`, `carry_forward_fix_rowcount_type`).
+
+**Root cause.** `ef_post_ledger_and_balances` only upserts `balances_daily` / `hodl_balances_daily` on dates with new fills or topups, and the prior `carry_forward_daily_balances()` only added a single row for today. After the v0.6.86 wipe-and-replay backfill, each customer had only 5–6 snapshot rows across 100+ calendar days, so the chart showed NAV collapsing to $0 on undefined days. `std_dca_balances_daily` was unaffected because `recompute_std_dca_balances()` rebuilds the full series.
+
+**One-shot gap fill.** `backfill_step7_fill_daily_balance_gaps` populated, for each active customer, every day from the first ledger entry through today:
+- `balances_daily` ← running `SUM(ledger_lines)` through that day, valued at the most-recent prior `ci_bands_daily.btc_price` (fallback 78318.18 for today pending today's CI bands).
+- `hodl_balances_daily` ← cumulative BTC bought from each USDT topup at the topup-day's price.
+- C999's `std_dca_balances_daily` was empty after the wipe — re-ran `recompute_std_dca_balances()`.
+
+Final coverage: C31 113/113/113, C48 76/76/76, C999 214/214/214 days.
+
+**Self-healing carry-forward.** Rewrote `lth_pvr.carry_forward_daily_balances()` so that on every invocation it fills **every** missing day (not just today) between each customer's first row and `CURRENT_DATE`. Per-day values are recomputed from `ledger_lines` sums × the day's BTC price, so the logic is idempotent and robust to reordering/backfill. Smoke-tested by deleting a 3-day hole for C31 and confirming the function refilled it.
+
+**Note on the ROW_COUNT gotcha.** First iteration used a `boolean was_inserted` but `GET DIAGNOSTICS rc = ROW_COUNT` returns an integer — fixed in the follow-up migration. Added as a memory note.
+
+---
 
 ### v0.6.87 – Generalised funding-event dedup trigger
 **Date:** 2026-04-23
