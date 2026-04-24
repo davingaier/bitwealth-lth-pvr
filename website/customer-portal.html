@@ -256,6 +256,7 @@
                                 <!-- NAV sub-options (visible only when NAV chart selected) -->
                                 <select id="perfNavSubOption" onchange="updatePerfChart()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
                                     <option value="benchmarks">LTH PVR vs Benchmarks</option>
+                                    <option value="benchmarks_v2">LTH PVR vs Benchmarks (Cost Basis preview)</option>
                                     <option value="signals">NAV with Buy/Sell/Hold</option>
                                     <option value="sizes">NAV with Position Sizes</option>
                                 </select>
@@ -2782,6 +2783,12 @@
                             label: function(context) {
                                 let label = context.dataset.label || '';
                                 if (label) label += ': ';
+                                // Deposit/Withdrawal scatter markers carry the flow amount in raw._amt
+                                // and should show that, not their pinned y-position on the NAV line.
+                                if (context.raw && typeof context.raw._amt === 'number') {
+                                    const sign = (label.startsWith('Deposit')) ? '+' : '−';
+                                    return label + sign + '$' + Number(context.raw._amt).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                }
                                 if (context.parsed.y !== null) {
                                     if (context.dataset.yAxisID === 'yBtc') {
                                         label += Number(context.parsed.y).toFixed(8) + ' BTC';
@@ -2832,6 +2839,62 @@
                     { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
                     { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
                     { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 }
+                ];
+            } else if (sub === 'benchmarks_v2') {
+                // ─── Preview: Cost Basis instead of gross Contributions ───
+                // Cost Basis = max(0, cumulative_topups − cumulative_withdrawals)
+                // Same-day deposit + withdrawal returns the line to its prior level;
+                // withdrawals beyond cumulative principal floor at $0 (treated as
+                // profit withdrawal). Deposit/withdrawal markers are pinned to the
+                // NAV line on the day they occurred for added context.
+                const flowsByDate = new Map();
+                for (const c of (perfData.contributions || [])) {
+                    const v = parseFloat(c.amount_usdt || 0);
+                    if (!v) continue;
+                    if (!flowsByDate.has(c.date)) flowsByDate.set(c.date, { topup: 0, withdrawal: 0 });
+                    const bucket = flowsByDate.get(c.date);
+                    if (c.kind === 'topup') bucket.topup += v;
+                    else if (c.kind === 'withdrawal') bucket.withdrawal += Math.abs(v);
+                }
+
+                let cumTop = 0, cumWd = 0;
+                const costBasis = daily.map(d => {
+                    const f = flowsByDate.get(d.date);
+                    if (f) { cumTop += f.topup; cumWd += f.withdrawal; }
+                    return Math.max(0, cumTop - cumWd);
+                });
+
+                // Build deposit/withdrawal markers (scatter overlay on NAV line)
+                const depositMarkers = [];
+                const withdrawalMarkers = [];
+                for (const d of daily) {
+                    const f = flowsByDate.get(d.date);
+                    if (!f) continue;
+                    const navY = parseFloat(d.nav_usd || 0);
+                    if (f.topup > 0)      depositMarkers.push({ x: d.date, y: navY, amount: f.topup });
+                    if (f.withdrawal > 0) withdrawalMarkers.push({ x: d.date, y: navY, amount: f.withdrawal });
+                }
+                const sizeFor = amt => Math.max(4, Math.min(14, Math.sqrt(amt) / 3));
+
+                datasets = [
+                    { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
+                    { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
+                    { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
+                    { label: 'Cost Basis', data: costBasis, borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
+                    {
+                        label: 'Deposit', type: 'scatter',
+                        data: depositMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
+                        backgroundColor: 'rgba(16,185,129,0.85)', borderColor: PERF_COLORS.buy, borderWidth: 1,
+                        pointStyle: 'triangle', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
+                        showLine: false
+                    },
+                    {
+                        label: 'Withdrawal', type: 'scatter',
+                        data: withdrawalMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
+                        backgroundColor: 'rgba(239,68,68,0.85)', borderColor: PERF_COLORS.sell, borderWidth: 1,
+                        pointStyle: 'rectRot', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
+                        showLine: false
+                    }
                 ];
             } else if (sub === 'signals') {
                 // Color each segment by decision; mark each point with a colored dot
