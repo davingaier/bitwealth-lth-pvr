@@ -41,6 +41,8 @@
             border-bottom: 2px solid #e2e8f0;
             margin: 22px 0 22px 0;
             overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 2px;
         }
         .tab-btn {
             background: none;
@@ -770,8 +772,18 @@
     });
     document.querySelectorAll('.tab-btn').forEach(b => {
         b.addEventListener('click', () => {
-            // Free navigation between tabs (per-tab data is saved on Continue/Submit only)
-            switchTab(b.dataset.tab);
+            const target = parseInt(b.dataset.tab, 10);
+            const current = parseInt(document.querySelector('.tab-btn.active')?.dataset.tab || '1', 10);
+            // Allow: clicking the current tab, going back, or jumping to a tab whose previous tab is completed.
+            if (target === current) return;
+            if (target < current) { switchTab(target); return; }
+            const prevBtn = document.querySelector(`.tab-btn[data-tab="${target - 1}"]`);
+            if (prevBtn && prevBtn.classList.contains('completed')) {
+                switchTab(target);
+            } else {
+                showMsg('globalMessage', 'Please click “Save & Continue” on the current tab before moving on.', 'error', true);
+                setTimeout(() => hideMsg('globalMessage'), 3000);
+            }
         });
     });
 
