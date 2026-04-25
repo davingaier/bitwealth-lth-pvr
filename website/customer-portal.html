@@ -259,7 +259,6 @@
                                     <option value="signals">NAV with Buy/Sell/Hold</option>
                                     <option value="sizes">NAV with Position Sizes</option>
                                 </select>
-                                <span id="perfCostBasisInfo" title="Cost Basis = the amount of your own capital currently at work. Withdrawing your profits doesn't reduce this; withdrawing your principal does. Std DCA and HODL benchmarks are simulated against the same Cost Basis: withdrawals reduce simulated holdings, and HODL is modelled as if your current Cost Basis had been invested upfront on day 1 at that day's BTC price." style="cursor: help; color: var(--text-secondary); font-size: 13px;">ⓘ</span>
                                 <!-- ROI benchmark toggles (visible only when ROI chart selected) -->
                                 <div id="perfRoiBenchmarks" style="display: none; gap: 10px; align-items: center;">
                                     <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
@@ -1348,12 +1347,22 @@
                 const btcBalance = parseFloat(portfolio.btc_balance || 0);
                 const usdtBalance = parseFloat(portfolio.usdt_balance || 0);
 
-                // Avg cost basis derived from BUY decisions only (Σ usdt_spent / Σ btc_bought).
-                let avgCostBasis = 0;
-                try {
-                    const { data: bm } = await sb.schema('lth_pvr').rpc('get_customer_buy_metrics', { p_customer_id: customerId });
-                    if (bm && bm.length > 0) avgCostBasis = parseFloat(bm[0].avg_cost_basis_usd || 0);
-                } catch (e) { console.warn('buy metrics RPC unavailable:', e); }
+                // Cost Basis = the amount of the customer's own capital currently at work
+                // (cumulative deposits minus cumulative withdrawals, floored at 0). Aligned
+                // with the chart's Cost Basis line. Derived from perfData.contributions if
+                // already loaded; otherwise rendered as '--' and patched later by
+                // updateCostBasisMetric() once loadPerformanceData() finishes.
+                let costBasis = null;
+                if (perfData?.contributions) {
+                    let dep = 0, wd = 0;
+                    for (const c of perfData.contributions) {
+                        const v = parseFloat(c.amount_usdt || 0);
+                        if (!v) continue;
+                        if (c.kind === 'topup')           dep += v;
+                        else if (c.kind === 'withdrawal') wd  += Math.abs(v);
+                    }
+                    costBasis = Math.max(0, dep - wd);
+                }
                 
                 // Calculate CAGR
                 let cagrDisplay = '--';
@@ -1382,8 +1391,11 @@
                         <div class="metric-value">${cagrDisplay}</div>
                     </div>
                     <div class="metric-item">
-                        <div class="metric-label">Avg Cost Basis</div>
-                        <div class="metric-value">${avgCostBasis > 0 ? '$' + avgCostBasis.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '--'}</div>
+                        <div class="metric-label">
+                            Cost Basis
+                            <span id="costBasisInfo" title="Cost Basis = the amount of your own capital currently at work. Withdrawing your profits doesn't reduce this; withdrawing your principal does. The Std DCA and HODL benchmarks on the Portfolio Performance chart are simulated against this same Cost Basis: withdrawals reduce simulated holdings, and HODL is modelled as if your current Cost Basis had been invested upfront on day 1 at that day's BTC price." style="cursor: help; color: var(--text-secondary); font-size: 12px; margin-left: 4px;">ⓘ</span>
+                        </div>
+                        <div class="metric-value" id="costBasisValue">${costBasis !== null ? '$' + costBasis.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '--'}</div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">Current BTC Price</div>
@@ -2705,6 +2717,7 @@
                 canvas.style.display = 'block';
                 switchPerfChart();
                 updateReturnsTile();
+                updateCostBasisMetric();
             } catch (err) {
                 console.error('Error loading performance data:', err);
                 loading.style.display = 'none';
@@ -2717,6 +2730,23 @@
         // timing so the headline reflects strategy performance only. We also
         // compute the dollar P&L (NAV − cumulative net contributions) and use it
         // to drive a dynamic "profit / loss" caption.
+        // Patch the Cost Basis metric in the Strategy Metrics card after perfData
+        // is loaded. The card is built before performance data arrives, so this
+        // helper fills in the value once available. Idempotent.
+        function updateCostBasisMetric() {
+            const el = document.getElementById('costBasisValue');
+            if (!el || !perfData?.contributions) return;
+            let dep = 0, wd = 0;
+            for (const c of perfData.contributions) {
+                const v = parseFloat(c.amount_usdt || 0);
+                if (!v) continue;
+                if (c.kind === 'topup')           dep += v;
+                else if (c.kind === 'withdrawal') wd  += Math.abs(v);
+            }
+            const cb = Math.max(0, dep - wd);
+            el.textContent = '$' + cb.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
+
         function updateReturnsTile() {
             const valueEl = document.getElementById('roiValue');
             const changeEl = document.getElementById('roiProfit');
@@ -2843,79 +2873,35 @@
 
             if (sub === 'benchmarks') {
                 // ─── Cost Basis view ───
-                // Cost Basis = max(0, cumulative_topups − cumulative_withdrawals).
-                // Same-day deposit + withdrawal returns the line to its prior level;
-                // withdrawals beyond cumulative principal floor at $0 (treated as
-                // profit withdrawal). Std DCA and HODL benchmarks are simulated
-                // against the same Cost Basis (so withdrawals reduce simulated
-                // holdings dollar-for-dollar, and HODL is the upfront-day-1
-                // counterfactual). Deposit/withdrawal markers are pinned to the
-                // NAV line on the day they occurred.
-                const flowsByDate = new Map();
+                // All three benchmark series and the Cost Basis line are computed
+                // server-side now (lth_pvr.recompute_std_dca_balances /
+                // recompute_hodl_balances / carry_forward_daily_balances) and
+                // exposed by lth_pvr.get_customer_performance_data:
+                //   * cost_basis_usd → lth_pvr.balances_daily.cost_basis_usd
+                //   * std_dca_nav    → withdrawal-aware (USDT drained first, then BTC sold)
+                //   * hodl_nav       → cost_basis[d] × (btc_price[d] / btc_price[day_0])
+                // The browser only collects deposit/withdrawal markers for the
+                // scatter overlay so they pin to the LTH PVR NAV line.
+                const depositMarkers = [];
+                const withdrawalMarkers = [];
+                const navByDate = new Map(daily.map(d => [d.date, parseFloat(d.nav_usd || 0)]));
                 for (const c of (perfData.contributions || [])) {
                     const v = parseFloat(c.amount_usdt || 0);
                     if (!v) continue;
-                    if (!flowsByDate.has(c.date)) flowsByDate.set(c.date, { topup: 0, withdrawal: 0 });
-                    const bucket = flowsByDate.get(c.date);
-                    if (c.kind === 'topup') bucket.topup += v;
-                    else if (c.kind === 'withdrawal') bucket.withdrawal += Math.abs(v);
-                }
-
-                // Walk the daily series once and derive: cost basis, std-DCA-with-
-                // withdrawals, and HODL-as-if-day-1 series. We also collect deposit/
-                // withdrawal markers for the scatter overlay.
-                let cumTop = 0, cumWd = 0;
-                let stdNav  = 0;            // simulated DCA wallet value (USD)
-                let stdNavPrev = null;      // for proportional drawdown on withdrawals
-                const day0Price = parseFloat(daily[0]?.btc_price || 0);
-                const costBasis = [];
-                const stdDcaCB  = [];
-                const hodlCB    = [];
-                const depositMarkers = [];
-                const withdrawalMarkers = [];
-
-                for (let i = 0; i < daily.length; i++) {
-                    const d = daily[i];
-                    const f = flowsByDate.get(d.date);
-                    const px = parseFloat(d.btc_price || 0);
-                    const grossStd = parseFloat(d.std_dca_nav || 0);
-                    const grossStdPrev = i > 0 ? parseFloat(daily[i-1].std_dca_nav || 0) : 0;
-
-                    // Bring std-DCA wallet from prior day forward at today's market
-                    // (i.e. apply today's underlying price move via the gross-DCA series).
-                    if (i === 0) {
-                        stdNav = grossStd;
-                    } else if (grossStdPrev > 0) {
-                        stdNav = stdNav * (grossStd / grossStdPrev);
+                    const navY = navByDate.get(c.date) ?? 0;
+                    if (c.kind === 'topup') {
+                        depositMarkers.push({ x: c.date, y: navY, amount: v });
+                    } else if (c.kind === 'withdrawal') {
+                        withdrawalMarkers.push({ x: c.date, y: navY, amount: Math.abs(v) });
                     }
-
-                    if (f) {
-                        if (f.topup > 0) {
-                            cumTop += f.topup;
-                            stdNav += f.topup;     // new principal joins the simulated DCA wallet
-                            depositMarkers.push({ x: d.date, y: parseFloat(d.nav_usd || 0), amount: f.topup });
-                        }
-                        if (f.withdrawal > 0) {
-                            cumWd += f.withdrawal;
-                            stdNav = Math.max(0, stdNav - f.withdrawal);   // withdraw same dollar amount
-                            withdrawalMarkers.push({ x: d.date, y: parseFloat(d.nav_usd || 0), amount: f.withdrawal });
-                        }
-                    }
-
-                    const cb = Math.max(0, cumTop - cumWd);
-                    costBasis.push(cb);
-                    stdDcaCB.push(stdNav);
-                    // HODL: the customer's current cost basis modelled as if it had
-                    // all been bought on day 1 at day-1 BTC price.
-                    hodlCB.push(day0Price > 0 ? cb * (px / day0Price) : 0);
                 }
                 const sizeFor = amt => Math.max(4, Math.min(14, Math.sqrt(amt) / 3));
 
                 datasets = [
                     { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
-                    { label: 'Standard DCA', data: stdDcaCB, borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
-                    { label: 'HODL (Buy & Hold)', data: hodlCB, borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
-                    { label: 'Cost Basis', data: costBasis, borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
+                    { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
+                    { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
+                    { label: 'Cost Basis', data: daily.map(d => d.cost_basis_usd ?? 0), borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
                     {
                         label: 'Deposit', type: 'scatter',
                         data: depositMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
