@@ -3,11 +3,55 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.89)
+**Last updated:** 2026-04-25 (v0.6.90)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.90 – Email Header Inline Light-Mode Styles (Pattern B follow-up)
+**Date:** 2026-04-25
+**Purpose:** Follow-up to v0.6.89. Despite the `<style>`-block fix in v0.6.89, the `prospect_notification` resend test still rendered with a **dark-blue header + white text in light-mode webmail** — the opposite of the intended white-bg/dark-text light-mode design.
+
+**Root cause.** All 13 "Pattern B" templates (the ones using `<div class="header">`) had their light-mode appearance defined *only* inside the `<style>` block (`.header { background:#ffffff; color:#032C48; ... }`). Two failure paths produced the inverted look:
+1. Webmail clients on a system in **OS-level dark mode** correctly fired `@media (prefers-color-scheme: dark)`, applying the dark-blue override. The user observed this in their light-themed webmail UI (the OS hint, not the webmail UI hint, drives the media query).
+2. Some webmail clients (cPanel/Roundcube variants) strip `<style>` blocks entirely, leaving the header div with no background at all but keeping the dark `<style>` only after re-injecting it as inline rules.
+
+Either way the *light-mode* design was never inline, so it never won.
+
+**Fix.** Added inline light-mode styles directly to every `<div class="header">` and to its subtitle `<p>` / `<h1>` child:
+- `<div class="header">` → `<div class="header" style="background-color:#ffffff; color:#032C48; padding:20px; text-align:center; border:3px solid #032C48;">`
+- bare `<p>` after the logo → `<p style="color:#032C48; margin:8px 0 0;">`
+- bare `<h1 style="margin: 0; font-size: 24px;">` → `<h1 style="margin: 0; font-size: 24px; color:#032C48;">`
+
+The dark-mode `@media` and `[data-ogsc]` overrides in `<style>` already use `!important`, which still beats *normal-priority* inline styles in true dark-mode-aware clients — so dark mode continues to flip correctly.
+
+**Pattern A (6 templates with `<td style="background-color:#ffffff; ...">` headers) was already inline-styled correctly in v0.6.89 and required no further change.**
+
+**Verification:**
+| Check | Result |
+|---|---|
+| Pattern B div headers with new inline white-bg/dark-text style | 13 / 13 |
+| Pattern B subtitle `<p>` with inline `color:#032C48` | 11 / 11 |
+| Pattern B subtitle `<h1>` with inline `color:#032C48` | 2 / 2 |
+| Pattern B div headers still missing inline style | 0 / 13 |
+
+**Test resend:** `prospect_notification` for customer 52 sent at 2026-04-25 09:58:34 UTC, smtp_message_id `<94eaad1a-ff8f-66ed-3427-5b0106db9043@bitwealth.co.za>`, status `sent`.
+
+**Rollback:**
+```sql
+UPDATE public.email_templates t
+SET body_html = b.body_html
+FROM public.email_templates_backup_20260425b b
+WHERE t.template_key = b.template_key;
+```
+
+**Files changed:**
+| File | Change |
+|---|---|
+| `public.email_templates` (DB) | 13 Pattern B rows updated in place; backup table `public.email_templates_backup_20260425b` created. |
+
+---
 
 ### v0.6.89 – Email Deliverability Headers + Dark/Light Mode Header Fix (all 19 templates)
 **Date:** 2026-04-25  
