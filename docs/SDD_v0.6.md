@@ -3,11 +3,53 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.91)
+**Last updated:** 2026-04-25 (v0.6.92)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.92 – Admin UI Email Template Manager
+**Date:** 2026-04-25
+**Purpose:** Enable admins to view, edit, preview, test-send, create, and delete `public.email_templates` rows directly from the Administration module — eliminating the need for SQL/CLI workflows for content edits.
+
+**Status:** ✅ COMPLETE (edge function deployed; UI modals added).
+
+#### New components
+- **Edge function:** `supabase/functions/ef_admin_email_templates/index.ts` (JWT-required). Action-based POST endpoint with operations:
+  - `list` — list all templates (incl. inactive)
+  - `get` — fetch full row by `template_key`
+  - `update` — patch `name | description | subject | body_html | active`
+  - `create` — insert new template
+  - `delete` — remove by key
+  - `preview` — server-side render (substitutes `{{placeholder}}` tokens with sample values mirroring `_render_email_templates.py`); supports unsaved body_html for live editor preview
+  - `test_send` — sends a real test email via `ef_send_email`. For unsaved drafts, uses a transient sandbox row that is deleted immediately after dispatch.
+  - **Auth model:** Caller's JWT must resolve via `auth.getUser()` AND map to at least one `org_members` row with `role IN ('owner','admin')`. RLS on `public.email_templates` only permits `service_role` writes, so all mutations route through this function.
+
+- **UI:** `ui/Advanced BTC DCA Strategy.html` — Administration module gains:
+  - **`#emailTemplatesCard`** card (placed after the Pending ZAR Conversions card) — searchable table listing all templates (key, name, subject, active flag, last-updated, Edit/Preview actions), plus "+ New Template" and refresh buttons.
+  - **`#etEditModal`** — large editor with HTML / Preview tab toggle, fields for `template_key` (read-only on edit), `name`, `description`, `subject`, `body_html` (textarea, monospace), and `active`. Footer actions: Send Test, Delete, Cancel, Save.
+  - **`#etTestSendModal`** — recipient input + Send Test button. Uses unsaved editor state when present.
+  - **JS:** Self-contained IIFE at the bottom of the file. Authenticates via `window.supabaseClient.auth.getSession()`. Auto-loads templates list when the Administration module becomes visible. Closes via Esc, click-outside, or explicit buttons.
+
+#### Files changed
+- **NEW:** `supabase/functions/ef_admin_email_templates/index.ts`
+- **MODIFIED:** `ui/Advanced BTC DCA Strategy.html` (admin card + 2 modals + IIFE script appended)
+- **MODIFIED:** `docs/SDD_v0.6.md` (this entry)
+
+#### Deployment
+```powershell
+supabase functions deploy ef_admin_email_templates --project-ref wqnmxpooabmedvtackji
+```
+JWT verification is intentionally **enabled** (default). The function refuses requests where the caller lacks an owner/admin org_members membership.
+
+#### Known limits / future work
+- No version history kept (overwrite saves; rollback still requires `email_templates_backup_*` snapshot tables).
+- No diff view between edits.
+- Test-send uses a static sample-data dictionary; admin cannot yet override individual placeholders from the UI (the underlying edge-function action does accept a `sample_data` payload override for future enhancement).
+- No template-import / -export.
+
+---
 
 ### v0.6.91 – Email Template Content Edits + Monthly Statement Redesign + Withdrawal Template Split
 **Date:** 2026-04-25

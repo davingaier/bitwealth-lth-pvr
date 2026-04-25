@@ -3978,6 +3978,37 @@
         </div>
       </div>
 
+      <!-- Email Templates Manager -->
+      <div class="card" id="emailTemplatesCard">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          <h3 style="margin:0;">✉️ Email Templates</h3>
+          <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="etSearch" placeholder="Filter by key, name, subject…" class="context-select" style="height:32px;min-width:240px;" />
+            <button id="etRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+            <button id="etNewBtn" type="button" class="btn btn-secondary-sm">＋ New Template</button>
+          </div>
+        </div>
+        <p class="small-muted" style="margin-bottom:.75rem;">Edit subject lines and HTML bodies of transactional emails sent via <code>ef_send_email</code>. Changes apply on next send.</p>
+        <div id="etMessage" style="display:none;padding:.6rem 1rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <div class="table-scroll" style="max-height:480px;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;">
+          <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+            <thead style="position:sticky;top:0;background:#f8fafc;z-index:1;">
+              <tr style="text-align:left;">
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;">Key</th>
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;">Name</th>
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;">Subject</th>
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;text-align:center;">Active</th>
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;">Updated</th>
+                <th style="padding:.55rem .75rem;border-bottom:1px solid #e5e7eb;text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="etTableBody">
+              <tr><td colspan="6" style="padding:1rem;text-align:center;color:#6c757d;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Withdrawal History card -->
       <div class="card" id="withdrawalHistoryCard">
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
@@ -15353,6 +15384,406 @@ self.onmessage = function(e) {
     window.postAdminReply       = postAdminReply;
     window.updateCurrentTicket  = updateCurrentTicket;
     window.downloadSupAttachment= downloadSupAttachment;
+  })();
+  </script>
+
+  <!-- ===== Email Templates Manager: Modals + IIFE ===== -->
+  <div id="etEditModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;">
+    <div style="background:#fff;border-radius:8px;width:100%;max-width:1100px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:.75rem;">
+        <h3 id="etEditTitle" style="margin:0;flex:1;">Edit Email Template</h3>
+        <button id="etEditCloseBtn" type="button" class="btn btn-secondary-sm" aria-label="Close">✕</button>
+      </div>
+      <div style="padding:1rem 1.25rem;overflow:auto;flex:1;">
+        <div id="etEditMessage" style="display:none;padding:.5rem .75rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
+          <label style="font-size:.85rem;color:#374151;display:flex;flex-direction:column;gap:.25rem;">
+            <span style="font-weight:600;">Template Key</span>
+            <input type="text" id="etEditKey" class="context-select" style="height:34px;font-family:monospace;" />
+          </label>
+          <label style="font-size:.85rem;color:#374151;display:flex;flex-direction:column;gap:.25rem;">
+            <span style="font-weight:600;">Name</span>
+            <input type="text" id="etEditName" class="context-select" style="height:34px;" />
+          </label>
+        </div>
+        <label style="font-size:.85rem;color:#374151;display:flex;flex-direction:column;gap:.25rem;margin-bottom:.75rem;">
+          <span style="font-weight:600;">Description</span>
+          <input type="text" id="etEditDescription" class="context-select" style="height:34px;" />
+        </label>
+        <label style="font-size:.85rem;color:#374151;display:flex;flex-direction:column;gap:.25rem;margin-bottom:.75rem;">
+          <span style="font-weight:600;">Subject</span>
+          <input type="text" id="etEditSubject" class="context-select" style="height:34px;" />
+        </label>
+        <div style="margin-bottom:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+          <strong style="font-size:.85rem;color:#374151;">Body HTML</strong>
+          <span class="small-muted" style="font-size:.78rem;">Placeholders use <code>{{variable_name}}</code> syntax.</span>
+          <div style="margin-left:auto;display:flex;gap:.4rem;">
+            <button type="button" id="etTabHtmlBtn" class="btn btn-secondary-sm" style="height:28px;">HTML</button>
+            <button type="button" id="etTabPreviewBtn" class="btn btn-secondary-sm" style="height:28px;">Preview</button>
+          </div>
+        </div>
+        <textarea id="etEditBody" spellcheck="false" style="width:100%;min-height:380px;font-family:'Cascadia Code',Consolas,monospace;font-size:.82rem;padding:.75rem;border:1px solid #d1d5db;border-radius:5px;resize:vertical;"></textarea>
+        <iframe id="etPreviewFrame" style="display:none;width:100%;min-height:380px;border:1px solid #d1d5db;border-radius:5px;background:#fff;"></iframe>
+        <div id="etPreviewSubjectLine" style="display:none;font-size:.85rem;color:#374151;margin-top:.5rem;"><strong>Rendered subject:</strong> <span id="etPreviewSubjectVal"></span></div>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-top:.75rem;font-size:.9rem;">
+          <input type="checkbox" id="etEditActive" />
+          <span>Active (uncheck to disable sending of this template)</span>
+        </label>
+      </div>
+      <div style="padding:.85rem 1.25rem;border-top:1px solid #e5e7eb;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <button type="button" id="etTestSendOpenBtn" class="btn btn-secondary-sm">📧 Send Test…</button>
+        <button type="button" id="etDeleteBtn" class="btn btn-secondary-sm" style="color:#b91c1c;border-color:#fecaca;">🗑 Delete</button>
+        <span style="flex:1;"></span>
+        <button type="button" id="etCancelBtn" class="btn btn-secondary-sm">Cancel</button>
+        <button type="button" id="etSaveBtn" class="btn">💾 Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="etTestSendModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10001;align-items:center;justify-content:center;padding:1rem;">
+    <div style="background:#fff;border-radius:8px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;">
+        <h3 style="margin:0;flex:1;">Send Test Email</h3>
+        <button id="etTestCloseBtn" type="button" class="btn btn-secondary-sm">✕</button>
+      </div>
+      <div style="padding:1rem 1.25rem;">
+        <p class="small-muted" style="margin:0 0 .75rem 0;">A test email rendered with sample placeholder data will be sent. Unsaved edits in the editor will be used.</p>
+        <div id="etTestMessage" style="display:none;padding:.5rem .75rem;border-radius:5px;margin-bottom:.75rem;font-size:.9em;"></div>
+        <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.85rem;">
+          <span style="font-weight:600;">Recipient email</span>
+          <input type="email" id="etTestRecipient" class="context-select" style="height:34px;" placeholder="you@example.com" />
+        </label>
+      </div>
+      <div style="padding:.85rem 1.25rem;border-top:1px solid #e5e7eb;display:flex;gap:.5rem;justify-content:flex-end;">
+        <button type="button" id="etTestCancelBtn" class="btn btn-secondary-sm">Cancel</button>
+        <button type="button" id="etTestSendBtn" class="btn">Send Test</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const SUPABASE_URL = "https://wqnmxpooabmedvtackji.supabase.co";
+    const FN_URL = `${SUPABASE_URL}/functions/v1/ef_admin_email_templates`;
+
+    const $ = (id) => document.getElementById(id);
+    const tbody = () => $("etTableBody");
+
+    let templates = [];
+    let editingKey = null;        // null = new
+    let originalKey = null;       // the key used to identify the row when saving
+    let isNew = false;
+
+    function showMsg(boxId, text, kind = "info") {
+      const box = $(boxId); if (!box) return;
+      const colors = {
+        info: { bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe" },
+        success: { bg: "#ecfdf5", color: "#065f46", border: "#a7f3d0" },
+        error: { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" },
+      }[kind] || { bg: "#f1f5f9", color: "#1e293b", border: "#cbd5e1" };
+      box.style.display = "block";
+      box.style.background = colors.bg;
+      box.style.color = colors.color;
+      box.style.border = `1px solid ${colors.border}`;
+      box.textContent = text;
+    }
+    function hideMsg(boxId) { const b = $(boxId); if (b) b.style.display = "none"; }
+
+    async function authHeaders() {
+      if (!window.supabaseClient) throw new Error("Supabase client not ready");
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      };
+    }
+
+    async function callFn(action, payload = {}) {
+      const headers = await authHeaders();
+      const res = await fetch(FN_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action, ...payload }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out?.error || `HTTP ${res.status}`);
+      return out;
+    }
+
+    function fmtDate(s) {
+      if (!s) return "—";
+      try {
+        const d = new Date(s);
+        return d.toISOString().slice(0, 16).replace("T", " ");
+      } catch { return s; }
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    function renderTable() {
+      const filter = ($("etSearch")?.value || "").toLowerCase();
+      const rows = templates.filter((t) => {
+        if (!filter) return true;
+        return [t.template_key, t.name, t.subject, t.description]
+          .filter(Boolean).some((v) => String(v).toLowerCase().includes(filter));
+      });
+      if (!rows.length) {
+        tbody().innerHTML = `<tr><td colspan="6" style="padding:1rem;text-align:center;color:#6c757d;">No templates found.</td></tr>`;
+        return;
+      }
+      tbody().innerHTML = rows.map((t) => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:.5rem .75rem;font-family:monospace;font-size:.82rem;">${escapeHtml(t.template_key)}</td>
+          <td style="padding:.5rem .75rem;">${escapeHtml(t.name)}</td>
+          <td style="padding:.5rem .75rem;color:#475569;">${escapeHtml(t.subject)}</td>
+          <td style="padding:.5rem .75rem;text-align:center;">${t.active ? '<span style="color:#059669;">✓</span>' : '<span style="color:#9ca3af;">○</span>'}</td>
+          <td style="padding:.5rem .75rem;font-size:.82rem;color:#64748b;">${fmtDate(t.updated_at)}</td>
+          <td style="padding:.5rem .75rem;text-align:right;white-space:nowrap;">
+            <button type="button" class="btn btn-secondary-sm" data-et-edit="${escapeHtml(t.template_key)}" style="height:28px;">Edit</button>
+            <button type="button" class="btn btn-secondary-sm" data-et-preview="${escapeHtml(t.template_key)}" style="height:28px;">Preview</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function loadTemplates() {
+      try {
+        showMsg("etMessage", "Loading templates…", "info");
+        const out = await callFn("list");
+        templates = out.templates || [];
+        hideMsg("etMessage");
+        renderTable();
+      } catch (e) {
+        templates = [];
+        renderTable();
+        showMsg("etMessage", `Failed to load: ${e.message}`, "error");
+      }
+    }
+
+    async function openEditor(key) {
+      hideMsg("etEditMessage");
+      isNew = !key;
+      originalKey = key;
+      editingKey = key;
+      // reset to HTML tab
+      switchTab("html");
+
+      $("etEditTitle").textContent = isNew ? "New Email Template" : `Edit: ${key}`;
+      $("etDeleteBtn").style.display = isNew ? "none" : "";
+
+      if (isNew) {
+        $("etEditKey").value = "";
+        $("etEditKey").readOnly = false;
+        $("etEditName").value = "";
+        $("etEditDescription").value = "";
+        $("etEditSubject").value = "";
+        $("etEditBody").value = "<!-- HTML body. Use {{first_name}} style placeholders. -->";
+        $("etEditActive").checked = true;
+      } else {
+        try {
+          const out = await callFn("get", { template_key: key });
+          const t = out.template;
+          $("etEditKey").value = t.template_key;
+          $("etEditKey").readOnly = true;
+          $("etEditName").value = t.name || "";
+          $("etEditDescription").value = t.description || "";
+          $("etEditSubject").value = t.subject || "";
+          $("etEditBody").value = t.body_html || "";
+          $("etEditActive").checked = !!t.active;
+        } catch (e) {
+          showMsg("etEditMessage", `Failed to load template: ${e.message}`, "error");
+        }
+      }
+      $("etEditModal").style.display = "flex";
+    }
+
+    function closeEditor() {
+      $("etEditModal").style.display = "none";
+      editingKey = null; originalKey = null; isNew = false;
+    }
+
+    async function saveTemplate() {
+      hideMsg("etEditMessage");
+      const payload = {
+        template_key: $("etEditKey").value.trim(),
+        name: $("etEditName").value.trim(),
+        description: $("etEditDescription").value.trim() || null,
+        subject: $("etEditSubject").value,
+        body_html: $("etEditBody").value,
+        active: $("etEditActive").checked,
+      };
+      if (!payload.template_key) return showMsg("etEditMessage", "Template key is required.", "error");
+      if (!payload.name) return showMsg("etEditMessage", "Name is required.", "error");
+      if (!payload.subject) return showMsg("etEditMessage", "Subject is required.", "error");
+      if (!payload.body_html) return showMsg("etEditMessage", "Body HTML is required.", "error");
+
+      try {
+        $("etSaveBtn").disabled = true;
+        if (isNew) {
+          await callFn("create", payload);
+        } else {
+          // template_key is fixed for updates
+          await callFn("update", { ...payload, template_key: originalKey });
+        }
+        showMsg("etEditMessage", "Saved.", "success");
+        await loadTemplates();
+        setTimeout(closeEditor, 600);
+      } catch (e) {
+        showMsg("etEditMessage", `Save failed: ${e.message}`, "error");
+      } finally {
+        $("etSaveBtn").disabled = false;
+      }
+    }
+
+    async function deleteTemplate() {
+      if (!originalKey) return;
+      if (!confirm(`Delete template "${originalKey}"? This cannot be undone.`)) return;
+      try {
+        await callFn("delete", { template_key: originalKey });
+        await loadTemplates();
+        closeEditor();
+      } catch (e) {
+        showMsg("etEditMessage", `Delete failed: ${e.message}`, "error");
+      }
+    }
+
+    async function switchTab(tab) {
+      const ta = $("etEditBody");
+      const ifr = $("etPreviewFrame");
+      const subjLine = $("etPreviewSubjectLine");
+      if (tab === "html") {
+        ta.style.display = "block";
+        ifr.style.display = "none";
+        subjLine.style.display = "none";
+        return;
+      }
+      // Preview tab: render via edge function with current unsaved values
+      try {
+        showMsg("etEditMessage", "Rendering preview…", "info");
+        const out = await callFn("preview", {
+          template_key: $("etEditKey").value.trim() || undefined,
+          subject: $("etEditSubject").value,
+          body_html: $("etEditBody").value,
+        });
+        hideMsg("etEditMessage");
+        ifr.srcdoc = out.body_html || "";
+        $("etPreviewSubjectVal").textContent = out.subject || "";
+        ta.style.display = "none";
+        ifr.style.display = "block";
+        subjLine.style.display = "block";
+      } catch (e) {
+        showMsg("etEditMessage", `Preview failed: ${e.message}`, "error");
+      }
+    }
+
+    async function quickPreview(key) {
+      // Open editor in preview mode for an existing template
+      await openEditor(key);
+      switchTab("preview");
+    }
+
+    function openTestSend() {
+      hideMsg("etTestMessage");
+      $("etTestRecipient").value = "";
+      $("etTestSendModal").style.display = "flex";
+    }
+    function closeTestSend() { $("etTestSendModal").style.display = "none"; }
+
+    async function sendTest() {
+      hideMsg("etTestMessage");
+      const to = $("etTestRecipient").value.trim();
+      if (!to) return showMsg("etTestMessage", "Recipient email required.", "error");
+      const key = $("etEditKey").value.trim();
+      if (!key) return showMsg("etTestMessage", "Save the template first or supply a key.", "error");
+      try {
+        $("etTestSendBtn").disabled = true;
+        showMsg("etTestMessage", "Sending…", "info");
+        await callFn("test_send", {
+          template_key: key,
+          to_email: to,
+          subject: $("etEditSubject").value,
+          body_html: $("etEditBody").value,
+        });
+        showMsg("etTestMessage", `Test sent to ${to}.`, "success");
+        setTimeout(closeTestSend, 1200);
+      } catch (e) {
+        showMsg("etTestMessage", `Send failed: ${e.message}`, "error");
+      } finally {
+        $("etTestSendBtn").disabled = false;
+      }
+    }
+
+    // === Wire up ===
+    function bind() {
+      const card = $("emailTemplatesCard");
+      if (!card) return;
+
+      $("etRefreshBtn")?.addEventListener("click", loadTemplates);
+      $("etNewBtn")?.addEventListener("click", () => openEditor(null));
+      $("etSearch")?.addEventListener("input", renderTable);
+
+      tbody().addEventListener("click", (ev) => {
+        const t = ev.target.closest("button");
+        if (!t) return;
+        if (t.dataset.etEdit) openEditor(t.dataset.etEdit);
+        else if (t.dataset.etPreview) quickPreview(t.dataset.etPreview);
+      });
+
+      $("etEditCloseBtn")?.addEventListener("click", closeEditor);
+      $("etCancelBtn")?.addEventListener("click", closeEditor);
+      $("etSaveBtn")?.addEventListener("click", saveTemplate);
+      $("etDeleteBtn")?.addEventListener("click", deleteTemplate);
+      $("etTabHtmlBtn")?.addEventListener("click", () => switchTab("html"));
+      $("etTabPreviewBtn")?.addEventListener("click", () => switchTab("preview"));
+
+      $("etTestSendOpenBtn")?.addEventListener("click", openTestSend);
+      $("etTestCloseBtn")?.addEventListener("click", closeTestSend);
+      $("etTestCancelBtn")?.addEventListener("click", closeTestSend);
+      $("etTestSendBtn")?.addEventListener("click", sendTest);
+
+      // Click-outside-to-close
+      $("etEditModal")?.addEventListener("click", (ev) => {
+        if (ev.target === $("etEditModal")) closeEditor();
+      });
+      $("etTestSendModal")?.addEventListener("click", (ev) => {
+        if (ev.target === $("etTestSendModal")) closeTestSend();
+      });
+      // Esc-to-close
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Escape") return;
+        if ($("etTestSendModal")?.style.display === "flex") closeTestSend();
+        else if ($("etEditModal")?.style.display === "flex") closeEditor();
+      });
+    }
+
+    function maybeAutoLoad() {
+      // Load when admin module is visible & supabase signed in
+      const adminModule = document.getElementById("admin-module");
+      const visible = adminModule && getComputedStyle(adminModule).display !== "none";
+      if (visible && window.supabaseClient && !window._etLoaded) {
+        window._etLoaded = true;
+        loadTemplates();
+      }
+    }
+
+    function start() {
+      bind();
+      maybeAutoLoad();
+      window.addEventListener("hashchange", () => { window._etLoaded = false; setTimeout(maybeAutoLoad, 200); });
+      const t = setInterval(() => { if (window.supabaseClient) { clearInterval(t); maybeAutoLoad(); } }, 400);
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start);
+    } else { start(); }
+
+    // Expose for debugging
+    window.loadEmailTemplates = loadTemplates;
+    window.openEmailTemplateEditor = openEditor;
   })();
   </script>
 

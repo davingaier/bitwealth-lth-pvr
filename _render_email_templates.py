@@ -2,7 +2,7 @@
 import json, os, re, html, webbrowser
 from pathlib import Path
 
-SRC = r"c:\Users\davin\AppData\Roaming\Code\User\workspaceStorage\623d70f03ab620e87c883410a49bb7e9\GitHub.copilot-chat\chat-session-resources\564bd449-5057-443e-800b-783fcb3e6354\toolu_vrtx_01NAtwK7eXwtpc4NayPZZGQo__vscode-1777009852086\content.json"
+SRC = r"c:\Users\davin\AppData\Roaming\Code\User\workspaceStorage\623d70f03ab620e87c883410a49bb7e9\GitHub.copilot-chat\chat-session-resources\564bd449-5057-443e-800b-783fcb3e6354\toolu_vrtx_016LDiS9S6mvWjBwp6d2mJQG__vscode-1777009852101\content.json"
 OUT = Path(r"c:\Users\davin\Dropbox\BitWealth\bitwealth-lth-pvr\bitwealth-lth-pvr\_email_previews")
 OUT.mkdir(exist_ok=True)
 
