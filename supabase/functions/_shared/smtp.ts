@@ -115,6 +115,20 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       };
     }
 
+    // Default Reply-To to a real human-monitored mailbox if not provided.
+    // This is one of the strongest deliverability signals — automated emails
+    // sent from a noreply@ address with no Reply-To are commonly junk-filtered
+    // by Outlook (server-delivered but client-side moved to Junk).
+    const defaultReplyTo = Deno.env.get("EMAIL_REPLY_TO") || "info@bitwealth.co.za";
+    const replyTo = options.replyTo || defaultReplyTo;
+
+    // List-Unsubscribe header signals to inbox providers that this is a
+    // managed transactional/notification mail (not unsolicited bulk).
+    // Required by Gmail/Yahoo bulk-sender rules and significantly reduces
+    // Outlook junk-filter false positives.
+    const unsubscribeMailto = Deno.env.get("EMAIL_UNSUBSCRIBE_MAILTO")
+      || "unsubscribe@bitwealth.co.za";
+
     // Send email
     const info = await transporter.sendMail({
       from: options.from,
@@ -122,7 +136,13 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       subject: options.subject,
       text: options.text,
       html: options.html,
-      replyTo: options.replyTo,
+      replyTo,
+      headers: {
+        "List-Unsubscribe": `<mailto:${unsubscribeMailto}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "X-Auto-Response-Suppress": "All",
+        "Auto-Submitted": "auto-generated",
+      },
     });
 
     return {

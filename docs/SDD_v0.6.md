@@ -3,11 +3,77 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-23 (v0.6.88)
+**Last updated:** 2026-04-25 (v0.6.89)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.89 – Email Deliverability Headers + Dark/Light Mode Header Fix (all 19 templates)
+**Date:** 2026-04-25  
+**Purpose:** Resolve two production complaints raised after prospect customer 52 (Ellie Landman) signed up:
+
+1. **Admin `prospect_notification` was server-delivered to `admin@bitwealth.co.za` but never appeared in Outlook.** Webmail showed the message present in the inbox — Outlook's local Junk Email filter was silently moving the automated `noreply@` mail with embedded base64 logo into Junk.
+2. **Email headers rendered as white-on-white in Outlook light mode.** The previous `@media (prefers-color-scheme: light)` rules in every template were inverted (forcing dark-blue background + white text into the *light*-mode branch) and Outlook's color-inversion behaviour then turned the dark-blue background into white — leaving white text on a white header.
+
+**Status:** ✅ COMPLETE (deployed).
+
+#### Part A — SMTP deliverability headers
+
+`supabase/functions/_shared/smtp.ts` now sets four additional outbound headers on every send (applied uniformly to all 10 edge functions that use the shared module: `ef_send_email`, `ef_alert_digest`, `ef_contact_form_submit`, `ef_create_support_ticket`, `ef_post_ticket_reply`, `ef_update_support_ticket`, `ef_rotate_api_key_notifications`, `ef_revert_withdrawal`, `ef_request_withdrawal`, `ef_process_withdrawal_queue`):
+
+| Header | Value | Why |
+|---|---|---|
+| `Reply-To` | `EMAIL_REPLY_TO` env (default `info@bitwealth.co.za`) | Strongest single-signal anti-junk improvement; gives recipients a real human address to reply to instead of the `noreply@` sender. Overridable per-call via `options.replyTo`. |
+| `List-Unsubscribe` | `<mailto:EMAIL_UNSUBSCRIBE_MAILTO>` (default `unsubscribe@bitwealth.co.za`) | Required by Gmail/Yahoo bulk-sender rules and significantly reduces Outlook junk-filter false positives on automated transactional mail. |
+| `List-Unsubscribe-Post` | `List-Unsubscribe=One-Click` | Companion header for the RFC 8058 one-click unsubscribe pattern. |
+| `X-Auto-Response-Suppress` | `All` | Tells receiving servers not to send out-of-office / auto-reply bounces. |
+| `Auto-Submitted` | `auto-generated` | Identifies the message as automated (RFC 3834). |
+
+No behavioural change for HTML/plain-text bodies; headers are additive. New env vars (both optional with sensible defaults): `EMAIL_REPLY_TO`, `EMAIL_UNSUBSCRIBE_MAILTO`.
+
+**One-time client action recommended:** In Outlook, right-click any BitWealth email → Junk → *Never Block Sender's Domain* (`bitwealth.co.za`). This permanently whitelists every BitWealth automated message regardless of heuristics.
+
+#### Part B — Dark/light mode header CSS fix (all 19 active templates)
+
+**Diagnosis.** All 19 active rows in `public.email_templates` shared the same broken header design:
+- Inline header `<td style="background-color: #032C48; border: 3px solid #ffffff;">` (dark blue with white border).
+- A `<style>` block containing `@media (prefers-color-scheme: light) { .email-header { background-color: #032C48 !important; ... } .email-subtitle { color: #ffffff !important; } }` — i.e. the rules were placed under *light*-mode and forced dark-blue + white-text. The CSS class `.email-header` wasn't even applied to the inline `<td>` so the rules were dead code in 6 templates and broken syntax in 13 (orphan `padding:` declarations after the inner rules).
+- Outlook (Windows desktop) in light mode applies its own colour transform that flips dark backgrounds toward white; combined with the inline `color: #ffffff` on `<h1>` / `<p>` inside the header, the result was an invisible header.
+
+**Fix applied via Supabase MCP (single migration, no `supabase/migrations/` file because it is a one-shot data update on `public.email_templates` rather than a schema change):**
+
+1. **Backed up** the table to `public.email_templates_backup_20260425` before any change (19 rows).
+2. **Pattern-A flip (6 templates with inline header `<td>`):** `background-color: #032C48; border: 3px solid #ffffff;` → `background-color: #ffffff; border: 3px solid #032C48;`.
+3. **Pattern-B flip (13 templates with `.header` CSS class):** `.header { background: #032C48; border: 3px solid #ffffff; color: #ffffff; }` → `.header { background: #ffffff; border: 3px solid #032C48; color: #032C48; padding: 20px; text-align: center; }`.
+4. **Replaced the broken `@media (prefers-color-scheme: light)` block in every template** (regex `@media \(prefers-color-scheme: light\) \{[^{}]*(\{[^{}]*\}[^{}]*)*\}`) with a clean four-part CSS block:
+   - **Default (light mode):** `!important` rules forcing `color: #032C48` on every `h1/h2/h3/p/span` inside `.header`, `.email-header`, and any `td` whose inline style matches `background-color: #ffffff` + `border: 3px solid #032C48` (covers all three template-structure variants in the table).
+   - **`@media (prefers-color-scheme: dark)`:** flips the header background to `#032C48`, border to `#ffffff`, and all text inside back to `#ffffff`. Honoured by Apple Mail, Gmail mobile, modern Thunderbird, iOS Mail.
+   - **`[data-ogsc]` attribute selector:** same dark-mode flip for Outlook.com / Outlook 365 web (Outlook prefixes elements with this attribute when its dark mode is active).
+5. **Added `<meta name="color-scheme" content="light dark">` and `<meta name="supported-color-schemes" content="light dark">`** to every template (handled the two templates without an existing `<meta charset>` tag separately by inserting both metas plus the charset).
+
+**Verification:**
+- 0 / 19 templates retain the old `@media (prefers-color-scheme: light)` block.
+- 19 / 19 templates have the new `@media (prefers-color-scheme: dark)` block.
+- 19 / 19 templates have `[data-ogsc]` Outlook dark-mode rules.
+- 19 / 19 templates have the `color-scheme` meta tags.
+
+**Rollback (if ever needed):**
+```sql
+UPDATE public.email_templates t
+SET body_html = b.body_html
+FROM public.email_templates_backup_20260425 b
+WHERE t.template_key = b.template_key;
+```
+
+**Files changed:**
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/smtp.ts` | Added Reply-To / List-Unsubscribe / X-Auto-Response-Suppress / Auto-Submitted headers; reads `EMAIL_REPLY_TO` and `EMAIL_UNSUBSCRIBE_MAILTO` env vars. |
+| 10 edge functions | Redeployed (no source change beyond the shared `smtp.ts` import). |
+| `public.email_templates` (DB) | All 19 rows updated in place; backup table `public.email_templates_backup_20260425` created. |
+
+---
 
 ### v0.6.88 – Daily-balance gap fill + self-healing carry-forward
 **Date:** 2026-04-23
