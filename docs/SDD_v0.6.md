@@ -3,11 +3,80 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.93)
+**Last updated:** 2026-04-25 (v0.6.94)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.94 – Bank info migration: `bank_accounts` becomes single source of truth
+**Date:** 2026-04-25
+**Purpose:** Complete the banking-data refactor by moving bank details out of `public.exchange_accounts` and into `public.bank_accounts`. Update all readers/writers (Admin UI, Customer Portal, edge functions, RPCs). Strengthen `ef_link_bank_account` preconditions so it can only run after VALR provisioning is complete.
+
+**Status:** ✅ COMPLETE (migration applied, EFs deployed).
+
+#### Architecture change
+| Before | After |
+|---|---|
+| Bank details (`bank_name`, `bank_account_number`, `bank_account_holder`, `bank_branch_code`, `bank_account_type`) lived **on `exchange_accounts`** alongside VALR identifiers (`bank_valr_id`, `bank_linked_at`, `bank_link_method`). | Bank details now live **only on `public.bank_accounts`**. `exchange_accounts` keeps just the VALR-side identifiers plus a new FK `bank_account_id` → `bank_accounts(bank_account_id)`. |
+
+#### Database changes (migration `20260425_migrate_bank_to_bank_accounts`)
+1. **Add FK column** `exchange_accounts.bank_account_id uuid REFERENCES bank_accounts(bank_account_id) ON DELETE SET NULL`, with index `idx_exchange_accounts_bank_account_id`.
+2. **Backfill** `bank_accounts` from every `exchange_accounts` row that has any bank info (deliberately wider than "rows with `bank_valr_id IS NOT NULL`" to prevent silent data loss when the legacy columns are dropped). Each row joins back to the most-recently-created `customer_strategies` row to resolve `customer_id`. Idempotent: customers who already have a `bank_accounts` row are skipped.
+3. **Replace `lth_pvr.exchange_accounts` view** to remove the legacy bank columns from its SELECT list and add `bank_account_id` instead.
+4. **Update RPC `public.get_customer_exchange_account(p_customer_id)`** to LEFT JOIN `bank_accounts` and return `bank_*` fields from there. New RPC return shape adds `bank_account_id` and the existing VALR fields (`bank_valr_id`, `bank_linked_at`, `bank_link_method`).
+5. **Drop columns** from `exchange_accounts`: `bank_name`, `bank_account_number`, `bank_account_holder`, `bank_branch_code`, `bank_account_type`. Retained: `bank_valr_id`, `bank_linked_at`, `bank_link_method`, `bank_account_id`.
+
+Backfill result on production: 2 rows migrated (customers 31 + 49). Both `exchange_accounts` rows that had bank info before the migration now point to corresponding `bank_accounts` rows.
+
+#### `ef_link_bank_account` changes
+- **New precondition gate** — refuses with HTTP 400 if VALR is not yet provisioned:
+  - **Subaccount Model:** `exchange_accounts.subaccount_id IS NULL` → returns `{ error: "VALR subaccount has not been set up...", gate: "subaccount_missing" }`
+  - **API Model:** `exchange_accounts.api_key_vault_id IS NULL` → returns `{ error: "VALR API keys have not been captured...", gate: "api_keys_missing" }`
+- **Write target changed:** instead of UPDATEing bank columns on `exchange_accounts`, the EF now upserts a `bank_accounts` row (single source of truth) and writes only the FK + VALR identifiers (`bank_account_id`, `bank_valr_id`, `bank_linked_at`, `bank_link_method`) to `exchange_accounts`.
+- **Behaviour preserved:** GET-fallback to `/v1/fiat/ZAR/banks` for canonical `bank_valr_id` recovery; alert logging on VALR failures; admin notification + manual fallback for subaccount-model VALR failures.
+
+#### `ef_request_withdrawal` changes
+- Replaced `exchange_accounts.bank_name, bank_account_number` reads with a fresh fetch from `bank_accounts` keyed by `exchange_accounts.bank_account_id`. Withdrawal blocking still keys off `bank_valr_id` (unchanged).
+- VALR ZAR fee calc (`calcValrZarFees`) now reads `bank_name` from the new `bankRow` instead of `exchAcct`.
+
+#### Admin UI changes (`ui/Advanced BTC DCA Strategy.html`)
+- **Customer Maintenance modal — Banking tab:**
+  - Form still allows editing of bank fields (admins remain able to edit on behalf of a customer).
+  - Save flow rewritten: bank fields now write to `public.bank_accounts` (upsert keyed by `customer_id` + `is_primary=true`). The auto-call to `ef_link_bank_account` on every save was removed — saving and VALR-linking are now decoupled.
+  - **NEW button "Link to VALR"** on the Banking tab, which:
+    1. Saves the form first (so `bank_accounts` is up to date)
+    2. Calls `ef_link_bank_account`
+    3. Surfaces the gate response (`gate: 'subaccount_missing' | 'api_keys_missing'`) as an error message if VALR is not yet provisioned
+- **Customer Maintenance editor (legacy modal at line ~7170):** profile fetch now also retrieves the customer's `bank_accounts` row; banking section is populated from that row, not from `exchange_accounts`.
+- **Single-customer save flow (`cmFetchFullProfile` / `cmFillEditor`):** now also returns/uses `bank` from `bank_accounts`. Save logic upserts to `bank_accounts` instead of writing through `ef_link_bank_account`.
+
+#### Customer Portal (`website/customer-portal.html`)
+- No code changes required — the page reads bank info via the `get_customer_exchange_account` RPC, whose return shape was preserved (additive only). Bank display on the ZAR withdrawal screen continues to show `bank_name` and last-4 of `bank_account_number` from the new join.
+
+#### `website/upload-kyc.html`
+- No code changes required — it already writes to `bank_accounts` directly (introduced in v0.6.93).
+
+#### Files changed
+- **NEW:** `supabase/migrations/20260425_migrate_bank_to_bank_accounts.sql`
+- **MODIFIED:** `supabase/functions/ef_link_bank_account/index.ts` (gate + write target)
+- **MODIFIED:** `supabase/functions/ef_request_withdrawal/index.ts` (read target)
+- **MODIFIED:** `ui/Advanced BTC DCA Strategy.html` (banking section + link button + cmFetchFullProfile)
+- **MODIFIED:** `docs/SDD_v0.6.md` (this entry)
+
+#### Deployment
+```powershell
+supabase functions deploy ef_link_bank_account --project-ref wqnmxpooabmedvtackji
+supabase functions deploy ef_request_withdrawal --project-ref wqnmxpooabmedvtackji
+```
+Both deployed successfully on 2026-04-25.
+
+#### Known follow-ups
+- `ef_admin_email_templates` sample placeholders still use `bank_name`/`account_number` — these are template variables (not column reads), so unaffected.
+- Email templates that reference `{{bank_name}}` / `{{account_number}}` continue to work because the rendering layer (presumably) substitutes from a context object, not from `exchange_accounts` directly. Verify if any template-rendering EF was reading `exchange_accounts.bank_*` directly.
+- A future enhancement could automatically call `ef_link_bank_account` whenever VALR provisioning completes (subaccount created or API keys captured) for any customer who already has a `bank_accounts` row — closing the loop without admin intervention.
+
+---
 
 ### v0.6.93 – Customer Self-Service Profile Page (Personal / KYC / Banking)
 **Date:** 2026-04-25

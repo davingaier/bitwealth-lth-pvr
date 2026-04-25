@@ -161,7 +161,46 @@ Deno.serve(async (req) => {
       .single();
 
     if (custErr || !customer) return json({ error: "Customer not found" }, 404);
+    // ── Resolve exchange_account_id for this customer (via customer_strategies) ─
+    const { data: cs, error: csErr } = await sb
+      .from("customer_strategies")
+      .select("exchange_account_id")
+      .eq("customer_id", customer_id)
+      .order("effective_from", { ascending: false })
+      .limit(1)
+      .single();
 
+    if (csErr || !cs?.exchange_account_id) {
+      return json({ error: "No exchange account found for customer" }, 404);
+    }
+
+    // ── Precondition gate: VALR must be provisioned before linking a bank ────
+    // Subaccount Model: requires exchange_accounts.subaccount_id
+    // API Model: requires exchange_accounts.api_key_vault_id (capture marker)
+    const { data: ea, error: eaErr } = await sb
+      .from("exchange_accounts")
+      .select("exchange_account_id, subaccount_id, api_key_vault_id, api_key_verified_at")
+      .eq("exchange_account_id", cs.exchange_account_id)
+      .single();
+    if (eaErr || !ea) return json({ error: "Exchange account record not found" }, 404);
+
+    if (customer.account_model === "subaccount") {
+      if (!ea.subaccount_id) {
+        return json({
+          error: "VALR subaccount has not been set up for this customer yet. Bank linking is blocked until the subaccount is provisioned.",
+          gate: "subaccount_missing",
+        }, 400);
+      }
+    } else if (customer.account_model === "api") {
+      if (!ea.api_key_vault_id) {
+        return json({
+          error: "VALR API keys have not been captured for this customer yet. Bank linking is blocked until API keys are stored.",
+          gate: "api_keys_missing",
+        }, 400);
+      }
+    } else {
+      return json({ error: `Unknown account_model '${customer.account_model}' — cannot determine bank-link preconditions.` }, 400);
+    }
     // ── Resolve VALR credentials (model-aware) ───────────────────────────────
     let creds: Awaited<ReturnType<typeof resolveCustomerCredentials>>;
     try {
@@ -276,46 +315,73 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Resolve exchange_account_id for this customer (via customer_strategies) ─
-    const { data: cs, error: csErr } = await sb
-      .from("customer_strategies")
-      .select("exchange_account_id")
+    // ── Upsert bank_accounts row (single source of truth) ──────────────
+    const { data: existingBank } = await sb
+      .from("bank_accounts")
+      .select("bank_account_id")
       .eq("customer_id", customer_id)
-      .order("effective_from", { ascending: false })
-      .limit(1)
-      .single();
+      .eq("is_primary", true)
+      .maybeSingle();
 
-    if (csErr || !cs?.exchange_account_id) {
-      return json({ error: "No exchange account found for customer" }, 404);
+    let bankAccountId: string;
+    if (existingBank?.bank_account_id) {
+      const { error: updBankErr } = await sb
+        .from("bank_accounts")
+        .update({
+          bank_name,
+          bank_account_holder,
+          bank_account_number,
+          bank_branch_code:  bank_branch_code  ?? "Unknown",
+          bank_account_type: bank_account_type ?? "Unknown",
+          status: "active",
+        })
+        .eq("bank_account_id", existingBank.bank_account_id);
+      if (updBankErr) return json({ error: `Failed to update bank_accounts: ${updBankErr.message}` }, 500);
+      bankAccountId = existingBank.bank_account_id;
+    } else {
+      const { data: ins, error: insErr } = await sb
+        .from("bank_accounts")
+        .insert({
+          customer_id,
+          org_id: customer.org_id,
+          bank_name,
+          bank_account_holder,
+          bank_account_number,
+          bank_branch_code:  bank_branch_code  ?? "Unknown",
+          bank_account_type: bank_account_type ?? "Unknown",
+          is_primary: true,
+          status: "active",
+        })
+        .select("bank_account_id")
+        .single();
+      if (insErr || !ins) return json({ error: `Failed to insert bank_accounts: ${insErr?.message}` }, 500);
+      bankAccountId = ins.bank_account_id;
     }
 
-    // ── Save bank details to exchange_accounts ───────────────────────────────
+    // ── Save VALR-side fields + FK to bank_accounts on exchange_accounts ───
     const { error: updateErr } = await sb
       .from("exchange_accounts")
       .update({
-        bank_account_number,
-        bank_account_holder,
-        bank_name,
-        bank_branch_code:   bank_branch_code  ?? null,
-        bank_account_type:  bank_account_type ?? null,
-        bank_valr_id:       valrBankId,
-        bank_linked_at:     new Date().toISOString(),
-        bank_link_method:   valrLinked ? "api" : "manual",
+        bank_account_id:  bankAccountId,
+        bank_valr_id:     valrBankId,
+        bank_linked_at:   new Date().toISOString(),
+        bank_link_method: valrLinked ? "api" : "manual",
       })
       .eq("exchange_account_id", cs.exchange_account_id);
 
     if (updateErr) {
-      return json({ error: `Failed to save bank details: ${updateErr.message}` }, 500);
+      return json({ error: `Failed to save bank link to exchange_accounts: ${updateErr.message}` }, 500);
     }
 
     return json({
-      success:       true,
-      valr_linked:   valrLinked,
-      bank_valr_id:  valrBankId,
+      success:        true,
+      valr_linked:    valrLinked,
+      bank_account_id: bankAccountId,
+      bank_valr_id:   valrBankId,
       debug,
       message: valrLinked
-        ? "Bank account linked with VALR and saved to exchange_accounts."
-        : "Bank details saved locally. Admin action required to link manually in VALR portal (subaccount model).",
+        ? "Bank account linked with VALR and saved to bank_accounts."
+        : "Bank details saved to bank_accounts. Admin action required to link manually in VALR portal (subaccount model).",
     });
 
   } catch (err) {

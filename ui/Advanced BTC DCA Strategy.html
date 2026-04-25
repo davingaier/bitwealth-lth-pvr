@@ -1498,7 +1498,7 @@
 
             <!-- =============== Banking =============== -->
             <section class="cm-tabpanel" data-panel="banking">
-              <p class="small-muted" style="margin:0 0 .5rem;">Bank details are linked to VALR via the <code>ef_link_bank_account</code> edge function when saved.</p>
+              <p class="small-muted" style="margin:0 0 .5rem;">Bank details are stored in <code>public.bank_accounts</code> (single source of truth). Use “Link to VALR” to push the bank to VALR — only available once the customer's VALR subaccount or API keys are set up.</p>
               <div class="cm-grid">
                 <label><span class="label-line">Bank name</span>
                   <select name="bank_name">
@@ -1519,6 +1519,10 @@
                 <label><span class="label-line">Linked at (read-only)</span><input data-readonly="bank_linked_at" disabled /></label>
                 <label><span class="label-line">Link method (read-only)</span><input data-readonly="bank_link_method" disabled /></label>
                 <label><span class="label-line">VALR bank ID (read-only)</span><input data-readonly="bank_valr_id" disabled /></label>
+              </div>
+              <div style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                <button type="button" id="cmLinkBankBtn" class="btn btn-secondary" style="font-size:.85rem;">Link to VALR</button>
+                <span class="small-muted">Saves the form to <code>bank_accounts</code> first, then calls <code>ef_link_bank_account</code>.</span>
               </div>
             </section>
 
@@ -7064,26 +7068,35 @@
       const { error } = await supabaseClient.from('customer_details').update(row).eq('customer_id', id);
       if(error) throw error;
 
-      // Link bank account via VALR API (ef_link_bank_account)
+      // Save bank details directly to public.bank_accounts (single source of truth).
+      // Linking to VALR is a separate explicit action via the "Link to VALR" button.
       const bankName = payload.bank_name?.trim();
       const bankAccNum = payload.bank_account_number?.trim();
       const bankHolder = payload.bank_account_holder?.trim();
-      if (bankName && bankAccNum && bankHolder) {
-        const bankPayload = {
+      if (bankName || bankAccNum || bankHolder) {
+        // Need org_id for INSERT case
+        const { data: cust } = await supabaseClient.from('customer_details')
+          .select('org_id').eq('customer_id', id).single();
+        const bankRow = {
           customer_id: Number(id),
-          bank_account_number: bankAccNum,
-          bank_account_holder: bankHolder,
-          bank_name: bankName,
-          bank_branch_code: payload.bank_branch_code?.trim() || null,
-          bank_account_type: payload.bank_account_type || null,
+          org_id: cust?.org_id,
+          bank_name: bankName || 'Unknown',
+          bank_account_holder: bankHolder || 'Unknown',
+          bank_account_number: bankAccNum || 'Unknown',
+          bank_branch_code: payload.bank_branch_code?.trim() || 'Unknown',
+          bank_account_type: payload.bank_account_type || 'Unknown',
+          is_primary: true,
+          status: 'active',
         };
-        const { data: linkResult, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
-        if (linkErr) {
-          console.error('Bank link error:', linkErr);
-          throw new Error('Customer saved but bank linking failed: ' + (linkErr.message || linkErr));
-        }
-        if (linkResult && !linkResult.success && linkResult.error) {
-          throw new Error('Customer saved but VALR bank link failed: ' + linkResult.error);
+        const { data: existing } = await supabaseClient.from('bank_accounts')
+          .select('bank_account_id').eq('customer_id', id).eq('is_primary', true).maybeSingle();
+        if (existing?.bank_account_id) {
+          const { error: updErr } = await supabaseClient.from('bank_accounts')
+            .update(bankRow).eq('bank_account_id', existing.bank_account_id);
+          if (updErr) throw new Error('Customer saved but bank update failed: ' + updErr.message);
+        } else {
+          const { error: insErr } = await supabaseClient.from('bank_accounts').insert(bankRow);
+          if (insErr) throw new Error('Customer saved but bank insert failed: ' + insErr.message);
         }
       }
     }
@@ -7178,19 +7191,15 @@
             const row = await cmLoadCustomer(id);
             cmFillForm(fEdit, row);
             fEdit.dataset.customerId = String(id);
-            // Load bank account data from exchange_accounts
-            const { data: csRows } = await supabaseClient.from('customer_strategies')
-              .select('exchange_account_id').eq('customer_id', id).not('status','in','("closed","terminated")').limit(1);
-            if (csRows?.[0]?.exchange_account_id) {
-              const { data: ea } = await supabaseClient.from('exchange_accounts')
-                .select('bank_name,bank_account_holder,bank_account_number,bank_branch_code,bank_account_type')
-                .eq('exchange_account_id', csRows[0].exchange_account_id).single();
-              if (ea) {
-                ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'].forEach(k => {
-                  const el = fEdit.querySelector(`[name="${k}"]`);
-                  if (el) el.value = ea[k] || '';
-                });
-              }
+            // Load bank account data from public.bank_accounts (single source of truth)
+            const { data: ba } = await supabaseClient.from('bank_accounts')
+              .select('bank_name,bank_account_holder,bank_account_number,bank_branch_code,bank_account_type')
+              .eq('customer_id', id).eq('is_primary', true).maybeSingle();
+            if (ba) {
+              ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'].forEach(k => {
+                const el = fEdit.querySelector(`[name="${k}"]`);
+                if (el) el.value = ba[k] || '';
+              });
             }
           }catch(err){ cmShowAlert('error', err.message || 'Failed to load client.'); }
         });
@@ -7225,6 +7234,51 @@
             }catch(err){ cmShowAlert('error', err.message || 'Delete failed.'); }
           });
           delBtn._bound=true;
+        }
+        const linkBtn = document.getElementById('cmLinkBankBtn');
+        if (linkBtn && !linkBtn._bound) {
+          linkBtn.addEventListener('click', async () => {
+            cmHideAlert();
+            const id = fEdit.dataset.customerId;
+            if (!id) return cmShowAlert('error', 'Select a client first.');
+            const payload = cmSerialize(fEdit);
+            const bankName   = payload.bank_name?.trim();
+            const bankAccNum = payload.bank_account_number?.trim();
+            const bankHolder = payload.bank_account_holder?.trim();
+            if (!bankName || !bankAccNum || !bankHolder) {
+              return cmShowAlert('error', 'Bank name, account holder and account number are required to link to VALR.');
+            }
+            // Save first (so bank_accounts is up to date), then call ef_link_bank_account.
+            try {
+              await cmUpdateCustomer(id, payload);
+            } catch (err) {
+              return cmShowAlert('error', 'Save failed before VALR link: ' + (err.message || err));
+            }
+            const bankPayload = {
+              customer_id: Number(id),
+              bank_account_number: bankAccNum,
+              bank_account_holder: bankHolder,
+              bank_name: bankName,
+              bank_branch_code: payload.bank_branch_code?.trim() || null,
+              bank_account_type: payload.bank_account_type || null,
+            };
+            try {
+              linkBtn.disabled = true;
+              linkBtn.textContent = 'Linking…';
+              const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
+              if (linkErr) throw new Error(linkErr.message || String(linkErr));
+              if (result && result.success === false && result.error) throw new Error(result.error);
+              if (result && result.gate) throw new Error(result.error || 'Pre-link gate failed');
+              cmShowAlert('success', result?.message || 'Bank linked successfully.');
+              await loadCustomers();
+            } catch (err) {
+              cmShowAlert('error', 'Link to VALR failed: ' + (err.message || err));
+            } finally {
+              linkBtn.disabled = false;
+              linkBtn.textContent = 'Link to VALR';
+            }
+          });
+          linkBtn._bound = true;
         }
         fEdit._bound = true;
       }
@@ -7417,7 +7471,7 @@
       const { data: cust, error: e1 } = await supabaseClient
         .from('customer_details').select('*').eq('customer_id', customerId).single();
       if(e1) throw e1;
-      let strat = null, exa = null;
+      let strat = null, exa = null, bank = null;
       const { data: stratRows } = await supabaseClient
         .from('customer_strategies')
         .select('*')
@@ -7431,7 +7485,12 @@
           .from('exchange_accounts').select('*').eq('exchange_account_id', strat.exchange_account_id).single();
         exa = exa1 || null;
       }
-      return { cust, strat, exa };
+      // Bank details now live in public.bank_accounts (single source of truth).
+      const { data: bank1 } = await supabaseClient
+        .from('bank_accounts').select('*')
+        .eq('customer_id', customerId).eq('is_primary', true).maybeSingle();
+      bank = bank1 || null;
+      return { cust, strat, exa, bank };
     }
 
     function cmSetField(name, value){
@@ -7455,12 +7514,13 @@
       else { el.textContent = txt; }
     }
 
-    function cmFillEditor({cust, strat, exa}){
+    function cmFillEditor({cust, strat, exa, bank}){
       const form = document.getElementById('cmEditorForm');
       form.reset();
       cust = cust || {};
       strat = strat || {};
       exa = exa || {};
+      bank = bank || {};
 
       // Personal + KYC + Portal + Compliance + a few from customer_details
       [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
@@ -7469,8 +7529,8 @@
       // Email backfill
       if(!cust.email_address && cust.email) cmSetField('email_address', cust.email);
 
-      // Banking + Exchange (from exchange_accounts)
-      CM_BANK_FIELDS.forEach(k => cmSetField(k, exa[k]));
+      // Banking (from public.bank_accounts) + Exchange (from public.exchange_accounts)
+      CM_BANK_FIELDS.forEach(k => cmSetField(k, bank[k]));
       CM_EX_FIELDS.forEach(k => cmSetField(k, exa[k]));
 
       // Strategy (from customer_strategies)
@@ -7643,23 +7703,34 @@
         }
       }
 
-      // 4) Bank account: if customer is editing existing record AND has all required bank fields → call ef_link_bank_account
-      if(cmEditorState.customerId && payload.bank_name && payload.bank_account_number && payload.bank_account_holder){
+      // 4) Bank account: write to public.bank_accounts (single source of truth).
+      //    Linking to VALR is an explicit separate action (\"Link to VALR\" button on the Banking tab).
+      if(cmEditorState.customerId && (payload.bank_name || payload.bank_account_number || payload.bank_account_holder)){
         try{
-          const { data: linkRes, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', {
-            body: {
-              customer_id: Number(custId),
-              bank_account_number: String(payload.bank_account_number).trim(),
-              bank_account_holder: String(payload.bank_account_holder).trim(),
-              bank_name: payload.bank_name,
-              bank_branch_code: payload.bank_branch_code || null,
-              bank_account_type: payload.bank_account_type || null,
-            }
-          });
-          if(linkErr) throw new Error(linkErr.message || String(linkErr));
-          if(linkRes && linkRes.success === false && linkRes.error) throw new Error(linkRes.error);
+          const orgId = cust?.org_id || cmEditorState.profile?.cust?.org_id;
+          const bankRow = {
+            customer_id: Number(custId),
+            org_id: orgId,
+            bank_name: (payload.bank_name || '').trim() || 'Unknown',
+            bank_account_holder: (payload.bank_account_holder || '').trim() || 'Unknown',
+            bank_account_number: (payload.bank_account_number || '').trim() || 'Unknown',
+            bank_branch_code: (payload.bank_branch_code || '').trim() || 'Unknown',
+            bank_account_type: payload.bank_account_type || 'Unknown',
+            is_primary: true,
+            status: 'active',
+          };
+          const { data: existing } = await supabaseClient.from('bank_accounts')
+            .select('bank_account_id').eq('customer_id', custId).eq('is_primary', true).maybeSingle();
+          if (existing?.bank_account_id) {
+            const { error: e } = await supabaseClient.from('bank_accounts')
+              .update(bankRow).eq('bank_account_id', existing.bank_account_id);
+            if (e) throw e;
+          } else {
+            const { error: e } = await supabaseClient.from('bank_accounts').insert(bankRow);
+            if (e) throw e;
+          }
         }catch(bankErr){
-          cmEditorAlert('error', `Saved customer details, but bank link failed: ${bankErr.message||bankErr}`);
+          cmEditorAlert('error', `Saved customer details, but bank save failed: ${bankErr.message||bankErr}`);
           return custId; // partial success
         }
       }

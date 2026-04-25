@@ -280,10 +280,23 @@ Deno.serve(async (req) => {
     ? await sb
         .schema("public")
         .from("exchange_accounts")
-        .select("exchange_account_id, subaccount_id, bank_valr_id, bank_name, bank_account_number")
+        .select("exchange_account_id, subaccount_id, bank_valr_id, bank_account_id")
         .eq("exchange_account_id", exAcct.exchange_account_id)
         .single()
     : { data: null };
+
+  // Bank details now live in public.bank_accounts (single source of truth).
+  // Resolve the linked bank row for ZAR withdrawals.
+  let bankRow: { bank_name: string | null; bank_account_number: string | null } | null = null;
+  if (exchAcct?.bank_account_id) {
+    const { data: br } = await sb
+      .schema("public")
+      .from("bank_accounts")
+      .select("bank_name, bank_account_number")
+      .eq("bank_account_id", exchAcct.bank_account_id)
+      .single();
+    bankRow = br ?? null;
+  }
 
   if (currency === "ZAR") {
     if (!exchAcct?.bank_valr_id) {
@@ -370,7 +383,7 @@ Deno.serve(async (req) => {
   let valrFeesDisplay = "None";
 
   if (currency === "ZAR") {
-    const zarFees = await calcValrZarFees(customerId, exchAcct?.bank_name ?? null, withdrawalType);
+    const zarFees = await calcValrZarFees(customerId, bankRow?.bank_name ?? null, withdrawalType);
     valrWithdrawalFeeZar = zarFees.withdrawalFeeZar;
     valrConvFeeRate = zarFees.conversionFeeUsdt; // 0.0018 rate
     const zarAmount = amount;
