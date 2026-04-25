@@ -1,7 +1,8 @@
 // ef_monthly_statement_generator/index.ts
 // Purpose: Generate monthly statements for all active customers on 1st of month
 // Triggered by pg_cron at 00:01 UTC on 1st of every month
-// Generates previous month's statements and emails customers
+// Generates previous month's PDF statement and emails customers via the
+// shared `ef_send_email` pipeline using the `monthly_statement` DB template.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -9,9 +10,52 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const ORG_ID = Deno.env.get("ORG_ID");
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const WEBSITE_URL = Deno.env.get("WEBSITE_URL") ?? "https://bitwealth.co.za";
+const PORTAL_URL = Deno.env.get("PORTAL_URL") ?? "https://bitwealth.co.za/customer-portal.html";
 
-serve(async (req) => {
+const MONTH_NAMES = [
+  "", "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function fmtZar(n: number): string {
+  return n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtUsd(n: number): string {
+  return "$ " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtBtc(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+}
+
+function fmtPct(n: number): string {
+  const pct = n * 100;
+  return pct.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function buildFeeStatusText(schedule: string): string {
+  return schedule === "annual" ? "Accrued (billed annually)" : "Deducted";
+}
+
+function buildPerformanceFeeNote(rate: number, schedule: string): string {
+  const ratePct = fmtPct(rate);
+  if (schedule === "annual") {
+    return `The performance fee of ${ratePct}% is calculated on your portfolio gains made for the month (subject to a high-water mark). It has been accrued and will be deducted on your annual fee anniversary.`;
+  }
+  return `The performance fee of ${ratePct}% is calculated on your portfolio gains made for the month (subject to a high-water mark) and has been automatically deducted.`;
+}
+
+function buildPlatformFeeNote(rate: number, schedule: string): string {
+  const ratePct = fmtPct(rate);
+  if (schedule === "annual") {
+    return `The platform fee of ${ratePct}% is calculated on your net USDT contributions. It has been accrued and will be deducted on your annual fee anniversary.`;
+  }
+  return `The platform fee of ${ratePct}% is calculated on your net USDT contributions and has been automatically deducted.`;
+}
+
+serve(async (_req) => {
   try {
     console.log("[ef_monthly_statement_generator] Starting monthly statement generation");
 
@@ -19,20 +63,27 @@ serve(async (req) => {
       db: { schema: "lth_pvr" },
     });
 
-    // Calculate previous month
     const now = new Date();
     const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
     const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    const monthName = MONTH_NAMES[prevMonth];
 
-    console.log(`[ef_monthly_statement_generator] Generating statements for ${prevMonth}/${prevYear}`);
+    const startDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+    const endDateObj = new Date(prevYear, prevMonth, 0);
+    const endDate = endDateObj.toISOString().split("T")[0];
 
-    // Get all active customers with strategies (consolidated table)
+    console.log(`[ef_monthly_statement_generator] Window: ${startDate} .. ${endDate}`);
+
     const { data: strategies, error: strategyError } = await supabase
       .schema("public")
       .from("customer_strategies")
       .select(`
         customer_id,
         status,
+        performance_fee_rate,
+        performance_fee_schedule,
+        platform_fee_rate,
+        platform_fee_schedule,
         customer_details!inner(
           customer_id,
           first_names,
@@ -56,15 +107,28 @@ serve(async (req) => {
       errors: [] as any[],
     };
 
-    // Generate statements for each customer
+    const { data: ciRow } = await supabase
+      .schema("lth_pvr")
+      .from("ci_bands_daily")
+      .select("date,btc_price")
+      .lte("date", endDate)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const currentBtcPriceUsd = Number(ciRow?.btc_price ?? 0);
+
     for (const strategy of strategies || []) {
       const customerId = strategy.customer_id;
       const customer = (strategy as any).customer_details;
+      const perfRate = Number(strategy.performance_fee_rate ?? 0.10);
+      const platRate = Number(strategy.platform_fee_rate ?? 0.0075);
+      const perfSchedule = String(strategy.performance_fee_schedule ?? "monthly");
+      const platSchedule = String(strategy.platform_fee_schedule ?? "immediate");
 
       try {
-        console.log(`[ef_monthly_statement_generator] Generating statement for customer ${customerId}`);
+        console.log(`[ef_monthly_statement_generator] Processing customer ${customerId}`);
 
-        // Call ef_generate_statement
+        // 1. Generate the PDF (unchanged)
         const statementResponse = await fetch(
           `${SUPABASE_URL}/functions/v1/ef_generate_statement`,
           {
@@ -78,120 +142,180 @@ serve(async (req) => {
               year: prevYear,
               month: prevMonth,
             }),
-          }
+          },
         );
 
         if (!statementResponse.ok) {
-          const errorData = await statementResponse.json();
+          const errorData = await statementResponse.json().catch(() => ({}));
           throw new Error(errorData.error || "Failed to generate statement");
         }
-
         const statementData = await statementResponse.json();
         results.generated++;
 
-        console.log(`[ef_monthly_statement_generator] Statement generated: ${statementData.filename}`);
+        // 2. Compute monthly investment activity from ledger_lines
+        const { data: monthLines } = await supabase
+          .schema("lth_pvr")
+          .from("ledger_lines")
+          .select("kind,amount_btc,amount_usdt,amount_zar,trade_date")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .gte("trade_date", startDate)
+          .lte("trade_date", endDate);
 
-        // Send email notification
+        let monthlyInvestedZar = 0;
+        let btcAcquired = 0;
+        let btcAcquiredZar = 0;
+        let purchaseCount = 0;
+        let monthDepositUsd = 0;
+        for (const ll of monthLines ?? []) {
+          if (ll.kind === "deposit") {
+            monthlyInvestedZar += Number(ll.amount_zar ?? 0);
+            monthDepositUsd += Number(ll.amount_usdt ?? 0);
+          }
+          if (ll.kind === "buy") {
+            btcAcquired += Number(ll.amount_btc ?? 0);
+            btcAcquiredZar += Number(ll.amount_zar ?? 0);
+            purchaseCount += 1;
+          }
+        }
+        const avgBuyPriceZar = btcAcquired > 0 ? btcAcquiredZar / btcAcquired : 0;
+
+        // 3. All-time invested (ZAR) for total_invested
+        const { data: allDeposits } = await supabase
+          .schema("lth_pvr")
+          .from("ledger_lines")
+          .select("amount_zar")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .eq("kind", "deposit");
+        const totalInvestedZar = (allDeposits ?? []).reduce(
+          (s, r) => s + Number(r.amount_zar ?? 0), 0,
+        );
+
+        // 4. Closing + opening balances for return calc
+        const { data: closingBal } = await supabase
+          .schema("lth_pvr")
+          .from("balances_daily")
+          .select("date,btc_balance,nav_usd")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .lte("date", endDate)
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const { data: openingBal } = await supabase
+          .schema("lth_pvr")
+          .from("balances_daily")
+          .select("date,nav_usd")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .lt("date", startDate)
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const btcBalance = Number(closingBal?.btc_balance ?? 0);
+        const navUsdClose = Number(closingBal?.nav_usd ?? 0);
+        const navUsdOpen = Number(openingBal?.nav_usd ?? 0);
+
+        let totalReturnPct = 0;
+        if (navUsdOpen > 0) {
+          totalReturnPct = ((navUsdClose - monthDepositUsd) - navUsdOpen) / navUsdOpen * 100;
+        } else if (navUsdClose > 0 && monthDepositUsd > 0) {
+          totalReturnPct = (navUsdClose - monthDepositUsd) / monthDepositUsd * 100;
+        }
+        const returnColor = totalReturnPct >= 0 ? "#10b981" : "#ef4444";
+
+        // 5. Aggregate fees for the month
+        const { data: feeLines } = await supabase
+          .schema("lth_pvr")
+          .from("ledger_lines")
+          .select("performance_fee_usdt,platform_fee_usdt,platform_fee_btc")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .gte("trade_date", startDate)
+          .lte("trade_date", endDate);
+
+        let perfFeeUsd = 0;
+        let platFeeUsdtSum = 0;
+        let platFeeBtcSum = 0;
+        for (const fl of feeLines ?? []) {
+          perfFeeUsd += Number(fl.performance_fee_usdt ?? 0);
+          platFeeUsdtSum += Number(fl.platform_fee_usdt ?? 0);
+          platFeeBtcSum += Number(fl.platform_fee_btc ?? 0);
+        }
+        const platFeeUsd = platFeeUsdtSum + (platFeeBtcSum * currentBtcPriceUsd);
+
+        // 6. Build template_data for the DB email template
+        const templateData: Record<string, string | number> = {
+          first_name: customer.first_names ?? "",
+          month_name: monthName,
+          year: prevYear,
+          monthly_invested: fmtZar(monthlyInvestedZar),
+          total_invested: fmtZar(totalInvestedZar),
+          btc_acquired: fmtBtc(btcAcquired),
+          avg_buy_price: fmtZar(avgBuyPriceZar),
+          current_btc_price: fmtUsd(currentBtcPriceUsd),
+          purchase_count: purchaseCount,
+          btc_balance: fmtBtc(btcBalance),
+          portfolio_value: fmtUsd(navUsdClose),
+          total_return: totalReturnPct.toFixed(2),
+          return_color: returnColor,
+          // New fee placeholders
+          performance_fee_rate: fmtPct(perfRate),
+          performance_fee_amount: fmtUsd(perfFeeUsd),
+          performance_fee_status_text: buildFeeStatusText(perfSchedule),
+          performance_fee_note: buildPerformanceFeeNote(perfRate, perfSchedule),
+          platform_fee_rate: fmtPct(platRate),
+          platform_fee_amount: fmtUsd(platFeeUsd),
+          platform_fee_status_text: buildFeeStatusText(platSchedule),
+          platform_fee_note: buildPlatformFeeNote(platRate, platSchedule),
+          portal_url: PORTAL_URL,
+          website_url: WEBSITE_URL,
+          download_url: statementData.downloadUrl ?? "",
+        };
+
+        // 7. Send via shared email pipeline
         try {
-          const monthNames = ["", "January", "February", "March", "April", "May", "June",
-                             "July", "August", "September", "October", "November", "December"];
-          const monthName = monthNames[prevMonth];
-
-          const emailResponse = await fetch("https://api.resend.com/emails", {
+          const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${RESEND_API_KEY}`,
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
             },
             body: JSON.stringify({
-              from: "BitWealth <no-reply@bitwealth.co.za>",
-              to: [customer.email],
-              subject: `Your BitWealth ${monthName} ${prevYear} Monthly Statement`,
-              html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <meta charset="utf-8">
-                  <style>
-                    body { font-family: 'Aptos', 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #032C48; background: #f5f5f5; margin: 0; padding: 0; }
-                    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; }
-                    .header { background: linear-gradient(135deg, #032C48 0%, #065A9E 100%); color: white; padding: 40px 30px; text-align: center; }
-                    .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
-                    .content { padding: 40px 30px; }
-                    .greeting { font-size: 18px; font-weight: 600; color: #032C48; margin-bottom: 20px; }
-                    .message { font-size: 16px; color: #333; margin-bottom: 30px; line-height: 1.8; }
-                    .btn { display: inline-block; background: #E5A663; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; margin: 20px 0; transition: background 0.3s; }
-                    .btn:hover { background: #D89553; }
-                    .footer { background: #f8f8f8; padding: 30px; text-align: center; font-size: 14px; color: #666; border-top: 1px solid #e0e0e0; }
-                    .footer a { color: #065A9E; text-decoration: none; }
-                  </style>
-                </head>
-                <body>
-                  <div class="container">
-                    <div class="header">
-                      <h1>📄 Monthly Statement Available</h1>
-                    </div>
-                    <div class="content">
-                      <div class="greeting">Hi ${customer.first_names},</div>
-                      <div class="message">
-                        <p>Your BitWealth monthly investment statement for <strong>${monthName} ${prevYear}</strong> is now ready!</p>
-                        <p>This statement includes:</p>
-                        <ul style="margin: 15px 0; padding-left: 20px;">
-                          <li>Performance summary with ROI and CAGR</li>
-                          <li>Complete transaction history</li>
-                          <li>Benchmark comparison (LTH PVR vs Standard DCA)</li>
-                          <li>Portfolio balances and fee breakdown</li>
-                        </ul>
-                        <p>You can download your statement using the button below, or log in to the Customer Portal anytime to access all your statements.</p>
-                      </div>
-                      <div style="text-align: center;">
-                        <a href="${statementData.downloadUrl}" class="btn">📥 Download Statement</a>
-                      </div>
-                      <div style="margin-top: 30px; padding: 20px; background: #f0f7ff; border-left: 4px solid #065A9E; border-radius: 6px;">
-                        <p style="margin: 0; font-size: 14px; color: #032C48;">
-                          <strong>📊 Quick Access:</strong> Log in to the <a href="https://bitwealth.co.za/customer-portal.html" style="color: #065A9E; text-decoration: none;">Customer Portal</a> to view your current portfolio, download historical statements, and manage your settings.
-                        </p>
-                      </div>
-                    </div>
-                    <div class="footer">
-                      <p>This is an automated message from BitWealth.</p>
-                      <p>If you have any questions, please contact us at <a href="mailto:support@bitwealth.co.za">support@bitwealth.co.za</a></p>
-                      <p style="margin-top: 20px; font-size: 12px; color: #999;">
-                        © ${prevYear} BitWealth. All rights reserved.<br>
-                        Automated Bitcoin Investment Platform
-                      </p>
-                    </div>
-                  </div>
-                </body>
-                </html>
-              `,
+              template_key: "monthly_statement",
+              to_email: customer.email,
+              data: templateData,
             }),
           });
 
           if (!emailResponse.ok) {
-            const emailError = await emailResponse.json();
-            throw new Error(`Email failed: ${JSON.stringify(emailError)}`);
+            const errBody = await emailResponse.text();
+            throw new Error(`ef_send_email failed (${emailResponse.status}): ${errBody}`);
           }
 
           results.emailed++;
           console.log(`[ef_monthly_statement_generator] Email sent to ${customer.email}`);
-
         } catch (emailError) {
-          console.error(`[ef_monthly_statement_generator] Email error for customer ${customerId}:`, emailError);
+          console.error(
+            `[ef_monthly_statement_generator] Email error for customer ${customerId}:`,
+            emailError,
+          );
           results.errors.push({
             customer_id: customerId,
             email: customer.email,
             type: "email",
-            error: emailError.message,
+            error: (emailError as Error).message,
           });
         }
-
       } catch (error) {
         console.error(`[ef_monthly_statement_generator] Error for customer ${customerId}:`, error);
         results.errors.push({
           customer_id: customerId,
           type: "statement",
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -205,17 +329,13 @@ serve(async (req) => {
         year: prevYear,
         results,
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { "Content-Type": "application/json" } },
     );
-
   } catch (error) {
     console.error("[ef_monthly_statement_generator] Fatal error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Failed to generate monthly statements" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ error: (error as Error).message || "Failed to generate monthly statements" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 });

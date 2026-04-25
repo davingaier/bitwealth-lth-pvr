@@ -3,11 +3,110 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.90)
+**Last updated:** 2026-04-25 (v0.6.91)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.91 – Email Template Content Edits + Monthly Statement Redesign + Withdrawal Template Split
+**Date:** 2026-04-25
+**Purpose:** Twelve content/UX corrections to the customer email suite raised after a full visual review of the rendered previews. Three of the items required code changes (one folder rename, one full edge-function refactor, one DB row split); the rest are in-place text/HTML edits to `public.email_templates`.
+
+**Status:** ✅ COMPLETE (DB updates applied, edge function deployed).
+
+#### Backup
+Before any edit, `public.email_templates` was snapshotted to **`public.email_templates_backup_20260425c`** (joins the existing `_20260425` and `_20260425b` snapshots from v0.6.89/v0.6.90).
+
+#### Items 1–11 summary (DB content edits)
+| # | Template | Change |
+|---|---|---|
+| 1 | `account_setup_complete` | "Always use this reference when making **deposits**" → "…when making **ZAR deposits**" — *then later **deleted** in this same revision (see Post-edit cleanup below) after confirming it is dead code.* |
+| 2 | `deposit_instructions` | "Your **ID** has been verified" → "Your **KYC documents have** been verified" |
+| 3 | `funds_deposited_admin_notification` | Removed `<li>` "Portfolio status updated to 'active'" |
+| 4 | `funds_deposited_notification` | "Long-Term Holder **Persistence Volatility** Ratio (LTH-PVR)" → "Long-Term Holder **Profit-to-Volatility** Ratio (LTH-PVR)" |
+| 5 | `kyc_id_uploaded_notification` | **Deleted** (legacy duplicate of `kyc_documents_uploaded_notification`); accompanying edge function folder `supabase/functions/ef_upload_kyc_id` renamed to **`_deprecated_ef_upload_kyc_id`**. Live UI (`website/upload-kyc.html`) calls `ef_upload_kyc_documents` only. |
+| 6 | `kyc_portal_registration` | "Once your **ID** is verified" → "Once your **KYC documentation has been** verified" |
+| 7 | `kyc_request` | **Deleted** (unused; not invoked by any edge function) |
+| 8 | `kyc_verified_notification` | Left as-is (verified active via `ef_approve_kyc`; no edits requested) |
+| 10 | `prospect_confirmation` | Outer wrapper table `background-color: #032C48` → `#ffffff` (was rendering dark-blue panel hiding white text in the email body) |
+| 11 | `withdrawal_completed` | "next **24** hours" → "next **48** hours" — DB row only. The live `getWithdrawalOutcomeEmail` in `_shared/email-templates.ts` already says "1–2 business days" for ZAR (≈48 h) and "10–60 minutes" for crypto, so no live-code edit. |
+
+#### Item 9 — `monthly_statement` redesign (single template + server-side conditional)
+
+**Problem.** Customer requirements: rename "Management Fee" → "Performance Fee", add a Platform Fee section, restate the calculation methodology (gains-based + high-water mark), and switch the wording dynamically based on each customer's **fee schedule** (monthly/immediate vs annual).
+
+**Critical pre-existing issue discovered.** The previous `ef_monthly_statement_generator` did **not** use the DB `monthly_statement` template at all — it called Resend directly with **hardcoded inline HTML**. The DB template was dead code that the local previewer rendered but no production customer ever received.
+
+**Resolution (Option B from the user choice).**
+1. **DB template `monthly_statement`** — fee section restructured in place:
+   - Old block (`Monthly Fee Invoice` heading with single `Management Fee ({{fee_rate}}%)` + `Fee Status` rows, plus a single Note paragraph) replaced with **`Monthly Fee Summary`** containing two rate+amount+status rows (Performance Fee, Platform Fee) and **two Note paragraphs**, each rendered via new placeholders.
+   - Stripped legacy `R ` (Rand) prefix from `<span>{{current_btc_price}}</span>` and `<span>{{portfolio_value}}</span>` since those placeholders are now formatted as USD by the edge function.
+2. **`ef_monthly_statement_generator/index.ts` rewritten** to:
+   - Call `ef_send_email` with `template_key='monthly_statement'` instead of inlining HTML in a Resend call.
+   - Compute monthly investment activity (`monthly_invested`, `btc_acquired`, `avg_buy_price`, `purchase_count`), portfolio metrics (`btc_balance`, `portfolio_value`, `total_return`), and per-currency fee aggregates (`performance_fee_amount`, `platform_fee_amount` rolled up from `lth_pvr.ledger_lines.{performance_fee_usdt, platform_fee_usdt, platform_fee_btc}`).
+   - Read `public.customer_strategies.{performance_fee_rate, performance_fee_schedule, platform_fee_rate, platform_fee_schedule}` and pre-render the two new note paragraphs server-side. **`ef_send_email` only supports flat `{{var}}` substitution** (no Handlebars-style conditionals), so the schedule-based branch ("Deducted" vs "Accrued — billed annually" / "deducted on your annual fee anniversary") is computed in TS and passed in as a fully-rendered string.
+   - The PDF generation step (call to `ef_generate_statement`) is unchanged.
+
+**New placeholders introduced for `monthly_statement`:**
+`performance_fee_rate`, `performance_fee_amount`, `performance_fee_status_text`, `performance_fee_note`, `platform_fee_rate`, `platform_fee_amount`, `platform_fee_status_text`, `platform_fee_note`, `download_url` (currently unused inside the body but passed for future use).
+
+**Deprecated placeholders (no longer rendered in the new fee block, but still substituted for older sections):** `fee_rate`, `management_fee`, `fee_status`.
+
+**Current customer fee-schedule distribution** (verified at edit time):
+| `performance_fee_schedule` | `platform_fee_schedule` | Customers |
+|---|---|---|
+| `monthly` | `immediate` | 11 |
+| `annual` | `annual` | 2 |
+
+#### Item 12 — `withdrawal_approved` split into ZAR + Crypto variants
+
+**Problem.** The single DB template `withdrawal_approved` baked in ZAR-bank-account language (`Withdrawal Amount: R {{amount}}`, `Bank Account: {{bank_account}}`, `Processing Time: 1-3 business days`) but the live `ef_request_withdrawal` flow handles both ZAR and crypto. The live `getWithdrawalOutcomeEmail` in `_shared/email-templates.ts` already differentiates inline (the DB template was dead code), but the duplicate confused future maintenance and the local previewer.
+
+**Resolution.** Split the DB row in a transaction:
+1. Renamed the existing row → `withdrawal_approved_zar` (`name`: "Withdrawal Approved (ZAR)", subject: "Your **ZAR** Withdrawal Request Has Been Approved").
+2. Cloned to a new row `withdrawal_approved_crypto` (`name`: "Withdrawal Approved (Crypto)", subject: "Your **Crypto** Withdrawal Request Has Been Approved") with three substitutions:
+   - `Withdrawal Amount: R {{amount}}` → `Withdrawal Amount: {{amount}} {{currency}}`
+   - `Bank Account: {{bank_account}}` → `Destination Address: {{destination_address}}`
+   - `Processing Time: 1-3 business …` → `Processing Time: 10–60 minutes for blockchain confirmation, then 1-3 business …`
+
+**Live code unchanged for item 12** — the production flow continues to send via `getWithdrawalOutcomeEmail` (already currency-aware). The split DB rows now serve as the canonical previewer/source-of-truth for future migration off the hardcoded TS strings.
+
+#### Post-edit cleanup — `account_setup_complete` deleted
+
+After applying the item-1 text edit, a follow-up audit showed `account_setup_complete` is duplicate dead code:
+- **0** matches in `supabase/functions/**` (no edge function calls it).
+- **0** matches in `ui/`, `website/`, or any HTML/JS asset.
+- **0** rows in `public.email_logs` where `template_key='account_setup_complete'` (never actually sent in production).
+- Pre-existing audit notes ([`docs/EMAIL_TEMPLATE_VERIFICATION.md`](EMAIL_TEMPLATE_VERIFICATION.md), [`PRE_DEPLOYMENT_CHECKLIST.md`](../PRE_DEPLOYMENT_CHECKLIST.md)) already flagged it as **Legacy** / "May be duplicate of registration_complete_welcome".
+
+Its intended scenario ("account setup is done, here is your deposit reference") is now fully owned by **`deposit_instructions`**, which is sent by the M4 deposit-instructions flow after KYC approval. Row deleted from `public.email_templates`.
+
+#### Verification
+- Email-template count: **19 → 17 active rows** (deleted `kyc_id_uploaded_notification`, `kyc_request`, and `account_setup_complete`; split `withdrawal_approved` → `_zar` + `_crypto`; net −2).
+- All 11 simple-edit assertions verified post-update via positive/negative LIKE checks (each returned 1).
+- `monthly_statement` placeholder set verified: `{{performance_fee_*}}` × 4 and `{{platform_fee_*}}` × 4 present; `Management Fee` and "management fee of" strings absent.
+- `_email_previews/` regenerated locally; preview index now shows 18 rows including separate `withdrawal_approved_zar` and `withdrawal_approved_crypto` previews.
+- `supabase functions deploy ef_monthly_statement_generator --project-ref wqnmxpooabmedvtackji --no-verify-jwt` returned exit code 0.
+
+#### Rollback
+```sql
+-- Restore all DB template rows (including the deleted ones and original withdrawal_approved)
+TRUNCATE public.email_templates;
+INSERT INTO public.email_templates SELECT * FROM public.email_templates_backup_20260425c;
+
+-- Edge function: revert via git (file: supabase/functions/ef_monthly_statement_generator/index.ts)
+-- Folder rename: rename supabase/functions/_deprecated_ef_upload_kyc_id back to ef_upload_kyc_id
+```
+
+#### Files changed
+| File | Change |
+|---|---|
+| `public.email_templates` (DB) | 9 in-place text edits, 2 row deletes, 1 row rename, 1 row insert; backup `public.email_templates_backup_20260425c`. |
+| `supabase/functions/ef_monthly_statement_generator/index.ts` | Full rewrite — now uses `ef_send_email` + DB template; computes monthly metrics from `lth_pvr.ledger_lines`/`balances_daily`; reads `customer_strategies` fee schedule. |
+| `supabase/functions/_deprecated_ef_upload_kyc_id/` | Renamed from `ef_upload_kyc_id` (legacy single-document KYC flow superseded by `ef_upload_kyc_documents`). The deployed Supabase function of the same old name remains live until manually deleted from the Supabase dashboard. |
+
+---
 
 ### v0.6.90 – Email Header Inline Light-Mode Styles (Pattern B follow-up)
 **Date:** 2026-04-25
