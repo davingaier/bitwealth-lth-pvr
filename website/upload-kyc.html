@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KYC Document Upload - BitWealth</title>
+    <title>My Profile · KYC · Banking — BitWealth</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -17,65 +16,138 @@
             justify-content: center;
             padding: 30px 20px;
         }
-
         .container {
             background: white;
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 700px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.3);
+            max-width: 820px;
             width: 100%;
-            padding: 40px;
+            padding: 32px;
         }
-
-        .header { text-align: center; margin-bottom: 28px; }
+        .header { text-align: center; margin-bottom: 20px; }
         .logo {
             font-size: 30px; font-weight: 700;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
-        h1 { font-size: 22px; color: #1a202c; margin-bottom: 8px; }
+        h1 { font-size: 22px; color: #1a202c; margin-bottom: 4px; }
         .subtitle { color: #718096; font-size: 14px; }
 
-        .progress-summary {
-            display: flex; align-items: center; gap: 12px;
-            background: #f7fafc; border-radius: 8px; padding: 14px 16px;
-            margin-bottom: 24px; border: 1px solid #e2e8f0;
+        /* Tabs */
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            border-bottom: 2px solid #e2e8f0;
+            margin: 22px 0 22px 0;
+            overflow-x: auto;
         }
-        .progress-dots { display: flex; gap: 8px; }
-        .dot {
-            width: 28px; height: 28px; border-radius: 50%;
-            background: #e2e8f0; display: flex; align-items: center;
-            justify-content: center; font-size: 13px; font-weight: 700;
-            color: #a0aec0; transition: all 0.3s;
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #718096;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all .2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .dot.done { background: #667eea; color: white; }
-        .progress-label { color: #4a5568; font-size: 14px; flex: 1; }
-        .progress-label strong { color: #2d3748; }
+        .tab-btn:hover { color: #4a5568; }
+        .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+        .tab-btn:disabled { cursor: not-allowed; opacity: .55; }
+        .tab-num {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #e2e8f0; color: #718096;
+            font-size: 12px; font-weight: 700;
+        }
+        .tab-btn.active .tab-num { background: #667eea; color: #fff; }
+        .tab-btn.completed .tab-num { background: #38a169; color: #fff; }
+        .tab-btn.completed .tab-num::after { content: "✓"; }
+        .tab-btn.completed .tab-num-text { display: none; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Forms */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        .form-row.single { grid-template-columns: 1fr; }
+        .form-row.triple { grid-template-columns: 140px 1fr 1fr; }
+        @media (max-width: 600px) {
+            .form-row, .form-row.triple { grid-template-columns: 1fr; }
+        }
+
+        label.field {
+            display: flex; flex-direction: column; gap: 4px;
+            font-size: 13px; color: #4a5568;
+        }
+        label.field .label-text { font-weight: 600; color: #2d3748; }
+        label.field .label-text .req { color: #e53e3e; margin-left: 2px; }
+        label.field input, label.field select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #2d3748;
+            background: white;
+        }
+        label.field select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23718096' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+            cursor: pointer;
+        }
+        label.field input:focus, label.field select:focus {
+            outline: none; border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,.18);
+        }
+        label.field input.invalid, label.field select.invalid {
+            border-color: #e53e3e;
+            box-shadow: 0 0 0 3px rgba(229,62,62,.12);
+        }
 
         .message {
-            padding: 14px; border-radius: 8px; margin-bottom: 20px;
-            display: none; font-size: 14px;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            display: none;
+            font-size: 14px;
         }
         .message.show { display: block; }
         .message.success { background: #c6f6d5; color: #22543d; border-left: 4px solid #38a169; }
         .message.error   { background: #fed7d7; color: #742a2a; border-left: 4px solid #e53e3e; }
         .message.info    { background: #bee3f8; color: #2a4365; border-left: 4px solid #3182ce; }
 
+        /* Doc upload sections */
         .doc-section {
-            border: 1px solid #e2e8f0; border-radius: 10px;
-            padding: 20px; margin-bottom: 18px; transition: border-color 0.3s;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 16px;
         }
         .doc-section.complete { border-color: #667eea; }
-
         .doc-section-header {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+            display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
         }
         .section-badge {
             width: 28px; height: 28px; border-radius: 50%;
-            background: #e2e8f0; display: flex; align-items: center;
-            justify-content: center; font-weight: 700; font-size: 13px;
-            color: #718096; flex-shrink: 0; transition: all 0.3s;
+            background: #e2e8f0; color: #718096;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 13px; flex-shrink: 0;
         }
         .doc-section.complete .section-badge { background: #667eea; color: white; }
         .section-title { font-weight: 600; font-size: 15px; color: #2d3748; }
@@ -89,27 +161,27 @@
             appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23718096' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
             background-repeat: no-repeat; background-position: right 12px center;
-            cursor: pointer;
+            cursor: pointer; padding-right: 32px;
         }
-        .income-select-wrap select:focus { outline: none; border-color: #667eea; }
 
         .upload-area {
-            border: 2px dashed #cbd5e0; border-radius: 8px; padding: 24px 20px;
-            text-align: center; cursor: pointer; transition: all 0.2s;
+            border: 2px dashed #cbd5e0; border-radius: 8px;
+            padding: 22px 18px; text-align: center;
+            cursor: pointer; transition: all .2s;
         }
         .upload-area:hover, .upload-area.dragover {
             border-color: #667eea; background: #f7fafc;
         }
-        .upload-area .upload-icon { font-size: 32px; margin-bottom: 8px; }
+        .upload-area .upload-icon { font-size: 30px; margin-bottom: 6px; }
         .upload-area .upload-text { color: #4a5568; font-size: 14px; margin-bottom: 4px; }
         .upload-area .upload-hint { color: #a0aec0; font-size: 11px; }
         input[type="file"] { display: none; }
 
         .file-chosen {
             display: none; background: #f7fafc; border-radius: 6px;
-            padding: 10px 14px; font-size: 13px;
+            padding: 10px 14px; font-size: 13px; align-items: center; gap: 10px;
         }
-        .file-chosen.show { display: flex; align-items: center; gap: 10px; }
+        .file-chosen.show { display: flex; }
         .file-chosen .fc-name { font-weight: 600; color: #2d3748; flex: 1; word-break: break-all; }
         .file-chosen .fc-size { color: #718096; white-space: nowrap; }
         .file-chosen .fc-change {
@@ -118,36 +190,70 @@
         }
         .file-chosen .fc-check { color: #38a169; font-size: 18px; }
 
-        .submit-section { margin-top: 24px; }
+        .existing-doc {
+            font-size: 12px; color: #6b7280;
+            margin-top: 8px;
+        }
+        .existing-doc a {
+            color: #667eea; text-decoration: underline;
+        }
+
+        /* Footer actions */
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            padding-top: 18px;
+            border-top: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
         .btn {
-            width: 100%; padding: 14px; border: none; border-radius: 8px;
-            font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
         }
         .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(102,126,234,.4);
         }
-        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+        .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
 
         .upload-progress {
-            display: none; height: 8px; background: #e2e8f0; border-radius: 4px;
+            display: none; height: 6px;
+            background: #e2e8f0; border-radius: 3px;
             overflow: hidden; margin-top: 14px;
         }
         .upload-progress.show { display: block; }
         .upload-progress-fill {
             height: 100%;
             background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            width: 0%; transition: width 0.4s;
+            width: 0%;
+            transition: width .4s;
         }
-        .upload-status { font-size: 13px; color: #718096; margin-top: 8px; text-align: center; min-height: 20px; }
+        .upload-status {
+            font-size: 13px; color: #718096; margin-top: 8px; text-align: center; min-height: 18px;
+        }
 
         .spinner {
-            display: inline-block; width: 18px; height: 18px;
-            border: 3px solid rgba(255,255,255,0.3); border-radius: 50%;
-            border-top-color: white; animation: spin 0.8s linear infinite;
-            margin-right: 8px; vertical-align: middle;
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%; border-top-color: white;
+            animation: spin .8s linear infinite;
+            margin-right: 6px; vertical-align: middle;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .loading-text { display: none; }
@@ -160,180 +266,429 @@
         }
         .footer a { color: #667eea; text-decoration: none; }
         .footer a:hover { text-decoration: underline; }
+        .small { font-size: 12px; color: #6b7280; }
+
+        .pep-checkbox {
+            display: flex; align-items: center; gap: 8px;
+            padding: 12px;
+            background: #f7fafc; border-radius: 6px;
+            margin-bottom: 14px;
+            font-size: 14px;
+            color: #2d3748;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
         <div class="logo">BitWealth</div>
-        <h1>KYC Document Upload</h1>
-        <p class="subtitle">Please upload all four required documents to complete your verification</p>
+        <h1 id="pageTitle">My Profile</h1>
+        <p class="subtitle" id="pageSubtitle">View and update your personal information, KYC documents, and banking details.</p>
     </div>
 
-    <div class="progress-summary">
-        <div class="progress-dots">
-            <div class="dot" id="dot1">1</div>
-            <div class="dot" id="dot2">2</div>
-            <div class="dot" id="dot3">3</div>
-            <div class="dot" id="dot4">4</div>
-        </div>
-        <div class="progress-label" id="progressLabel"><strong>0 of 4</strong> sections complete</div>
-    </div>
+    <div id="globalMessage" class="message"></div>
 
-    <div id="message" class="message"></div>
-
-    <!-- Section 1: Identity document -->
-    <div class="doc-section" id="section1">
-        <div class="doc-section-header">
-            <div class="section-badge">1</div>
-            <div>
-                <div class="section-title">Identity Document</div>
-                <div class="section-subtitle">South African ID, passport, or foreign ID</div>
-            </div>
-        </div>
-        <div class="upload-area" id="uploadArea1">
-            <div class="upload-icon">🪪</div>
-            <div class="upload-text">Click to select or drag and drop</div>
-            <div class="upload-hint">JPEG, PNG, or PDF &bull; max 10 MB</div>
-        </div>
-        <input type="file" id="fileInput1" accept="image/jpeg,image/jpg,image/png,application/pdf">
-        <div class="file-chosen" id="fileChosen1">
-            <span class="fc-check">✓</span>
-            <span class="fc-name" id="fileName1"></span>
-            <span class="fc-size" id="fileSize1"></span>
-            <span class="fc-change" onclick="clearSection(1)">Change</span>
-        </div>
-    </div>
-
-    <!-- Section 2: Proof of address -->
-    <div class="doc-section" id="section2">
-        <div class="doc-section-header">
-            <div class="section-badge">2</div>
-            <div>
-                <div class="section-title">Proof of Address</div>
-                <div class="section-subtitle">Bank statement, utility bill, or municipality invoice — not older than 3 months</div>
-            </div>
-        </div>
-        <div class="upload-area" id="uploadArea2">
-            <div class="upload-icon">🏠</div>
-            <div class="upload-text">Click to select or drag and drop</div>
-            <div class="upload-hint">JPEG, PNG, or PDF &bull; max 10 MB</div>
-        </div>
-        <input type="file" id="fileInput2" accept="image/jpeg,image/jpg,image/png,application/pdf">
-        <div class="file-chosen" id="fileChosen2">
-            <span class="fc-check">✓</span>
-            <span class="fc-name" id="fileName2"></span>
-            <span class="fc-size" id="fileSize2"></span>
-            <span class="fc-change" onclick="clearSection(2)">Change</span>
-        </div>
-    </div>
-
-    <!-- Section 3: Source of income -->
-    <div class="doc-section" id="section3">
-        <div class="doc-section-header">
-            <div class="section-badge">3</div>
-            <div>
-                <div class="section-title">Source of Income</div>
-                <div class="section-subtitle">Select your primary income source and upload a supporting document</div>
-            </div>
-        </div>
-        <div class="income-select-wrap">
-            <label for="incomeSelect">Primary source of income</label>
-            <select id="incomeSelect" onchange="checkIncomeSection()">
-                <option value="">— Select one —</option>
-                <option value="Employment / Salary">Employment / Salary</option>
-                <option value="Self-employment / Freelance">Self-employment / Freelance</option>
-                <option value="Business income">Business income</option>
-                <option value="Investments / Dividends">Investments / Dividends</option>
-                <option value="Pension / Retirement">Pension / Retirement</option>
-                <option value="Inheritance / Gift">Inheritance / Gift</option>
-            </select>
-        </div>
-        <div class="upload-area" id="uploadArea3">
-            <div class="upload-icon">💼</div>
-            <div class="upload-text">Click to select or drag and drop supporting document</div>
-            <div class="upload-hint">e.g. payslip, contract, bank statement &bull; JPEG, PNG, or PDF &bull; max 10 MB</div>
-        </div>
-        <input type="file" id="fileInput3" accept="image/jpeg,image/jpg,image/png,application/pdf">
-        <div class="file-chosen" id="fileChosen3">
-            <span class="fc-check">✓</span>
-            <span class="fc-name" id="fileName3"></span>
-            <span class="fc-size" id="fileSize3"></span>
-            <span class="fc-change" onclick="clearSection(3)">Change</span>
-        </div>
-    </div>
-
-    <!-- Section 4: Bank account confirmation -->
-    <div class="doc-section" id="section4">
-        <div class="doc-section-header">
-            <div class="section-badge">4</div>
-            <div>
-                <div class="section-title">Bank Account Confirmation Letter</div>
-                <div class="section-subtitle">Official letter from your bank confirming your account — not older than 3 months</div>
-            </div>
-        </div>
-        <div class="upload-area" id="uploadArea4">
-            <div class="upload-icon">🏦</div>
-            <div class="upload-text">Click to select or drag and drop</div>
-            <div class="upload-hint">JPEG, PNG, or PDF &bull; max 10 MB</div>
-        </div>
-        <input type="file" id="fileInput4" accept="image/jpeg,image/jpg,image/png,application/pdf">
-        <div class="file-chosen" id="fileChosen4">
-            <span class="fc-check">✓</span>
-            <span class="fc-name" id="fileName4"></span>
-            <span class="fc-size" id="fileSize4"></span>
-            <span class="fc-change" onclick="clearSection(4)">Change</span>
-        </div>
-    </div>
-
-    <!-- Submit -->
-    <div class="submit-section">
-        <button id="submitBtn" class="btn btn-primary" disabled onclick="submitAllDocuments()">
-            <span class="spinner" style="display:none;"></span>
-            <span class="normal-text">🔒 Submit All Documents</span>
-            <span class="loading-text">Uploading…</span>
+    <div class="tab-bar" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="1" role="tab" aria-selected="true">
+            <span class="tab-num"><span class="tab-num-text">1</span></span>
+            Personal Information
         </button>
-        <div class="upload-progress" id="uploadProgress">
-            <div class="upload-progress-fill" id="uploadProgressFill"></div>
-        </div>
-        <div class="upload-status" id="uploadStatus"></div>
+        <button type="button" class="tab-btn" data-tab="2" role="tab" aria-selected="false">
+            <span class="tab-num"><span class="tab-num-text">2</span></span>
+            KYC
+        </button>
+        <button type="button" class="tab-btn" data-tab="3" role="tab" aria-selected="false">
+            <span class="tab-num"><span class="tab-num-text">3</span></span>
+            Banking Information
+        </button>
     </div>
+
+    <!-- ========================= TAB 1: PERSONAL ========================= -->
+    <section id="tab-1" class="tab-panel active" role="tabpanel">
+        <div id="tab1Message" class="message"></div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">First name(s)<span class="req">*</span></span>
+                <input type="text" id="f_first_names" required maxlength="120">
+            </label>
+            <label class="field">
+                <span class="label-text">Middle name</span>
+                <input type="text" id="f_middle_name" maxlength="120">
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Surname<span class="req">*</span></span>
+                <input type="text" id="f_last_name" required maxlength="120">
+            </label>
+            <label class="field">
+                <span class="label-text">Date of birth<span class="req">*</span></span>
+                <input type="date" id="f_date_of_birth" required>
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Gender</span>
+                <select id="f_gender">
+                    <option value="">— Select —</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                </select>
+            </label>
+            <label class="field">
+                <span class="label-text">Email address<span class="req">*</span></span>
+                <input type="email" id="f_email" required readonly title="Email is your account login and cannot be changed here. Contact support to change it.">
+            </label>
+        </div>
+
+        <div class="form-row triple">
+            <label class="field">
+                <span class="label-text">Phone country code<span class="req">*</span></span>
+                <select id="f_phone_country_code" required></select>
+            </label>
+            <label class="field">
+                <span class="label-text">Cellphone number<span class="req">*</span></span>
+                <input type="tel" id="f_cellphone_number" inputmode="numeric" pattern="[0-9 ]*" required maxlength="20" placeholder="82 123 4567">
+            </label>
+            <label class="field">
+                <span class="label-text">Occupation</span>
+                <input type="text" id="f_occupation" maxlength="120">
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Country of residence<span class="req">*</span></span>
+                <select id="f_country_of_residence" required></select>
+            </label>
+            <label class="field">
+                <span class="label-text">Country of origin<span class="req">*</span></span>
+                <select id="f_country_of_origin" required></select>
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Nationality<span class="req">*</span></span>
+                <select id="f_nationality" required></select>
+            </label>
+            <label class="field">
+                <span class="label-text">Secondary nationality</span>
+                <select id="f_nationality_secondary"></select>
+            </label>
+        </div>
+
+        <div class="form-row single">
+            <label class="field">
+                <span class="label-text">Income Tax number<span class="req">*</span></span>
+                <input type="text" id="f_tax_number" required maxlength="40" placeholder="e.g. 1234567890">
+            </label>
+        </div>
+
+        <div class="actions">
+            <span style="flex:1;"></span>
+            <button type="button" id="tab1ContinueBtn" class="btn btn-primary">
+                <span class="spinner" style="display:none;"></span>
+                <span class="normal-text">Save & Continue →</span>
+                <span class="loading-text">Saving…</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ========================= TAB 2: KYC ============================== -->
+    <section id="tab-2" class="tab-panel" role="tabpanel">
+        <div id="tab2Message" class="message"></div>
+        <p class="small" style="margin-bottom:14px;">Please upload three required KYC documents. Files must be JPEG, PNG, or PDF and no larger than 10 MB.</p>
+
+        <!-- Section 1: Identity document -->
+        <div class="doc-section" id="section1">
+            <div class="doc-section-header">
+                <div class="section-badge">1</div>
+                <div>
+                    <div class="section-title">Identity Document</div>
+                    <div class="section-subtitle">South African ID, passport, or foreign ID</div>
+                </div>
+            </div>
+            <div class="upload-area" id="uploadArea1">
+                <div class="upload-icon">🪪</div>
+                <div class="upload-text">Click to select or drag and drop</div>
+                <div class="upload-hint">JPEG, PNG, or PDF · max 10 MB</div>
+            </div>
+            <input type="file" id="fileInput1" accept="image/jpeg,image/jpg,image/png,application/pdf">
+            <div class="file-chosen" id="fileChosen1">
+                <span class="fc-check">✓</span>
+                <span class="fc-name" id="fileName1"></span>
+                <span class="fc-size" id="fileSize1"></span>
+                <span class="fc-change" data-clear="1">Change</span>
+            </div>
+            <div class="existing-doc" id="existing1"></div>
+        </div>
+
+        <!-- Section 2: Proof of address -->
+        <div class="doc-section" id="section2">
+            <div class="doc-section-header">
+                <div class="section-badge">2</div>
+                <div>
+                    <div class="section-title">Proof of Address</div>
+                    <div class="section-subtitle">Bank statement, utility bill, or municipality invoice — not older than 3 months</div>
+                </div>
+            </div>
+            <div class="upload-area" id="uploadArea2">
+                <div class="upload-icon">🏠</div>
+                <div class="upload-text">Click to select or drag and drop</div>
+                <div class="upload-hint">JPEG, PNG, or PDF · max 10 MB</div>
+            </div>
+            <input type="file" id="fileInput2" accept="image/jpeg,image/jpg,image/png,application/pdf">
+            <div class="file-chosen" id="fileChosen2">
+                <span class="fc-check">✓</span>
+                <span class="fc-name" id="fileName2"></span>
+                <span class="fc-size" id="fileSize2"></span>
+                <span class="fc-change" data-clear="2">Change</span>
+            </div>
+            <div class="existing-doc" id="existing2"></div>
+        </div>
+
+        <!-- Section 3: Source of income -->
+        <div class="doc-section" id="section3">
+            <div class="doc-section-header">
+                <div class="section-badge">3</div>
+                <div>
+                    <div class="section-title">Source of Income</div>
+                    <div class="section-subtitle">Select your primary income source and upload a supporting document</div>
+                </div>
+            </div>
+            <div class="income-select-wrap">
+                <label for="incomeSelect">Primary source of income</label>
+                <select id="incomeSelect">
+                    <option value="">— Select one —</option>
+                    <option value="Employment / Salary">Employment / Salary</option>
+                    <option value="Self-employment / Freelance">Self-employment / Freelance</option>
+                    <option value="Business income">Business income</option>
+                    <option value="Investments / Dividends">Investments / Dividends</option>
+                    <option value="Pension / Retirement">Pension / Retirement</option>
+                    <option value="Inheritance / Gift">Inheritance / Gift</option>
+                </select>
+            </div>
+            <div class="upload-area" id="uploadArea3">
+                <div class="upload-icon">💼</div>
+                <div class="upload-text">Click to select or drag and drop supporting document</div>
+                <div class="upload-hint">e.g. payslip, contract, bank statement · JPEG, PNG, or PDF · max 10 MB</div>
+            </div>
+            <input type="file" id="fileInput3" accept="image/jpeg,image/jpg,image/png,application/pdf">
+            <div class="file-chosen" id="fileChosen3">
+                <span class="fc-check">✓</span>
+                <span class="fc-name" id="fileName3"></span>
+                <span class="fc-size" id="fileSize3"></span>
+                <span class="fc-change" data-clear="3">Change</span>
+            </div>
+            <div class="existing-doc" id="existing3"></div>
+        </div>
+
+        <div class="upload-progress" id="kycUploadProgress"><div class="upload-progress-fill" id="kycUploadProgressFill"></div></div>
+        <div class="upload-status" id="kycUploadStatus"></div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-secondary" data-back="1">← Back</button>
+            <span style="flex:1;"></span>
+            <button type="button" id="tab2ContinueBtn" class="btn btn-primary">
+                <span class="spinner" style="display:none;"></span>
+                <span class="normal-text">Save & Continue →</span>
+                <span class="loading-text">Uploading…</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ========================= TAB 3: BANKING ========================== -->
+    <section id="tab-3" class="tab-panel" role="tabpanel">
+        <div id="tab3Message" class="message"></div>
+        <p class="small" style="margin-bottom:14px;">Please provide your South African bank account details for ZAR deposits and withdrawals.</p>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Bank name<span class="req">*</span></span>
+                <select id="b_bank_name" required>
+                    <option value="">— Select bank —</option>
+                    <option>ABSA</option>
+                    <option>African Bank</option>
+                    <option>Bidvest Bank</option>
+                    <option>Capitec</option>
+                    <option>Discovery Bank</option>
+                    <option>FNB</option>
+                    <option>Investec</option>
+                    <option>Nedbank</option>
+                    <option>Standard Bank</option>
+                    <option>TymeBank</option>
+                    <option>Other</option>
+                </select>
+            </label>
+            <label class="field">
+                <span class="label-text">Account holder<span class="req">*</span></span>
+                <input type="text" id="b_account_holder" required maxlength="120">
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">Account number<span class="req">*</span></span>
+                <input type="text" id="b_account_number" required maxlength="30" inputmode="numeric" pattern="[0-9]*">
+            </label>
+            <label class="field">
+                <span class="label-text">Branch code<span class="req">*</span></span>
+                <input type="text" id="b_branch_code" required maxlength="10" inputmode="numeric" pattern="[0-9]*">
+            </label>
+        </div>
+
+        <div class="form-row single">
+            <label class="field">
+                <span class="label-text">Account type<span class="req">*</span></span>
+                <select id="b_account_type" required>
+                    <option value="">— Select type —</option>
+                    <option>Cheque/Current</option>
+                    <option>Savings</option>
+                    <option>Transmission</option>
+                    <option>Business</option>
+                </select>
+            </label>
+        </div>
+
+        <!-- Bank confirmation upload -->
+        <div class="doc-section" id="section4">
+            <div class="doc-section-header">
+                <div class="section-badge">4</div>
+                <div>
+                    <div class="section-title">Bank Account Confirmation Letter</div>
+                    <div class="section-subtitle">Official letter from your bank confirming your account — not older than 3 months</div>
+                </div>
+            </div>
+            <div class="upload-area" id="uploadArea4">
+                <div class="upload-icon">🏦</div>
+                <div class="upload-text">Click to select or drag and drop</div>
+                <div class="upload-hint">JPEG, PNG, or PDF · max 10 MB</div>
+            </div>
+            <input type="file" id="fileInput4" accept="image/jpeg,image/jpg,image/png,application/pdf">
+            <div class="file-chosen" id="fileChosen4">
+                <span class="fc-check">✓</span>
+                <span class="fc-name" id="fileName4"></span>
+                <span class="fc-size" id="fileSize4"></span>
+                <span class="fc-change" data-clear="4">Change</span>
+            </div>
+            <div class="existing-doc" id="existing4"></div>
+        </div>
+
+        <div class="upload-progress" id="bankUploadProgress"><div class="upload-progress-fill" id="bankUploadProgressFill"></div></div>
+        <div class="upload-status" id="bankUploadStatus"></div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-secondary" data-back="2">← Back</button>
+            <span style="flex:1;"></span>
+            <button type="button" id="tab3SubmitBtn" class="btn btn-primary">
+                <span class="spinner" style="display:none;"></span>
+                <span class="normal-text">🔒 Submit</span>
+                <span class="loading-text">Submitting…</span>
+            </button>
+        </div>
+    </section>
 
     <div class="footer">
-        Your documents are encrypted and securely stored. &nbsp;
+        Your data is encrypted and securely stored. &nbsp;
         Need help? <a href="mailto:support@bitwealth.co.za">Contact Support</a>
     </div>
 </div>
 
 <script>
+(() => {
     const SUPABASE_URL  = 'https://wqnmxpooabmedvtackji.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const VALID_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
     const MAX_BYTES   = 10 * 1024 * 1024;
 
-    const files = { 1: null, 2: null, 3: null, 4: null };
-    let customerData = null;
+    // ===== Country list (ISO 3166) with South Africa pinned to top =====
+    const ZA = "South Africa";
+    const COUNTRIES_RAW = ["Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cabo Verde","Cambodia","Cameroon","Canada","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo","Congo (Democratic Republic)","Costa Rica","Côte d'Ivoire","Croatia","Cuba","Cyprus","Czechia","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kosovo","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia","Saint Vincent and the Grenadines","Samoa","San Marino","São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia",ZA,"South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Vatican City","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"];
+    const COUNTRY_LIST = [ZA, ...COUNTRIES_RAW.filter(c => c !== ZA).sort()];
 
-    function isSectionReady(n) {
-        if (n === 3) return files[3] !== null && document.getElementById('incomeSelect').value !== '';
-        return files[n] !== null;
+    // Phone country codes — +27 pinned, then sorted by name
+    const PHONE_CODES = [
+        ["+27", "South Africa"],
+        ["+1", "Canada / USA"],
+        ["+7", "Russia / Kazakhstan"],
+        ["+20", "Egypt"], ["+30", "Greece"], ["+31", "Netherlands"], ["+32", "Belgium"],
+        ["+33", "France"], ["+34", "Spain"], ["+36", "Hungary"], ["+39", "Italy"],
+        ["+40", "Romania"], ["+41", "Switzerland"], ["+43", "Austria"], ["+44", "United Kingdom"],
+        ["+45", "Denmark"], ["+46", "Sweden"], ["+47", "Norway"], ["+48", "Poland"], ["+49", "Germany"],
+        ["+51", "Peru"], ["+52", "Mexico"], ["+53", "Cuba"], ["+54", "Argentina"], ["+55", "Brazil"],
+        ["+56", "Chile"], ["+57", "Colombia"], ["+58", "Venezuela"], ["+60", "Malaysia"],
+        ["+61", "Australia"], ["+62", "Indonesia"], ["+63", "Philippines"], ["+64", "New Zealand"],
+        ["+65", "Singapore"], ["+66", "Thailand"], ["+81", "Japan"], ["+82", "South Korea"],
+        ["+84", "Vietnam"], ["+86", "China"], ["+90", "Turkey"], ["+91", "India"], ["+92", "Pakistan"],
+        ["+93", "Afghanistan"], ["+94", "Sri Lanka"], ["+95", "Myanmar"], ["+98", "Iran"],
+        ["+212", "Morocco"], ["+213", "Algeria"], ["+216", "Tunisia"], ["+218", "Libya"],
+        ["+220", "Gambia"], ["+221", "Senegal"], ["+222", "Mauritania"], ["+223", "Mali"],
+        ["+224", "Guinea"], ["+225", "Côte d'Ivoire"], ["+226", "Burkina Faso"], ["+227", "Niger"],
+        ["+228", "Togo"], ["+229", "Benin"], ["+230", "Mauritius"], ["+231", "Liberia"],
+        ["+232", "Sierra Leone"], ["+233", "Ghana"], ["+234", "Nigeria"], ["+235", "Chad"],
+        ["+236", "Central African Republic"], ["+237", "Cameroon"], ["+238", "Cabo Verde"],
+        ["+239", "São Tomé and Príncipe"], ["+240", "Equatorial Guinea"], ["+241", "Gabon"],
+        ["+242", "Congo"], ["+243", "Congo (DRC)"], ["+244", "Angola"], ["+245", "Guinea-Bissau"],
+        ["+248", "Seychelles"], ["+249", "Sudan"], ["+250", "Rwanda"], ["+251", "Ethiopia"],
+        ["+252", "Somalia"], ["+253", "Djibouti"], ["+254", "Kenya"], ["+255", "Tanzania"],
+        ["+256", "Uganda"], ["+257", "Burundi"], ["+258", "Mozambique"], ["+260", "Zambia"],
+        ["+261", "Madagascar"], ["+263", "Zimbabwe"], ["+264", "Namibia"], ["+265", "Malawi"],
+        ["+266", "Lesotho"], ["+267", "Botswana"], ["+268", "Eswatini"], ["+269", "Comoros"],
+        ["+350", "Gibraltar"], ["+351", "Portugal"], ["+352", "Luxembourg"], ["+353", "Ireland"],
+        ["+354", "Iceland"], ["+356", "Malta"], ["+358", "Finland"], ["+359", "Bulgaria"],
+        ["+370", "Lithuania"], ["+371", "Latvia"], ["+372", "Estonia"], ["+374", "Armenia"],
+        ["+375", "Belarus"], ["+380", "Ukraine"], ["+381", "Serbia"], ["+385", "Croatia"],
+        ["+386", "Slovenia"], ["+420", "Czechia"], ["+421", "Slovakia"], ["+852", "Hong Kong"],
+        ["+886", "Taiwan"], ["+962", "Jordan"], ["+963", "Syria"], ["+964", "Iraq"],
+        ["+965", "Kuwait"], ["+966", "Saudi Arabia"], ["+967", "Yemen"], ["+968", "Oman"],
+        ["+970", "Palestine"], ["+971", "United Arab Emirates"], ["+972", "Israel"], ["+973", "Bahrain"],
+        ["+974", "Qatar"], ["+975", "Bhutan"], ["+976", "Mongolia"], ["+977", "Nepal"],
+    ];
+
+    function fillCountrySelect(el, includeBlank = false, blankText = "— Select —") {
+        const opts = [];
+        if (includeBlank) opts.push(`<option value="">${blankText}</option>`);
+        COUNTRY_LIST.forEach(c => opts.push(`<option value="${c}">${c}</option>`));
+        el.innerHTML = opts.join("");
     }
 
-    function completedCount() {
-        return [1, 2, 3, 4].filter(isSectionReady).length;
-    }
-
-    function updateProgress() {
-        const done = completedCount();
-        [1, 2, 3, 4].forEach(n => {
-            document.getElementById('dot' + n).classList.toggle('done', isSectionReady(n));
-            document.getElementById('section' + n).classList.toggle('complete', isSectionReady(n));
+    function fillPhoneCodeSelect(el) {
+        const opts = ['<option value="">— Select —</option>'];
+        PHONE_CODES.forEach(([code, name]) => {
+            opts.push(`<option value="${code}">${code} (${name})</option>`);
         });
-        document.getElementById('progressLabel').innerHTML = '<strong>' + done + ' of 4</strong> sections complete';
-        document.getElementById('submitBtn').disabled = (done < 4);
+        el.innerHTML = opts.join("");
     }
+
+    fillCountrySelect(document.getElementById('f_country_of_residence'), true);
+    fillCountrySelect(document.getElementById('f_country_of_origin'), true);
+    fillCountrySelect(document.getElementById('f_nationality'), true);
+    fillCountrySelect(document.getElementById('f_nationality_secondary'), true, "— None —");
+    fillPhoneCodeSelect(document.getElementById('f_phone_country_code'));
+
+    // ===== State =====
+    let customerData = null;
+    let bankRow = null;        // existing public.bank_accounts row, if any
+    const files = { 1: null, 2: null, 3: null, 4: null };
+
+    // ===== Helpers =====
+    const $ = (id) => document.getElementById(id);
+
+    function showMsg(boxId, text, type = 'info', persist = false) {
+        const el = $(boxId);
+        el.textContent = text;
+        el.className = 'message show ' + type;
+        if (!persist) setTimeout(() => el.classList.remove('show'), 7000);
+    }
+    function hideMsg(boxId) { $(boxId).classList.remove('show'); }
 
     function formatSize(bytes) {
         if (bytes < 1024)    return bytes + ' B';
@@ -341,176 +696,456 @@
         return (bytes / 1048576).toFixed(1) + ' MB';
     }
 
+    function setBtnLoading(btn, loading) {
+        btn.disabled = loading;
+        btn.classList.toggle('loading', loading);
+        const sp = btn.querySelector('.spinner');
+        if (sp) sp.style.display = loading ? 'inline-block' : 'none';
+    }
+
+    function switchTab(n) {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            const isActive = String(n) === b.dataset.tab;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        document.querySelectorAll('.tab-panel').forEach(p => {
+            p.classList.toggle('active', p.id === `tab-${n}`);
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function markCompleted(n) {
+        const btn = document.querySelector(`.tab-btn[data-tab="${n}"]`);
+        if (btn) btn.classList.add('completed');
+    }
+
+    // ===== File handling =====
     function handleFileSelect(n, file) {
         if (!file) return;
         if (!VALID_TYPES.includes(file.type)) {
-            showMessage('Invalid file type. Please upload JPEG, PNG, or PDF.', 'error');
+            showMsg('globalMessage', 'Invalid file type. Please upload JPEG, PNG, or PDF.', 'error');
             return;
         }
         if (file.size > MAX_BYTES) {
-            showMessage('File too large. Maximum size is 10 MB.', 'error');
+            showMsg('globalMessage', 'File too large. Maximum size is 10 MB.', 'error');
             return;
         }
         files[n] = file;
-        document.getElementById('fileName' + n).textContent = file.name;
-        document.getElementById('fileSize' + n).textContent = formatSize(file.size);
-        document.getElementById('uploadArea' + n).style.display = 'none';
-        document.getElementById('fileChosen' + n).classList.add('show');
-        updateProgress();
+        $('fileName' + n).textContent = file.name;
+        $('fileSize' + n).textContent = formatSize(file.size);
+        $('uploadArea' + n).style.display = 'none';
+        $('fileChosen' + n).classList.add('show');
+        const sec = $('section' + n);
+        if (sec) sec.classList.add('complete');
+    }
+    function clearSection(n) {
+        files[n] = null;
+        $('fileInput' + n).value = '';
+        $('fileChosen' + n).classList.remove('show');
+        $('uploadArea' + n).style.display = '';
+        const sec = $('section' + n);
+        if (sec) sec.classList.remove('complete');
     }
 
-    window.clearSection = function(n) {
-        files[n] = null;
-        document.getElementById('fileInput' + n).value = '';
-        document.getElementById('fileChosen' + n).classList.remove('show');
-        document.getElementById('uploadArea' + n).style.display = '';
-        updateProgress();
-    };
-
-    window.checkIncomeSection = function() { updateProgress(); };
-
-    [1, 2, 3, 4].forEach(function(n) {
-        var area  = document.getElementById('uploadArea' + n);
-        var input = document.getElementById('fileInput' + n);
-        area.addEventListener('click', function() { input.click(); });
-        input.addEventListener('change', function(e) { handleFileSelect(n, e.target.files[0]); });
-        area.addEventListener('dragover',  function(e) { e.preventDefault(); area.classList.add('dragover'); });
-        area.addEventListener('dragleave', function() { area.classList.remove('dragover'); });
-        area.addEventListener('drop', function(e) {
+    [1,2,3,4].forEach(n => {
+        const area = $('uploadArea' + n);
+        const input = $('fileInput' + n);
+        if (!area || !input) return;
+        area.addEventListener('click', () => input.click());
+        input.addEventListener('change', (e) => handleFileSelect(n, e.target.files[0]));
+        area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+        area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+        area.addEventListener('drop', (e) => {
             e.preventDefault();
             area.classList.remove('dragover');
             handleFileSelect(n, e.dataTransfer.files[0]);
         });
     });
+    document.querySelectorAll('[data-clear]').forEach(el => {
+        el.addEventListener('click', () => clearSection(el.dataset.clear));
+    });
+    document.querySelectorAll('[data-back]').forEach(el => {
+        el.addEventListener('click', () => switchTab(el.dataset.back));
+    });
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.addEventListener('click', () => {
+            // Free navigation between tabs (per-tab data is saved on Continue/Submit only)
+            switchTab(b.dataset.tab);
+        });
+    });
 
-    function showMessage(text, type, persist) {
-        var el = document.getElementById('message');
-        el.textContent = text;
-        el.className = 'message show ' + type;
-        if (!persist) setTimeout(function() { el.classList.remove('show'); }, 6000);
-    }
-
-    function setUploadStatus(text, pct) {
-        document.getElementById('uploadStatus').textContent = text;
-        if (pct !== undefined) {
-            document.getElementById('uploadProgress').classList.add('show');
-            document.getElementById('uploadProgressFill').style.width = pct + '%';
-        }
-    }
-
+    // ===== Init: load customer + bank row =====
     async function init() {
-        var sessionData = await supabaseClient.auth.getSession();
-        var session = sessionData.data.session;
+        const { data: { session } } = await sb.auth.getSession();
         if (!session) {
-            showMessage('Please log in to upload your KYC documents.', 'error', true);
-            setTimeout(function() { window.location.href = 'login.html'; }, 2500);
+            showMsg('globalMessage', 'Please sign in to view or update your profile.', 'error', true);
+            setTimeout(() => { window.location.href = 'login.html'; }, 2500);
             return;
         }
-        var result = await supabaseClient
+
+        const { data: cust, error: custErr } = await sb
             .from('customer_details')
-            .select('customer_id, first_names, last_name, email, registration_status')
+            .select('*')
             .eq('email', session.user.email)
             .single();
-        if (result.error || !result.data) {
-            showMessage('Customer profile not found. Please contact support.', 'error', true);
+        if (custErr || !cust) {
+            showMsg('globalMessage', 'Customer profile not found. Please contact support.', 'error', true);
             return;
         }
-        customerData = result.data;
-        if (customerData.registration_status !== 'kyc') {
-            showMessage(
-                'KYC document upload is not required at this stage (status: ' + customerData.registration_status + '). Redirecting…',
-                'info', true
-            );
-            setTimeout(function() { window.location.href = 'customer-portal.html'; }, 3000);
-            return;
+        customerData = cust;
+        $('pageSubtitle').textContent = `Welcome, ${cust.first_names || ''}. Update your information below.`;
+
+        // Personal info — populate
+        $('f_first_names').value = cust.first_names || '';
+        $('f_middle_name').value = cust.middle_name || '';
+        $('f_last_name').value = cust.last_name || '';
+        $('f_date_of_birth').value = cust.date_of_birth || '';
+        $('f_gender').value = cust.gender || '';
+        $('f_email').value = cust.email || cust.email_address || session.user.email || '';
+        $('f_phone_country_code').value = cust.phone_country_code || '+27';
+        $('f_cellphone_number').value = cust.cellphone_number || cust.phone_number || '';
+        $('f_country_of_residence').value = cust.country_of_residence || cust.country || ZA;
+        $('f_country_of_origin').value = cust.country_of_origin || ZA;
+        $('f_nationality').value = cust.nationality || ZA;
+        $('f_nationality_secondary').value = cust.nationality_secondary || '';
+        $('f_occupation').value = cust.occupation || '';
+        $('f_tax_number').value = cust.tax_number || '';
+
+        // KYC tab — show existing docs (read-only links) + income source
+        $('incomeSelect').value = cust.kyc_source_of_income || '';
+        const showExisting = (n, url, when) => {
+            if (!url) return;
+            const el = $('existing' + n);
+            const dt = when ? new Date(when).toLocaleDateString('en-ZA', { dateStyle: 'medium' }) : '';
+            el.innerHTML = `Currently on file: <a href="${url}" target="_blank" rel="noopener">view document</a>${dt ? ` · uploaded ${dt}` : ''}. Upload a new file to replace it.`;
+        };
+        showExisting(1, cust.kyc_id_document_url, cust.kyc_id_uploaded_at);
+        showExisting(2, cust.kyc_proof_address_url, cust.kyc_proof_address_uploaded_at);
+        showExisting(3, cust.kyc_source_of_income_doc_url, cust.kyc_source_of_income_doc_uploaded_at);
+        showExisting(4, cust.kyc_bank_confirmation_url, cust.kyc_bank_confirmation_uploaded_at);
+
+        // Banking — load existing bank_accounts row if present
+        const { data: bank } = await sb
+            .from('bank_accounts')
+            .select('*')
+            .eq('customer_id', cust.customer_id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (bank) {
+            bankRow = bank;
+            $('b_bank_name').value = bank.bank_name || '';
+            $('b_account_holder').value = bank.bank_account_holder || '';
+            $('b_account_number').value = bank.bank_account_number || '';
+            $('b_branch_code').value = bank.bank_branch_code || '';
+            $('b_account_type').value = bank.bank_account_type || '';
+        }
+
+        // If status is past KYC, show informational banner
+        if (cust.registration_status && cust.registration_status !== 'kyc') {
+            showMsg('globalMessage',
+                `You are viewing your existing profile (status: ${cust.registration_status}). Edits will be saved immediately.`,
+                'info', true);
         }
     }
 
-    async function uploadToStorage(file, suffix, userId) {
-        var today    = new Date().toISOString().split('T')[0];
-        var ext      = file.name.split('.').pop().toLowerCase();
-        var safeLast  = customerData.last_name.replace(/[^a-zA-Z0-9]/g, '_');
-        var safeFirst = customerData.first_names.replace(/[^a-zA-Z0-9]/g, '_');
-        var storeName = today + '_' + safeLast + '_' + safeFirst + '_' + suffix + '.' + ext;
-        var filePath  = userId + '/' + storeName;
-
-        var up = await supabaseClient.storage
-            .from('kyc-documents')
-            .upload(filePath, file, { cacheControl: '3600', upsert: true });
-        if (up.error) throw new Error('Storage upload failed for ' + suffix + ': ' + up.error.message);
-
-        var signed = await supabaseClient.storage
-            .from('kyc-documents')
-            .createSignedUrl(filePath, 31536000);
-        if (signed.error) throw new Error('Signed URL failed for ' + suffix + ': ' + signed.error.message);
-
-        return { filePath: filePath, fileUrl: signed.data.signedUrl };
+    // ===== Validation helpers =====
+    function clearInvalid(panelId) {
+        document.querySelectorAll(`#${panelId} .invalid`).forEach(el => el.classList.remove('invalid'));
     }
+    function markInvalid(id) { $(id)?.classList.add('invalid'); }
 
-    window.submitAllDocuments = async function() {
-        if (completedCount() < 4) return;
+    // ===== Tab 1: Personal — Save & Continue =====
+    async function saveTab1() {
+        clearInvalid('tab-1');
+        hideMsg('tab1Message');
+        const requiredFields = [
+            ['f_first_names', 'First name(s)'],
+            ['f_last_name', 'Surname'],
+            ['f_date_of_birth', 'Date of birth'],
+            ['f_phone_country_code', 'Phone country code'],
+            ['f_cellphone_number', 'Cellphone number'],
+            ['f_country_of_residence', 'Country of residence'],
+            ['f_country_of_origin', 'Country of origin'],
+            ['f_nationality', 'Nationality'],
+            ['f_tax_number', 'Income Tax number'],
+        ];
+        const missing = [];
+        requiredFields.forEach(([id, label]) => {
+            const v = $(id).value.trim();
+            if (!v) { markInvalid(id); missing.push(label); }
+        });
+        if (missing.length) {
+            showMsg('tab1Message', 'Please complete: ' + missing.join(', '), 'error');
+            return;
+        }
+        const cell = $('f_cellphone_number').value.replace(/\s/g, '');
+        if (!/^\d{6,15}$/.test(cell)) {
+            markInvalid('f_cellphone_number');
+            showMsg('tab1Message', 'Cellphone number must be 6–15 digits.', 'error');
+            return;
+        }
 
-        var btn = document.getElementById('submitBtn');
-        btn.disabled = true;
-        btn.classList.add('loading');
-        btn.querySelector('.spinner').style.display = 'inline-block';
-        document.getElementById('uploadProgress').classList.add('show');
-
+        const btn = $('tab1ContinueBtn');
+        setBtnLoading(btn, true);
         try {
-            var sessionData = await supabaseClient.auth.getSession();
-            var userId = sessionData.data.session.user.id;
-
-            setUploadStatus('Uploading identity document…', 10);
-            var id = await uploadToStorage(files[1], 'id', userId);
-
-            setUploadStatus('Uploading proof of address…', 30);
-            var addr = await uploadToStorage(files[2], 'address', userId);
-
-            setUploadStatus('Uploading source of income document…', 50);
-            var income = await uploadToStorage(files[3], 'income', userId);
-
-            setUploadStatus('Uploading bank account confirmation…', 70);
-            var bank = await uploadToStorage(files[4], 'bank', userId);
-
-            setUploadStatus('Saving records…', 85);
-
-            var result = await supabaseClient.functions.invoke('ef_upload_kyc_documents', {
-                body: {
-                    customer_id:                        customerData.customer_id,
-                    kyc_id_file_path:                   id.filePath,
-                    kyc_id_file_url:                    id.fileUrl,
-                    kyc_proof_address_file_path:         addr.filePath,
-                    kyc_proof_address_file_url:          addr.fileUrl,
-                    kyc_source_of_income:               document.getElementById('incomeSelect').value,
-                    kyc_source_of_income_file_path:     income.filePath,
-                    kyc_source_of_income_file_url:      income.fileUrl,
-                    kyc_bank_confirmation_file_path:    bank.filePath,
-                    kyc_bank_confirmation_file_url:     bank.fileUrl
-                }
-            });
-
-            if (result.error) throw new Error(result.error.message || JSON.stringify(result.error));
-
-            setUploadStatus('✓ All documents uploaded successfully!', 100);
-            showMessage(
-                '✅ All KYC documents submitted successfully! An admin will review them within 1–2 business days. Redirecting…',
-                'success', true
-            );
-            btn.style.display = 'none';
-            setTimeout(function() { window.location.href = 'customer-portal.html'; }, 4000);
-
-        } catch (err) {
-            console.error('KYC upload error:', err);
-            showMessage('Upload failed: ' + err.message, 'error', true);
-            setUploadStatus('Upload failed — please try again.');
-            btn.disabled = false;
-            btn.classList.remove('loading');
-            btn.querySelector('.spinner').style.display = 'none';
+            const patch = {
+                first_names: $('f_first_names').value.trim(),
+                middle_name: $('f_middle_name').value.trim() || null,
+                last_name: $('f_last_name').value.trim(),
+                date_of_birth: $('f_date_of_birth').value,
+                gender: $('f_gender').value || null,
+                phone_country_code: $('f_phone_country_code').value,
+                cellphone_number: cell,
+                phone_number: cell, // legacy mirror
+                country_of_residence: $('f_country_of_residence').value,
+                country: $('f_country_of_residence').value, // legacy mirror
+                country_of_origin: $('f_country_of_origin').value,
+                nationality: $('f_nationality').value,
+                nationality_secondary: $('f_nationality_secondary').value || null,
+                occupation: $('f_occupation').value.trim() || null,
+                tax_number: $('f_tax_number').value.trim(),
+            };
+            const { error } = await sb.from('customer_details').update(patch).eq('customer_id', customerData.customer_id);
+            if (error) throw error;
+            Object.assign(customerData, patch);
+            showMsg('tab1Message', '✓ Personal information saved.', 'success');
+            markCompleted(1);
+            setTimeout(() => switchTab(2), 600);
+        } catch (e) {
+            console.error('Tab 1 save:', e);
+            showMsg('tab1Message', 'Save failed: ' + e.message, 'error');
+        } finally {
+            setBtnLoading(btn, false);
         }
-    };
+    }
 
-    updateProgress();
+    // ===== Storage upload helper =====
+    async function uploadToStorage(file, suffix, userId) {
+        const today = new Date().toISOString().split('T')[0];
+        const ext = file.name.split('.').pop().toLowerCase();
+        const safeLast  = (customerData.last_name || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+        const safeFirst = (customerData.first_names || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+        const storeName = `${today}_${safeLast}_${safeFirst}_${suffix}.${ext}`;
+        const filePath  = `${userId}/${storeName}`;
+
+        const up = await sb.storage.from('kyc-documents').upload(filePath, file, { cacheControl: '3600', upsert: true });
+        if (up.error) throw new Error(`Storage upload failed for ${suffix}: ${up.error.message}`);
+
+        const signed = await sb.storage.from('kyc-documents').createSignedUrl(filePath, 31536000);
+        if (signed.error) throw new Error(`Signed URL failed for ${suffix}: ${signed.error.message}`);
+
+        return { filePath, fileUrl: signed.data.signedUrl };
+    }
+
+    function setUploadStatus(prefix, text, pct) {
+        $(prefix + 'UploadStatus').textContent = text;
+        if (pct !== undefined) {
+            $(prefix + 'UploadProgress').classList.add('show');
+            $(prefix + 'UploadProgressFill').style.width = pct + '%';
+        }
+    }
+
+    // ===== Tab 2: KYC — Save & Continue =====
+    async function saveTab2() {
+        hideMsg('tab2Message');
+        const income = $('incomeSelect').value;
+        if (!income) { showMsg('tab2Message', 'Please select your primary source of income.', 'error'); return; }
+
+        // For first-time uploads: require all 3 docs. For edits: only re-upload what was changed.
+        const hasExistingId = !!customerData.kyc_id_document_url;
+        const hasExistingAddr = !!customerData.kyc_proof_address_url;
+        const hasExistingIncome = !!customerData.kyc_source_of_income_doc_url;
+
+        if (!files[1] && !hasExistingId)   return showMsg('tab2Message', 'Please upload your Identity Document.', 'error');
+        if (!files[2] && !hasExistingAddr) return showMsg('tab2Message', 'Please upload your Proof of Address.', 'error');
+        if (!files[3] && !hasExistingIncome) return showMsg('tab2Message', 'Please upload your Source of Income document.', 'error');
+
+        const btn = $('tab2ContinueBtn');
+        setBtnLoading(btn, true);
+        try {
+            const { data: { session } } = await sb.auth.getSession();
+            const userId = session.user.id;
+            const patch = { kyc_source_of_income: income };
+            const now = new Date().toISOString();
+
+            if (files[1]) {
+                setUploadStatus('kyc', 'Uploading identity document…', 20);
+                const r = await uploadToStorage(files[1], 'id', userId);
+                patch.kyc_id_document_url = r.fileUrl;
+                patch.kyc_id_uploaded_at = now;
+            }
+            if (files[2]) {
+                setUploadStatus('kyc', 'Uploading proof of address…', 50);
+                const r = await uploadToStorage(files[2], 'address', userId);
+                patch.kyc_proof_address_url = r.fileUrl;
+                patch.kyc_proof_address_uploaded_at = now;
+            }
+            if (files[3]) {
+                setUploadStatus('kyc', 'Uploading source of income…', 80);
+                const r = await uploadToStorage(files[3], 'income', userId);
+                patch.kyc_source_of_income_doc_url = r.fileUrl;
+                patch.kyc_source_of_income_doc_uploaded_at = now;
+            }
+            setUploadStatus('kyc', 'Saving…', 95);
+            const { error } = await sb.from('customer_details').update(patch).eq('customer_id', customerData.customer_id);
+            if (error) throw error;
+            Object.assign(customerData, patch);
+            setUploadStatus('kyc', '✓ Saved.', 100);
+            showMsg('tab2Message', '✓ KYC documents saved.', 'success');
+            markCompleted(2);
+            setTimeout(() => switchTab(3), 700);
+        } catch (e) {
+            console.error('Tab 2 save:', e);
+            showMsg('tab2Message', 'Save failed: ' + e.message, 'error');
+            setUploadStatus('kyc', 'Failed — please retry.', 0);
+        } finally {
+            setBtnLoading(btn, false);
+        }
+    }
+
+    // ===== Tab 3: Banking — Submit =====
+    async function submitTab3() {
+        clearInvalid('tab-3');
+        hideMsg('tab3Message');
+
+        const required = [
+            ['b_bank_name', 'Bank name'],
+            ['b_account_holder', 'Account holder'],
+            ['b_account_number', 'Account number'],
+            ['b_branch_code', 'Branch code'],
+            ['b_account_type', 'Account type'],
+        ];
+        const missing = [];
+        required.forEach(([id, label]) => {
+            if (!$(id).value.trim()) { markInvalid(id); missing.push(label); }
+        });
+        if (missing.length) {
+            showMsg('tab3Message', 'Please complete: ' + missing.join(', '), 'error');
+            return;
+        }
+        const acct = $('b_account_number').value.trim();
+        if (!/^\d{6,20}$/.test(acct)) {
+            markInvalid('b_account_number');
+            showMsg('tab3Message', 'Account number must be 6–20 digits.', 'error');
+            return;
+        }
+        const branch = $('b_branch_code').value.trim();
+        if (!/^\d{4,10}$/.test(branch)) {
+            markInvalid('b_branch_code');
+            showMsg('tab3Message', 'Branch code must be 4–10 digits.', 'error');
+            return;
+        }
+
+        const hasExistingBankDoc = !!customerData.kyc_bank_confirmation_url;
+        if (!files[4] && !hasExistingBankDoc) {
+            return showMsg('tab3Message', 'Please upload your Bank Account Confirmation Letter.', 'error');
+        }
+
+        const btn = $('tab3SubmitBtn');
+        setBtnLoading(btn, true);
+        try {
+            const { data: { session } } = await sb.auth.getSession();
+            const userId = session.user.id;
+            const now = new Date().toISOString();
+
+            // Upload new bank confirmation if provided
+            let bankDocPath = bankRow?.bank_confirmation_file_path || null;
+            let bankDocUrl  = bankRow?.bank_confirmation_url || customerData.kyc_bank_confirmation_url || null;
+            if (files[4]) {
+                setUploadStatus('bank', 'Uploading bank confirmation letter…', 40);
+                const r = await uploadToStorage(files[4], 'bank', userId);
+                bankDocPath = r.filePath;
+                bankDocUrl  = r.fileUrl;
+            }
+
+            // Upsert public.bank_accounts row
+            setUploadStatus('bank', 'Saving banking details…', 70);
+            const bankPatch = {
+                customer_id: customerData.customer_id,
+                org_id: customerData.org_id,
+                bank_name: $('b_bank_name').value,
+                bank_account_holder: $('b_account_holder').value.trim(),
+                bank_account_number: acct,
+                bank_branch_code: branch,
+                bank_account_type: $('b_account_type').value,
+                bank_confirmation_url: bankDocUrl,
+                bank_confirmation_file_path: bankDocPath,
+                bank_confirmation_uploaded_at: files[4] ? now : (bankRow?.bank_confirmation_uploaded_at || null),
+                is_primary: true,
+                status: 'active',
+            };
+            if (bankRow) {
+                const { error } = await sb.from('bank_accounts').update(bankPatch).eq('bank_account_id', bankRow.bank_account_id);
+                if (error) throw error;
+            } else {
+                const { data, error } = await sb.from('bank_accounts').insert(bankPatch).select().maybeSingle();
+                if (error) throw error;
+                bankRow = data;
+            }
+
+            // Mirror bank confirmation onto customer_details (for legacy admin views)
+            if (files[4]) {
+                const { error: cErr } = await sb.from('customer_details').update({
+                    kyc_bank_confirmation_url: bankDocUrl,
+                    kyc_bank_confirmation_uploaded_at: now,
+                }).eq('customer_id', customerData.customer_id);
+                if (cErr) console.warn('customer_details mirror failed (non-fatal):', cErr);
+            }
+
+            // If status is still 'kyc' AND all 4 docs are now on file, fire admin notification via ef_upload_kyc_documents
+            const allDocsOnFile = customerData.kyc_id_document_url && customerData.kyc_proof_address_url
+                && customerData.kyc_source_of_income_doc_url && bankDocUrl;
+            if (customerData.registration_status === 'kyc' && allDocsOnFile) {
+                setUploadStatus('bank', 'Notifying admin…', 90);
+                try {
+                    await sb.functions.invoke('ef_upload_kyc_documents', {
+                        body: {
+                            customer_id: customerData.customer_id,
+                            kyc_id_file_path: 'existing', // placeholders — function only uses for audit log
+                            kyc_id_file_url: customerData.kyc_id_document_url,
+                            kyc_proof_address_file_path: 'existing',
+                            kyc_proof_address_file_url: customerData.kyc_proof_address_url,
+                            kyc_source_of_income: customerData.kyc_source_of_income,
+                            kyc_source_of_income_file_path: 'existing',
+                            kyc_source_of_income_file_url: customerData.kyc_source_of_income_doc_url,
+                            kyc_bank_confirmation_file_path: bankDocPath || 'existing',
+                            kyc_bank_confirmation_file_url: bankDocUrl,
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Admin notification non-fatal failure:', e);
+                }
+            }
+
+            setUploadStatus('bank', '✓ Submitted.', 100);
+            showMsg('tab3Message', '✅ Banking details saved successfully!', 'success', true);
+            markCompleted(3);
+
+            const isInitialSubmission = customerData.registration_status === 'kyc';
+            if (isInitialSubmission) {
+                showMsg('globalMessage',
+                    '✅ All information submitted. An admin will review your KYC within 1–2 business days. Redirecting…',
+                    'success', true);
+                setTimeout(() => { window.location.href = 'customer-portal.html'; }, 3500);
+            }
+        } catch (e) {
+            console.error('Tab 3 submit:', e);
+            showMsg('tab3Message', 'Submit failed: ' + e.message, 'error');
+            setUploadStatus('bank', 'Failed — please retry.', 0);
+        } finally {
+            setBtnLoading(btn, false);
+        }
+    }
+
+    // ===== Wire buttons =====
+    $('tab1ContinueBtn').addEventListener('click', saveTab1);
+    $('tab2ContinueBtn').addEventListener('click', saveTab2);
+    $('tab3SubmitBtn').addEventListener('click', submitTab3);
+
     init();
+})();
 </script>
 </body>
 </html>

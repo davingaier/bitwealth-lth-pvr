@@ -3,11 +3,101 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.92)
+**Last updated:** 2026-04-25 (v0.6.93)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.93 – Customer Self-Service Profile Page (Personal / KYC / Banking)
+**Date:** 2026-04-25
+**Purpose:** Replace the single-purpose `upload-kyc.html` page with a full self-service profile page allowing customers to view and edit their personal information, KYC documents, and banking information across three tabbed sections. Adds a new `public.bank_accounts` table (customer-owned banking captured pre-VALR-onboarding).
+
+**Status:** ✅ COMPLETE (DB migration applied, page rewritten).
+
+#### New table — `public.bank_accounts`
+Stores customer-supplied banking details prior to (and independent of) VALR onboarding. Single active row per customer; admins copy data into `public.exchange_accounts` when linking the bank to VALR.
+
+| Column | Type | Notes |
+|---|---|---|
+| `bank_account_id` | uuid PK | `gen_random_uuid()` |
+| `customer_id` | bigint FK → `customer_details` | NOT NULL, ON DELETE CASCADE |
+| `org_id` | uuid | NOT NULL |
+| `bank_name` | text | NOT NULL — dropdown values: ABSA, Capitec, FNB, Investec, Nedbank, Standard Bank, TymeBank, Discovery Bank, African Bank, Bidvest Bank, Other |
+| `bank_account_holder` | text | NOT NULL |
+| `bank_account_number` | text | NOT NULL |
+| `bank_branch_code` | text | NOT NULL |
+| `bank_account_type` | text | NOT NULL — Cheque/Current, Savings, Transmission, Business |
+| `bank_confirmation_url` | text | Signed-URL of bank confirmation letter in `kyc-documents` bucket |
+| `bank_confirmation_file_path` | text | Storage path |
+| `bank_confirmation_uploaded_at` | timestamptz | |
+| `is_primary` | boolean | Default `true` |
+| `status` | text | `active` \| `archived` |
+| `created_at`, `updated_at` | timestamptz | Trigger-maintained |
+
+**RLS policies:**
+- `service_role`: full access
+- Customer self: `SELECT`, `INSERT`, `UPDATE` on rows where `customer_id` maps to a `customer_details` row whose `email` matches the caller's `auth.jwt()->>'email'`
+- Org members: `SELECT` for any row in their org (for admin UI listing)
+- Org `owner|admin|editor`: full write access on rows in their org
+
+Migration: `supabase/migrations/20260425_bank_accounts.sql` (applied via MCP `apply_migration`).
+
+#### Page rewrite — `website/upload-kyc.html`
+The page is now a **3-tab full-page** profile editor (no overlay modal). Title changed from "KYC Document Upload" → "My Profile". Accessible to all authenticated customers regardless of `registration_status` (the previous "redirect away unless status='kyc'" gate was removed).
+
+**Tab 1 — Personal Information** (saved directly to `public.customer_details`)
+| Field | Type | Required | DB column |
+|---|---|---|---|
+| First name(s) | text | ✓ | `first_names` |
+| Middle name | text |   | `middle_name` |
+| Surname | text | ✓ | `last_name` |
+| Date of birth | date picker | ✓ | `date_of_birth` |
+| Gender | dropdown |   | `gender` |
+| Email address | text (read-only) | ✓ | `email` (login identity — change via support) |
+| Phone country code | dropdown (+27 pinned) | ✓ | `phone_country_code` |
+| Cellphone number | numeric tel | ✓ | `cellphone_number` (and legacy `phone_number` mirror) |
+| Country of residence | dropdown (ISO 3166, ZA pinned) | ✓ | `country_of_residence` (and legacy `country` mirror) |
+| Country of origin | dropdown (ISO 3166, ZA pinned) | ✓ | `country_of_origin` |
+| Nationality | dropdown (ISO 3166, ZA pinned) | ✓ | `nationality` |
+| Secondary nationality | dropdown (ISO 3166, ZA pinned) |   | `nationality_secondary` |
+| Occupation | text |   | `occupation` |
+| Income Tax number | alphanumeric | ✓ | `tax_number` |
+
+**Tab 2 — KYC** (saved directly to `public.customer_details`)
+- Identity Document upload → `kyc_id_document_url`
+- Proof of Address upload → `kyc_proof_address_url`
+- Source of Income dropdown + supporting document → `kyc_source_of_income`, `kyc_source_of_income_doc_url`
+- Bank Account Confirmation Letter has been **moved to Tab 3** (per requirements).
+- Existing documents (if any) are surfaced as "Currently on file: view document" links so customers can review or replace them.
+- For first-time submissions all 3 KYC docs are required; for repeat visits only changed docs are re-uploaded.
+
+**Tab 3 — Banking Information** (saved to `public.bank_accounts`, mirrors bank confirmation URL onto `customer_details.kyc_bank_confirmation_url` for legacy admin views)
+- Bank name (dropdown), Account holder (text), Account number (numeric), Branch code (numeric), Account type (dropdown), Bank Account Confirmation Letter upload.
+- On Tab 3 **Submit**:
+  1. Validates all 5 fields + bank confirmation document
+  2. Uploads bank confirmation to `kyc-documents` bucket (if new)
+  3. Upserts the customer's row in `public.bank_accounts`
+  4. Mirrors `bank_confirmation_url` onto `customer_details.kyc_bank_confirmation_url`
+  5. **If** `registration_status === 'kyc'` AND all 4 docs are now on file: invokes `ef_upload_kyc_documents` to fire the admin notification email (existing flow preserved). For customers past `kyc` status, no notification is sent — the edit is silent.
+  6. Initial-submission customers are redirected to `customer-portal.html` after 3.5s.
+
+**Per-tab Continue button behaviour:** Each tab persists its own data immediately to the DB on Continue/Submit. Failed validations show inline red-bordered fields and a tab-scoped error message. Customers can navigate between tabs freely once a tab has been completed.
+
+**Country list:** ISO 3166 inlined as a JS const, with "South Africa" pinned to the top. Phone codes: 100+ codes inlined, +27 pinned.
+
+#### Files changed
+- **NEW:** `supabase/migrations/20260425_bank_accounts.sql` (table + 5 RLS policies)
+- **REWRITTEN:** `website/upload-kyc.html` (~570 lines → ~830 lines; tabbed UI, country/phone dropdowns, bank_accounts integration)
+- **MODIFIED:** `docs/SDD_v0.6.md` (this entry)
+
+#### Known limits / future work
+- Email change is intentionally locked (it is the auth identity). A future enhancement could add an email-change flow with re-verification.
+- Bank details are not yet auto-pushed to VALR — admins still link banks via the existing Admin UI flow that calls `ef_link_bank_account`. A future enhancement could surface a "Push to VALR" button in the Admin UI that reads from `bank_accounts`.
+- No audit history of bank-detail changes (overwrite-only for now). The `status='archived'` column is reserved for future history support.
+- Date-of-birth has no minimum-age check (FICA requires 18+; should be added if not validated elsewhere).
+
+---
 
 ### v0.6.92 – Admin UI Email Template Manager
 **Date:** 2026-04-25
