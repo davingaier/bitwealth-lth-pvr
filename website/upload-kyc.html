@@ -326,6 +326,7 @@
             <label class="field">
                 <span class="label-text">Date of birth<span class="req">*</span></span>
                 <input type="date" id="f_date_of_birth" required>
+                <span class="helper-text" style="font-size:12px;color:#666;">You must be at least 18 years old (FICA requirement).</span>
             </label>
         </div>
 
@@ -775,7 +776,27 @@
     });
 
     // ===== Init: load customer + bank row =====
+    const PREVIEW_MODE = new URLSearchParams(window.location.search).get('preview') === '1';
     async function init() {
+        // Set DOB max to today (browser-level guard against future dates)
+        const todayIso = new Date().toISOString().slice(0, 10);
+        $('f_date_of_birth').max = todayIso;
+
+        if (PREVIEW_MODE) {
+            // UI-only preview: skip auth + DB. All Save/Submit actions are no-ops.
+            $('pageSubtitle').textContent = 'PREVIEW MODE — no data is loaded or saved. Sign in to use the page for real.';
+            $('pageSubtitle').style.background = '#fff3cd';
+            $('pageSubtitle').style.color = '#856404';
+            $('pageSubtitle').style.padding = '8px 12px';
+            $('pageSubtitle').style.borderRadius = '6px';
+            customerData = { customer_id: 0, registration_status: 'preview' };
+            $('f_country_of_residence').value = ZA;
+            $('f_country_of_origin').value = ZA;
+            $('f_nationality').value = ZA;
+            $('f_phone_country_code').value = '+27';
+            return;
+        }
+
         const { data: { session } } = await sb.auth.getSession();
         if (!session) {
             showMsg('globalMessage', 'Please sign in to view or update your profile.', 'error', true);
@@ -887,9 +908,38 @@
             return;
         }
 
+        // FICA: customer must be at least 18 years old
+        const dobStr = $('f_date_of_birth').value;
+        const dob = new Date(dobStr);
+        if (isNaN(dob.getTime())) {
+            markInvalid('f_date_of_birth');
+            showMsg('tab1Message', 'Please enter a valid date of birth.', 'error');
+            return;
+        }
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        if (age < 18) {
+            markInvalid('f_date_of_birth');
+            showMsg('tab1Message', 'You must be at least 18 years old to use this service (FICA requirement).', 'error');
+            return;
+        }
+        if (age > 120) {
+            markInvalid('f_date_of_birth');
+            showMsg('tab1Message', 'Please enter a valid date of birth.', 'error');
+            return;
+        }
+
         const btn = $('tab1ContinueBtn');
         setBtnLoading(btn, true);
         try {
+            if (PREVIEW_MODE) {
+                showMsg('tab1Message', '✓ (Preview) Personal info validated. No data saved.', 'success');
+                markCompleted(1);
+                setTimeout(() => switchTab(2), 600);
+                return;
+            }
             const patch = {
                 first_names: $('f_first_names').value.trim(),
                 middle_name: $('f_middle_name').value.trim() || null,
@@ -964,6 +1014,13 @@
 
         const btn = $('tab2ContinueBtn');
         setBtnLoading(btn, true);
+        if (PREVIEW_MODE) {
+            showMsg('tab2Message', '✓ (Preview) KYC tab validated. No files uploaded.', 'success');
+            markCompleted(2);
+            setTimeout(() => switchTab(3), 600);
+            setBtnLoading(btn, false);
+            return;
+        }
         try {
             const { data: { session } } = await sb.auth.getSession();
             const userId = session.user.id;
@@ -1045,6 +1102,12 @@
 
         const btn = $('tab3SubmitBtn');
         setBtnLoading(btn, true);
+        if (PREVIEW_MODE) {
+            showMsg('tab3Message', '✓ (Preview) Banking tab validated. No data saved.', 'success');
+            markCompleted(3);
+            setBtnLoading(btn, false);
+            return;
+        }
         try {
             const { data: { session } } = await sb.auth.getSession();
             const userId = session.user.id;
