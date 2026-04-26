@@ -113,6 +113,40 @@ Both items originally listed as "known follow-ups" were closed in the same relea
 
 ---
 
+### v0.6.95 – Bank-info migration follow-ups
+**Date:** 2026-04-25
+**Purpose:** Close three gaps identified after the v0.6.94 cutover.
+
+**Status:** ✅ COMPLETE.
+
+#### 1. `bank_confirmation_url` backfill into `bank_accounts`
+- The v0.6.94 migration moved structured bank fields off `exchange_accounts`, but the **bank-confirmation document URL** had always lived on `customer_details.kyc_bank_confirmation_url` (not on `exchange_accounts`), so it was not part of the original column drop. Result: customer 49 had a `bank_accounts` row with `bank_confirmation_url IS NULL` even though the document had been uploaded pre-migration.
+- Migration `backfill_bank_confirmation_url` (2026-04-25) copies `customer_details.kyc_bank_confirmation_url` and `kyc_bank_confirmation_uploaded_at` into the corresponding `bank_accounts` row when the latter is NULL.
+- Forward contract: new self-service uploads via `website/upload-kyc.html` Tab 3 write directly to `bank_accounts.{bank_confirmation_url, bank_confirmation_file_path, bank_confirmation_uploaded_at}` AND mirror to `customer_details.kyc_bank_confirmation_url` for backward compatibility with the legacy KYC dashboard list.
+- Admin UI (`cmFillEditor` in `ui/Advanced BTC DCA Strategy.html`) now sources the Bank Confirmation tile from `bank_accounts.bank_confirmation_url` first and falls back to `customer_details.kyc_bank_confirmation_url`.
+- `bank_confirmation_file_path` is intentionally left NULL for backfilled rows: the legacy upload flow only stored the public URL, not the storage path. Only post-migration self-service uploads will populate it.
+
+#### 2. "Link to VALR" → "Sync Bank from VALR" rename
+- VALR's `POST /v1/fiat/ZAR/banks` is undocumented in the public Postman docs and behaviour is uncertain (the only confirmed evidence is that the **GET** endpoint at `/v1/fiat/ZAR/banks` exists and is cached for 600s — see VALR docs). The "Link Bank Account" API permission scope does exist on VALR's API key permission list, so programmatic add is in principle supported, but our two confirmed populations of `bank_valr_id` (customer 31) came via the **GET-fallback** path in `ef_link_bank_account`: list existing banks via GET, match by account number, persist the canonical UUID. That fallback only succeeds if the bank has already been linked manually on the VALR portal (or by VALR ops).
+- The button in the Admin UI Banking tab is therefore renamed to **"Sync Bank from VALR"** with hover-tooltip copy: *"Attempts to add the bank via VALR's API; if rejected, lists existing VALR-linked banks and matches by account number to populate `bank_valr_id`. The customer may need to link the bank manually on the VALR portal first."*
+- The result alert is now tri-state:
+  - `bank_valr_id` returned → green "Synced. VALR bank id: … (method: api|manual)."
+  - No `bank_valr_id` → amber warning "Bank record saved. VALR did not return a bank id — the customer may need to add this bank on the VALR portal first, then click Sync again."
+  - Pre-link gate failure (no subaccount/api key) → red error.
+- `cmShowAlert(type, msg)` now supports a `'warning'` type (amber palette) in addition to `'success'`/`'error'`.
+- The pre-link gate from v0.6.94 (subaccount-model needs `subaccount_id`; API-model needs `api_key_vault_id`) is unchanged — it is required for `ef_link_bank_account` to call VALR with the right authentication context.
+
+#### 3. Email-template / EF audit (no changes needed)
+- Audited every `supabase/functions/**/*.ts` for legacy `bank_*` reads from `exchange_accounts`. Findings:
+  - `ef_request_withdrawal` — already migrated to read from `bank_accounts` via FK in v0.6.94.
+  - `ef_link_bank_account` — write side, already on `bank_accounts`.
+  - `ef_sync_valr_transactions` — only writes `bank_name` from VALR's API response (not from our DB), so no migration needed.
+  - `ef_admin_email_templates` — `bank_name`/`account_number` only appear as **sample preview** values for the admin template editor; not sourced from DB.
+- Email templates `deposit_instructions` and `bank_deposit_received` use `{{bank_name}}` / `{{account_number}}` placeholders, but no edge function currently sends these templates with DB-populated bank values (the deposit-instructions email is rendered manually). When such a sender is added, it must read from `bank_accounts` joined via `exchange_accounts.bank_account_id` — recorded as a forward contract in this SDD section.
+- **Conclusion:** no further EF changes required.
+
+---
+
 ### v0.6.94 – Bank info migration: `bank_accounts` becomes single source of truth
 **Date:** 2026-04-25
 **Purpose:** Complete the banking-data refactor by moving bank details out of `public.exchange_accounts` and into `public.bank_accounts`. Update all readers/writers (Admin UI, Customer Portal, edge functions, RPCs). Strengthen `ef_link_bank_account` preconditions so it can only run after VALR provisioning is complete.

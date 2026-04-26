@@ -1521,7 +1521,7 @@
                 <label><span class="label-line">VALR bank ID (read-only)</span><input data-readonly="bank_valr_id" disabled /></label>
               </div>
               <div style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                <button type="button" id="cmLinkBankBtn" class="btn btn-secondary" style="font-size:.85rem;">Link to VALR</button>
+                <button type="button" id="cmLinkBankBtn" class="btn btn-secondary" style="font-size:.85rem;" title="Attempts to add the bank via VALR's API; if rejected, lists existing VALR-linked banks and matches by account number to populate bank_valr_id. The customer may need to link the bank manually on the VALR portal first.">Sync Bank from VALR</button>
                 <span class="small-muted">Saves the form to <code>bank_accounts</code> first, then calls <code>ef_link_bank_account</code>.</span>
               </div>
             </section>
@@ -6970,9 +6970,13 @@
       const el = document.getElementById('cmAlert');
       el.style.display = 'block';
       el.textContent = msg;
-      el.style.borderColor = type==='error' ? '#fecaca' : '#bbf7d0';
-      el.style.background = type==='error' ? '#fee2e2' : '#ecfdf5';
-      el.style.color = type==='error' ? '#7f1d1d' : '#065f46';
+      if (type === 'error') {
+        el.style.borderColor = '#fecaca'; el.style.background = '#fee2e2'; el.style.color = '#7f1d1d';
+      } else if (type === 'warning') {
+        el.style.borderColor = '#fde68a'; el.style.background = '#fef3c7'; el.style.color = '#78350f';
+      } else {
+        el.style.borderColor = '#bbf7d0'; el.style.background = '#ecfdf5'; el.style.color = '#065f46';
+      }
     }
     function cmHideAlert(){ const el=document.getElementById('cmAlert'); el.style.display='none'; el.textContent=''; }
 
@@ -7246,7 +7250,7 @@
             const bankAccNum = payload.bank_account_number?.trim();
             const bankHolder = payload.bank_account_holder?.trim();
             if (!bankName || !bankAccNum || !bankHolder) {
-              return cmShowAlert('error', 'Bank name, account holder and account number are required to link to VALR.');
+              return cmShowAlert('error', 'Bank name, account holder and account number are required to sync with VALR.');
             }
             // Save first (so bank_accounts is up to date), then call ef_link_bank_account.
             try {
@@ -7264,18 +7268,21 @@
             };
             try {
               linkBtn.disabled = true;
-              linkBtn.textContent = 'Linking…';
+              linkBtn.textContent = 'Syncing…';
               const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
               if (linkErr) throw new Error(linkErr.message || String(linkErr));
               if (result && result.success === false && result.error) throw new Error(result.error);
               if (result && result.gate) throw new Error(result.error || 'Pre-link gate failed');
-              cmShowAlert('success', result?.message || 'Bank linked successfully.');
+              const msg = result?.bank_valr_id
+                ? `Synced. VALR bank id: ${result.bank_valr_id} (method: ${result.bank_link_method || 'api'}).`
+                : (result?.message || 'Bank record saved. VALR did not return a bank id — the customer may need to add this bank on the VALR portal first, then click Sync again.');
+              cmShowAlert(result?.bank_valr_id ? 'success' : 'warning', msg);
               await loadCustomers();
             } catch (err) {
-              cmShowAlert('error', 'Link to VALR failed: ' + (err.message || err));
+              cmShowAlert('error', 'Sync from VALR failed: ' + (err.message || err));
             } finally {
               linkBtn.disabled = false;
-              linkBtn.textContent = 'Link to VALR';
+              linkBtn.textContent = 'Sync Bank from VALR';
             }
           });
           linkBtn._bound = true;
@@ -7564,11 +7571,15 @@
       cmSetReadOnly('compliance_frozen_at', cust.compliance_frozen_at, cmFmtDateTime);
 
       // KYC document tiles
+      // Bank Confirmation is sourced from public.bank_accounts (single source of truth);
+      // fall back to legacy customer_details.kyc_bank_confirmation_url for rows not yet migrated.
+      const bankConfUrl = bank?.bank_confirmation_url || cust.kyc_bank_confirmation_url || null;
+      const bankConfTs  = bank?.bank_confirmation_uploaded_at || cust.kyc_bank_confirmation_uploaded_at || null;
       const docs = [
         { label:'ID Document', url: cust.kyc_id_document_url, ts: cust.kyc_id_uploaded_at },
         { label:'Proof of Address', url: cust.kyc_proof_address_url, ts: cust.kyc_proof_address_uploaded_at },
         { label:'Source of Income', url: cust.kyc_source_of_income_doc_url, ts: cust.kyc_source_of_income_doc_uploaded_at },
-        { label:'Bank Confirmation', url: cust.kyc_bank_confirmation_url, ts: cust.kyc_bank_confirmation_uploaded_at },
+        { label:'Bank Confirmation', url: bankConfUrl, ts: bankConfTs },
       ];
       const docsHost = document.getElementById('cmEditorDocs');
       docsHost.innerHTML = docs.map(d => {
