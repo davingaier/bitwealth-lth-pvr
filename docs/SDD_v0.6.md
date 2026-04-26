@@ -113,6 +113,36 @@ Both items originally listed as "known follow-ups" were closed in the same relea
 
 ---
 
+### v0.6.96 – Drop legacy `kyc_bank_confirmation_*` columns + fix "Sync Bank from VALR" button binding
+**Date:** 2026-04-26
+**Purpose:** Complete the bank-confirmation cutover by removing the legacy columns from `customer_details` and fix a regression where the Banking-tab "Sync Bank from VALR" button in the modern modal editor never fired.
+
+**Status:** ✅ COMPLETE.
+
+#### 1. Column drop
+- Migration `drop_kyc_bank_confirmation_columns` (2026-04-26) recreated `public.v_fic_kyc_completeness` to source `has_bank_confirmation` and the corresponding score component from `public.bank_accounts.bank_confirmation_url` (LATERAL join on `is_primary`), then dropped:
+  - `customer_details.kyc_bank_confirmation_url`
+  - `customer_details.kyc_bank_confirmation_uploaded_at`
+- Migration `onboarding_status_uses_bank_accounts` (2026-04-26) updated `public.get_customer_onboarding_status(p_customer_id)` to read `bank_confirmation_url` from `bank_accounts` instead of the dropped column. Output keys (`kyc_bank_conf_uploaded`, `kyc_docs_uploaded`, `kyc_all_docs_uploaded`) preserved.
+- Code updates:
+  - `ef_upload_kyc_documents` no longer writes `kyc_bank_confirmation_url`/`uploaded_at` (the upload-kyc.html flow writes directly to `bank_accounts`). Redeployed with `--no-verify-jwt`.
+  - `website/upload-kyc.html` no longer mirrors the bank confirmation URL onto `customer_details`. Tab 1's "currently on file" link for the bank doc is now sourced from `bank_accounts` after that row is loaded.
+  - `ui/Advanced BTC DCA Strategy.html`:
+    - `cmFillEditor` reads only from `bank_accounts.bank_confirmation_url` (no fallback).
+    - KYC ID Verification list (`loadPendingKyc`) now joins `bank_accounts(bank_confirmation_url, is_primary)` and flattens client-side to the synthetic `kyc_bank_confirmation_url` field used by the existing render code.
+
+#### 2. "Sync Bank from VALR" button never fired (regression fix)
+- **Root cause:** The button `#cmLinkBankBtn` lives inside the modern modal `#cmEditorForm`, but the click handler from v0.6.95 was attached inside `cmBindEditor()` — a function that only runs when the legacy `fEdit` form is bound. When the user opens a customer through the modern editor card, `fEdit` is never instantiated, so the listener was never attached. The button received clicks but no handler ran (no error, no alert, no UX feedback) — exactly matching the reported symptom.
+- **Fix:** Extracted a new idempotent function `cmBindEditorButtons()` that wires `#cmLinkBankBtn` against `cmEditorState.customerId` (the modern editor's source of truth) and uses `cmEditorAlert()` (the modal's in-place alert pane), called from `cmOpenEditor()` on every open. The `_bound` guard prevents duplicate listeners. The legacy `fEdit` block now has its own no-op for the button (the button no longer exists in that form anyway).
+- **Persistence path:** Switched from `.upsert({...}, { onConflict: 'customer_id,is_primary' })` to a select-then-update/insert pattern because `bank_accounts` has no UNIQUE constraint on `(customer_id, is_primary)`. A partial unique index `bank_accounts_customer_primary_uidx ON (customer_id) WHERE is_primary` was added (`bank_accounts_unique_primary` migration, 2026-04-26) for future direct-upserts and to enforce one-primary-per-customer.
+- **UX improvements:**
+  - `cmEditorAlert()` now supports a `'warning'` type (amber palette) in addition to `'success'`/`'error'`, matching the previous `cmShowAlert` change.
+  - Alert pane is `scrollIntoView`'d so the user actually sees it after clicking Sync.
+  - On success, the editor refreshes via `cmFetchFullProfile()` and re-pins the Banking tab so the newly-populated `bank_valr_id`, `bank_linked_at`, `bank_link_method` are visible immediately.
+  - Errors logged to console with `[cmLinkBankBtn]` prefix for debuggability.
+
+---
+
 ### v0.6.95 – Bank-info migration follow-ups
 **Date:** 2026-04-25
 **Purpose:** Close three gaps identified after the v0.6.94 cutover.

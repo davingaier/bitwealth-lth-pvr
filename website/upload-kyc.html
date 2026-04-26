@@ -855,7 +855,7 @@
         showExisting(1, cust.kyc_id_document_url, cust.kyc_id_uploaded_at);
         showExisting(2, cust.kyc_proof_address_url, cust.kyc_proof_address_uploaded_at);
         showExisting(3, cust.kyc_source_of_income_doc_url, cust.kyc_source_of_income_doc_uploaded_at);
-        showExisting(4, cust.kyc_bank_confirmation_url, cust.kyc_bank_confirmation_uploaded_at);
+        // Bank confirmation lives on bank_accounts now — populated below once that row is loaded.
 
         // Banking — load existing bank_accounts row if present
         const { data: bank } = await sb
@@ -873,6 +873,7 @@
             $('b_account_number').value = bank.bank_account_number || '';
             $('b_branch_code').value = bank.bank_branch_code || '';
             $('b_account_type').value = bank.bank_account_type || '';
+            showExisting(4, bank.bank_confirmation_url, bank.bank_confirmation_uploaded_at);
         }
 
         // If status is past KYC, show informational banner
@@ -1107,7 +1108,7 @@
             return;
         }
 
-        const hasExistingBankDoc = !!customerData.kyc_bank_confirmation_url;
+        const hasExistingBankDoc = !!bankRow?.bank_confirmation_url;
         if (!files[4] && !hasExistingBankDoc) {
             return showMsg('tab3Message', 'Please upload your Bank Account Confirmation Letter.', 'error');
         }
@@ -1127,7 +1128,7 @@
 
             // Upload new bank confirmation if provided
             let bankDocPath = bankRow?.bank_confirmation_file_path || null;
-            let bankDocUrl  = bankRow?.bank_confirmation_url || customerData.kyc_bank_confirmation_url || null;
+            let bankDocUrl  = bankRow?.bank_confirmation_url || null;
             if (files[4]) {
                 setUploadStatus('bank', 'Uploading bank confirmation letter…', 40);
                 const r = await uploadToStorage(files[4], 'bank', userId);
@@ -1160,14 +1161,7 @@
                 bankRow = data;
             }
 
-            // Mirror bank confirmation onto customer_details (for legacy admin views)
-            if (files[4]) {
-                const { error: cErr } = await sb.from('customer_details').update({
-                    kyc_bank_confirmation_url: bankDocUrl,
-                    kyc_bank_confirmation_uploaded_at: now,
-                }).eq('customer_id', customerData.customer_id);
-                if (cErr) console.warn('customer_details mirror failed (non-fatal):', cErr);
-            }
+            // Bank confirmation now lives only on bank_accounts — no mirror to customer_details.
 
             // If status is still 'kyc' AND all 4 docs are now on file, fire admin notification via ef_upload_kyc_documents
             const allDocsOnFile = customerData.kyc_id_document_url && customerData.kyc_proof_address_url

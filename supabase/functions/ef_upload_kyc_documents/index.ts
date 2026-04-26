@@ -115,7 +115,10 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
-    // ── Update all 4 KYC document sections ───────────────────────────────────
+    // ── Update first 3 KYC document sections on customer_details ─────────────
+    // (Bank confirmation is stored on public.bank_accounts and is written by the
+    // upload-kyc.html flow directly. The kyc_bank_confirmation_* columns on
+    // customer_details have been dropped.)
     const now = new Date().toISOString();
     const { error: updateError } = await supabase
       .from("customer_details")
@@ -130,9 +133,6 @@ Deno.serve(async (req) => {
         kyc_source_of_income:                   kyc_source_of_income,
         kyc_source_of_income_doc_url:           kyc_source_of_income_file_url,
         kyc_source_of_income_doc_uploaded_at:   now,
-        // 4. Bank account confirmation
-        kyc_bank_confirmation_url:              kyc_bank_confirmation_file_url,
-        kyc_bank_confirmation_uploaded_at:       now,
       })
       .eq("customer_id", customer_id);
 

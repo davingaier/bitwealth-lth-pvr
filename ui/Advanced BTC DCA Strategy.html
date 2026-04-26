@@ -7240,53 +7240,10 @@
           delBtn._bound=true;
         }
         const linkBtn = document.getElementById('cmLinkBankBtn');
-        if (linkBtn && !linkBtn._bound) {
-          linkBtn.addEventListener('click', async () => {
-            cmHideAlert();
-            const id = fEdit.dataset.customerId;
-            if (!id) return cmShowAlert('error', 'Select a client first.');
-            const payload = cmSerialize(fEdit);
-            const bankName   = payload.bank_name?.trim();
-            const bankAccNum = payload.bank_account_number?.trim();
-            const bankHolder = payload.bank_account_holder?.trim();
-            if (!bankName || !bankAccNum || !bankHolder) {
-              return cmShowAlert('error', 'Bank name, account holder and account number are required to sync with VALR.');
-            }
-            // Save first (so bank_accounts is up to date), then call ef_link_bank_account.
-            try {
-              await cmUpdateCustomer(id, payload);
-            } catch (err) {
-              return cmShowAlert('error', 'Save failed before VALR link: ' + (err.message || err));
-            }
-            const bankPayload = {
-              customer_id: Number(id),
-              bank_account_number: bankAccNum,
-              bank_account_holder: bankHolder,
-              bank_name: bankName,
-              bank_branch_code: payload.bank_branch_code?.trim() || null,
-              bank_account_type: payload.bank_account_type || null,
-            };
-            try {
-              linkBtn.disabled = true;
-              linkBtn.textContent = 'Syncing…';
-              const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
-              if (linkErr) throw new Error(linkErr.message || String(linkErr));
-              if (result && result.success === false && result.error) throw new Error(result.error);
-              if (result && result.gate) throw new Error(result.error || 'Pre-link gate failed');
-              const msg = result?.bank_valr_id
-                ? `Synced. VALR bank id: ${result.bank_valr_id} (method: ${result.bank_link_method || 'api'}).`
-                : (result?.message || 'Bank record saved. VALR did not return a bank id — the customer may need to add this bank on the VALR portal first, then click Sync again.');
-              cmShowAlert(result?.bank_valr_id ? 'success' : 'warning', msg);
-              await loadCustomers();
-            } catch (err) {
-              cmShowAlert('error', 'Sync from VALR failed: ' + (err.message || err));
-            } finally {
-              linkBtn.disabled = false;
-              linkBtn.textContent = 'Sync Bank from VALR';
-            }
-          });
-          linkBtn._bound = true;
-        }
+        // The #cmLinkBankBtn lives inside the modern modal #cmEditorForm; binding
+        // is wired in cmBindEditorButtons() (called from cmOpenEditor). Nothing to
+        // do here for the legacy fEdit flow.
+        void linkBtn;
         fEdit._bound = true;
       }
     }
@@ -7400,9 +7357,15 @@
       if(!el) return;
       el.style.display='block';
       el.textContent = msg;
-      el.style.borderColor = type==='error' ? '#fecaca' : '#bbf7d0';
-      el.style.background  = type==='error' ? '#fee2e2' : '#ecfdf5';
-      el.style.color       = type==='error' ? '#7f1d1d' : '#065f46';
+      if (type === 'error') {
+        el.style.borderColor = '#fecaca'; el.style.background = '#fee2e2'; el.style.color = '#7f1d1d';
+      } else if (type === 'warning') {
+        el.style.borderColor = '#fde68a'; el.style.background = '#fef3c7'; el.style.color = '#78350f';
+      } else {
+        el.style.borderColor = '#bbf7d0'; el.style.background = '#ecfdf5'; el.style.color = '#065f46';
+      }
+      // Scroll alert into view inside the modal so the user actually sees it.
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
     }
     function cmEditorAlertHide(){
       const el = document.getElementById('cmEditorAlert');
@@ -7571,10 +7534,9 @@
       cmSetReadOnly('compliance_frozen_at', cust.compliance_frozen_at, cmFmtDateTime);
 
       // KYC document tiles
-      // Bank Confirmation is sourced from public.bank_accounts (single source of truth);
-      // fall back to legacy customer_details.kyc_bank_confirmation_url for rows not yet migrated.
-      const bankConfUrl = bank?.bank_confirmation_url || cust.kyc_bank_confirmation_url || null;
-      const bankConfTs  = bank?.bank_confirmation_uploaded_at || cust.kyc_bank_confirmation_uploaded_at || null;
+      // Bank Confirmation lives on public.bank_accounts (single source of truth).
+      const bankConfUrl = bank?.bank_confirmation_url || null;
+      const bankConfTs  = bank?.bank_confirmation_uploaded_at || null;
       const docs = [
         { label:'ID Document', url: cust.kyc_id_document_url, ts: cust.kyc_id_uploaded_at },
         { label:'Proof of Address', url: cust.kyc_proof_address_url, ts: cust.kyc_proof_address_uploaded_at },
@@ -7621,6 +7583,84 @@
         p.classList.toggle('cm-tabpanel--active', p.dataset.panel === tabName);
       });
     }
+    // Idempotent binding for buttons inside the modern editor modal (#cmEditorForm).
+    // Called from cmOpenEditor on every open; the _bound guard prevents duplicate listeners.
+    function cmBindEditorButtons(){
+      const linkBtn = document.getElementById('cmLinkBankBtn');
+      if (linkBtn && !linkBtn._bound) {
+        linkBtn.addEventListener('click', async () => {
+          cmEditorAlertHide();
+          const id = cmEditorState.customerId;
+          if (!id) { cmEditorAlert('error', 'Open an existing client before syncing the bank.'); return; }
+          const form = document.getElementById('cmEditorForm');
+          const fd = new FormData(form);
+          const bankName   = String(fd.get('bank_name') || '').trim();
+          const bankAccNum = String(fd.get('bank_account_number') || '').trim();
+          const bankHolder = String(fd.get('bank_account_holder') || '').trim();
+          const bankBranch = String(fd.get('bank_branch_code') || '').trim();
+          const bankType   = String(fd.get('bank_account_type') || '').trim();
+          if (!bankName || !bankAccNum || !bankHolder) {
+            cmEditorAlert('error', 'Bank name, account holder and account number are required to sync with VALR.');
+            return;
+          }
+          const bankPayload = {
+            customer_id: Number(id),
+            bank_account_number: bankAccNum,
+            bank_account_holder: bankHolder,
+            bank_name: bankName,
+            bank_branch_code: bankBranch || null,
+            bank_account_type: bankType || null,
+          };
+          try {
+            linkBtn.disabled = true;
+            linkBtn.textContent = 'Syncing…';
+            // Persist the bank row first so ef_link_bank_account sees current values.
+            const orgId = cmEditorState.profile?.cust?.org_id || null;
+            const baseRow = { ...bankPayload };
+            if (orgId) baseRow.org_id = orgId;
+            const { data: existingBa } = await supabaseClient
+              .from('bank_accounts')
+              .select('bank_account_id')
+              .eq('customer_id', Number(id))
+              .eq('is_primary', true)
+              .maybeSingle();
+            if (existingBa?.bank_account_id) {
+              const { error: upErr } = await supabaseClient
+                .from('bank_accounts')
+                .update(baseRow)
+                .eq('bank_account_id', existingBa.bank_account_id);
+              if (upErr) throw new Error('bank_accounts update failed: ' + upErr.message);
+            } else {
+              const { error: insErr } = await supabaseClient
+                .from('bank_accounts')
+                .insert({ ...baseRow, is_primary: true, status: 'active' });
+              if (insErr) throw new Error('bank_accounts insert failed: ' + insErr.message);
+            }
+            const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
+            if (linkErr) throw new Error(linkErr.message || String(linkErr));
+            if (result && result.success === false && result.error) throw new Error(result.error);
+            if (result && result.gate) throw new Error(result.error || `Pre-link gate failed: ${result.gate}`);
+            const msg = result?.bank_valr_id
+              ? `Synced. VALR bank id: ${result.bank_valr_id} (method: ${result.bank_link_method || 'api'}).`
+              : (result?.message || 'Bank record saved. VALR did not return a bank id — the customer may need to add this bank on the VALR portal first, then click Sync again.');
+            cmEditorAlert(result?.bank_valr_id ? 'success' : 'warning', msg);
+            try {
+              cmEditorState.profile = await cmFetchFullProfile(Number(id));
+              cmFillEditor(cmEditorState.profile);
+              cmSetActiveTab('banking');
+            } catch (_) { /* non-fatal refresh */ }
+          } catch (err) {
+            console.error('[cmLinkBankBtn] Sync failed:', err);
+            cmEditorAlert('error', 'Sync from VALR failed: ' + (err.message || err));
+          } finally {
+            linkBtn.disabled = false;
+            linkBtn.textContent = 'Sync Bank from VALR';
+          }
+        });
+        linkBtn._bound = true;
+      }
+    }
+
     function cmShowEditor(){
       document.getElementById('customerEditorModal').style.display = 'flex';
       cmSetActiveTab('personal');
@@ -7634,6 +7674,7 @@
       const titleEl = document.getElementById('cmEditorTitle');
       const archiveBtn = document.getElementById('cmEditorArchive');
       cmShowEditor();
+      cmBindEditorButtons();
       if(!customerId){
         // Create mode
         cmEditorState = { customerId: null, profile: null };
@@ -9943,17 +9984,22 @@
       try {
         const { data, error } = await supabaseClient
           .from('customer_details')
-          .select('customer_id, first_names, last_name, email, kyc_id_document_url, kyc_id_uploaded_at, kyc_proof_address_url, kyc_source_of_income, kyc_source_of_income_doc_url, kyc_bank_confirmation_url, created_at, registration_status')
+          .select('customer_id, first_names, last_name, email, kyc_id_document_url, kyc_id_uploaded_at, kyc_proof_address_url, kyc_source_of_income, kyc_source_of_income_doc_url, created_at, registration_status, bank_accounts(bank_confirmation_url, is_primary)')
           .eq('registration_status', 'kyc')
           .not('kyc_id_document_url', 'is', null)
           .not('kyc_proof_address_url', 'is', null)
           .not('kyc_source_of_income_doc_url', 'is', null)
-          .not('kyc_bank_confirmation_url', 'is', null)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        allPendingKyc = data || [];
+        // Flatten the bank confirmation URL from the (possibly multi-row) bank_accounts join.
+        const flat = (data || []).map(c => {
+          const primary = (c.bank_accounts || []).find(b => b.is_primary) || (c.bank_accounts || [])[0];
+          return { ...c, kyc_bank_confirmation_url: primary?.bank_confirmation_url || null };
+        });
+        // Only customers with all four documents uploaded.
+        allPendingKyc = flat.filter(c => c.kyc_bank_confirmation_url);
         renderPendingKyc();
       } catch (err) {
         console.error('Error loading pending KYC:', err);
