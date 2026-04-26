@@ -79,7 +79,8 @@ async function valrListBankAccounts(
 }
 
 // Find a bank in VALR's list whose accountNumber matches the supplied one.
-function matchBankByAccountNumber(banks: any[], accountNumber: string): string | null {
+// (Kept for reference — current flow uses summarised list directly.)
+function _matchBankByAccountNumber(banks: any[], accountNumber: string): string | null {
   const normalized = (accountNumber || "").trim();
   for (const b of banks) {
     const candidate = String(b.accountNumber ?? b.accountnumber ?? b.account_number ?? "").trim();
@@ -90,8 +91,11 @@ function matchBankByAccountNumber(banks: any[], accountNumber: string): string |
   return null;
 }
 
-// ── VALR: link bank account ───────────────────────────────────────────────────
-async function valrLinkBankAccount(
+// ── VALR: link bank account (POST) — RETIRED ────────────────────────────────
+// VALR's POST /v1/fiat/ZAR/banks endpoint is unreliable for our master-key +
+// subaccount-header model; the customer must link the bank on the VALR portal.
+// Helper kept for reference only.
+async function _valrLinkBankAccount(
   apiKey: string,
   apiSecret: string,
   subaccountId: string | null,
@@ -124,33 +128,54 @@ async function valrLinkBankAccount(
   return { ok: res.ok, status: res.status, data };
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function pickField(b: any, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = b?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+  }
+  return null;
+}
+
+function summariseBank(b: any) {
+  return {
+    id:             pickField(b, ["id", "bankAccountId", "bank_account_id"]),
+    bank_name:      pickField(b, ["bank", "bankName", "bank_name"]),
+    account_holder: pickField(b, ["accountHolder", "accountholder", "account_holder"]),
+    account_number: pickField(b, ["accountNumber", "accountnumber", "account_number"]),
+    account_type:   pickField(b, ["accountType", "accounttype", "account_type"]),
+    branch_code:    pickField(b, ["branchCode", "branchcode", "branch_code"]),
+  };
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
+//
+// Request body (all VALR-pull mode):
+//   { customer_id: number, selected_bank_id?: string }
+//
+// `selected_bank_id` is only used after the caller has previously received a
+// `multiple_banks: true` response and the admin has picked one. When omitted:
+//   - 0 banks linked on VALR → returns { no_banks: true, ... }
+//   - 1 bank linked          → auto-syncs that one
+//   - >1 banks linked        → returns { multiple_banks: true, banks: [...] }
+//
+// Bank fields (bank_name / holder / account_number / account_type / branch_code)
+// are no longer accepted from the caller — they are pulled from VALR.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const {
       customer_id,
-      bank_account_number,
-      bank_account_holder,
-      bank_name,
-      bank_branch_code,
-      bank_account_type,
+      selected_bank_id,
     }: {
       customer_id: number;
-      bank_account_number: string;
-      bank_account_holder: string;
-      bank_name: string;
-      bank_branch_code?: string;
-      bank_account_type?: string;
-    } = body;
+      selected_bank_id?: string;
+    } = body ?? {};
 
-    // ── Validate inputs ──────────────────────────────────────────────────────
-    if (!customer_id || !bank_account_number || !bank_account_holder || !bank_name) {
-      return json({
-        error: "Missing required fields: customer_id, bank_account_number, bank_account_holder, bank_name",
-      }, 400);
+    if (!customer_id) {
+      return json({ error: "Missing required field: customer_id" }, 400);
     }
 
     // ── Load customer ────────────────────────────────────────────────────────
@@ -209,132 +234,116 @@ Deno.serve(async (req) => {
       return json({ error: `Failed to resolve VALR credentials: ${e.message}` }, 500);
     }
 
-    // ── Build VALR bank account payload ─────────────────────────────────────
-    // VALR bank account link payload
-    // Note: VALR endpoint for bank linking is uncertain — if it 404s,
-    // bank details are stored locally and admin links manually.
-    const bankPayload: Record<string, unknown> = {
-      accountNumber: bank_account_number,
-      accountHolder: bank_account_holder,
-      bankName:      bank_name,
-    };
-    if (bank_branch_code) bankPayload.branchCode    = bank_branch_code;
-    if (bank_account_type) bankPayload.accountType  = bank_account_type;
-
-    // ── Call VALR to link bank account ───────────────────────────────────────
-    let valrBankId: string | null = null;
-    let valrLinked = false;
+    // ── Pull VALR bank list (we never POST — VALR's POST endpoint is unreliable
+    //    and the customer is responsible for linking the bank on the VALR portal) ─
     const debug: Record<string, unknown> = { account_model: creds.accountModel };
     const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
+    let valrBanks: any[] = [];
     if (testMode) {
-      valrBankId = "test_bank_id_" + Date.now();
-      valrLinked = true;
+      valrBanks = [{
+        id: "test_bank_id_" + Date.now(),
+        bank: "Test Bank",
+        accountHolder: "Test Holder",
+        accountNumber: "1234567890",
+      }];
+      debug.list_status = 200;
+      debug.list_count  = valrBanks.length;
     } else {
-      const result = await valrLinkBankAccount(
-        creds.apiKey,
-        creds.apiSecret,
-        creds.subaccountId,
-        bankPayload,
-      );
-      debug.post_status = result.status;
-      debug.post_response = result.data;
-
-      if (result.ok) {
-        const responseData = result.data as Record<string, unknown>;
-        valrBankId = (responseData.id ?? responseData.bankAccountId ?? null) as string | null;
-        valrLinked = true;
-      } else {
-        // VALR bank linking may fail for various reasons (wrong endpoint, permissions, etc.)
-        // Store bank details locally regardless — admin can link manually in VALR portal.
-        const errMsg = `VALR bank link failed for customer ${customer_id} (HTTP ${result.status}, model: ${creds.accountModel}). ` +
-          "Bank details stored locally — admin must link manually in VALR portal if needed.";
-
-        await logAlert(
-          sb,
-          "ef_link_bank_account",
-          "warn",
-          errMsg,
-          { customer_id, valr_status: result.status, valr_response: result.data, model: creds.accountModel },
-          ORG_ID,
-          customer_id,
-        );
-        // Proceed to store bank details locally for all account models
-      }
-
-      // GET-fallback: even if POST succeeded we re-list to pick up the canonical id;
-      // and if POST failed (e.g. account was added manually in the VALR portal),
-      // this is the only way to recover bank_valr_id.
-      if (!valrBankId) {
-        try {
-          const list = await valrListBankAccounts(creds.apiKey, creds.apiSecret, creds.subaccountId);
-          debug.list_status = list.status;
-          debug.list_path = list.path;
-          debug.list_tried = list.tried;
-          debug.list_count = list.data.length;
-          debug.list_sample = list.data.slice(0, 5).map((b: any) => ({
-            id: b.id ?? b.bankAccountId ?? null,
-            accountNumber: b.accountNumber ?? b.accountnumber ?? null,
-            bank: b.bank ?? b.bankName ?? null,
-          }));
-          if (list.ok) {
-            const matched = matchBankByAccountNumber(list.data, bank_account_number);
-            if (matched) {
-              valrBankId = matched;
-              valrLinked = true;
-              await logAlert(
-                sb, "ef_link_bank_account", "info",
-                `Recovered bank_valr_id via GET /v1/fiat/ZAR/banks for customer ${customer_id}`,
-                { customer_id, bank_valr_id: matched, bank_account_number },
-                ORG_ID, customer_id,
-              );
-            } else {
-              await logAlert(
-                sb, "ef_link_bank_account", "warn",
-                `GET /v1/fiat/ZAR/banks returned ${list.data.length} bank(s) but none matched account ${bank_account_number}`,
-                { customer_id, bank_account_number, returned_count: list.data.length },
-                ORG_ID, customer_id,
-              );
-            }
-          } else {
-            await logAlert(
-              sb, "ef_link_bank_account", "warn",
-              `GET /v1/fiat/ZAR/banks failed (HTTP ${list.status})`,
-              { customer_id, valr_status: list.status },
-              ORG_ID, customer_id,
-            );
-          }
-        } catch (listErr) {
+      try {
+        const list = await valrListBankAccounts(creds.apiKey, creds.apiSecret, creds.subaccountId);
+        debug.list_status = list.status;
+        debug.list_path   = list.path;
+        debug.list_tried  = list.tried;
+        debug.list_count  = list.data.length;
+        if (!list.ok) {
           await logAlert(
             sb, "ef_link_bank_account", "warn",
-            `GET /v1/fiat/ZAR/banks threw: ${(listErr as Error).message}`,
-            { customer_id },
+            `GET VALR bank list failed (HTTP ${list.status})`,
+            { customer_id, valr_status: list.status, tried: list.tried },
             ORG_ID, customer_id,
           );
+          return json({
+            error: `VALR bank list lookup failed (HTTP ${list.status}). Please retry shortly.`,
+            debug,
+          }, 502);
         }
+        valrBanks = list.data;
+      } catch (listErr) {
+        await logAlert(
+          sb, "ef_link_bank_account", "error",
+          `GET VALR bank list threw: ${(listErr as Error).message}`,
+          { customer_id }, ORG_ID, customer_id,
+        );
+        return json({ error: `VALR bank list lookup threw: ${(listErr as Error).message}`, debug }, 502);
       }
     }
+
+    // ── 0 banks: tell caller the customer must link first on VALR ──────────
+    if (valrBanks.length === 0) {
+      return json({
+        success: false,
+        no_banks: true,
+        account_model: creds.accountModel,
+        message: "No bank accounts are linked on this customer's VALR account yet. " +
+                 "Please ask the customer to link their bank inside VALR and then click Sync again.",
+        debug,
+      });
+    }
+
+    // ── >1 banks without a selection: return picker payload ───────────────
+    const summarised = valrBanks.map(summariseBank).filter(b => b.id);
+    if (summarised.length > 1 && !selected_bank_id) {
+      return json({
+        success: false,
+        multiple_banks: true,
+        account_model: creds.accountModel,
+        banks: summarised,
+        message: "Multiple bank accounts are linked on VALR. Please choose which one to use.",
+        debug,
+      });
+    }
+
+    // ── Resolve the chosen bank ───────────────────────────────────────────
+    let chosen = summarised[0];
+    if (selected_bank_id) {
+      const found = summarised.find(b => b.id === selected_bank_id);
+      if (!found) {
+        return json({
+          error: `selected_bank_id '${selected_bank_id}' was not found in the customer's VALR bank list.`,
+          banks: summarised,
+          debug,
+        }, 400);
+      }
+      chosen = found;
+    }
+
+    const valrBankId = chosen.id;
+    const valrLinked = !!valrBankId;
 
     // ── Upsert bank_accounts row (single source of truth) ──────────────
     const { data: existingBank } = await sb
       .from("bank_accounts")
-      .select("bank_account_id")
+      .select("bank_account_id, bank_account_type, bank_branch_code")
       .eq("customer_id", customer_id)
       .eq("is_primary", true)
       .maybeSingle();
+
+    // Don't overwrite admin-set account_type / branch_code if VALR doesn't return them.
+    const bankPatch: Record<string, unknown> = {
+      bank_name:           chosen.bank_name,
+      bank_account_holder: chosen.account_holder,
+      bank_account_number: chosen.account_number,
+      status: "active",
+    };
+    if (chosen.branch_code)  bankPatch.bank_branch_code  = chosen.branch_code;
+    if (chosen.account_type) bankPatch.bank_account_type = chosen.account_type;
 
     let bankAccountId: string;
     if (existingBank?.bank_account_id) {
       const { error: updBankErr } = await sb
         .from("bank_accounts")
-        .update({
-          bank_name,
-          bank_account_holder,
-          bank_account_number,
-          bank_branch_code:  bank_branch_code  ?? "Unknown",
-          bank_account_type: bank_account_type ?? "Unknown",
-          status: "active",
-        })
+        .update(bankPatch)
         .eq("bank_account_id", existingBank.bank_account_id);
       if (updBankErr) return json({ error: `Failed to update bank_accounts: ${updBankErr.message}` }, 500);
       bankAccountId = existingBank.bank_account_id;
@@ -342,15 +351,10 @@ Deno.serve(async (req) => {
       const { data: ins, error: insErr } = await sb
         .from("bank_accounts")
         .insert({
+          ...bankPatch,
           customer_id,
           org_id: customer.org_id,
-          bank_name,
-          bank_account_holder,
-          bank_account_number,
-          bank_branch_code:  bank_branch_code  ?? "Unknown",
-          bank_account_type: bank_account_type ?? "Unknown",
           is_primary: true,
-          status: "active",
         })
         .select("bank_account_id")
         .single();
@@ -365,7 +369,7 @@ Deno.serve(async (req) => {
         bank_account_id:  bankAccountId,
         bank_valr_id:     valrBankId,
         bank_linked_at:   new Date().toISOString(),
-        bank_link_method: valrLinked ? "api" : "manual",
+        bank_link_method: "api",
       })
       .eq("exchange_account_id", cs.exchange_account_id);
 
@@ -374,19 +378,15 @@ Deno.serve(async (req) => {
     }
 
     return json({
-      success:        true,
-      valr_linked:    valrLinked,
-      account_model:  creds.accountModel,
-      bank_account_id: bankAccountId,
-      bank_valr_id:   valrBankId,
-      bank_link_method: valrLinked ? "api" : "manual",
+      success:          true,
+      valr_linked:      valrLinked,
+      account_model:    creds.accountModel,
+      bank_account_id:  bankAccountId,
+      bank_valr_id:     valrBankId,
+      bank:             chosen,
+      bank_link_method: "api",
       debug,
-      message: valrLinked
-        ? `Bank account linked with VALR (method: ${debug.list_status ? "discovered via GET" : "POST succeeded"}) and saved to bank_accounts.`
-        : (creds.accountModel === "api"
-            ? `Bank details saved to bank_accounts. VALR did not return a bank id. Most likely the customer has not yet added this bank on the VALR portal — once they have, click Sync again and we'll match it by account number. (POST status: ${debug.post_status ?? "n/a"}, GET listed: ${debug.list_count ?? "n/a"} banks)`
-            : `Bank details saved to bank_accounts. VALR did not return a bank id. Admin must add the bank on the VALR portal via the master account, then click Sync again to populate bank_valr_id. (POST status: ${debug.post_status ?? "n/a"}, GET listed: ${debug.list_count ?? "n/a"} banks)`
-          ),
+      message: `Bank account synced from VALR. ${chosen.bank_name ?? ''} ${chosen.account_number ? '****' + chosen.account_number.slice(-4) : ''}`.trim(),
     });
 
   } catch (err) {

@@ -1352,27 +1352,13 @@
               </select>
             </label>
 
-            <!-- Bank Account Details (stored on exchange_accounts) -->
+            <!-- Bank Account: bank fields are pulled from VALR via
+                 ef_link_bank_account (see modern Customer Editor → Banking tab).
+                 Only bank_account_type may be set by an admin here. -->
             <div style="grid-column:1/-1;border-top:1px solid #dee2e6;margin-top:0.5rem;padding-top:0.75rem;">
-              <strong style="font-size:0.9rem;color:var(--muted);">🏦 Bank Account (for ZAR withdrawals)</strong>
+              <strong style="font-size:0.9rem;color:var(--muted);">🏦 Bank Account Type (admin-editable)</strong>
+              <div style="font-size:0.8rem;color:var(--muted);margin-top:0.25rem;">Bank name, account holder, account number and branch code are pulled from VALR.</div>
             </div>
-            <label><span class="label-line">Bank name</span>
-              <select name="bank_name">
-                <option value="">-- Select --</option>
-                <option value="ABSA">ABSA</option>
-                <option value="Capitec">Capitec</option>
-                <option value="FNB">FNB</option>
-                <option value="Investec">Investec</option>
-                <option value="Nedbank">Nedbank</option>
-                <option value="Standard Bank">Standard Bank</option>
-                <option value="TymeBank">TymeBank</option>
-                <option value="African Bank">African Bank</option>
-                <option value="Discovery Bank">Discovery Bank</option>
-              </select>
-            </label>
-            <label><span class="label-line">Account holder</span> <input name="bank_account_holder" /></label>
-            <label><span class="label-line">Account number</span> <input name="bank_account_number" inputmode="numeric" /></label>
-            <label><span class="label-line">Branch code</span> <input name="bank_branch_code" inputmode="numeric" /></label>
             <label><span class="label-line">Account type</span>
               <select name="bank_account_type">
                 <option value="">-- Select --</option>
@@ -1509,20 +1495,13 @@
 
             <!-- =============== Banking =============== -->
             <section class="cm-tabpanel" data-panel="banking">
-              <p class="small-muted" style="margin:0 0 .5rem;">Bank details are stored in <code>public.bank_accounts</code> (single source of truth). Use “Link to VALR” to push the bank to VALR — only available once the customer's VALR subaccount or API keys are set up.</p>
+              <p class="small-muted" style="margin:0 0 .5rem;">Bank details are <strong>pulled from VALR</strong> via <code>ef_link_bank_account</code>. The customer must link their bank inside their VALR account first; then click <strong>Sync Bank from VALR</strong> below. Branch code and account type are not returned by VALR — admin can edit Account type below if needed.</p>
               <div class="cm-grid">
-                <label><span class="label-line">Bank name</span>
-                  <select name="bank_name">
-                    <option value="">--</option>
-                    <option>ABSA</option><option>Capitec</option><option>FNB</option><option>Investec</option>
-                    <option>Nedbank</option><option>Standard Bank</option><option>TymeBank</option>
-                    <option>African Bank</option><option>Discovery Bank</option>
-                  </select>
-                </label>
-                <label><span class="label-line">Account holder</span><input name="bank_account_holder" /></label>
-                <label><span class="label-line">Account number</span><input name="bank_account_number" inputmode="numeric" /></label>
-                <label><span class="label-line">Branch code</span><input name="bank_branch_code" inputmode="numeric" /></label>
-                <label><span class="label-line">Account type</span>
+                <label><span class="label-line">Bank name (from VALR)</span><input data-readonly="bank_name" disabled /></label>
+                <label><span class="label-line">Account holder (from VALR)</span><input data-readonly="bank_account_holder" disabled /></label>
+                <label><span class="label-line">Account number (from VALR)</span><input data-readonly="bank_account_number" disabled /></label>
+                <label><span class="label-line">Branch code (from VALR if provided)</span><input data-readonly="bank_branch_code" disabled /></label>
+                <label><span class="label-line">Account type (admin-editable)</span>
                   <select name="bank_account_type">
                     <option value="">--</option>
                     <option value="cheque">Cheque/Current</option>
@@ -1536,8 +1515,8 @@
                 <label><span class="label-line">VALR bank ID (read-only)</span><input data-readonly="bank_valr_id" disabled /></label>
               </div>
               <div style="margin-top:.75rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                <button type="button" id="cmLinkBankBtn" class="btn btn-secondary" style="font-size:.85rem;" title="Attempts to add the bank via VALR's API; if rejected, lists existing VALR-linked banks and matches by account number to populate bank_valr_id. The customer may need to link the bank manually on the VALR portal first.">Sync Bank from VALR</button>
-                <span class="small-muted">Saves the form to <code>bank_accounts</code> first, then calls <code>ef_link_bank_account</code>.</span>
+                <button type="button" id="cmLinkBankBtn" class="btn btn-secondary" style="font-size:.85rem;" title="Pulls the customer's linked bank account list from VALR (GET /v1/fiat/ZAR/banks). If exactly one is linked, it auto-syncs. If multiple are linked, you'll be asked to pick. If none are linked, the customer must link one on the VALR portal first.">Sync Bank from VALR</button>
+                <span class="small-muted">No bank fields are captured here — they are pulled from VALR.</span>
               </div>
             </section>
 
@@ -7087,36 +7066,21 @@
       const { error } = await supabaseClient.from('customer_details').update(row).eq('customer_id', id);
       if(error) throw error;
 
-      // Save bank details directly to public.bank_accounts (single source of truth).
-      // Linking to VALR is a separate explicit action via the "Link to VALR" button.
-      const bankName = payload.bank_name?.trim();
-      const bankAccNum = payload.bank_account_number?.trim();
-      const bankHolder = payload.bank_account_holder?.trim();
-      if (bankName || bankAccNum || bankHolder) {
-        // Need org_id for INSERT case
-        const { data: cust } = await supabaseClient.from('customer_details')
-          .select('org_id').eq('customer_id', id).single();
-        const bankRow = {
-          customer_id: Number(id),
-          org_id: cust?.org_id,
-          bank_name: bankName || 'Unknown',
-          bank_account_holder: bankHolder || 'Unknown',
-          bank_account_number: bankAccNum || 'Unknown',
-          bank_branch_code: payload.bank_branch_code?.trim() || 'Unknown',
-          bank_account_type: payload.bank_account_type || 'cheque',
-          is_primary: true,
-          status: 'active',
-        };
-        const { data: existing } = await supabaseClient.from('bank_accounts')
+      // Bank fields are pulled from VALR via ef_link_bank_account — admins no
+      // longer write bank_name / holder / account number / branch code from
+      // this form. Account type is admin-editable and saved separately below.
+      const bankType = (payload.bank_account_type || '').trim();
+      if (bankType) {
+        const { data: existingBa } = await supabaseClient.from('bank_accounts')
           .select('bank_account_id').eq('customer_id', id).eq('is_primary', true).maybeSingle();
-        if (existing?.bank_account_id) {
+        if (existingBa?.bank_account_id) {
           const { error: updErr } = await supabaseClient.from('bank_accounts')
-            .update(bankRow).eq('bank_account_id', existing.bank_account_id);
-          if (updErr) throw new Error('Customer saved but bank update failed: ' + updErr.message);
-        } else {
-          const { error: insErr } = await supabaseClient.from('bank_accounts').insert(bankRow);
-          if (insErr) throw new Error('Customer saved but bank insert failed: ' + insErr.message);
+            .update({ bank_account_type: bankType }).eq('bank_account_id', existingBa.bank_account_id);
+          if (updErr) throw new Error('Customer saved but bank account_type update failed: ' + updErr.message);
         }
+        // No insert path: a bank_accounts row only comes into existence via either
+        // ef_link_bank_account (VALR sync) or the customer uploading a bank
+        // confirmation letter. Setting account_type before that is a no-op.
       }
     }
 
@@ -7210,15 +7174,15 @@
             const row = await cmLoadCustomer(id);
             cmFillForm(fEdit, row);
             fEdit.dataset.customerId = String(id);
-            // Load bank account data from public.bank_accounts (single source of truth)
+            // Load bank account_type from public.bank_accounts. Other bank fields
+            // are pulled from VALR (modern editor → Banking tab) and are no longer
+            // shown on the legacy form.
             const { data: ba } = await supabaseClient.from('bank_accounts')
-              .select('bank_name,bank_account_holder,bank_account_number,bank_branch_code,bank_account_type')
+              .select('bank_account_type')
               .eq('customer_id', id).eq('is_primary', true).maybeSingle();
             if (ba) {
-              ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'].forEach(k => {
-                const el = fEdit.querySelector(`[name="${k}"]`);
-                if (el) el.value = ba[k] || '';
-              });
+              const el = fEdit.querySelector('[name="bank_account_type"]');
+              if (el) el.value = ba.bank_account_type || '';
             }
           }catch(err){ cmShowAlert('error', err.message || 'Failed to load client.'); }
         });
@@ -7361,7 +7325,10 @@
       compliance:['is_pep','pep_details','fic_source_of_funds','compliance_frozen','compliance_frozen_note','is_test'],
       strategyOnDetails: ['account_model','trade_start_date','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc']
     };
-    const CM_BANK_FIELDS = ['bank_name','bank_account_holder','bank_account_number','bank_branch_code','bank_account_type'];
+    // Banking: only bank_account_type is admin-editable. The other bank fields
+    // (bank_name, account_holder, account_number, branch_code) are pulled from
+    // VALR via ef_link_bank_account and rendered as data-readonly displays.
+    const CM_BANK_FIELDS = ['bank_account_type'];
     const CM_EX_FIELDS   = ['exchange','subaccount_ref','subaccount_id','deposit_ref','btc_wallet_address','usdt_wallet_address','usdt_deposit_network','api_key_label'];
     const CM_STRAT_FIELDS= ['strategy_label','live_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
     const CM_RO_FIELDS   = ['kyc_id_verified_at','kyc_verified_by','bank_linked_at','bank_link_method','bank_valr_id','api_key_created_at','api_key_expires_at','api_key_verified_at','api_key_has_view','api_key_has_trade','api_key_has_withdraw','api_key_has_link_bank','strategy_code','portal_access_granted_at','terms_accepted_at','privacy_accepted_at','disclaimer_signed_at','fic_kyc_reviewed_at','fic_kyc_reviewed_by','compliance_frozen_at'];
@@ -7514,8 +7481,15 @@
       // Email backfill
       if(!cust.email_address && cust.email) cmSetField('email_address', cust.email);
 
-      // Banking (from public.bank_accounts) + Exchange (from public.exchange_accounts)
-      CM_BANK_FIELDS.forEach(k => cmSetField(k, bank[k]));
+      // Banking (from public.bank_accounts) — most fields are read-only displays
+      // populated from the latest VALR sync; only bank_account_type remains an
+      // editable select (admin-set when VALR doesn't return it).
+      cmSetReadOnly('bank_name',           bank.bank_name);
+      cmSetReadOnly('bank_account_holder', bank.bank_account_holder);
+      cmSetReadOnly('bank_account_number', bank.bank_account_number);
+      cmSetReadOnly('bank_branch_code',    bank.bank_branch_code);
+      cmSetField('bank_account_type',      bank.bank_account_type);
+      // Exchange (from public.exchange_accounts)
       CM_EX_FIELDS.forEach(k => cmSetField(k, exa[k]));
 
       // Strategy (from customer_strategies)
@@ -7603,78 +7577,86 @@
     function cmBindEditorButtons(){
       const linkBtn = document.getElementById('cmLinkBankBtn');
       if (linkBtn && !linkBtn._bound) {
-        linkBtn.addEventListener('click', async () => {
-          cmEditorAlertHide();
-          const id = cmEditorState.customerId;
-          if (!id) { cmEditorAlert('error', 'Open an existing client before syncing the bank.'); return; }
-          const form = document.getElementById('cmEditorForm');
-          const fd = new FormData(form);
-          const bankName   = String(fd.get('bank_name') || '').trim();
-          const bankAccNum = String(fd.get('bank_account_number') || '').trim();
-          const bankHolder = String(fd.get('bank_account_holder') || '').trim();
-          const bankBranch = String(fd.get('bank_branch_code') || '').trim();
-          const bankType   = String(fd.get('bank_account_type') || '').trim();
-          if (!bankName || !bankAccNum || !bankHolder) {
-            cmEditorAlert('error', 'Bank name, account holder and account number are required to sync with VALR.');
-            return;
-          }
-          const bankPayload = {
-            customer_id: Number(id),
-            bank_account_number: bankAccNum,
-            bank_account_holder: bankHolder,
-            bank_name: bankName,
-            bank_branch_code: bankBranch || null,
-            // bank_account_type is NOT NULL in DB; fall back to 'cheque' if the user
-            // hasn't selected one yet so the upsert doesn't violate the constraint.
-            bank_account_type: bankType || 'cheque',
-          };
-          try {
-            linkBtn.disabled = true;
-            linkBtn.textContent = 'Syncing…';
-            // Persist the bank row first so ef_link_bank_account sees current values.
-            const orgId = cmEditorState.profile?.cust?.org_id || null;
-            const baseRow = { ...bankPayload };
-            if (orgId) baseRow.org_id = orgId;
-            const { data: existingBa } = await supabaseClient
-              .from('bank_accounts')
-              .select('bank_account_id')
-              .eq('customer_id', Number(id))
-              .eq('is_primary', true)
-              .maybeSingle();
-            if (existingBa?.bank_account_id) {
-              const { error: upErr } = await supabaseClient
-                .from('bank_accounts')
-                .update(baseRow)
-                .eq('bank_account_id', existingBa.bank_account_id);
-              if (upErr) throw new Error('bank_accounts update failed: ' + upErr.message);
-            } else {
-              const { error: insErr } = await supabaseClient
-                .from('bank_accounts')
-                .insert({ ...baseRow, is_primary: true, status: 'active' });
-              if (insErr) throw new Error('bank_accounts insert failed: ' + insErr.message);
-            }
-            const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body: bankPayload });
-            if (linkErr) throw new Error(linkErr.message || String(linkErr));
-            if (result && result.success === false && result.error) throw new Error(result.error);
-            if (result && result.gate) throw new Error(result.error || `Pre-link gate failed: ${result.gate}`);
-            const msg = result?.bank_valr_id
-              ? `Synced. VALR bank id: ${result.bank_valr_id} (method: ${result.bank_link_method || 'api'}).`
-              : (result?.message || 'Bank record saved. VALR did not return a bank id — the customer may need to add this bank on the VALR portal first, then click Sync again.');
-            cmEditorAlert(result?.bank_valr_id ? 'success' : 'warning', msg);
-            try {
-              cmEditorState.profile = await cmFetchFullProfile(Number(id));
-              cmFillEditor(cmEditorState.profile);
-              cmSetActiveTab('banking');
-            } catch (_) { /* non-fatal refresh */ }
-          } catch (err) {
-            console.error('[cmLinkBankBtn] Sync failed:', err);
-            cmEditorAlert('error', 'Sync from VALR failed: ' + (err.message || err));
-          } finally {
-            linkBtn.disabled = false;
-            linkBtn.textContent = 'Sync Bank from VALR';
-          }
-        });
+        linkBtn.addEventListener('click', () => cmSyncBankFromValr());
         linkBtn._bound = true;
+      }
+    }
+
+    // Open / close a tiny modal to pick from multiple VALR-linked bank accounts.
+    function cmOpenBankPicker(banks, onPick){
+      let modal = document.getElementById('cmBankPickerModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'cmBankPickerModal';
+        modal.className = 'cm-modal';
+        modal.style.cssText = 'display:none;';
+        modal.innerHTML = `
+          <div class="cm-modal-card" style="max-width:520px;">
+            <div class="cm-modal-header">
+              <h3 style="margin:0;">Choose a VALR bank account</h3>
+              <button type="button" class="cm-modal-close" id="cmBankPickerClose" aria-label="Close">&times;</button>
+            </div>
+            <div style="padding:1rem 1.25rem;">
+              <p class="small-muted" style="margin-top:0;">VALR returned multiple bank accounts for this customer. Pick one to use for this customer's BitWealth profile.</p>
+              <div id="cmBankPickerList" style="display:flex;flex-direction:column;gap:.5rem;"></div>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+        modal.querySelector('#cmBankPickerClose').addEventListener('click', () => { modal.style.display = 'none'; });
+      }
+      const list = modal.querySelector('#cmBankPickerList');
+      list.innerHTML = '';
+      (banks || []).forEach(b => {
+        const masked = b.account_number ? `****${b.account_number.slice(-4)}` : '';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary';
+        btn.style.cssText = 'text-align:left;padding:.6rem .75rem;display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;';
+        btn.innerHTML = `<strong>${(b.bank_name||'Bank')} ${masked}</strong>${b.account_holder ? `<span class="small-muted">${b.account_holder}</span>` : ''}`;
+        btn.addEventListener('click', () => {
+          modal.style.display = 'none';
+          onPick(b.id);
+        });
+        list.appendChild(btn);
+      });
+      modal.style.display = 'flex';
+    }
+
+    async function cmSyncBankFromValr(selectedBankId){
+      const linkBtn = document.getElementById('cmLinkBankBtn');
+      cmEditorAlertHide();
+      const id = cmEditorState.customerId;
+      if (!id) { cmEditorAlert('error', 'Open an existing client before syncing the bank.'); return; }
+      try {
+        if (linkBtn) { linkBtn.disabled = true; linkBtn.textContent = 'Syncing\u2026'; }
+        const body = selectedBankId ? { customer_id: Number(id), selected_bank_id: selectedBankId } : { customer_id: Number(id) };
+        const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body });
+        if (linkErr) throw new Error(linkErr.message || String(linkErr));
+        if (result?.gate) { cmEditorAlert('error', result.error || `Pre-link gate failed: ${result.gate}`); return; }
+        if (result?.no_banks) {
+          cmEditorAlert('warning', result.message || 'No bank accounts are linked on this customer\'s VALR account yet. Ask the customer to link one inside VALR, then click Sync again.');
+          return;
+        }
+        if (result?.multiple_banks) {
+          cmEditorAlert('warning', result.message || 'Multiple bank accounts are linked on VALR. Please pick one.');
+          cmOpenBankPicker(result.banks || [], (pickedId) => cmSyncBankFromValr(pickedId));
+          return;
+        }
+        if (result?.success === false && result?.error) throw new Error(result.error);
+        const msg = result?.bank_valr_id
+          ? `Synced. ${result?.bank?.bank_name || ''} ${result?.bank?.account_number ? '****' + result.bank.account_number.slice(-4) : ''} (VALR id: ${result.bank_valr_id}).`
+          : (result?.message || 'Bank record saved. VALR did not return a bank id.');
+        cmEditorAlert(result?.bank_valr_id ? 'success' : 'warning', msg);
+        try {
+          cmEditorState.profile = await cmFetchFullProfile(Number(id));
+          cmFillEditor(cmEditorState.profile);
+          cmSetActiveTab('banking');
+        } catch (_) { /* non-fatal refresh */ }
+      } catch (err) {
+        console.error('[cmLinkBankBtn] Sync failed:', err);
+        cmEditorAlert('error', 'Sync from VALR failed: ' + (err.message || err));
+      } finally {
+        if (linkBtn) { linkBtn.disabled = false; linkBtn.textContent = 'Sync Bank from VALR'; }
       }
     }
 
@@ -7772,34 +7754,24 @@
         }
       }
 
-      // 4) Bank account: write to public.bank_accounts (single source of truth).
-      //    Linking to VALR is an explicit separate action (\"Link to VALR\" button on the Banking tab).
-      if(cmEditorState.customerId && (payload.bank_name || payload.bank_account_number || payload.bank_account_holder)){
-        try{
-          const orgId = cust?.org_id || cmEditorState.profile?.cust?.org_id;
-          const bankRow = {
-            customer_id: Number(custId),
-            org_id: orgId,
-            bank_name: (payload.bank_name || '').trim() || 'Unknown',
-            bank_account_holder: (payload.bank_account_holder || '').trim() || 'Unknown',
-            bank_account_number: (payload.bank_account_number || '').trim() || 'Unknown',
-            bank_branch_code: (payload.bank_branch_code || '').trim() || 'Unknown',
-            bank_account_type: payload.bank_account_type || 'cheque',
-            is_primary: true,
-            status: 'active',
-          };
+      // 4) Bank account_type (admin-editable): bank_name / holder / account number /
+      //    branch code are pulled from VALR via ef_link_bank_account, not captured
+      //    here. Only bank_account_type may be set by the admin.
+      if (cmEditorState.customerId && payload.bank_account_type) {
+        try {
           const { data: existing } = await supabaseClient.from('bank_accounts')
             .select('bank_account_id').eq('customer_id', custId).eq('is_primary', true).maybeSingle();
           if (existing?.bank_account_id) {
             const { error: e } = await supabaseClient.from('bank_accounts')
-              .update(bankRow).eq('bank_account_id', existing.bank_account_id);
-            if (e) throw e;
-          } else {
-            const { error: e } = await supabaseClient.from('bank_accounts').insert(bankRow);
+              .update({ bank_account_type: payload.bank_account_type })
+              .eq('bank_account_id', existing.bank_account_id);
             if (e) throw e;
           }
-        }catch(bankErr){
-          cmEditorAlert('error', `Saved customer details, but bank save failed: ${bankErr.message||bankErr}`);
+          // No insert path: a bank_accounts row only comes into existence via
+          // either ef_link_bank_account (VALR sync) or a customer-uploaded bank
+          // confirmation letter. Setting account_type before that is a no-op.
+        } catch (bankErr) {
+          cmEditorAlert('error', `Saved customer details, but bank account_type save failed: ${bankErr.message||bankErr}`);
           return custId; // partial success
         }
       }

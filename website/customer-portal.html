@@ -123,6 +123,17 @@
                         <a href="#settings" onclick="scrollToSection('settings'); return false;" style="color: #ef4444; font-weight: 600; margin-left: 8px; font-size: 14px;">Go to Settings →</a>
                     </div>
 
+                    <!-- No-Bank-Linked Marquee (shown only when bank is missing) -->
+                    <div id="noBankMarquee" style="display:none; overflow:hidden; background:#fff5f5; border:1px solid #fecaca; border-radius:8px; padding:10px 0; margin-bottom:20px;">
+                        <style>
+                            @keyframes bw-marquee { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
+                            #noBankMarquee .bw-marquee-track { display:inline-block; white-space:nowrap; padding-left:100%; animation: bw-marquee 22s linear infinite; color:#dc2626; font-weight:700; font-size:15px; letter-spacing:0.3px; }
+                        </style>
+                        <div class="bw-marquee-track">
+                            🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.       🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.
+                        </div>
+                    </div>
+
                     <!-- Stats Grid (5-up: NAV, BTC, USDT, ZAR, TWR) -->
                     <div class="dashboard-stats" id="dashboardStats" style="display: none; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
                         <style>
@@ -642,8 +653,20 @@
                     <div style="padding: 20px;">
                         <div id="bankAccountInfo">Loading...</div>
                         <div style="margin-top: 15px; font-size: 13px; color: var(--text-secondary);">
-                            To update your linked bank account, please contact <a href="mailto:support@bitwealth.co.za" style="color: #3b82f6;">support@bitwealth.co.za</a> with a copy of your new bank confirmation letter.
+                            Bank details are synced automatically from your VALR account. To change your linked bank, link the new bank inside VALR and click <em>Re-try Bank Account Sync</em>, or contact <a href="mailto:support@bitwealth.co.za" style="color: #3b82f6;">support@bitwealth.co.za</a>.
                         </div>
+                    </div>
+                </div>
+
+                <!-- Multi-bank picker modal -->
+                <div id="bankPickerModal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,.65); align-items:center; justify-content:center;">
+                    <div style="background:var(--bg-dark,#0f172a); color:var(--text-primary,#e2e8f0); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:24px; max-width:560px; width:94%; max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.5);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                            <h3 style="margin:0;">🏦 Choose your bank account</h3>
+                            <button onclick="closeBankPicker()" style="background:transparent; border:none; color:var(--text-secondary); font-size:22px; cursor:pointer;">×</button>
+                        </div>
+                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">VALR has multiple bank accounts linked on your profile. Please pick the one you want BitWealth to use.</p>
+                        <div id="bankPickerList" style="display:flex; flex-direction:column; gap:10px;"></div>
                     </div>
                 </div>
             </section>
@@ -2241,7 +2264,7 @@
                         const masked = acct.bank_account_number ? `****${acct.bank_account_number.slice(-4)}` : 'number not on file';
                         bankEl.textContent = `${acct.bank_name} ${masked}`;
                     } else {
-                        bankEl.innerHTML = '<span style="color: #ef4444;">No bank account linked \u2014 contact support before submitting a ZAR withdrawal.</span>';
+                        bankEl.innerHTML = '<span style="color: #ef4444;">No bank account linked &mdash; please link your bank inside your VALR account, then go to Settings and click <em>Re-try Bank Account Sync</em>.</span>';
                     }
                 }
 
@@ -2605,9 +2628,22 @@
 
         function renderBankAccountInfo(acct) {
             const el = document.getElementById('bankAccountInfo');
+            const marquee = document.getElementById('noBankMarquee');
             if (!el) return;
-            if (!acct || !acct.bank_name) {
-                el.innerHTML = '<p style="color:var(--text-secondary);">No bank account linked yet. <a href="mailto:support@bitwealth.co.za" style="color:#3b82f6;">Contact support</a> to link your bank account before making ZAR withdrawals.</p>';
+            const hasBank = !!(acct && acct.bank_name);
+            if (marquee) marquee.style.display = hasBank ? 'none' : 'block';
+            if (!hasBank) {
+                el.innerHTML = `
+                    <p style="color:#dc2626; font-weight:600; margin-bottom:10px;">⚠️ No linked bank account</p>
+                    <p style="color:var(--text-secondary); font-size:13px; margin-bottom:14px;">
+                        Please link your bank account inside your VALR account first, then click the button below.
+                        BitWealth will then automatically sync your bank details from VALR.
+                    </p>
+                    <button id="retryBankSyncBtn" onclick="syncBankFromValr()"
+                        style="padding:10px 20px; background:var(--gold,#d4a017); color:var(--bg-dark,#0f172a); border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+                        🔄 Re-try Bank Account Sync
+                    </button>
+                    <div id="bankSyncMsg" style="margin-top:12px; padding:10px; border-radius:6px; display:none; font-size:13px;"></div>`;
                 return;
             }
             const masked = acct.bank_account_number ? `****${acct.bank_account_number.slice(-4)}` : 'Not provided';
@@ -2618,7 +2654,85 @@
                     <tr><td style="padding:8px 0;color:var(--text-secondary);">Account Number</td><td style="padding:8px 0;color:var(--text-primary);">${masked}</td></tr>
                     ${acct.bank_branch_code?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Branch Code</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_branch_code}</td></tr>`:''}
                     ${acct.bank_account_type?`<tr><td style="padding:8px 0;color:var(--text-secondary);">Account Type</td><td style="padding:8px 0;color:var(--text-primary);">${acct.bank_account_type}</td></tr>`:''}
-                </table>`;
+                </table>
+                <button onclick="syncBankFromValr()" style="margin-top:12px; padding:8px 16px; background:rgba(59,130,246,0.15); border:1px solid #3b82f6; border-radius:8px; color:#93c5fd; cursor:pointer; font-size:13px;">
+                    🔄 Re-sync from VALR
+                </button>
+                <div id="bankSyncMsg" style="margin-top:12px; padding:10px; border-radius:6px; display:none; font-size:13px;"></div>`;
+        }
+
+        function showBankSyncMsg(msg, type) {
+            const el = document.getElementById('bankSyncMsg');
+            if (!el) { alert(msg); return; }
+            const palette = {
+                loading: { bg:'rgba(59,130,246,0.1)', border:'#3b82f6', color:'#93c5fd' },
+                success: { bg:'rgba(16,185,129,0.1)', border:'#10b981', color:'#6ee7b7' },
+                warn:    { bg:'rgba(245,158,11,0.1)', border:'#f59e0b', color:'#fcd34d' },
+                error:   { bg:'rgba(239,68,68,0.1)', border:'#ef4444', color:'#fca5a5' },
+            }[type] || { bg:'rgba(239,68,68,0.1)', border:'#ef4444', color:'#fca5a5' };
+            el.style.cssText = `margin-top:12px; padding:10px; border-radius:6px; display:block; font-size:13px; background:${palette.bg}; border-left:4px solid ${palette.border}; color:${palette.color};`;
+            el.textContent = msg;
+        }
+
+        async function syncBankFromValr(selectedBankId) {
+            const btn = document.getElementById('retryBankSyncBtn');
+            const customerId = customerData?.customer_id;
+            if (!customerId) { showBankSyncMsg('Customer not loaded yet.', 'error'); return; }
+            if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+            showBankSyncMsg('Contacting VALR…', 'loading');
+            try {
+                const body = selectedBankId ? { customer_id: customerId, selected_bank_id: selectedBankId } : { customer_id: customerId };
+                const { data, error } = await sb.functions.invoke('ef_link_bank_account', { body });
+                if (error) throw error;
+                if (data?.no_banks) {
+                    showBankSyncMsg(data.message || 'No bank accounts are linked on your VALR account yet. Please link one inside VALR and try again.', 'warn');
+                    return;
+                }
+                if (data?.multiple_banks) {
+                    openBankPicker(data.banks || []);
+                    showBankSyncMsg('Please choose which bank account to use.', 'loading');
+                    return;
+                }
+                if (data?.error) {
+                    showBankSyncMsg(data.error, 'error');
+                    return;
+                }
+                if (data?.success) {
+                    showBankSyncMsg(data.message || 'Bank account synced from VALR.', 'success');
+                    // Refresh the card so the new bank shows up.
+                    closeBankPicker();
+                    await loadSettings(customerId);
+                    return;
+                }
+                showBankSyncMsg('Unexpected response from VALR sync.', 'error');
+            } catch (e) {
+                console.error('syncBankFromValr error:', e);
+                showBankSyncMsg('Sync failed: ' + (e?.message || e), 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '🔄 Re-try Bank Account Sync'; }
+            }
+        }
+
+        function openBankPicker(banks) {
+            const modal = document.getElementById('bankPickerModal');
+            const list  = document.getElementById('bankPickerList');
+            if (!modal || !list) return;
+            list.innerHTML = banks.map(b => {
+                const masked = b.account_number ? `****${b.account_number.slice(-4)}` : '';
+                const id = (b.id || '').replace(/'/g, '&#39;');
+                return `
+                    <button onclick="syncBankFromValr('${id}')"
+                        style="text-align:left; padding:12px 14px; background:var(--bg-card,#1e293b); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:var(--text-primary); cursor:pointer;">
+                        <div style="font-weight:600; margin-bottom:4px;">${b.bank_name || 'Bank'} ${masked}</div>
+                        ${b.account_holder ? `<div style="font-size:12px; color:var(--text-secondary);">${b.account_holder}</div>` : ''}
+                    </button>`;
+            }).join('');
+            modal.style.display = 'flex';
+        }
+
+        function closeBankPicker() {
+            const modal = document.getElementById('bankPickerModal');
+            if (modal) modal.style.display = 'none';
         }
 
         function showApiKeyUpdateForm() {

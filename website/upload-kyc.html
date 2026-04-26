@@ -285,7 +285,7 @@
     <div class="header">
         <div class="logo">BitWealth</div>
         <h1 id="pageTitle">My Profile</h1>
-        <p class="subtitle" id="pageSubtitle">View and update your personal information, KYC documents, and banking details.</p>
+        <p class="subtitle" id="pageSubtitle">View and update your personal information, KYC documents, and bank confirmation letter.</p>
     </div>
 
     <div id="globalMessage" class="message"></div>
@@ -301,7 +301,7 @@
         </button>
         <button type="button" class="tab-btn" data-tab="3" role="tab" aria-selected="false">
             <span class="tab-num"><span class="tab-num-text">3</span></span>
-            Banking Information
+            Bank Confirmation Letter
         </button>
     </div>
 
@@ -549,58 +549,19 @@
         </div>
     </section>
 
-    <!-- ========================= TAB 3: BANKING ========================== -->
+    <!-- ========================= TAB 3: BANK CONFIRMATION LETTER ======== -->
     <section id="tab-3" class="tab-panel" role="tabpanel">
         <div id="tab3Message" class="message"></div>
-        <p class="small" style="margin-bottom:14px;">Please provide your South African bank account details for ZAR deposits and withdrawals.</p>
-
-        <div class="form-row">
-            <label class="field">
-                <span class="label-text">Bank name<span class="req">*</span></span>
-                <select id="b_bank_name" required>
-                    <option value="">— Select bank —</option>
-                    <option>ABSA</option>
-                    <option>African Bank</option>
-                    <option>Bidvest Bank</option>
-                    <option>Capitec</option>
-                    <option>Discovery Bank</option>
-                    <option>FNB</option>
-                    <option>Investec</option>
-                    <option>Nedbank</option>
-                    <option>Standard Bank</option>
-                    <option>TymeBank</option>
-                    <option>Other</option>
-                </select>
-            </label>
-            <label class="field">
-                <span class="label-text">Account holder<span class="req">*</span></span>
-                <input type="text" id="b_account_holder" required maxlength="120">
-            </label>
-        </div>
-
-        <div class="form-row">
-            <label class="field">
-                <span class="label-text">Account number<span class="req">*</span></span>
-                <input type="text" id="b_account_number" required maxlength="30" inputmode="numeric" pattern="[0-9]*">
-            </label>
-            <label class="field">
-                <span class="label-text">Branch code<span class="req">*</span></span>
-                <input type="text" id="b_branch_code" required maxlength="10" inputmode="numeric" pattern="[0-9]*">
-            </label>
-        </div>
-
-        <div class="form-row single">
-            <label class="field">
-                <span class="label-text">Account type<span class="req">*</span></span>
-                <select id="b_account_type" required>
-                    <option value="">— Select type —</option>
-                    <option value="cheque">Cheque/Current</option>
-                    <option value="savings">Savings</option>
-                    <option value="transmission">Transmission</option>
-                    <option value="business">Business</option>
-                </select>
-            </label>
-        </div>
+        <p class="small" style="margin-bottom:14px;">
+            Please upload your <strong>Bank Account Confirmation Letter</strong>.
+            Your bank account details will be synced automatically from VALR after
+            you have linked your bank account on your VALR account.
+            <br><br>
+            <strong style="color:#c53030;">IMPORTANT:</strong>
+            Make sure you have linked your bank account inside your VALR account.
+            BitWealth will pull your bank details from VALR — we no longer ask you
+            to enter bank details on this page.
+        </p>
 
         <!-- Bank confirmation upload -->
         <div class="doc-section" id="section4">
@@ -954,11 +915,8 @@
             .maybeSingle();
         if (bank) {
             bankRow = bank;
-            $('b_bank_name').value = bank.bank_name || '';
-            $('b_account_holder').value = bank.bank_account_holder || '';
-            $('b_account_number').value = bank.bank_account_number || '';
-            $('b_branch_code').value = bank.bank_branch_code || '';
-            $('b_account_type').value = bank.bank_account_type || '';
+            // Bank fields (name/holder/account number/branch/type) are pulled from
+            // VALR via ef_link_bank_account — they are no longer captured on this form.
             showExisting(4, bank.bank_confirmation_url, bank.bank_confirmation_uploaded_at);
         }
 
@@ -1212,38 +1170,10 @@
         }
     }
 
-    // ===== Tab 3: Banking — Submit =====
+    // ===== Tab 3: Bank Confirmation Letter — Submit =====
     async function submitTab3() {
         clearInvalid('tab-3');
         hideMsg('tab3Message');
-
-        const required = [
-            ['b_bank_name', 'Bank name'],
-            ['b_account_holder', 'Account holder'],
-            ['b_account_number', 'Account number'],
-            ['b_branch_code', 'Branch code'],
-            ['b_account_type', 'Account type'],
-        ];
-        const missing = [];
-        required.forEach(([id, label]) => {
-            if (!$(id).value.trim()) { markInvalid(id); missing.push(label); }
-        });
-        if (missing.length) {
-            showMsg('tab3Message', 'Please complete: ' + missing.join(', '), 'error');
-            return;
-        }
-        const acct = $('b_account_number').value.trim();
-        if (!/^\d{6,20}$/.test(acct)) {
-            markInvalid('b_account_number');
-            showMsg('tab3Message', 'Account number must be 6–20 digits.', 'error');
-            return;
-        }
-        const branch = $('b_branch_code').value.trim();
-        if (!/^\d{4,10}$/.test(branch)) {
-            markInvalid('b_branch_code');
-            showMsg('tab3Message', 'Branch code must be 4–10 digits.', 'error');
-            return;
-        }
 
         const hasExistingBankDoc = !!bankRow?.bank_confirmation_url;
         if (!files[4] && !hasExistingBankDoc) {
@@ -1253,7 +1183,7 @@
         const btn = $('tab3SubmitBtn');
         setBtnLoading(btn, true);
         if (PREVIEW_MODE) {
-            showMsg('tab3Message', '✓ (Preview) Banking tab validated. No data saved.', 'success');
+            showMsg('tab3Message', '✓ (Preview) Bank confirmation letter validated. No data saved.', 'success');
             markCompleted(3);
             setBtnLoading(btn, false);
             return;
@@ -1273,16 +1203,13 @@
                 bankDocUrl  = r.fileUrl;
             }
 
-            // Upsert public.bank_accounts row
-            setUploadStatus('bank', 'Saving banking details…', 70);
+            // Upsert public.bank_accounts row — only the bank confirmation letter
+            // is captured here; structured bank fields are pulled from VALR via
+            // ef_link_bank_account.
+            setUploadStatus('bank', 'Saving bank confirmation letter…', 70);
             const bankPatch = {
                 customer_id: customerData.customer_id,
                 org_id: customerData.org_id,
-                bank_name: $('b_bank_name').value,
-                bank_account_holder: $('b_account_holder').value.trim(),
-                bank_account_number: acct,
-                bank_branch_code: branch,
-                bank_account_type: $('b_account_type').value,
                 bank_confirmation_url: bankDocUrl,
                 bank_confirmation_file_path: bankDocPath,
                 bank_confirmation_uploaded_at: files[4] ? now : (bankRow?.bank_confirmation_uploaded_at || null),
@@ -1326,7 +1253,7 @@
             }
 
             setUploadStatus('bank', '✓ Submitted.', 100);
-            showMsg('tab3Message', '✅ Banking details saved successfully!', 'success', true);
+            showMsg('tab3Message', '✅ Bank confirmation letter saved successfully!', 'success', true);
             markCompleted(3);
 
             const isInitialSubmission = customerData.registration_status === 'kyc';
