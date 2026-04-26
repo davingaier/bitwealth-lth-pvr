@@ -393,6 +393,49 @@
             </label>
         </div>
 
+        <div class="form-row">
+            <label class="field">
+                <span class="label-text">ID type<span class="req">*</span></span>
+                <select id="f_id_type" required>
+                    <option value="">— Select —</option>
+                    <option value="SA ID">SA ID</option>
+                    <option value="Passport">Passport</option>
+                    <option value="Driver's License">Driver's License</option>
+                </select>
+            </label>
+            <label class="field">
+                <span class="label-text">ID issuing country<span class="req">*</span></span>
+                <select id="f_id_issuing_country" required></select>
+            </label>
+        </div>
+
+        <div class="form-row" id="f_sa_id_row" style="display:none;">
+            <label class="field">
+                <span class="label-text">SA ID number<span class="req">*</span></span>
+                <input type="text" id="f_id_number" inputmode="numeric" pattern="[0-9]*" maxlength="13" placeholder="13-digit SA ID">
+            </label>
+            <span class="field"></span>
+        </div>
+
+        <div class="form-row" id="f_passport_row" style="display:none;">
+            <label class="field">
+                <span class="label-text"><span id="f_passport_label_text">Document number</span><span class="req">*</span></span>
+                <input type="text" id="f_id_passport_number" maxlength="40" placeholder="Document number">
+            </label>
+            <span class="field"></span>
+        </div>
+
+        <div class="form-row" id="f_id_dates_row" style="display:none;">
+            <label class="field">
+                <span class="label-text">ID issue date<span class="req">*</span></span>
+                <input type="date" id="f_id_issue_date">
+            </label>
+            <label class="field">
+                <span class="label-text">ID expiry date<span class="req">*</span></span>
+                <input type="date" id="f_id_expiry_date">
+            </label>
+        </div>
+
         <div class="actions">
             <span style="flex:1;"></span>
             <button type="button" id="tab1ContinueBtn" class="btn btn-primary">
@@ -675,7 +718,39 @@
     fillCountrySelect(document.getElementById('f_country_of_origin'), true);
     fillCountrySelect(document.getElementById('f_nationality'), true);
     fillCountrySelect(document.getElementById('f_nationality_secondary'), true, "— None —");
+    fillCountrySelect(document.getElementById('f_id_issuing_country'), true);
     fillPhoneCodeSelect(document.getElementById('f_phone_country_code'));
+
+    // ===== ID type → conditional field visibility / required-ness =====
+    function applyIdTypeVisibility() {
+        const t = document.getElementById('f_id_type').value;
+        const saRow      = document.getElementById('f_sa_id_row');
+        const passRow    = document.getElementById('f_passport_row');
+        const datesRow   = document.getElementById('f_id_dates_row');
+        const passLabel  = document.getElementById('f_passport_label_text');
+        const idNumberEl = document.getElementById('f_id_number');
+        const idPassEl   = document.getElementById('f_id_passport_number');
+        const issueEl    = document.getElementById('f_id_issue_date');
+        const expiryEl   = document.getElementById('f_id_expiry_date');
+
+        const showSa   = (t === 'SA ID');
+        const showPass = (t === 'Passport' || t === "Driver's License");
+
+        saRow.style.display    = showSa   ? '' : 'none';
+        passRow.style.display  = showPass ? '' : 'none';
+        datesRow.style.display = showPass ? '' : 'none';
+
+        idNumberEl.required = showSa;
+        idPassEl.required   = showPass;
+        issueEl.required    = showPass;
+        expiryEl.required   = showPass;
+
+        if (passLabel) passLabel.textContent = (t === "Driver's License") ? "Driver's License number" : 'Passport number';
+
+        if (!showSa)   idNumberEl.value = '';
+        if (!showPass) { idPassEl.value = ''; issueEl.value = ''; expiryEl.value = ''; }
+    }
+    document.getElementById('f_id_type').addEventListener('change', applyIdTypeVisibility);
 
     // ===== State =====
     let customerData = null;
@@ -805,7 +880,9 @@
             $('f_country_of_residence').value = ZA;
             $('f_country_of_origin').value = ZA;
             $('f_nationality').value = ZA;
+            $('f_id_issuing_country').value = ZA;
             $('f_phone_country_code').value = '+27';
+            applyIdTypeVisibility();
             return;
         }
 
@@ -843,6 +920,15 @@
         $('f_nationality_secondary').value = cust.nationality_secondary || '';
         $('f_occupation').value = cust.occupation || '';
         $('f_tax_number').value = cust.tax_number || '';
+
+        // ID details
+        $('f_id_type').value = cust.id_type || '';
+        $('f_id_issuing_country').value = cust.id_issuing_country || ZA;
+        $('f_id_number').value = cust.id_number != null ? String(cust.id_number) : '';
+        $('f_id_passport_number').value = cust.id_passport_number || '';
+        $('f_id_issue_date').value = cust.id_issue_date || '';
+        $('f_id_expiry_date').value = cust.id_expiry_date || '';
+        applyIdTypeVisibility();
 
         // KYC tab — show existing docs (read-only links) + income source
         $('incomeSelect').value = cust.kyc_source_of_income || '';
@@ -904,7 +990,19 @@
             ['f_country_of_origin', 'Country of origin'],
             ['f_nationality', 'Nationality'],
             ['f_tax_number', 'Income Tax number'],
+            ['f_id_type', 'ID type'],
+            ['f_id_issuing_country', 'ID issuing country'],
         ];
+        const idType = $('f_id_type').value;
+        if (idType === 'SA ID') {
+            requiredFields.push(['f_id_number', 'SA ID number']);
+        } else if (idType === 'Passport' || idType === "Driver's License") {
+            requiredFields.push(
+                ['f_id_passport_number', idType === "Driver's License" ? "Driver's License number" : 'Passport number'],
+                ['f_id_issue_date', 'ID issue date'],
+                ['f_id_expiry_date', 'ID expiry date'],
+            );
+        }
         const missing = [];
         requiredFields.forEach(([id, label]) => {
             const v = $(id).value.trim();
@@ -919,6 +1017,36 @@
             markInvalid('f_cellphone_number');
             showMsg('tab1Message', 'Cellphone number must be 6–15 digits.', 'error');
             return;
+        }
+
+        // ID-specific validation
+        const idTypeVal = $('f_id_type').value;
+        if (idTypeVal === 'SA ID') {
+            const sa = $('f_id_number').value.trim();
+            if (!/^\d{13}$/.test(sa)) {
+                markInvalid('f_id_number');
+                showMsg('tab1Message', 'SA ID number must be exactly 13 digits.', 'error');
+                return;
+            }
+        } else if (idTypeVal === 'Passport' || idTypeVal === "Driver's License") {
+            const docNum = $('f_id_passport_number').value.trim();
+            if (docNum.length < 4) {
+                markInvalid('f_id_passport_number');
+                showMsg('tab1Message', 'Document number must be at least 4 characters.', 'error');
+                return;
+            }
+            const issue = $('f_id_issue_date').value;
+            const expiry = $('f_id_expiry_date').value;
+            if (issue && expiry && expiry <= issue) {
+                markInvalid('f_id_expiry_date');
+                showMsg('tab1Message', 'ID expiry date must be after the issue date.', 'error');
+                return;
+            }
+            if (expiry && expiry < new Date().toISOString().slice(0, 10)) {
+                markInvalid('f_id_expiry_date');
+                showMsg('tab1Message', 'ID has expired — please use a valid document.', 'error');
+                return;
+            }
         }
 
         // FICA: customer must be at least 18 years old
@@ -969,6 +1097,15 @@
                 nationality_secondary: $('f_nationality_secondary').value || null,
                 occupation: $('f_occupation').value.trim() || null,
                 tax_number: $('f_tax_number').value.trim(),
+                id_type: idTypeVal,
+                id_issuing_country: $('f_id_issuing_country').value,
+                id_number: idTypeVal === 'SA ID' ? Number($('f_id_number').value.trim()) : null,
+                id_passport_number: (idTypeVal === 'Passport' || idTypeVal === "Driver's License")
+                    ? $('f_id_passport_number').value.trim() : null,
+                id_issue_date: (idTypeVal === 'Passport' || idTypeVal === "Driver's License")
+                    ? ($('f_id_issue_date').value || null) : null,
+                id_expiry_date: (idTypeVal === 'Passport' || idTypeVal === "Driver's License")
+                    ? ($('f_id_expiry_date').value || null) : null,
             };
             const { error } = await sb.from('customer_details').update(patch).eq('customer_id', customerData.customer_id);
             if (error) throw error;

@@ -643,6 +643,16 @@
     tr:last-child td{ border-bottom:none; }
     tbody tr:hover td{ background:var(--bg-row-hover); }
 
+    /* Horizontal-scroll wrapper for wide tables (e.g. KYC, VALR setup, Active customers) */
+    .table-scroll{
+      width:100%;
+      max-width:100%;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      border-radius:var(--radius);
+    }
+    .table-scroll table{ min-width:100%; }
+
     /* Inputs / selects / textarea */
     input[type="text"], input[type="email"], input[type="password"],
     input[type="number"], input[type="date"], input[type="search"],
