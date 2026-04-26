@@ -200,9 +200,19 @@
         async function checkSession() {
             try {
                 const { data: { session } } = await supabaseClient.auth.getSession();
-                
+
                 // Only proceed if we have a valid session with email
                 if (session && session.user && session.user.email) {
+                    // If a return_to was supplied (e.g. admin clicked the portal
+                    // impersonation link), honour it immediately. The destination
+                    // page does its own auth + role checks; we must not block here
+                    // on a customer_details lookup because admin accounts often
+                    // have no customer profile of their own.
+                    if (returnTo) {
+                        window.location.href = returnTo;
+                        return;
+                    }
+
                     // Find customer and redirect based on status
                     const { data: customerData, error: customerError } = await supabaseClient
                         .from('customer_details')
@@ -254,7 +264,19 @@
                 if (error) {
                     throw error;
                 }
-                
+
+                // If a return_to was supplied (admin impersonation flow), redirect
+                // straight there. The destination page handles its own auth + role
+                // gating; we must not block here on a customer_details lookup
+                // because admin accounts often have no customer profile.
+                if (returnTo) {
+                    formMessage.className = 'form-message success';
+                    formMessage.style.display = 'block';
+                    formMessage.textContent = 'Login successful! Redirecting...';
+                    setTimeout(() => { window.location.href = returnTo; }, 500);
+                    return;
+                }
+
                 // Get customer_id (use order by and limit to handle duplicates gracefully)
                 const { data: customerData, error: customerError } = await supabaseClient
                     .from('customer_details')
