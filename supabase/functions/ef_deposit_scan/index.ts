@@ -354,7 +354,7 @@ Deno.serve(async (req) => {
                 "Authorization": req.headers.get("authorization") || "",
               },
               body: JSON.stringify({
-                template_key: "registration_complete_welcome",
+                template_key: "funds_deposited_notification",
                 to_email: customer.email,
                 data: {
                   first_name: customer.first_names,
