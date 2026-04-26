@@ -1393,7 +1393,7 @@
                     <div class="metric-item">
                         <div class="metric-label">
                             Cost Basis
-                            <span id="costBasisInfo" title="Cost Basis = the amount of your own capital currently at work. Withdrawing your profits doesn't reduce this; withdrawing your principal does. The Std DCA and HODL benchmarks on the Portfolio Performance chart are simulated against this same Cost Basis: withdrawals reduce simulated holdings, and HODL is modelled as if your current Cost Basis had been invested upfront on day 1 at that day's BTC price." style="cursor: help; color: var(--text-secondary); font-size: 12px; margin-left: 4px;">ⓘ</span>
+                            <span id="costBasisInfo" title="Cost Basis = the amount of your own capital currently at work. Withdrawing your profits doesn't reduce this; withdrawing your principal does.&#10;&#10;The Std DCA and HODL benchmarks on the Portfolio Performance chart are simulated against this same Cost Basis: withdrawals reduce simulated holdings, and HODL is modelled as if your current Cost Basis had been invested upfront on day 1 at that day's BTC price.&#10;&#10;Note: because HODL always uses your *current* Cost Basis, the historical HODL line will rebase across the entire chart whenever you deposit or withdraw — it answers the single question \"what would my portfolio be worth if I'd put my current capital into BTC on day 1 and held?\" rather than tracking past contributions one-by-one." style="cursor: help; color: var(--text-secondary); font-size: 12px; margin-left: 4px;">ⓘ</span>
                         </div>
                         <div class="metric-value" id="costBasisValue">${costBasis !== null ? '$' + costBasis.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '--'}</div>
                     </div>
@@ -2959,11 +2959,14 @@
             const showStd = document.getElementById('perfRoiStdDca').checked;
             const showHodl = document.getElementById('perfRoiHodl').checked;
 
-            // Calculate ROI: (NAV / contrib - 1) × 100
-            const calcRoi = (nav, contrib) => contrib > 0 ? ((nav / contrib) - 1) * 100 : 0;
-            const lthRoi = daily.map(d => calcRoi(d.nav_usd, d.contrib_cum_usd));
-            const stdRoi = daily.map(d => calcRoi(d.std_dca_nav, d.contrib_cum_usd));
-            const hodlRoi = daily.map(d => calcRoi(d.hodl_nav, d.contrib_cum_usd));
+            // ROI is now measured against Cost Basis (capital currently at work),
+            // matching the NAV chart's Cost Basis line. Falls back to gross
+            // contributions for legacy rows where cost_basis_usd is null.
+            const calcRoi = (nav, basis) => basis > 0 ? ((nav / basis) - 1) * 100 : 0;
+            const basisOf  = d => parseFloat(d.cost_basis_usd ?? d.contrib_cum_usd ?? 0);
+            const lthRoi  = daily.map(d => calcRoi(d.nav_usd,    basisOf(d)));
+            const stdRoi  = daily.map(d => calcRoi(d.std_dca_nav, basisOf(d)));
+            const hodlRoi = daily.map(d => calcRoi(d.hodl_nav,    basisOf(d)));
 
             const datasets = [
                 { label: 'LTH PVR ROI', data: lthRoi, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 }
@@ -3040,10 +3043,12 @@
                 thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">LTH PVR ROI</th><th style="${headStyle}text-align:right;">Std DCA ROI</th><th style="${headStyle}text-align:right;">HODL ROI</th><th style="${headStyle}text-align:right;">Alpha vs DCA</th></tr>`;
                 tbody.innerHTML = groups.map(g => {
                     const last = g.rows[g.rows.length-1];
-                    const contrib = last?.contrib_cum_usd || 1;
-                    const lthRoi = ((last?.nav_usd || 0) / contrib - 1) * 100;
-                    const stdRoi = ((last?.std_dca_nav || 0) / contrib - 1) * 100;
-                    const hodlRoi = ((last?.hodl_nav || 0) / contrib - 1) * 100;
+                    // Match the chart: ROI is measured against Cost Basis, with
+                    // a fallback to gross contributions for legacy rows.
+                    const basis = parseFloat(last?.cost_basis_usd ?? last?.contrib_cum_usd ?? 0) || 1;
+                    const lthRoi = ((last?.nav_usd || 0) / basis - 1) * 100;
+                    const stdRoi = ((last?.std_dca_nav || 0) / basis - 1) * 100;
+                    const hodlRoi = ((last?.hodl_nav || 0) / basis - 1) * 100;
                     const alpha = lthRoi - stdRoi;
                     const alphaColor = alpha > 0 ? '#10b981' : alpha < 0 ? '#ef4444' : 'inherit';
                     return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${fmtPct(lthRoi)}</td><td style="${valStyle}">${fmtPct(stdRoi)}</td><td style="${valStyle}">${fmtPct(hodlRoi)}</td><td style="${valStyle}color:${alphaColor};">${fmtPct(alpha)}</td></tr>`;

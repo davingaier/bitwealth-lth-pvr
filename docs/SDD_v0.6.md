@@ -3,11 +3,115 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-25 (v0.6.94)
+**Last updated:** 2026-04-26 (v0.6.95)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.95 – Cost Basis chart redesign + DB-side benchmark audit + admin-impersonation login passthrough fix
+**Date:** 2026-04-26
+**Purpose:** (1) Replace the misleading gross "Contributions" line on the Customer Portal's Portfolio Performance chart with a Cost-Basis-aware view that handles deposits and withdrawals symmetrically. (2) Apply the same Cost-Basis treatment to the Std DCA and HODL benchmarks so all three series tell a consistent story. (3) Move all benchmark math into the database for full audit trail (`balances_daily.cost_basis_usd` column + `recompute_hodl_balances` + withdrawal-aware `recompute_std_dca_balances`). (4) Replace the never-populated "Avg Cost Basis" Strategy-Metrics tile with a "Cost Basis" tile aligned to the chart's teal line, with an explanatory info icon. (5) Update Returns/Profit tile caption to break out deposits/withdrawals/current value/P&L. (6) Fix `login.html` so admin accounts (no `customer_details` row) can complete the `?admin_as=…` impersonation flow.
+
+**Status:** ✅ COMPLETE (migrations applied, UI deployed via Netlify auto-deploy).
+
+#### 1 — Chart redesign: gross "Contributions" → Cost Basis (`website/customer-portal.html`)
+**Problem.** The original `LTH PVR vs Benchmarks` view rendered a black "Contributions" line that tracked **cumulative gross topups**. This was misleading in two scenarios:
+- A same-day deposit + withdrawal (e.g. C999 on 2026-02-10) bumped the line up permanently, even though no net principal entered the portfolio.
+- A genuine principal withdrawal (e.g. C999 on 2026-02-19) left the line unchanged, so the portfolio appeared to "lose" the withdrawal as profit destruction.
+
+**Solution.** Retired the gross-Contributions line and replaced it with a **Cost Basis** line: `cost_basis[d] = max(0, Σ topups − Σ withdrawals up to d)`. This treats:
+- Same-day deposit + withdrawal → no movement (correct: no new capital was committed)
+- Profit withdrawal (within `current_nav − cost_basis`) → no movement on the cost-basis line (correct: principal is intact)
+- Principal withdrawal (eats into cost basis) → cost-basis line drops by the principal-eating portion
+
+The sub-option dropdown was relabelled `LTH PVR vs Benchmarks (Cost Basis)`. Deposit (▲ green) and withdrawal (◆ red) markers are now overlaid on the LTH PVR NAV line on the day they occurred, with marker size proportional to `√amount` so context is visible without dominating the chart. The tooltip displays `+$X.XX` for deposits and `−$X.XX` for withdrawals.
+
+#### 2 — Cost-Basis-aligned benchmarks (Std DCA + HODL)
+The Std DCA and HODL benchmarks now share the Cost-Basis principle so the chart tells one consistent story:
+
+**Std DCA** (`lth_pvr.recompute_std_dca_balances` — withdrawal-aware):
+- Deposits land in the simulated USDT pool, then are spread evenly over the remaining days of the deposit's calendar month (`amount / max(1, days_remaining_in_month)`).
+- **NEW: Withdrawals drain USDT first.** If insufficient USDT, the simulation sells BTC at the prior-day close price to cover the remainder. If the withdrawal exceeds the entire wallet (i.e. profit-withdrawal-beyond-basis), it floors at zero.
+- This means C999's 2026-02-10 wash returns the Std DCA line to its prior level, and the 2026-02-19 principal withdrawal drops the line by the same dollar amount as the LTH PVR NAV.
+
+**HODL** (`lth_pvr.recompute_hodl_balances` — **NEW function**, fully recomputed every `carry_forward_daily_balances()` run):
+- New rule: `hodl_nav[d] = cost_basis[d] × (btc_price[d] / btc_price[first_deposit_date])`.
+- This models "if the customer's *current* cost basis had been invested upfront on day 1" — the cleanest counterfactual when deposits and withdrawals occur over time. As cost basis changes (top-ups, withdrawals), the HODL series rebases retroactively across the entire history. Idempotent.
+
+#### 3 — Database audit storage
+Full audit trail for every benchmark and the Cost Basis itself is now persisted per day:
+
+| Object | Change |
+|---|---|
+| `lth_pvr.balances_daily` | New column `cost_basis_usd numeric`. Populated on every insert by `carry_forward_daily_balances()` and back-patched by the same function on every run. |
+| `lth_pvr.recompute_std_dca_balances(p_customer_id, p_org_id)` | Rewritten to handle withdrawals (drain USDT first, then sell BTC at prior close, floor at 0). Same daily-buy schedule as before. |
+| `lth_pvr.recompute_hodl_balances(p_customer_id, p_org_id)` | **NEW.** Wipes and rebuilds `hodl_balances_daily` under the new "current cost basis upfront on day 1" semantics. |
+| `lth_pvr.carry_forward_daily_balances()` | Now (a) populates `cost_basis_usd` on every insert + back-patches existing rows, (b) calls `recompute_hodl_balances()` for every active customer per run, (c) keeps the pre-existing `recompute_std_dca_balances()` call. Returns `{hodl_recomputed, std_dca_recomputed}` counters. |
+| `lth_pvr.get_customer_performance_data(p_customer_id, p_org_id)` | Now returns `cost_basis_usd` in each `daily` row so the chart reads it straight from the DB without browser-side reconstruction. |
+
+Backfill ran in the same call: `hodl_recomputed: 4, std_dca_recomputed: 4`. Verified on C49 (deposit-only) and C999 (deposit + same-day wash + later principal withdrawal).
+
+#### 4 — Strategy Metrics card: Cost Basis tile
+- "Avg Cost Basis" tile (always rendered `--` because its source RPC `get_customer_buy_metrics` returned 0 for live customers) was renamed to **"Cost Basis"**.
+- Value is computed from `perfData.contributions` after `loadPerformanceData()` returns: `max(0, Σ deposits − Σ withdrawals)`. Patched in by helper `updateCostBasisMetric()` (the metrics card is built before performance data arrives).
+- Info icon (ⓘ) moved here from the chart's sub-option dropdown. Tooltip explains the Cost Basis concept and how Std DCA and HODL benchmarks use it.
+
+#### 5 — Returns/Profit tile caption
+The headline TWR percentage stays unchanged (still the cleanest single number for strategy quality). The sub-caption was rewritten from `±$Profit profit/loss` to:
+
+```
+Deposited $X · Withdrawn $Y · Currently $Z · P&L ±$P (±Q%)
+```
+
+Where `P&L = current_nav − net_contribution` and `Q% = P&L / net_contribution × 100`. Lines up exactly with the Cost Basis story shown on the chart.
+
+#### 6 — Std DCA double-count bug (UI side, now obsolete)
+**Bug** introduced briefly in v0.6.89-draft: the chart code maintained a running `stdNav` variable that started from the DB's `std_dca_nav` (which already includes the day-1 deposit) and then added the deposit again via `stdNav += f.topup` — resulting in C49 showing ~$39,500 on day 1 instead of $17,950.
+
+**Fix.** Now that `lth_pvr.recompute_std_dca_balances()` is withdrawal-aware (item #3), the chart consumes `d.std_dca_nav` directly with no client-side adjustment. The reconstruction loop was removed.
+
+#### 7 — `login.html` admin-impersonation passthrough fix
+**Symptom.** Admin clicks 👁️ on a customer row in the Admin UI → opens `customer-portal.html?admin_as=49` → no session → bumped to `login.html?return_to=customer-portal.html%3Fadmin_as%3D49` → admin enters credentials → **stays stranded on the login page**.
+
+**Root cause.** Both `login.html` redirect paths (the `checkSession()` auto-redirect and the post-`signInWithPassword` handler) gated their redirect on a `customer_details` lookup keyed by `session.user.email`. Admin accounts often have no `customer_details` row of their own, so the lookup returned no rows and the `if` chain fell through silently — no redirect was ever issued.
+
+**Fix.** Both code paths now check for `?return_to=…` first; if present and a valid session exists, redirect there immediately, **before** the customer-details lookup. The destination page (`customer-portal.html`) still performs its own admin role check (`org_members.role IN ('admin','owner')`) before loading the impersonated customer's data, so no new attack surface is opened.
+
+This is a recurrence of the issue first fixed in v0.6.85 §5; the original fix only handled the `checkSession()` path. The signin-form path inherited the same `customer_details`-gating bug.
+
+#### Files changed
+- **NEW migrations:**
+  - `add_cost_basis_and_recompute_hodl` — adds `balances_daily.cost_basis_usd` + `recompute_hodl_balances()`
+  - `recompute_std_dca_with_withdrawals` — withdrawal-aware Std DCA simulation
+  - `carry_forward_with_cost_basis_and_hodl` — populates new column + calls both recompute fns
+  - `expose_cost_basis_in_perf_rpc` — returns `cost_basis_usd` in `daily` rows
+- **MODIFIED:**
+  - [website/customer-portal.html](website/customer-portal.html) — chart benchmarks block, returns tile caption, Cost Basis metric tile + info icon, `updateCostBasisMetric()` helper
+  - [website/login.html](website/login.html) — `return_to` honoured before customer-details lookup in both `checkSession()` and submit handler
+  - [docs/SDD_v0.6.md](docs/SDD_v0.6.md) — this entry
+
+#### Deployment
+- Migrations applied directly via MCP — no manual `supabase db push` needed.
+- UI files auto-deploy via Netlify on push to main.
+- No edge function deployments required.
+
+#### Verification (production, 2026-04-26)
+- **C49** (single $17,950.20 deposit on 2026-04-18, no withdrawals):
+  - Std DCA day 1: NAV $17,950.20 / BTC 0 / USDT $17,950.20 ✓ (was $39,500 — double-count bug fixed)
+  - Std DCA day 2: bought $1,495.85 of BTC at Apr-18 close ($75,730.99) → 0.01974 BTC ✓
+  - `cost_basis_usd`: $17,950.20 every day ✓
+  - HODL: 0.23703 BTC equivalent at day-0 price; NAV tracks BTC moves ✓
+  - Cost Basis tile in Strategy Metrics card displays $17,950 ✓
+- **Admin impersonation:** clicking 👁️ on C49 from Admin UI → login → lands on `customer-portal.html?admin_as=49` with orange "Admin Preview" banner ✓
+
+#### Follow-ups completed (2026-04-26)
+Both items originally listed as "known follow-ups" were closed in the same release:
+
+- **ROI sub-chart now uses Cost Basis** — `buildRoiChart()` and the ROI row of `updatePerfMetricsTable()` now compute ROI as `(NAV / cost_basis_usd − 1) × 100` instead of `(NAV / contrib_cum_usd − 1) × 100`. Falls back to `contrib_cum_usd` for any legacy row where `cost_basis_usd` is null. This brings the ROI tab into alignment with the NAV-tab Cost Basis story: same-day deposit-then-withdraw events and pure profit-withdrawals no longer distort the ROI percentage.
+- **HODL retroactive-rebase semantics now disclosed in customer-facing copy** — the Cost Basis info icon (ⓘ) on the Strategy Metrics card now includes an extra paragraph: *"Note: because HODL always uses your current Cost Basis, the historical HODL line will rebase across the entire chart whenever you deposit or withdraw — it answers the single question 'what would my portfolio be worth if I'd put my current capital into BTC on day 1 and held?' rather than tracking past contributions one-by-one."* Newlines (`&#10;`) used in the `title` attribute so the tooltip renders as three readable paragraphs.
+
+---
 
 ### v0.6.94 – Bank info migration: `bank_accounts` becomes single source of truth
 **Date:** 2026-04-25
