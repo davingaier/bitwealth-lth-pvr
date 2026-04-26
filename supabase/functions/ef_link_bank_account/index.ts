@@ -376,12 +376,17 @@ Deno.serve(async (req) => {
     return json({
       success:        true,
       valr_linked:    valrLinked,
+      account_model:  creds.accountModel,
       bank_account_id: bankAccountId,
       bank_valr_id:   valrBankId,
+      bank_link_method: valrLinked ? "api" : "manual",
       debug,
       message: valrLinked
-        ? "Bank account linked with VALR and saved to bank_accounts."
-        : "Bank details saved to bank_accounts. Admin action required to link manually in VALR portal (subaccount model).",
+        ? `Bank account linked with VALR (method: ${debug.list_status ? "discovered via GET" : "POST succeeded"}) and saved to bank_accounts.`
+        : (creds.accountModel === "api"
+            ? `Bank details saved to bank_accounts. VALR did not return a bank id. Most likely the customer has not yet added this bank on the VALR portal — once they have, click Sync again and we'll match it by account number. (POST status: ${debug.post_status ?? "n/a"}, GET listed: ${debug.list_count ?? "n/a"} banks)`
+            : `Bank details saved to bank_accounts. VALR did not return a bank id. Admin must add the bank on the VALR portal via the master account, then click Sync again to populate bank_valr_id. (POST status: ${debug.post_status ?? "n/a"}, GET listed: ${debug.list_count ?? "n/a"} banks)`
+          ),
     });
 
   } catch (err) {
