@@ -7633,18 +7633,20 @@
         const { data: result, error: linkErr } = await supabaseClient.functions.invoke('ef_link_bank_account', { body });
         if (linkErr) {
           // supabase-js wraps non-2xx as FunctionsHttpError and hides the body.
-          // Pull the JSON payload off the underlying Response so the admin sees
-          // the actual reason (gate, validation, VALR error).
+          // In v2, linkErr.context IS the Response object (not .context.response).
           let detail = linkErr.message || String(linkErr);
           try {
-            const resp = linkErr?.context?.response;
-            if (resp && typeof resp.json === 'function') {
-              const j = await resp.clone().json();
-              if (j?.error) detail = j.error + (j.gate ? ` (gate: ${j.gate})` : '');
-              else if (j) detail = JSON.stringify(j);
-            } else if (resp && typeof resp.text === 'function') {
-              const t = await resp.clone().text();
-              if (t) detail = t;
+            const resp = linkErr?.context?.response ?? linkErr?.context;
+            if (resp && typeof resp.clone === 'function') {
+              const cloned = resp.clone();
+              const text = await cloned.text();
+              if (text) {
+                try {
+                  const j = JSON.parse(text);
+                  if (j?.error) detail = j.error + (j.gate ? ` (gate: ${j.gate})` : '');
+                  else detail = text;
+                } catch (_) { detail = text; }
+              }
             }
           } catch (_) { /* keep linkErr.message */ }
           throw new Error(detail);
