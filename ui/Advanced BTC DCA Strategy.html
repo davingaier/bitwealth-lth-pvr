@@ -1376,9 +1376,10 @@
             <label><span class="label-line">Account type</span>
               <select name="bank_account_type">
                 <option value="">-- Select --</option>
-                <option value="current">Current</option>
+                <option value="cheque">Cheque/Current</option>
                 <option value="savings">Savings</option>
                 <option value="transmission">Transmission</option>
+                <option value="business">Business</option>
               </select>
             </label>
           </div>
@@ -1523,7 +1524,11 @@
                 <label><span class="label-line">Branch code</span><input name="bank_branch_code" inputmode="numeric" /></label>
                 <label><span class="label-line">Account type</span>
                   <select name="bank_account_type">
-                    <option value="">--</option><option value="current">Current</option><option value="savings">Savings</option><option value="transmission">Transmission</option>
+                    <option value="">--</option>
+                    <option value="cheque">Cheque/Current</option>
+                    <option value="savings">Savings</option>
+                    <option value="transmission">Transmission</option>
+                    <option value="business">Business</option>
                   </select>
                 </label>
                 <label><span class="label-line">Linked at (read-only)</span><input data-readonly="bank_linked_at" disabled /></label>
@@ -7098,7 +7103,7 @@
           bank_account_holder: bankHolder || 'Unknown',
           bank_account_number: bankAccNum || 'Unknown',
           bank_branch_code: payload.bank_branch_code?.trim() || 'Unknown',
-          bank_account_type: payload.bank_account_type || 'Unknown',
+          bank_account_type: payload.bank_account_type || 'cheque',
           is_primary: true,
           status: 'active',
         };
@@ -7619,7 +7624,9 @@
             bank_account_holder: bankHolder,
             bank_name: bankName,
             bank_branch_code: bankBranch || null,
-            bank_account_type: bankType || null,
+            // bank_account_type is NOT NULL in DB; fall back to 'cheque' if the user
+            // hasn't selected one yet so the upsert doesn't violate the constraint.
+            bank_account_type: bankType || 'cheque',
           };
           try {
             linkBtn.disabled = true;
@@ -7777,7 +7784,7 @@
             bank_account_holder: (payload.bank_account_holder || '').trim() || 'Unknown',
             bank_account_number: (payload.bank_account_number || '').trim() || 'Unknown',
             bank_branch_code: (payload.bank_branch_code || '').trim() || 'Unknown',
-            bank_account_type: payload.bank_account_type || 'Unknown',
+            bank_account_type: payload.bank_account_type || 'cheque',
             is_primary: true,
             status: 'active',
           };

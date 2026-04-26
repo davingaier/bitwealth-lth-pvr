@@ -347,14 +347,14 @@ Deno.serve(async (req) => {
               day: "numeric" 
             });
             
-            await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+            const custEmailResp = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": req.headers.get("authorization") || "",
               },
               body: JSON.stringify({
-                template_key: "funds_deposited_notification",
+                template_key: "registration_complete_welcome",
                 to_email: customer.email,
                 data: {
                   first_name: customer.first_names,
@@ -366,8 +366,21 @@ Deno.serve(async (req) => {
                 },
               }),
             });
+
+            if (!custEmailResp.ok) {
+              const errBody = await custEmailResp.text();
+              console.error(`Customer welcome email failed: HTTP ${custEmailResp.status} ${errBody}`);
+              await logAlert(sbLthPvr, "ef_deposit_scan", "error",
+                `Customer welcome email failed for customer ${customer.customer_id}: HTTP ${custEmailResp.status}`,
+                { customer_id: customer.customer_id, email: customer.email, status: custEmailResp.status, body: errBody.slice(0, 500) });
+            }
           } catch (emailError) {
             console.error("Error sending customer email:", emailError);
+            try {
+              await logAlert(sbLthPvr, "ef_deposit_scan", "error",
+                `Customer welcome email threw for customer ${customer.customer_id}: ${(emailError as Error)?.message ?? String(emailError)}`,
+                { customer_id: customer.customer_id, email: customer.email });
+            } catch (_) { /* alerting failure is non-fatal */ }
           }
 
           // SELF-CONTAINED ACCOUNTING: Create funding events + ledger entries immediately

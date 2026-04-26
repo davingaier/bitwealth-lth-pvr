@@ -44,14 +44,15 @@ serve(async (req) => {
     return new Response("ok", { headers: CORS });
   }
 
+  // Hoisted so the outer catch can include them in the failure log row.
+  let template_key: string | undefined;
+  let to_email: string | undefined;
+  let data: Record<string, any> = {};
+  let from_email: string | undefined;
+
   try {
     const body = await req.json();
-    const {
-      template_key,
-      to_email,
-      data = {},
-      from_email,
-    } = body;
+    ({ template_key, to_email, data = {}, from_email } = body);
 
     // Validate inputs
     if (!template_key || !to_email) {
@@ -119,6 +120,26 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("ef_send_email error:", error);
+
+    // Best-effort: log the failure to email_logs so silent crashes are visible.
+    // Uses the hoisted request inputs so we can still attribute the failure
+    // even when the SMTP call or template lookup threw before the normal log.
+    try {
+      const sb = createClient(SUPABASE_URL!, SECRET_KEY!, {
+        auth: { persistSession: false },
+      });
+      await sb.from("email_logs").insert({
+        template_key: template_key ?? "(unknown)",
+        recipient_email: to_email ?? "(unknown)",
+        subject: "(send aborted by exception)",
+        status: "failed",
+        error_message: `ef_send_email exception: ${error?.message ?? String(error)}`,
+        template_data: data ?? null,
+      });
+    } catch (logErr) {
+      console.error("ef_send_email failed to log exception:", logErr);
+    }
+
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: CORS }
