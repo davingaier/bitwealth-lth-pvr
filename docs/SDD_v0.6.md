@@ -3,11 +3,81 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-26 (v0.6.95)
+**Last updated:** 2026-04-27 (v0.6.97)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.97 – Bank capture fully retired (VALR-pull-only); customer-portal marquee; omnibus customer flipped to API model
+**Date:** 2026-04-27
+**Purpose:** Complete the architectural simplification of bank handling — admins and customers no longer **capture** bank fields anywhere. Bank details are exclusively **pulled from VALR** via `ef_link_bank_account`. Add a customer-portal marquee that surfaces "no linked bank" prominently. Migrate customer 9 (the BitWealth omnibus account) from the broken `subaccount` model to `api` model so it can sync its own bank.
+
+**Status:** ✅ COMPLETE (migrations applied, EF deployed, omnibus keys vaulted, UIs updated).
+
+#### 1 — DB: bank_accounts columns made optional (`20260427_bank_accounts_optional_for_valr_pull`)
+Dropped `NOT NULL` on `bank_accounts.{bank_name, bank_account_holder, bank_account_number, bank_branch_code, bank_account_type}` and added explanatory column comments. This unblocks the customer-id-only upsert path used by the rewritten EF, and makes it safe for a `bank_accounts` row to exist (e.g. for a bank-confirmation letter) before VALR data is available.
+
+#### 2 — `ef_link_bank_account`: pull-only contract
+Rewritten to remove the `POST /v1/fiat/ZAR/banks` write path entirely (unreliable for our master-key + subaccount-header model) and replace it with three deterministic outcomes from a single `GET` call:
+
+| VALR result | EF response | UI behaviour |
+|---|---|---|
+| 0 banks linked on customer's VALR account | `{ success:false, no_banks:true, message }` (HTTP 200) | Amber warning, no further action |
+| Exactly 1 bank | Upsert `bank_accounts` (preserves admin-set `branch_code` / `account_type` if VALR omits them), set `exchange_accounts.{bank_account_id, bank_valr_id, bank_link_method:'api'}` | Green success, refresh editor, pin Banking tab |
+| >1 banks and no `selected_bank_id` | `{ success:false, multiple_banks:true, banks:[…] }` | Open admin/customer picker modal; on pick, retry with `selected_bank_id` |
+
+New body schema: `{ customer_id: number, selected_bank_id?: string }` — bank fields are no longer accepted from the caller. Pre-link gate (`subaccount_missing` / `api_keys_missing`) preserved verbatim from v0.6.94.
+
+#### 3 — Customer-portal marquee + Sync button (`website/customer-portal.html`)
+- New `#noBankMarquee` element shown on the dashboard for any customer whose `bank_accounts` row is missing or has `bank_account_number IS NULL`. Red text, scrolling right-to-left, message: *"🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals."*
+- **Marquee uses the duplicate-content technique**: two `<span class="bw-marquee-copy">` copies inside the track, animated `translateX(0) → translateX(-50%)` over 40s `linear infinite`. This means the message is **visible at the left edge from frame 1** (no off-screen lead-in) and loops seamlessly. Earlier attempt with `padding-left:100%` + `translateX(100%) → translateX(-100%)` had a ~10s entry delay before the text first appeared, which was unacceptable for an "important" alert.
+- Settings → Bank card: when bank is missing, shows "⚠️ No linked bank account" panel with `#retryBankSyncBtn` calling `syncBankFromValr()`. When bank present, shows table + "🔄 Re-sync from VALR" button.
+- Withdrawal page no-bank message updated: *"…please link your bank inside your VALR account, then go to Settings and click Re-try Bank Account Sync."*
+- New JS: `syncBankFromValr(selectedBankId?)`, `openBankPicker(banks)`, `closeBankPicker()`, `showBankSyncMsg(msg, type)`. Picker modal `#bankPickerModal` lives just after the bank card.
+
+#### 4 — Admin UI Banking tab: pulled-fields read-only (`ui/Advanced BTC DCA Strategy.html`)
+- Modern editor Banking tab: `bank_name`, `bank_account_holder`, `bank_account_number`, `bank_branch_code` converted to `data-readonly` displays (populated via `cmSetReadOnly()`); only `bank_account_type` remains editable as a `name=` select.
+- `cmFillEditor()` updated: explicit per-field calls instead of the old `CM_BANK_FIELDS.forEach(cmSetField)` loop, which silently failed for the four read-only fields.
+- `CM_BANK_FIELDS` constant reduced to `['bank_account_type']`.
+- `cmUpdateCustomer()` only updates `bank_account_type` on an existing `bank_accounts` row; **no insert path** — a row only comes into existence via either `ef_link_bank_account` (VALR sync) or a customer-uploaded bank-confirmation letter.
+- Legacy `fEdit` form: bank inputs (`bank_name`, `bank_account_holder`, `bank_account_number`, `bank_branch_code`) removed. Only the `bank_account_type` select remains, with explanatory note above. Legacy populate (`cmEditSelect` change handler) reduced to the single field.
+- "Sync Bank from VALR" handler rewritten as `cmSyncBankFromValr(selectedBankId?)`:
+  - Calls EF with `{ customer_id }` (or `{ customer_id, selected_bank_id }` on retry).
+  - Handles `no_banks` → amber warning; `multiple_banks` → opens new `cmOpenBankPicker(banks, onPick)` modal; success → green alert + `cmFetchFullProfile()` refresh + pin Banking tab.
+  - **Robust EF-error extraction**: `supabase-js` v2's `FunctionsHttpError` exposes the underlying `Response` at `linkErr.context` (not `linkErr.context.response`). The handler now reads `.text()` off the cloned Response and parses `{ error, gate }` so the admin sees the actual reason (e.g. *"VALR subaccount has not been set up for this customer yet… (gate: subaccount_missing)"*) instead of the generic *"Edge Function returned a non-2xx status code"*.
+- New picker modal `#cmBankPickerModal` is created on demand (lazy) to keep the static markup small.
+
+#### 5 — KYC upload page: bank inputs removed (`website/upload-kyc.html`)
+- Tab 3 renamed *"Bank Confirmation Letter"* (was *"Banking Information"*).
+- Removed all five bank input fields and their validators. Submit payload now contains only `customer_id`, `org_id`, `bank_confirmation_url`, `bank_confirmation_file_path`, `bank_confirmation_uploaded_at`, `is_primary`, `status`.
+- Page subtitle updated to reflect that only the bank confirmation letter is captured here.
+
+#### 6 — Customer 9 (BitWealth omnibus): `subaccount` → `api` model migration
+**Symptom.** Customer 9 (Davin Harald Gaier — the omnibus master account) was on `account_model='subaccount'` but had no `subaccount_id`, no `api_key_vault_id`, and no `bank_account_id`. `Sync Bank from VALR` therefore failed with `gate: subaccount_missing` even though the Main VALR account has a Nedbank linked.
+
+**Root cause.** The omnibus account is the master account whose API key/secret live in environment variables (`VALR_API_KEY` / `VALR_API_SECRET`); it is fundamentally an *API*-model entity, not a subaccount of itself.
+
+**Fix (one-shot helper EF, deleted after use):**
+1. `UPDATE public.customer_details SET account_model='api' WHERE customer_id=9`.
+2. New temporary edge function `ef_install_omnibus_keys` (deployed `--no-verify-jwt`, deleted after running) reads `VALR_API_KEY` / `VALR_API_SECRET` from its env, validates them via a live `GET /v1/account/balances` probe, then calls the existing `lth_pvr.store_customer_valr_api_keys(...)` SECURITY DEFINER RPC to install the secrets into Supabase Vault and link them to customer 9's `exchange_accounts` row.
+3. Verified: `api_key_vault_id`, `api_secret_vault_id`, `api_key_label='BitWealth Omnibus'`, `api_key_verified_at`, and all four `api_key_has_*` flags now populated on customer 9's exchange account.
+
+This pattern (install env-var keys into vault for the omnibus customer) is reusable if VALR keys are ever rotated; redeploy `ef_install_omnibus_keys`, invoke once, delete.
+
+#### Files changed
+- **Migrations:** `bank_accounts_optional_for_valr_pull`
+- **Edge functions:** [supabase/functions/ef_link_bank_account/index.ts](supabase/functions/ef_link_bank_account/index.ts) (rewritten), [supabase/functions/ef_install_omnibus_keys/index.ts](supabase/functions/ef_install_omnibus_keys/index.ts) (one-shot, since deleted)
+- **UI:** [website/customer-portal.html](website/customer-portal.html), [website/upload-kyc.html](website/upload-kyc.html), [ui/Advanced BTC DCA Strategy.html](ui/Advanced BTC DCA Strategy.html)
+- **Docs:** [docs/SDD_v0.6.md](docs/SDD_v0.6.md) — this entry
+
+#### Verification (production, 2026-04-27)
+- Customer #9 → admin editor → Banking → Sync Bank from VALR → returns the Nedbank record (`account_holder='Davin Harald Gaier'`, `account_number='1204637148'`, branch `198765`).
+- Customer #49 (API model, no banks linked on VALR yet) → Sync → amber warning *"No bank accounts are linked on this customer's VALR account yet…"* (HTTP 200 from EF, expected).
+- Customer #999 (no portal access yet, but row exists with no bank) → marquee renders on dashboard load and is readable from the first frame.
+- KYC upload page Tab 3 no longer asks for bank fields; submission writes only the confirmation letter.
+
+---
 
 ### v0.6.95 – Cost Basis chart redesign + DB-side benchmark audit + admin-impersonation login passthrough fix
 **Date:** 2026-04-26

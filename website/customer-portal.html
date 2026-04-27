@@ -126,11 +126,14 @@
                     <!-- No-Bank-Linked Marquee (shown only when bank is missing) -->
                     <div id="noBankMarquee" style="display:none; overflow:hidden; background:#fff5f5; border:1px solid #fecaca; border-radius:8px; padding:10px 0; margin-bottom:20px;">
                         <style>
-                            @keyframes bw-marquee { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
-                            #noBankMarquee .bw-marquee-track { display:inline-block; white-space:nowrap; padding-left:100%; animation: bw-marquee 50s linear infinite; color:#dc2626; font-weight:700; font-size:15px; letter-spacing:0.3px; }
+                            /* Duplicate-content marquee: text starts visible at the left edge
+                               immediately and scrolls -50% (one copy width) for seamless looping. */
+                            @keyframes bw-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+                            #noBankMarquee .bw-marquee-track { display:inline-block; white-space:nowrap; animation: bw-marquee 40s linear infinite; color:#dc2626; font-weight:700; font-size:15px; letter-spacing:0.3px; }
+                            #noBankMarquee .bw-marquee-copy { display:inline-block; padding-right:60px; }
                         </style>
                         <div class="bw-marquee-track">
-                            🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.       🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.
+                            <span class="bw-marquee-copy">🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.</span><span class="bw-marquee-copy">🚨 IMPORTANT! Please link your bank account inside your VALR account so that BitWealth can sync it for ZAR deposits and withdrawals.</span>
                         </div>
                     </div>
 
