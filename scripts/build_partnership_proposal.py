@@ -115,9 +115,10 @@ doc.add_paragraph()
 add_heading("1. Purpose of This Document", level=1)
 add_para(
     "This document sets out a proposed two-phase structure for a partnership between BitWealth "
-    "(Pty) Ltd, RocketX, and Simon [Surname]. The structure is designed to enable BitWealth to "
-    "go to market immediately under RocketX's regulatory cover, while creating a clear path "
-    "toward a permanent equity arrangement that aligns the long-term interests of all parties."
+    "(Pty) Ltd, RocketX, and Simon [Surname]. Phase 1 is a formal Juristic Representative "
+    "appointment under RocketX's FSP licence, running for an initial 12 months and renewable "
+    "annually. Phase 2 — a permanent equity structure — is optional and only commences if and "
+    "when all parties mutually agree to it."
 )
 add_para(
     "All numbers, percentages, and terms in this document are starting positions for discussion. "
@@ -143,42 +144,75 @@ add_table(
 )
 
 # ============ 3. PHASE 1 ============
-add_heading("3. Phase 1 — Joint Representative (JR) Arrangement", level=1)
+add_heading("3. Phase 1 — Juristic Representative (JR) Appointment", level=1)
 add_para(
-    "The JR arrangement is the bridge that allows BitWealth to begin onboarding clients legally "
-    "while equity negotiations are concluded in parallel. This phase is intended to last "
-    "3 to 6 months."
+    "BitWealth (Pty) Ltd is appointed as a Juristic Representative of RocketX in terms of "
+    "section 13 of the Financial Advisory and Intermediary Services Act (FAIS). This is a "
+    "formal, FSCA-registered appointment — not an informal commercial arrangement — that "
+    "allows BitWealth to render financial services to clients under RocketX's FSP licence "
+    "from day one. The appointment runs for an initial 12-month term and renews automatically "
+    "on each anniversary unless either party gives 90 days' written notice of non-renewal."
+)
+add_para(
+    "Phase 1 stands on its own. It is not a trial period that must convert into equity — it "
+    "is a complete, sustainable operating model in its own right. Phase 2 (equity) is a "
+    "separate, optional decision that requires the mutual agreement of all parties.",
+    italic=True, color=GREY
 )
 
 add_heading("3.1 Proposed JR Terms", level=2)
 add_table(
     headers=["Term", "Proposed Position"],
     rows=[
-        ["Effective date", "Upon RocketX CASP licence finalisation (~mid-May 2026)"],
-        ["Duration", "3 to 6 months, automatically converting to the equity structure once the SHA is signed"],
-        ["Revenue share to RocketX", "30% of gross revenue (performance fees + platform fees)"],
-        ["Compliance services included", "Yes — full compliance administration, KI supervision, regulatory reporting"],
-        ["BitWealth client ownership", "BitWealth retains all client relationships and data; clients sign mandates with BitWealth as the appointed Representative of RocketX"],
-        ["Termination", "Either party may terminate on 60 days' notice; BitWealth retains client portability subject to clients' consent"],
-        ["Credit toward equity", "JR fees paid during this phase to be credited (in part or in full) against RocketX's equity subscription price — to be negotiated"],
+        ["Legal basis", "Juristic Representative appointment under section 13 of FAIS, registered with the FSCA"],
+        ["Effective date", "Upon (a) execution of the JR Agreement and (b) FSCA approval of BitWealth as a JR under RocketX's FSP licence"],
+        ["Initial term", "12 months from the Effective Date"],
+        ["Renewal", "Automatic renewal for further 12-month periods unless either party gives 90 days' written notice of non-renewal before the renewal date"],
+        ["Fee-sharing (FAIS s.13)", "40% BitWealth / 30% RocketX / 30% Simon of net management and performance fees, after platform/exchange costs"],
+        ["Compliance services included", "Full FAIS compliance administration, KI supervision, regulatory reporting, FICA/AML programme, complaints handling, record-keeping under the FSP"],
+        ["Key Individual", "Assigned KI nominated by RocketX (or mutually agreed) with documented capacity and supervision plan for the LTH PVR strategy"],
+        ["PI insurance", "Either extended under RocketX's existing professional indemnity cover, or BitWealth carries its own policy meeting the FSP's minimum requirements — to be agreed"],
+        ["Client relationship", "Client mandates are with BitWealth (as JR), supervised by RocketX (as FSP). Client relationship and data ownership remain with BitWealth."],
+        ["Client portability", "On termination of the JR appointment, BitWealth retains the right to transfer client mandates to an alternative FSP (or its own FSP) subject to client consent and FAIS notification rules"],
+        ["Right to seek alternative FSP", "BitWealth may, at any time, apply for its own FSP licence or negotiate appointment under another FSP. RocketX shall not unreasonably impede such efforts."],
+        ["Conflicts of interest", "Documented conflicts-of-interest management plan, including disclosure to clients of the JR/FSP fee-share and any RocketX equity interests"],
+        ["Early termination triggers", "Material breach (with cure period), regulatory action against either party, insolvency, loss of FSP licence, mutual written consent"],
+        ["Phase 2 trigger", "Phase 2 (equity) commences only on the mutual written agreement of all parties. Discussions to be initiated 90 days before any renewal date."],
+        ["Effect of Phase 2", "On the SHA Effective Date, the JR Agreement is superseded by intra-group operating arrangements. The JR appointment with the FSCA continues uninterrupted."],
     ],
     col_widths=[5, 11.5]
 )
 
-add_heading("3.2 Why 30%?", level=2)
+add_heading("3.2 FSCA Appointment Process", level=2)
 add_para(
-    "Industry-typical JR/sub-FSP arrangements in South Africa range from 20% to 40% of gross "
-    "revenue. 30% sits in the middle and reflects the value of a fully outsourced compliance "
-    "function plus the regulatory licence itself. A lower percentage may be defensible if "
-    "BitWealth handles its own compliance operations (e.g. record keeping, FICA), with RocketX "
-    "providing only the licence umbrella and KI oversight."
+    "Appointment of BitWealth (Pty) Ltd as a JR requires RocketX to lodge the appointment "
+    "with the FSCA. BitWealth must satisfy the fit-and-proper requirements applicable to a "
+    "juristic representative:"
+)
+add_bullet("Honesty, integrity and good standing declarations from all directors")
+add_bullet("Operational ability — documented systems, processes and controls (largely already in place)")
+add_bullet("Financial soundness — solvency and liquidity demonstrated")
+add_bullet("Confirmation that RocketX's FSP categories (and, if applicable, CASP authorisation) cover the LTH PVR strategy")
+add_bullet("Indicative timeline: 30–60 days from lodgement to FSCA approval")
+
+add_heading("3.3 Why 30% / 30% / 40%?", level=2)
+add_para(
+    "Industry-typical JR/FSP fee-sharing arrangements in South Africa range from 20% to 40% "
+    "to the FSP. 30% sits in the middle and reflects the value of a fully outsourced "
+    "compliance function plus the regulatory licence itself. The matching 30% to Simon "
+    "compensates the distribution role on equal footing during Phase 1, when no party yet "
+    "holds equity. BitWealth retains 40% to fund ongoing technology development, infrastructure "
+    "and operations."
 )
 
 # ============ 4. PHASE 2 ============
-add_heading("4. Phase 2 — Permanent Equity Structure", level=1)
+add_heading("4. Phase 2 — Permanent Equity Structure (Optional)", level=1)
 add_para(
-    "Once equity terms are agreed, the JR fee converts into shareholder economics. BitWealth "
-    "becomes a jointly-owned operating company. Three illustrative options are set out below."
+    "Phase 2 commences only if and when all parties mutually agree to convert the JR "
+    "relationship into a permanent shareholding. It is not automatic and is not a precondition "
+    "of Phase 1. If Phase 2 is agreed, the JR fee-share falls away and is replaced by "
+    "intra-group operating arrangements; BitWealth (Pty) Ltd becomes a jointly-owned operating "
+    "company. Three illustrative options are set out below."
 )
 
 add_heading("4.1 Founder Non-Negotiables", level=2)
@@ -336,7 +370,10 @@ add_table(
 )
 add_para(
     "Anchor the negotiation at R 2.5m and accept anywhere down to R 1.8m. Anything below that "
-    "undervalues the IP, the regulatory groundwork already done, and the operational platform.",
+    "undervalues the IP, the regulatory groundwork already done, and the operational platform. "
+    "A successful 12-month JR period strengthens this valuation materially at Phase 2 — proven "
+    "revenue, operational track record and a clean regulatory record all support the upper end "
+    "of the range.",
     bold=True
 )
 
@@ -361,12 +398,19 @@ add_bullet("Will RocketX want a board seat? Voting or observer?")
 add_bullet("Beyond the licence, what active role does the CEO see RocketX playing — strategic guidance, introductions, infrastructure sharing?")
 add_bullet("Will RocketX provide the Key Individual on a permanent basis, or only during the JR phase?")
 
-add_heading("6.4 JR-to-Equity Transition", level=2)
-add_bullet("Should the JR revenue share paid during Phase 1 be credited against RocketX's equity subscription price?")
-add_bullet("What is the trigger to move from Phase 1 to Phase 2 — date, AUM milestone, or licence approval?")
-add_bullet("Once in Phase 2, does the JR fee fall away entirely, or is there a residual licence-fee component?")
+add_heading("6.4 JR Operations and Renewal", level=2)
+add_bullet("Does RocketX's current FSP licence have the right categories (and CASP authorisation, if applicable) to host BitWealth as JR for the LTH PVR strategy?")
+add_bullet("Who would you propose as the assigned KI, and what is their documented capacity for ongoing supervision of this strategy?")
+add_bullet("What are RocketX's JR onboarding fees and ongoing supervision fees, if any?")
+add_bullet("What is your preferred PI insurance arrangement — extension of RocketX's policy, or BitWealth carries its own?")
+add_bullet("What is the formal renewal/non-renewal process and notice mechanism?")
 
-add_heading("6.5 Exit and Protections", level=2)
+add_heading("6.5 JR-to-Equity Transition (Phase 2)", level=2)
+add_bullet("What is the trigger to open Phase 2 discussions — we propose 90 days before each annual renewal date?")
+add_bullet("On Phase 2 effective date, the JR fee-share falls away and is replaced by intra-group operating arrangements — agreed in principle?")
+add_bullet("Are there any RocketX board or shareholder constraints around taking equity in a JR's underlying IP company?")
+
+add_heading("6.6 Exit and Protections", level=2)
 add_bullet("Will RocketX accept reverse vesting (i.e. equity vests over 3 years; unvested shares forfeited if RocketX exits early)?")
 add_bullet("Tag-along, drag-along, and ROFR clauses — acceptable in principle?")
 add_bullet("Founder veto rights on changes to strategy, capital structure, or sale of business — acceptable?")
@@ -377,11 +421,12 @@ add_table(
     headers=["#", "Action", "Owner", "Timing"],
     rows=[
         ["1", "Sign IP Assignment Agreement transferring all LTH PVR IP from Founder to BitWealth (Pty) Ltd", "Founder + Attorney", "Before any partnership discussion"],
-        ["2", "Execute JR Agreement with RocketX (Phase 1)", "All parties + Attorney", "On RocketX CASP licence finalisation"],
-        ["3", "Begin onboarding clients under JR cover", "BitWealth", "Immediately after JR signing"],
-        ["4", "Negotiate and sign Shareholders Agreement (SHA) — Phase 2", "All parties + Attorney", "Within 3–6 months of JR start"],
-        ["5", "Convert from JR to permanent equity structure; JR fees fall away", "All parties", "On SHA effective date"],
-        ["6", "Submit own FSP licence application (continuing in parallel)", "Founder + Compliance Officer", "Within 6 months"],
+        ["2", "Execute JR Agreement; RocketX lodges JR appointment with FSCA", "All parties + Attorney", "On agreement of terms"],
+        ["3", "KI onboarding, PI insurance arrangement, client mandate templates approved by KI", "RocketX KI + BitWealth", "In parallel with FSCA approval (30–60 days)"],
+        ["4", "Phase 1 go-live: begin onboarding clients under JR appointment", "BitWealth + Simon", "Immediately on FSCA approval"],
+        ["5", "Operate Year 1 as JR; review performance, AUM, regulatory record", "All parties", "Months 1–9 of JR term"],
+        ["6", "Phase 2 window opens: mutually decide to (a) renew JR for Year 2, (b) sign SHA and supersede JR, or (c) part ways at renewal", "All parties + Attorney", "90 days before JR renewal date"],
+        ["7", "Submit own FSP licence application (running in parallel as continuity option)", "Founder + Compliance Officer", "Within 12 months"],
     ],
     col_widths=[1, 8, 4, 4]
 )
@@ -391,12 +436,15 @@ add_heading("8. Key Risks to Manage", level=1)
 add_table(
     headers=["Risk", "Mitigant"],
     rows=[
-        ["Founder loses control through dilution", "Cap RocketX + Simon combined at <50% in initial round; require shareholder supermajority for further dilution"],
-        ["RocketX uses leverage (licence dependency) to renegotiate", "Time-bound JR agreement with credit toward equity; pursue own FSP licence in parallel as exit option"],
-        ["Simon underdelivers on distribution", "Vesting schedule with performance milestones; reverse vesting if AUM targets missed"],
+        ["Founder loses control through dilution at Phase 2", "Cap RocketX + Simon combined at <50% in initial round; supermajority required for further dilution"],
+        ["RocketX uses JR-licence dependency as leverage at renewal", "Explicit right in JR Agreement for BitWealth to apply for its own FSP or move to another FSP; pursue own FSP licence in parallel from Year 1"],
+        ["FSCA delays in approving the JR appointment", "Lodge appointment immediately after signing; agree interim arrangements; allow 30–60 day window in go-live planning"],
+        ["Assigned KI lacks capacity to supervise the strategy properly", "Document KI capacity and supervision plan in the JR Agreement; named KI with stated hours allocated"],
+        ["Non-renewal of JR by RocketX (single-point-of-failure)", "90-day notice period; client-portability clause; BitWealth's own FSP application running in parallel"],
+        ["Conflicts of interest between FSP fee-share and client interests", "Documented COI management plan; full client disclosure of fee-share and any equity interests"],
+        ["Simon underdelivers on distribution", "At Phase 2: vesting schedule with performance milestones; reverse vesting if AUM targets missed"],
         ["IP disputes if Founder exits", "All IP assigned to BitWealth (Pty) Ltd before any equity is issued"],
-        ["Disagreement on operational direction", "Founder retains CEO role; clear decision rights in SHA; deadlock resolution mechanism"],
-        ["Client portability if partnership ends", "Client mandates explicitly with BitWealth, not RocketX; written portability clause in JR"],
+        ["Client portability if JR ends", "Client mandates explicitly with BitWealth as JR; written portability clause; clients informed of the JR/FSP structure on onboarding"],
     ],
     col_widths=[6, 10.5]
 )
