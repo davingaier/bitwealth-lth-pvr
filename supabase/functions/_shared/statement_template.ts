@@ -195,7 +195,7 @@ export function renderStatementHtml(d: StatementData): string {
 <meta charset="utf-8" />
 <title>BitWealth Statement — ${e(d.customer_name)} — ${e(d.period_label)}</title>
 <style>
-  @page { size: A4; margin: 18mm 16mm 22mm 16mm; }
+  @page { size: A4; margin: 11mm 16mm 22mm 16mm; }
   :root {
     --navy: ${navy};
     --gold: ${gold};
@@ -221,7 +221,7 @@ export function renderStatementHtml(d: StatementData): string {
 
   header.brand { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 2px solid var(--navy); }
   header.brand .logo { display: flex; align-items: center; gap: 12px; }
-  header.brand .logo img { height: 44px; width: auto; }
+  header.brand .logo img { height: 72px; width: auto; display: block; }
   header.brand .meta { text-align: right; font-size: 9.5pt; }
   header.brand .meta .title { font-size: 13pt; font-weight: 700; color: var(--navy); }
   header.brand .meta .row { margin-top: 2px; }
@@ -238,6 +238,18 @@ export function renderStatementHtml(d: StatementData): string {
   .neg { color: var(--red); }
 
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* Avoid awkward page splits inside cards, fee blocks, the spark line and any
+     of the data tables. Browsers will move the entire block to the next page
+     instead of cutting it in half. */
+  table, .kpi, .fee-block, .spark, .outperf, .disclaim {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  table tr, table thead, table tfoot { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  h2.section { page-break-after: avoid; break-after: avoid; }
 
   table { width: 100%; border-collapse: collapse; font-size: 10pt; }
   table.kv td { padding: 4px 0; vertical-align: top; }

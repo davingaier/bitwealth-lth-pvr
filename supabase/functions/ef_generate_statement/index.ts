@@ -63,13 +63,20 @@ const fmtBtc = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 }) + " ₿";
 const fmtPct = (n: number, signed = true) => {
   if (!isFinite(n)) return "—";
+  // When inception NAV is tiny (e.g. first day after deposit), CAGR can explode
+  // into the millions or billions of percent and produce scientific notation.
+  // Cap the displayed value so the statement stays legible; the underlying number
+  // is logged and the cap (±999.99 %) is loud enough to flag review.
+  if (Math.abs(n) > 9999.99) return n > 0 ? "> +999.99 %" : "< -999.99 %";
   const sign = signed && n > 0 ? "+ " : n < 0 ? "– " : "";
   return `${sign}${Math.abs(n).toFixed(2)} %`;
 };
 const fmtPp = (n: number) => {
+  // Render percentage-point differences as "%" too — most readers don't know what "pp" means.
   if (!isFinite(n)) return "—";
+  if (Math.abs(n) > 9999.99) return n > 0 ? "> +999.99 %" : "< -999.99 %";
   const sign = n > 0 ? "+ " : n < 0 ? "– " : "";
-  return `${sign}${Math.abs(n).toFixed(2)} pp`;
+  return `${sign}${Math.abs(n).toFixed(2)} %`;
 };
 const fmtDateLong = (iso: string) => {
   const d = new Date(iso + (iso.length === 10 ? "T00:00:00Z" : ""));
@@ -89,16 +96,29 @@ async function htmlToPdf(html: string): Promise<Uint8Array> {
     throw new Error("BROWSERLESS_TOKEN env var is not set");
   }
   const url = `${BROWSERLESS_BASE.replace(/\/$/, "")}/pdf?token=${encodeURIComponent(BROWSERLESS_TOKEN)}`;
+  // Footer template injected by Chrome. Uses the special <span class="pageNumber">
+  // and <span class="totalPages"> placeholders. Inline styles are required because
+  // header/footer templates run in an isolated context with no shared CSS.
+  const footerTemplate = `
+    <div style="width:100%; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:8pt; color:#6b7280; padding:0 16mm; display:flex; justify-content:space-between; align-items:center;">
+      <span>BitWealth (Pty) Ltd · bitwealth.co.za</span>
+      <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+    </div>`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       html,
+      // Browserless margins (top/right/bottom/left). The bottom margin reserves
+      // room for the page-number footer; the @page rule in the template is
+      // ignored when displayHeaderFooter is enabled.
       options: {
         format: "A4",
         printBackground: true,
-        preferCSSPageSize: true,
-        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+        displayHeaderFooter: true,
+        headerTemplate: "<span></span>",
+        footerTemplate,
+        margin: { top: "11mm", bottom: "16mm", left: "0", right: "0" },
       },
       gotoOptions: { waitUntil: "networkidle0", timeout: 25000 },
     }),
