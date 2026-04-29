@@ -114,6 +114,29 @@
             color: var(--gold);
         }
 
+        /* Password reveal toggle */
+        .pw-toggle {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            background: none;
+            border: none;
+            border-radius: 6px;
+            color: #6b7280;
+            cursor: pointer;
+            transition: color 0.15s ease, background 0.15s ease;
+        }
+        .pw-toggle:hover { color: #032C48; background: #f3f4f6; }
+        .pw-toggle:focus-visible { outline: 2px solid var(--gold, #C9A04A); outline-offset: 1px; }
+        .pw-toggle svg { display: block; }
+
         /* ───── Legal modal ───── */
         .legal-modal-backdrop {
             position: fixed; inset: 0;
@@ -193,8 +216,8 @@
                     <label for="password">Password *</label>
                     <div style="position: relative;">
                         <input type="password" id="password" name="password" required style="padding-right: 40px;">
-                        <button type="button" onclick="togglePassword('password', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #666;" title="Show/Hide Password">
-                            👁️
+                        <button type="button" onclick="togglePassword('password', this)" class="pw-toggle" aria-label="Show password" aria-pressed="false" title="Show password">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
                 </div>
@@ -203,8 +226,8 @@
                     <label for="confirmPassword">Confirm Password *</label>
                     <div style="position: relative;">
                         <input type="password" id="confirmPassword" name="confirmPassword" required style="padding-right: 40px;">
-                        <button type="button" onclick="togglePassword('confirmPassword', this)" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 18px; color: #666;" title="Show/Hide Password">
-                            👁️
+                        <button type="button" onclick="togglePassword('confirmPassword', this)" class="pw-toggle" aria-label="Show password" aria-pressed="false" title="Show password">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
                 </div>
@@ -318,15 +341,23 @@
             if (e.key === 'Escape') closeLegalModal();
         });
 
-        // Toggle password visibility
+        // Toggle password visibility (Heroicons outline)
+        const PW_ICON_EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.25 12s3.75-7.5 9.75-7.5 9.75 7.5 9.75 7.5-3.75 7.5-9.75 7.5S2.25 12 2.25 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+        const PW_ICON_EYE_SLASH = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.243 4.243L9.88 9.88"/></svg>';
         function togglePassword(inputId, button) {
             const input = document.getElementById(inputId);
             if (input.type === 'password') {
                 input.type = 'text';
-                button.innerHTML = '👁️‍🗨️'; // eye with slash
+                button.innerHTML = PW_ICON_EYE_SLASH;
+                button.setAttribute('aria-label', 'Hide password');
+                button.setAttribute('aria-pressed', 'true');
+                button.setAttribute('title', 'Hide password');
             } else {
                 input.type = 'password';
-                button.innerHTML = '👁️'; // eye
+                button.innerHTML = PW_ICON_EYE;
+                button.setAttribute('aria-label', 'Show password');
+                button.setAttribute('aria-pressed', 'false');
+                button.setAttribute('title', 'Show password');
             }
         }
         
