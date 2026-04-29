@@ -9,7 +9,7 @@ import { sendHTMLEmail } from "../_shared/smtp.ts";
 const SB_URL  = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
 const SB_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SB_SR   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ADMIN_EMAIL  = Deno.env.get("SUPPORT_ADMIN_EMAIL") ?? "info@bitwealth.co.za";
+const ADMIN_EMAIL  = Deno.env.get("SUPPORT_ADMIN_EMAIL") ?? "support@bitwealth.co.za";
 const FROM_EMAIL   = Deno.env.get("SUPPORT_FROM_EMAIL")  ?? "support@bitwealth.co.za";
 const PORTAL_URL   = Deno.env.get("PORTAL_URL")          ?? "https://www.bitwealth.co.za/customer-portal.html";
 const ADMIN_URL    = Deno.env.get("ADMIN_URL")           ?? "https://www.bitwealth.co.za/admin/Advanced%20BTC%20DCA%20Strategy.html";

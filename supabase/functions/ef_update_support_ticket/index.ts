@@ -53,7 +53,7 @@ serve(async (req) => {
     // Verify caller is admin in every ticket's org
     const { data: tickets, error: tErr } = await sb
       .from("support_tickets")
-      .select("ticket_id, ticket_number, org_id, customer_id, subject")
+      .select("ticket_id, ticket_number, org_id, customer_id, subject, status")
       .in("ticket_id", ticket_ids);
     if (tErr) throw tErr;
     if (!tickets || tickets.length === 0) return new Response(JSON.stringify({ error: "No tickets found" }), { status: 404, headers: CORS });
@@ -64,13 +64,20 @@ serve(async (req) => {
     const allowed   = tickets.filter(t => adminOrgs.has(t.org_id));
     if (allowed.length === 0) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: CORS });
 
+    // Tickets whose status would actually change. Used to suppress duplicate
+    // "Status: resolved" emails when admins bulk-mark already-resolved tickets.
+    const statusChanged = status
+      ? allowed.filter(t => t.status !== status)
+      : allowed;
+
     const allowedIds = allowed.map(t => t.ticket_id);
     const { error: uErr } = await sb.from("support_tickets").update(updates).in("ticket_id", allowedIds);
     if (uErr) throw uErr;
 
-    // Optional system message (audit) when status changes
-    if (status) {
-      const sysRows = allowed.map(t => ({
+    // Optional system message (audit) when status changes — only for tickets
+    // whose status actually transitioned.
+    if (status && statusChanged.length > 0) {
+      const sysRows = statusChanged.map(t => ({
         ticket_id:  t.ticket_id,
         author_id:  user.id,
         author_role:"system",
@@ -80,9 +87,10 @@ serve(async (req) => {
       await sb.from("support_ticket_messages").insert(sysRows);
     }
 
-    // Optional customer notification on status change
+    // Optional customer notification on status change — skip tickets that were
+    // already in the requested status to avoid duplicate emails.
     if (notify_customer && status) {
-      for (const t of allowed) {
+      for (const t of statusChanged) {
         const { data: cd } = await sb.from("customer_details")
           .select("first_names, last_name, email, email_address")
           .eq("customer_id", t.customer_id).maybeSingle();
@@ -95,7 +103,12 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, updated: allowedIds.length, skipped: tickets.length - allowedIds.length }), { status: 200, headers: CORS });
+    return new Response(JSON.stringify({
+      success: true,
+      updated: allowedIds.length,
+      skipped: tickets.length - allowedIds.length,
+      notified: (notify_customer && status) ? statusChanged.length : 0,
+    }), { status: 200, headers: CORS });
 
   } catch (e) {
     console.error("ef_update_support_ticket error:", e);
