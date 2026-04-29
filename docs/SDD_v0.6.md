@@ -3,11 +3,50 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-27 (v0.6.97)
+**Last updated:** 2026-04-29 (v0.6.98)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.98 – Monthly statement PDF redesign (HTML + Browserless)
+**Date:** 2026-04-29
+**Purpose:** Replace the broken jsPDF-based monthly statement (missing logo, overlapping columns, hard-coded $0.00 fee rows, `cagr` computed from month-open NAV instead of inception NAV, references to non-existent columns `balances_daily.btc_price` / `contrib_gross_cum`, missing `org_id` filter on two queries) with a polished HTML template rendered to A4 PDF via Browserless.
+
+**Status:** ✅ COMPLETE (code), ⏳ PENDING (deploy + smoke test).
+
+#### 1 — DB: idempotency table + brand bucket (`20260429_statement_redesign.sql`)
+- New table `lth_pvr.statements_sent (statement_id, org_id, customer_id, statement_month DATE, storage_path, filename, download_url, pdf_bytes, generated_at, emailed_at, generator_version)` with `UNIQUE(org_id, customer_id, statement_month)`. Lets `ef_monthly_statement_generator` skip customers who already have a statement for the period and re-attempt only the email step on prior failures.
+- New public storage bucket `branding` (RLS: read=public, write=authenticated/service-role). Holds the SVG/PNG logos referenced by all email + statement templates from a single canonical URL — change the file once, every future render uses it.
+- New RPC `lth_pvr.statement_already_generated(p_org_id, p_customer_id, p_statement_month) RETURNS BOOLEAN`.
+
+#### 2 — `_shared/branding.ts` and `_shared/statement_template.ts`
+Single source of truth for brand colours (navy `#032C48`, gold `#C9A04A`), legal name, support email, and logo URLs. The template module exports `renderStatementHtml(StatementData)` — a self-contained HTML+CSS document with `@page A4` margins, a 4-card KPI strip, 2-column performance summary, optional 30-day spark line (inline SVG, no JS chart library), Mockup-B fee blocks (separate "Deducted this period" and amber-tinted "Accrued (paid annually)" cards), benchmark comparison vs Standard DCA, transaction table with type tags, and a strategy-details footer. No external template engine — mustache-style `{{var}}` substitution implemented inline.
+
+#### 3 — `ef_generate_statement` v2 (full rewrite)
+HTML+Browserless instead of jsPDF. New behaviour:
+- **POST body:** `{ customer_id, year, month, force? }`. **Query:** `?preview=html` returns the rendered HTML (no PDF, no DB write) — used for in-browser previewing.
+- **CAGR fix:** uses the customer's **inception NAV** (first `balances_daily` row at-or-after `customer_strategies.created_at`) and `(periodEnd − inceptionAnchor) / 365.25` years, replacing the previous bug that compounded a single-month return for one full year.
+- **Cost basis fix:** cumulative net contributions to date computed from `ledger_lines` (`deposit + topup − withdrawal`), no longer references the non-existent `contrib_gross_cum` column.
+- **BTC price:** sourced from `lth_pvr.ci_bands_daily.btc_price` (matching `ef_monthly_statement_generator`), no longer references the non-existent `balances_daily.btc_price` column.
+- **Fee classification (Mockup B):** branches on `customer_strategies.{platform_fee_schedule, performance_fee_schedule}`. `immediate` → "Deducted this period" card. `annual` → "Accrued (paid annually)" card with a YTD running total pulled from `lth_pvr.annual_fee_accrual` (latest unsettled row) and a next-billing-date set to the next anniversary of `created_at`.
+- **`org_id` filter** added to every query (was missing on two ledger queries previously).
+- **Idempotency:** writes/upserts a row in `statements_sent` with `onConflict: org_id,customer_id,statement_month`. With `force=true` the row is updated; without `force`, an existing row short-circuits and just returns the previously-signed URL.
+- **Storage:** uploads to `customer-statements/{ORG_ID}/customer-{id}/{YYYY-MM-DD}_{Last}_{First}_statement_M{MM}_{YYYY}.pdf`, signs for 30 days.
+
+#### 4 — `ef_monthly_statement_generator` (idempotency-aware)
+- Before calling `ef_generate_statement` for a customer, looks up `statements_sent` for the period; if `emailed_at IS NOT NULL` the customer is skipped (`results.skipped++`). If a row exists with `emailed_at IS NULL`, the email step is re-attempted without re-rendering.
+- After a successful `ef_send_email` call, stamps `statements_sent.emailed_at = now()` so subsequent monthly runs treat the customer as done.
+
+#### 5 — `ef_fee_monthly_close` (TODO closed; never sent to customers)
+- Replaces the `// TODO: Pull from customer_accumulated_fees` zeros with a real lookup against `lth_pvr.customer_accumulated_fees`, populating `platform_fees_accumulated_btc` / `platform_fees_accumulated_usdt` on each new `fee_invoices` row.
+- Header comment clarifies that this function produces **internal admin invoices** for BitWealth bookkeeping and is never sent to customers — customers receive the monthly statement which already itemises their fees. This had been a recurring source of confusion.
+
+#### 6 — Required env var and deploy artefacts
+- New Supabase secret: **`BROWSERLESS_TOKEN`** (Edge Functions environment). Optional: `BROWSERLESS_BASE` to override the default `https://chrome.browserless.io` (e.g. for the EU endpoint).
+- New PowerShell helper: [deploy-statement-redesign.ps1](deploy-statement-redesign.ps1) — applies the migration, uploads `logos/bitwealth_logo_*.svg|png` to the public `branding` bucket, deploys the three modified edge functions.
+
+---
 
 ### v0.6.97 – Bank capture fully retired (VALR-pull-only); customer-portal marquee; omnibus customer flipped to API model
 **Date:** 2026-04-27

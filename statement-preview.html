@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BitWealth Statement — Davin Gaier — 1 – 31 March 2026</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 22mm 16mm; }
+  :root {
+    --navy: #032C48;
+    --gold: #C9A04A;
+    --ink:   #1f2937;
+    --muted: #6b7280;
+    --line:  #e5e7eb;
+    --soft:  #f8fafc;
+    --green: #10b981;
+    --red:   #dc2626;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page { max-width: 178mm; margin: 0 auto; padding: 6mm 0; }
+
+  header.brand { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 2px solid var(--navy); }
+  header.brand .logo { display: flex; align-items: center; gap: 12px; }
+  header.brand .logo img { height: 44px; width: auto; }
+  header.brand .meta { text-align: right; font-size: 9.5pt; }
+  header.brand .meta .title { font-size: 13pt; font-weight: 700; color: var(--navy); }
+  header.brand .meta .row { margin-top: 2px; }
+  header.brand .meta .row span { color: var(--muted); margin-right: 4px; }
+
+  h2.section { font-size: 11pt; text-transform: uppercase; letter-spacing: 0.6px; color: var(--navy); margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .kpi  { background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .kpi .label { font-size: 8pt; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; }
+  .kpi .value { font-size: 14pt; font-weight: 700; color: var(--navy); margin-top: 4px; }
+  .kpi .sub   { font-size: 8.5pt; color: var(--muted); margin-top: 2px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  table.kv td { padding: 4px 0; vertical-align: top; }
+  table.kv td.k { color: var(--muted); }
+  table.kv td.v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+  table.kv tr.total td { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; color: var(--navy); }
+
+  table.tx { margin-top: 6px; }
+  table.tx th, table.tx td { padding: 6px 6px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
+  table.tx th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.tx td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.tx tfoot td { font-weight: 700; border-top: 2px solid var(--navy); border-bottom: none; padding-top: 8px; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8.5pt; font-weight: 600; }
+  .tag.deposit  { background: #dcfce7; color: #166534; }
+  .tag.buy      { background: #dbeafe; color: #1e40af; }
+  .tag.fee      { background: #fef3c7; color: #92400e; }
+  .tag.withdraw { background: #fee2e2; color: #991b1b; }
+
+  .fee-block { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: #fff; }
+  .fee-block + .fee-block { margin-top: 10px; }
+  .fee-block.accrued { border-color: var(--amber); background: #fffbeb; }
+  .fee-block h3 { margin: 0 0 6px; font-size: 10.5pt; color: var(--navy); }
+  .fee-block.accrued h3 { color: #92400e; }
+  .fee-block .next { margin-top: 8px; font-size: 9pt; color: var(--muted); }
+
+  table.bench { margin-top: 6px; }
+  table.bench th, table.bench td { padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
+  table.bench th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; }
+  table.bench td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .outperf { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #dcfce7; color: #166534; font-weight: 700; margin-top: 6px; }
+  .outperf.neg { background: #fee2e2; color: #991b1b; }
+
+  .spark { margin-top: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .spark .legend { display: flex; gap: 14px; font-size: 8.5pt; color: var(--muted); margin-top: 4px; }
+  .spark .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+  footer.foot { margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 8pt; color: var(--muted); display: flex; justify-content: space-between; }
+
+  .disclaim { margin-top: 12px; font-size: 8pt; color: var(--muted); line-height: 1.5; border-left: 3px solid var(--line); padding-left: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="brand">
+    <div class="logo">
+      <img src="https://wqnmxpooabmedvtackji.supabase.co/storage/v1/object/public/branding/bitwealth_logo_transparent.svg" alt="BitWealth" />
+    </div>
+    <div class="meta">
+      <div class="title">Monthly Statement</div>
+      <div class="row"><span>Period:</span> 1 – 31 March 2026</div>
+      <div class="row"><span>Account:</span> Davin Gaier (#999)</div>
+      <div class="row"><span>Generated:</span> 29 Apr 2026 19:25 UTC</div>
+    </div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi">
+      <div class="label">Closing NAV</div>
+      <div class="value">$ 1,122.57</div>
+      <div class="sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Net change this month</div>
+      <div class="value pos">+ $ 817.44</div>
+      <div class="sub pos">+ 267.90 %</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Bitcoin held</div>
+      <div class="value">0.00000000 ₿</div>
+      <div class="sub">Awaiting next buy signal</div>
+    </div>
+    <div class="kpi">
+      <div class="label">USDT cash</div>
+      <div class="value">$ 1,122.57</div>
+      <div class="sub">Available for trading</div>
+    </div>
+  </section>
+
+  <h2 class="section">Performance summary</h2>
+  <div class="cols">
+    <div>
+      <table class="kv">
+        <tr><td class="k">Opening NAV (28 Feb 2026)</td><td class="v">$ 305.13</td></tr>
+        <tr><td class="k">Contributions this month</td><td class="v">$ 0.00</td></tr>
+        <tr><td class="k">Withdrawals this month</td><td class="v">– $ 0.00</td></tr>
+        <tr><td class="k">Trading P&amp;L</td><td class="v pos">+ $ 817.44</td></tr>
+        <tr><td class="k">Fees deducted</td><td class="v neg">– $ 0.00</td></tr>
+        <tr class="total"><td>Closing NAV (31 Mar 2026)</td><td class="v">$ 1,122.57</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="kv">
+        <tr><td class="k">Time-weighted return (TWR)</td><td class="v pos">+ 267.90 %</td></tr>
+        <tr><td class="k">Inception-to-date ROI</td><td class="v neg">– 0.00 %</td></tr>
+        <tr><td class="k">Annualised return (CAGR)</td><td class="v pos">+ 2.3895422130303126e+30 %</td></tr>
+        <tr><td class="k">Cost basis</td><td class="v">$ 1,122.57</td></tr>
+        <tr><td class="k">FX rate at close</td><td class="v">—</td></tr>
+        <tr><td class="k">FX source / time</td><td class="v" style="font-size:8.5pt; color: var(--muted);">No fills in period</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="spark">
+    <strong style="color: var(--navy); font-size: 10pt;">NAV vs Standard DCA — last 30 days</strong>
+    <svg viewBox="0 0 600 120" width="100%" height="110" preserveAspectRatio="none" style="margin-top:6px;">
+      <line x1="0" y1="20"  x2="600" y2="20"  stroke="#e5e7eb" stroke-width="1"/>
+      <line x1="0" y1="60"  x2="600" y2="60"  stroke="#e5e7eb" stroke-width="1"/>
+      <line x1="0" y1="100" x2="600" y2="100" stroke="#e5e7eb" stroke-width="1"/>
+      <polyline fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4,3" points="6.0,104.0 26.3,103.6 46.6,103.7 66.8,103.1 87.1,103.4 107.4,103.7 127.7,103.8 147.9,104.0 168.2,103.7 188.5,103.5 208.8,103.5 229.0,103.4 249.3,103.4 269.6,103.3 289.9,103.1 310.1,102.9 330.4,103.0 350.7,103.3 371.0,103.5 391.2,103.4 411.5,103.6 431.8,103.7 452.1,103.4 472.3,103.4 492.6,26.0 512.9,26.3 533.2,27.2 553.4,27.2 573.7,27.5 594.0,26.7" />
+      <polyline fill="none" stroke="#032C48" stroke-width="2.5" points="6.0,83.3 26.3,83.3 46.6,83.3 66.8,83.3 87.1,83.3 107.4,83.3 127.7,83.3 147.9,83.3 168.2,83.3 188.5,83.3 208.8,83.3 229.0,83.3 249.3,83.3 269.6,83.3 289.9,83.3 310.1,83.3 330.4,83.3 350.7,83.3 371.0,83.3 391.2,83.3 411.5,83.3 431.8,83.3 452.1,83.3 472.3,83.3 492.6,6.0 512.9,6.0 533.2,6.0 553.4,6.0 573.7,6.0 594.0,6.0" />
+    </svg>
+    <div class="legend">
+      <span><span class="dot" style="background:#032C48;"></span>LTH PVR DCA — $ 1,122.57</span>
+      <span><span class="dot" style="background:#94a3b8;"></span>Standard DCA benchmark — $ 903.68</span>
+    </div>
+  </div>
+
+  <h2 class="section">Fees</h2>
+  <div class="fee-block">
+    <h3>Deducted this month</h3>
+    <table class="kv">
+      <tr><td class="k">No fees deducted this month</td><td class="v">—</td></tr>
+      <tr class="total"><td>Total deducted</td><td class="v">$ 0.00</td></tr>
+    </table>
+  </div>
+
+  
+
+  <h2 class="section">Benchmark comparison</h2>
+  <table class="bench">
+    <thead><tr><th>Metric</th><th class="num">LTH PVR DCA</th><th class="num">Standard DCA</th><th class="num">Difference</th></tr></thead>
+    <tbody>
+      <tr><td>Closing NAV</td><td class="num">$ 1,122.57</td><td class="num">$ 903.68</td><td class="num pos">+ 19.50 pp</td></tr>
+      <tr><td>ROI (inception-to-date)</td><td class="num">– 0.00 %</td><td class="num">– 19.50 %</td><td class="num"></td></tr>
+      <tr><td>CAGR</td><td class="num">+ 2.3895422130303126e+30 %</td><td class="num">+ 7.063015028858195e+29 %</td><td class="num"></td></tr>
+    </tbody>
+  </table>
+  <div class="outperf ">Outperformance vs Standard DCA: + 19.50 pp</div>
+
+  <h2 class="section">Transaction history</h2>
+  <table class="tx">
+    <thead>
+      <tr>
+        <th>Date</th><th>Type</th>
+        <th class="num">BTC</th><th class="num">USDT</th><th class="num">ZAR</th>
+        <th class="num">Fee (USD)</th><th class="num">BTC bal.</th><th class="num">USDT bal.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="8" style="text-align:center; color:#6b7280; padding:14px;">No transactions this month</td></tr>
+    </tbody>
+    
+  </table>
+
+  <h2 class="section">Strategy details</h2>
+  <div class="cols">
+    <table class="kv">
+      <tr><td class="k">Strategy</td><td class="v">LTH PVR Bitcoin DCA</td></tr>
+      <tr><td class="k">Status</td><td class="v">Active</td></tr>
+      <tr><td class="k">Exchange</td><td class="v">VALR (subaccount)</td></tr>
+      <tr><td class="k">Inception</td><td class="v">25 Jan 2026</td></tr>
+    </table>
+    <table class="kv">
+      <tr><td class="k">Platform fee</td><td class="v">0.00 % · immediate</td></tr>
+      <tr><td class="k">Performance fee</td><td class="v">0.00 % · monthly (HWM)</td></tr>
+      <tr><td class="k">Next fee anniversary</td><td class="v">—</td></tr>
+      <tr><td class="k">High-water mark</td><td class="v">—</td></tr>
+    </table>
+  </div>
+
+  <div class="disclaim">
+    This statement is provided for information only and does not constitute financial advice. NAV figures reflect end-of-day BTC mid-market prices on VALR. Cryptocurrency investments are volatile; past performance does not guarantee future returns. BitWealth (Pty) Ltd is registered in South Africa. For queries please contact <a href="mailto:support@bitwealth.co.za" style="color:#032C48;">support@bitwealth.co.za</a>.
+  </div>
+
+  <footer class="foot">
+    <span>2026-03-31_Gaier_Davin_statement_M03_2026.pdf</span>
+    <span>BitWealth (Pty) Ltd · bitwealth.co.za</span>
+  </footer>
+
+</div>
+</body>
+</html>

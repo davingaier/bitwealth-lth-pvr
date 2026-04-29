@@ -1,15 +1,41 @@
 // ef_generate_statement/index.ts
-// Purpose: Generate monthly statement PDF for customer with Supabase Storage upload
-// Input: { customer_id: number, year: number, month: number }
-// Output: PDF uploaded to storage bucket, returns download URL
+// ─────────────────────────────────────────────────────────────────────────────
+// Purpose:  Generate the monthly statement for ONE customer for ONE (year, month).
+//           Renders an HTML template, converts it to PDF via Browserless,
+//           uploads the PDF to Supabase Storage, records an idempotency row,
+//           and returns a signed download URL.
+//
+// Body:     { customer_id: number, year: number, month: number, force?: boolean }
+// Query:    ?preview=html  → returns the rendered HTML (no PDF, no upload, no DB write).
+//                            Useful for in-browser preview during development and for
+//                            a future "Preview" button in the customer portal.
+//
+// Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID, BROWSERLESS_TOKEN.
+// Storage:  Bucket `customer-statements` (private, signed URLs only).
+//           Bucket `branding`            (public, holds the SVG logo).
+//
+// History:  v2 (2026-04-29) — full rewrite. Replaces the jsPDF implementation that
+//                              suffered from missing logo, overlapping columns,
+//                              hard-coded $0.00 fees, and a broken CAGR formula.
+//                              See docs/Statement_Redesign_Proposal.md.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { jsPDF } from "npm:jspdf@2.5.1";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { logAlert } from "../_shared/alerting.ts";
+import {
+  renderStatementHtml,
+  StatementData,
+  StatementFeeRow,
+  StatementSparkPoint,
+  StatementTransactionRow,
+} from "../_shared/statement_template.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const ORG_ID = Deno.env.get("ORG_ID");
+const BROWSERLESS_TOKEN = Deno.env.get("BROWSERLESS_TOKEN");
+const BROWSERLESS_BASE = Deno.env.get("BROWSERLESS_BASE") ?? "https://chrome.browserless.io";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -17,493 +43,643 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// BitWealth logo as base64 data URL (embedded for use in PDF)
-const LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAt8AAAH8CAYAAAAJ2sPBAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAD8pSURBVHhe7Z0HnBRF+sc3kElI..."; // Truncated for brevity - will load full version
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Formatting helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtUsd = (n: number, signed = false) => {
+  const s = (Math.abs(n)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (signed && n > 0) return `+ $ ${s}`;
+  if (n < 0) return `– $ ${s}`;
+  return `$ ${s}`;
+};
+const fmtZar = (n: number) =>
+  `R ${(Math.abs(n)).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtBtc = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 8, maximumFractionDigits: 8 }) + " ₿";
+const fmtPct = (n: number, signed = true) => {
+  if (!isFinite(n)) return "—";
+  const sign = signed && n > 0 ? "+ " : n < 0 ? "– " : "";
+  return `${sign}${Math.abs(n).toFixed(2)} %`;
+};
+const fmtPp = (n: number) => {
+  if (!isFinite(n)) return "—";
+  const sign = n > 0 ? "+ " : n < 0 ? "– " : "";
+  return `${sign}${Math.abs(n).toFixed(2)} pp`;
+};
+const fmtDateLong = (iso: string) => {
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00Z" : ""));
+  if (isNaN(d.valueOf())) return iso;
+  return `${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()}`;
+};
+const fmtTimestampUtc = (d: Date) => {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(d.getUTCDate())} ${MONTH_NAMES[d.getUTCMonth()].slice(0, 3)} ${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Browserless: HTML → PDF
+// ─────────────────────────────────────────────────────────────────────────────
+async function htmlToPdf(html: string): Promise<Uint8Array> {
+  if (!BROWSERLESS_TOKEN) {
+    throw new Error("BROWSERLESS_TOKEN env var is not set");
+  }
+  const url = `${BROWSERLESS_BASE.replace(/\/$/, "")}/pdf?token=${encodeURIComponent(BROWSERLESS_TOKEN)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      html,
+      options: {
+        format: "A4",
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
+      },
+      gotoOptions: { waitUntil: "networkidle0", timeout: 25000 },
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Browserless PDF render failed (${res.status}): ${detail.slice(0, 500)}`);
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data assembly
+// ─────────────────────────────────────────────────────────────────────────────
+interface BuildArgs {
+  supabase: SupabaseClient;
+  orgId: string;
+  customerId: number;
+  year: number;
+  month: number; // 1-12
+}
+
+interface BuildResult {
+  data: StatementData;
+  filename: string;
+  storagePath: string;
+  statementMonth: string; // YYYY-MM-01
+}
+
+async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
+  const { supabase, orgId, customerId, year, month } = a;
+
+  const monthIdx = month - 1;
+  const periodStart = new Date(Date.UTC(year, monthIdx, 1));
+  const periodEnd = new Date(Date.UTC(year, monthIdx + 1, 0));
+  const prevMonthEnd = new Date(Date.UTC(year, monthIdx, 0));
+  const startStr = periodStart.toISOString().split("T")[0];
+  const endStr = periodEnd.toISOString().split("T")[0];
+  const prevEndStr = prevMonthEnd.toISOString().split("T")[0];
+  const statementMonth = startStr; // YYYY-MM-01
+
+  // ── Customer + strategy ────────────────────────────────────────────
+  const { data: customer, error: customerErr } = await supabase
+    .schema("public")
+    .from("customer_details")
+    .select("customer_id, first_names, last_name, email, org_id")
+    .eq("customer_id", customerId)
+    .single();
+  if (customerErr || !customer) throw new Error(`Customer ${customerId} not found`);
+
+  const { data: strategies, error: strategyErr } = await supabase
+    .schema("public")
+    .from("customer_strategies")
+    .select("*")
+    .eq("customer_id", customerId)
+    .eq("org_id", orgId);
+  if (strategyErr || !strategies?.length) throw new Error(`No strategy for customer ${customerId}`);
+  const strategy = strategies[0];
+  const perfRate = Number(strategy.performance_fee_rate ?? 0.10);
+  const platRate = Number(strategy.platform_fee_rate ?? 0.0075);
+  const perfSchedule = String(strategy.performance_fee_schedule ?? "monthly");
+  const platSchedule = String(strategy.platform_fee_schedule ?? "immediate");
+  const inceptionDate = strategy.created_at ? new Date(strategy.created_at) : periodStart;
+
+  // ── Balances (opening = last row ≤ prev-month-end; closing = last row ≤ end) ──
+  const { data: openingBal } = await supabase
+    .schema("lth_pvr")
+    .from("balances_daily")
+    .select("date, btc_balance, usdt_balance, nav_usd")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .lte("date", prevEndStr)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: closingBal } = await supabase
+    .schema("lth_pvr")
+    .from("balances_daily")
+    .select("date, btc_balance, usdt_balance, nav_usd")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .lte("date", endStr)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const openingNav = Number(openingBal?.nav_usd ?? 0);
+  const closingNav = Number(closingBal?.nav_usd ?? 0);
+  const btcBalance = Number(closingBal?.btc_balance ?? 0);
+  const usdtBalance = Number(closingBal?.usdt_balance ?? 0);
+
+  // ── Inception NAV (for honest CAGR — not the broken month-open one) ──
+  const inceptionStr = inceptionDate.toISOString().split("T")[0];
+  const { data: inceptionBal } = await supabase
+    .schema("lth_pvr")
+    .from("balances_daily")
+    .select("date, nav_usd")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .gte("date", inceptionStr)
+    .order("date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const inceptionNav = Number(inceptionBal?.nav_usd ?? 0);
+  const inceptionAnchorStr = inceptionBal?.date ?? inceptionStr;
+
+  // ── Transactions for the month ────────────────────────────────────
+  const { data: txRows } = await supabase
+    .schema("lth_pvr")
+    .from("ledger_lines")
+    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, exchange_rate, note")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .gte("trade_date", startStr)
+    .lte("trade_date", endStr)
+    .order("trade_date", { ascending: true });
+
+  // ── BTC price (used for fee USD conversion when the line is BTC-denominated) ──
+  const { data: ciRow } = await supabase
+    .schema("lth_pvr")
+    .from("ci_bands_daily")
+    .select("date, btc_price")
+    .lte("date", endStr)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const btcPrice = Number(ciRow?.btc_price ?? 0);
+
+  // ── Most recent USD/ZAR rate from the period (or empty) ──
+  const fxRows = (txRows ?? [])
+    .map((t: any) => Number(t.exchange_rate ?? 0))
+    .filter((r) => r > 0);
+  const fxRate = fxRows.length ? fxRows[fxRows.length - 1] : 0;
+
+  // ── Aggregates from ledger_lines ──────────────────────────────────
+  let contributionsUsd = 0;
+  let withdrawalsUsd = 0;
+  let exchangeFeesUsd = 0;
+  let platformFeeUsdtSum = 0;
+  let platformFeeBtcSum = 0;
+  let performanceFeeUsdtSum = 0;
+  let txCount = 0;
+  let totalBtc = 0;
+  let totalUsdt = 0;
+  let totalZar = 0;
+  let runningBtc = Number(openingBal?.btc_balance ?? 0);
+  let runningUsdt = Number(openingBal?.usdt_balance ?? 0);
+  const rows: StatementTransactionRow[] = [];
+
+  for (const t of txRows ?? []) {
+    const amtBtc = Number(t.amount_btc ?? 0);
+    const amtUsdt = Number(t.amount_usdt ?? 0);
+    const amtZar = Number(t.amount_zar ?? 0);
+    const feeBtc = Number(t.fee_btc ?? 0);
+    const feeUsdt = Number(t.fee_usdt ?? 0);
+    const platFeeUsdt = Number(t.platform_fee_usdt ?? 0);
+    const platFeeBtc = Number(t.platform_fee_btc ?? 0);
+    const perfFeeUsdt = Number(t.performance_fee_usdt ?? 0);
+
+    runningBtc += amtBtc;
+    runningUsdt += amtUsdt;
+    totalBtc += amtBtc;
+    totalUsdt += amtUsdt;
+    totalZar += amtZar;
+    exchangeFeesUsd += feeUsdt + (feeBtc * btcPrice);
+    platformFeeUsdtSum += platFeeUsdt;
+    platformFeeBtcSum += platFeeBtc;
+    performanceFeeUsdtSum += perfFeeUsdt;
+
+    const kind = String(t.kind ?? "").toLowerCase();
+    if (kind === "deposit" || kind === "topup") contributionsUsd += amtUsdt;
+    if (kind === "withdrawal" || kind === "withdraw") withdrawalsUsd += Math.abs(amtUsdt);
+
+    txCount++;
+    rows.push({
+      date: fmtDateLong(t.trade_date),
+      type: kind === "topup" ? "deposit" : kind,
+      btc: amtBtc !== 0 ? (amtBtc > 0 ? "+ " : "– ") + Math.abs(amtBtc).toFixed(8) : "—",
+      usdt: amtUsdt !== 0 ? (amtUsdt > 0 ? "+ " : "– ") + Math.abs(amtUsdt).toFixed(2) : "—",
+      zar: amtZar !== 0 ? (amtZar > 0 ? "+ " : "– ") + Math.abs(amtZar).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—",
+      fee_usd: (feeUsdt + (feeBtc * btcPrice)) > 0 ? (feeUsdt + (feeBtc * btcPrice)).toFixed(2) : "—",
+      btc_balance: runningBtc.toFixed(8),
+      usdt_balance: runningUsdt.toFixed(2),
+    });
+  }
+
+  const platformFeeUsdSum = platformFeeUsdtSum + (platformFeeBtcSum * btcPrice);
+
+  // ── Standard DCA benchmark ────────────────────────────────────────
+  const { data: stdClosing } = await supabase
+    .schema("lth_pvr")
+    .from("std_dca_balances_daily")
+    .select("date, nav_usd")
+    .eq("customer_id", customerId)
+    .lte("date", endStr)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { data: stdInception } = await supabase
+    .schema("lth_pvr")
+    .from("std_dca_balances_daily")
+    .select("date, nav_usd")
+    .eq("customer_id", customerId)
+    .gte("date", inceptionStr)
+    .order("date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const stdClosingNav = Number(stdClosing?.nav_usd ?? 0);
+  const stdInceptionNav = Number(stdInception?.nav_usd ?? 0);
+
+  // ── Cost basis = cumulative net contributions to date ──
+  const { data: contribAll } = await supabase
+    .schema("lth_pvr")
+    .from("ledger_lines")
+    .select("kind, amount_usdt")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .in("kind", ["deposit", "topup", "withdrawal"])
+    .lte("trade_date", endStr);
+  const costBasisUsd = (contribAll ?? []).reduce((s: number, r: any) => {
+    const kind = String(r.kind ?? "").toLowerCase();
+    const amt = Number(r.amount_usdt ?? 0);
+    if (kind === "deposit" || kind === "topup") return s + amt;
+    if (kind === "withdrawal" || kind === "withdraw") return s - Math.abs(amt);
+    return s;
+  }, 0);
+
+  // ── Returns ────────────────────────────────────────────────────────
+  const netChange = closingNav - openingNav;
+  const netChangePct = openingNav > 0 ? (netChange / openingNav) * 100 : 0;
+  const tradingPnl = closingNav - openingNav - contributionsUsd + withdrawalsUsd;
+
+  const itdRoi = costBasisUsd > 0 ? ((closingNav - costBasisUsd) / costBasisUsd) * 100 : 0;
+  const stdItdRoi = costBasisUsd > 0 ? ((stdClosingNav - costBasisUsd) / costBasisUsd) * 100 : 0;
+
+  const yearsSinceInception = Math.max(
+    (periodEnd.getTime() - new Date(inceptionAnchorStr + "T00:00:00Z").getTime()) / (365.25 * 86400 * 1000),
+    1 / 365,
+  );
+  const cagr = inceptionNav > 0
+    ? (Math.pow(closingNav / inceptionNav, 1 / yearsSinceInception) - 1) * 100
+    : 0;
+  const stdCagr = stdInceptionNav > 0
+    ? (Math.pow(stdClosingNav / stdInceptionNav, 1 / yearsSinceInception) - 1) * 100
+    : 0;
+
+  const twr = openingNav > 0
+    ? (((closingNav - (contributionsUsd - withdrawalsUsd)) / openingNav) - 1) * 100
+    : 0;
+
+  // ── Fee classification per Mockup B ───────────────────────────────
+  const accruedFees: StatementFeeRow[] = [];
+  const deductedFees: StatementFeeRow[] = [];
+  let accruedYtdUsd = 0;
+  let nextBillingDateLabel = "—";
+
+  const totalFeesDeductedUsd = exchangeFeesUsd
+    + (platSchedule === "immediate" ? platformFeeUsdSum : 0)
+    + (perfSchedule !== "annual" ? performanceFeeUsdtSum : 0);
+
+  if (platSchedule === "immediate" && platformFeeUsdSum > 0) {
+    deductedFees.push({
+      label: `Platform fee (${(platRate * 100).toFixed(2).replace(/\.?0+$/, "")}% of net contributions)`,
+      amount_usd: fmtUsd(platformFeeUsdSum),
+    });
+  }
+  if (perfSchedule !== "annual" && performanceFeeUsdtSum > 0) {
+    deductedFees.push({
+      label: `Performance fee (${(perfRate * 100).toFixed(2).replace(/\.?0+$/, "")}% of monthly gain, HWM)`,
+      amount_usd: fmtUsd(performanceFeeUsdtSum),
+    });
+  }
+  if (exchangeFeesUsd > 0) {
+    deductedFees.push({ label: "Exchange fees (VALR fills)", amount_usd: fmtUsd(exchangeFeesUsd) });
+  }
+
+  // ── Annual accrual lookup (if either fee is on annual schedule) ──
+  if (platSchedule === "annual" || perfSchedule === "annual") {
+    const { data: accrualRows } = await supabase
+      .schema("lth_pvr")
+      .from("annual_fee_accrual")
+      .select("accrual_year, accrued_platform_fee_btc, accrued_platform_fee_usdt, accrued_performance_fee_usdt, settled_at")
+      .eq("org_id", orgId)
+      .eq("customer_id", customerId)
+      .order("accrual_year", { ascending: false });
+    const latestAccrual =
+      (accrualRows ?? []).find((r: any) => r.settled_at == null) ?? accrualRows?.[0];
+
+    if (platSchedule === "annual") {
+      const accruedPlatUsd =
+        Number(latestAccrual?.accrued_platform_fee_usdt ?? 0) +
+        Number(latestAccrual?.accrued_platform_fee_btc ?? 0) * btcPrice;
+      if (platformFeeUsdSum > 0) {
+        accruedFees.push({
+          label: `Platform fee — ${MONTH_NAMES[monthIdx]} ${year}`,
+          amount_usd: fmtUsd(platformFeeUsdSum),
+        });
+      }
+      accruedYtdUsd += accruedPlatUsd;
+    }
+    if (perfSchedule === "annual") {
+      // Conservative interim monthly slice — final figure is set by ef_collect_annual_fees.
+      const interimMonthlyPerfUsd = Math.max(0, (closingNav - openingNav - contributionsUsd + withdrawalsUsd)) * perfRate;
+      if (interimMonthlyPerfUsd > 0) {
+        accruedFees.push({
+          label: `Performance fee — ${MONTH_NAMES[monthIdx]} ${year} (interim)`,
+          amount_usd: fmtUsd(interimMonthlyPerfUsd),
+        });
+      }
+      accruedYtdUsd += Number(latestAccrual?.accrued_performance_fee_usdt ?? 0);
+    }
+
+    // Anniversary = next yearly anniversary of inception after today.
+    const today = new Date();
+    const anniv = new Date(Date.UTC(today.getUTCFullYear(), inceptionDate.getUTCMonth(), inceptionDate.getUTCDate()));
+    if (anniv.getTime() <= today.getTime()) {
+      anniv.setUTCFullYear(anniv.getUTCFullYear() + 1);
+    }
+    nextBillingDateLabel = fmtDateLong(anniv.toISOString().split("T")[0]);
+  }
+
+  if (deductedFees.length === 0) {
+    deductedFees.push({ label: "No fees deducted this month", amount_usd: "—" });
+  }
+
+  // ── Spark line: last 30 days of NAV vs Std DCA, normalised 0..1 ──
+  const sparkStart = new Date(periodEnd.getTime() - 29 * 86400 * 1000).toISOString().split("T")[0];
+  const [{ data: lthPts }, { data: stdPts }] = await Promise.all([
+    supabase.schema("lth_pvr").from("balances_daily")
+      .select("date, nav_usd").eq("org_id", orgId).eq("customer_id", customerId)
+      .gte("date", sparkStart).lte("date", endStr).order("date", { ascending: true }),
+    supabase.schema("lth_pvr").from("std_dca_balances_daily")
+      .select("date, nav_usd").eq("customer_id", customerId)
+      .gte("date", sparkStart).lte("date", endStr).order("date", { ascending: true }),
+  ]);
+  const allVals = [...(lthPts ?? []), ...(stdPts ?? [])].map((p: any) => Number(p.nav_usd ?? 0));
+  const minV = allVals.length ? Math.min(...allVals) : 0;
+  const maxV = allVals.length ? Math.max(...allVals) : 1;
+  const range = Math.max(maxV - minV, 1e-9);
+  const norm = (rs: any[] | null): StatementSparkPoint[] => {
+    if (!rs?.length) return [];
+    const n = rs.length;
+    return rs.map((r, i) => ({
+      x: n === 1 ? 1 : i / (n - 1),
+      y: (Number(r.nav_usd ?? 0) - minV) / range,
+    }));
+  };
+  const sparkLthPoints = norm(lthPts ?? null);
+  const sparkStdPoints = norm(stdPts ?? null);
+  const showChart = sparkLthPoints.length >= 2 || sparkStdPoints.length >= 2;
+
+  // ── Filename + storage path ────────────────────────────────────────
+  const lastName = String(customer.last_name ?? "").replace(/\s+/g, "_");
+  const firstNames = String(customer.first_names ?? "").replace(/\s+/g, "_");
+  const monthPadded = String(month).padStart(2, "0");
+  const filename = `${endStr}_${lastName}_${firstNames}_statement_M${monthPadded}_${year}.pdf`;
+  const storagePath = `${orgId}/customer-${customerId}/${filename}`;
+
+  const outperfPp = itdRoi - stdItdRoi;
+
+  const data: StatementData = {
+    customer_name: `${customer.first_names} ${customer.last_name}`.trim(),
+    customer_id: customerId,
+    period_label: `1 – ${periodEnd.getUTCDate()} ${MONTH_NAMES[monthIdx]} ${year}`,
+    generated_at: fmtTimestampUtc(new Date()),
+    statement_filename: filename,
+
+    closing_nav_usd: fmtUsd(closingNav),
+    closing_nav_zar: fxRate > 0 ? fmtZar(closingNav * fxRate) : "—",
+    net_change_usd: fmtUsd(netChange, true),
+    net_change_pct: fmtPct(netChangePct),
+    net_change_positive: netChange >= 0,
+    btc_balance: fmtBtc(btcBalance),
+    btc_balance_sub: btcBalance > 0 ? `≈ ${fmtUsd(btcBalance * btcPrice)}` : "Awaiting next buy signal",
+    usdt_balance_usd: fmtUsd(usdtBalance),
+    usdt_balance_sub: usdtBalance > 0 ? "Available for trading" : "—",
+
+    opening_date: fmtDateLong(prevEndStr),
+    closing_date: fmtDateLong(endStr),
+    opening_nav_usd: fmtUsd(openingNav),
+    contributions_usd: fmtUsd(contributionsUsd, true),
+    withdrawals_usd: withdrawalsUsd > 0 ? `– ${fmtUsd(withdrawalsUsd)}` : "– $ 0.00",
+    trading_pnl_usd: fmtUsd(tradingPnl, true),
+    trading_pnl_positive: tradingPnl >= 0,
+    fees_deducted_usd: `– ${fmtUsd(totalFeesDeductedUsd)}`,
+    twr_pct: fmtPct(twr),
+    twr_positive: twr >= 0,
+    itd_roi_pct: fmtPct(itdRoi),
+    itd_roi_positive: itdRoi >= 0,
+    cagr_pct: fmtPct(cagr),
+    cagr_positive: cagr >= 0,
+    cost_basis_usd: fmtUsd(costBasisUsd),
+    fx_rate_label: fxRate > 0 ? `USD 1 = ZAR ${fxRate.toFixed(2)}` : "—",
+    fx_source_label: fxRate > 0 ? `Last fill in period · VALR` : "No fills in period",
+
+    show_chart: showChart,
+    chart_lth_points: sparkLthPoints,
+    chart_std_points: sparkStdPoints,
+    chart_lth_label: `LTH PVR DCA — ${fmtUsd(closingNav)}`,
+    chart_std_label: `Standard DCA benchmark — ${fmtUsd(stdClosingNav)}`,
+
+    deducted_fees: deductedFees,
+    deducted_total_usd: fmtUsd(totalFeesDeductedUsd),
+    show_accrued_block: accruedFees.length > 0 || accruedYtdUsd > 0,
+    accrued_fees: accruedFees,
+    accrued_ytd_usd: fmtUsd(accruedYtdUsd),
+    next_billing_date: nextBillingDateLabel,
+
+    std_dca_closing_nav_usd: fmtUsd(stdClosingNav),
+    std_dca_roi_pct: fmtPct(stdItdRoi),
+    std_dca_cagr_pct: fmtPct(stdCagr),
+    outperformance_label: fmtPp(outperfPp),
+    outperformance_positive: outperfPp >= 0,
+
+    transactions: rows,
+    tx_count: txCount,
+    tx_total_btc: totalBtc.toFixed(8),
+    tx_total_usdt: totalUsdt.toFixed(2),
+    tx_total_zar: totalZar.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    tx_total_fees_usd: exchangeFeesUsd.toFixed(2),
+
+    strategy_name: strategy.strategy_code === "STD_DCA" ? "Standard Bitcoin DCA" : "LTH PVR Bitcoin DCA",
+    strategy_status: String(strategy.status ?? (strategy.live_enabled ? "active" : "paused")).replace(/^\w/, (c: string) => c.toUpperCase()),
+    exchange_label: "VALR (subaccount)",
+    inception_label: fmtDateLong(inceptionDate.toISOString().split("T")[0]),
+    platform_fee_label: `${(platRate * 100).toFixed(2)} % · ${platSchedule}`,
+    performance_fee_label: `${(perfRate * 100).toFixed(2)} % · ${perfSchedule} (HWM)`,
+    next_anniversary_label: nextBillingDateLabel,
+    hwm_usd: "—",
+  };
+
+  // HWM (best-effort lookup; statement still renders if missing).
+  const { data: hwmRow } = await supabase
+    .schema("lth_pvr")
+    .from("customer_state_daily")
+    .select("high_water_mark_usd")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (hwmRow?.high_water_mark_usd != null) {
+    data.hwm_usd = fmtUsd(Number(hwmRow.high_water_mark_usd));
+  }
+
+  return { data, filename, storagePath, statementMonth };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Request handler
+// ─────────────────────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
   }
 
-  try {
-    const { customer_id, year, month } = await req.json();
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !ORG_ID) {
+    return new Response(
+      JSON.stringify({ error: "Missing required env vars (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID)" }),
+      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
+    );
+  }
 
-    if (!customer_id || !year || !month) {
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    db: { schema: "lth_pvr" },
+  });
+
+  try {
+    const url = new URL(req.url);
+    const previewMode = url.searchParams.get("preview") === "html";
+
+    const body = await req.json().catch(() => ({}));
+    const customer_id = Number(body.customer_id);
+    const year = Number(body.year);
+    const month = Number(body.month);
+    const force = body.force === true;
+
+    if (!customer_id || !year || !month || month < 1 || month > 12) {
       return new Response(
-        JSON.stringify({ error: "Missing required parameters: customer_id, year, month" }),
-        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing or invalid parameters: customer_id, year, month (1-12)" }),
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } },
       );
     }
 
-    // Initialize Supabase client
-    const supabase = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
-      db: { schema: "lth_pvr" },
+    const built = await buildStatementData({
+      supabase, orgId: ORG_ID, customerId: customer_id, year, month,
     });
 
-    // Get customer details
-    const { data: customer, error: customerError } = await supabase
-      .schema("public")
-      .from("customer_details")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .single();
+    const html = renderStatementHtml(built.data);
 
-    if (customerError || !customer) {
-      return new Response(
-        JSON.stringify({ error: "Customer not found" }),
-        { status: 404, headers: { ...CORS, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Get customer strategy details (consolidated table)
-    const { data: strategies, error: strategyError } = await supabase
-      .schema("public")
-      .from("customer_strategies")
-      .select("*")
-      .eq("customer_id", customer_id);
-
-    if (strategyError || !strategies || strategies.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Customer strategy not found" }),
-        { status: 404, headers: { ...CORS, "Content-Type": "application/json" } }
-      );
-    }
-
-    const strategy = strategies[0];
-
-    // Calculate date range for the month
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0); // Last day of month
-    const startDateStr = startDate.toISOString().split("T")[0];
-    const endDateStr = endDate.toISOString().split("T")[0];
-
-    // Get opening balance (last day of previous month)
-    const prevMonthEnd = new Date(year, month - 1, 0).toISOString().split("T")[0];
-    const { data: openingBalance } = await supabase
-      .from("balances_daily")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .eq("date", prevMonthEnd)
-      .single();
-
-    // Get closing balance (last day of current month)
-    const { data: closingBalance } = await supabase
-      .from("balances_daily")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .eq("date", endDateStr)
-      .single();
-
-    // Get transactions for the month
-    const { data: transactions } = await supabase
-      .from("ledger_lines")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .gte("trade_date", startDateStr)
-      .lte("trade_date", endDateStr)
-      .order("trade_date", { ascending: true });
-
-    // Get benchmark data (Standard DCA) - opening and closing
-    const { data: stdDcaOpening } = await supabase
-      .schema("lth_pvr")
-      .from("std_dca_balances_daily")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .eq("date", prevMonthEnd)
-      .single();
-
-    const { data: stdDcaClosing } = await supabase
-      .schema("lth_pvr")
-      .from("std_dca_balances_daily")
-      .select("*")
-      .eq("customer_id", customer_id)
-      .eq("date", endDateStr)
-      .single();
-
-    // Calculate metrics
-    const openingNav = openingBalance ? parseFloat(openingBalance.nav_usd) : 0;
-    const closingNav = closingBalance ? parseFloat(closingBalance.nav_usd) : 0;
-    const netChange = closingNav - openingNav;
-    const percentChange = openingNav > 0 ? ((netChange / openingNav) * 100) : 0;
-
-    // Calculate total contributions and fees for the month
-    const totalContributions = transactions
-      ? transactions.filter((tx: any) => tx.kind === "deposit" || tx.kind === "topup")
-          .reduce((sum: number, tx: any) => sum + parseFloat(tx.amount_usdt || 0), 0)
-      : 0;
-
-    const totalFeesBtc = transactions
-      ? transactions.reduce((sum: number, tx: any) => sum + parseFloat(tx.fee_btc || 0), 0)
-      : 0;
-
-    const totalFeesUsdt = transactions
-      ? transactions.reduce((sum: number, tx: any) => sum + parseFloat(tx.fee_usdt || 0), 0)
-      : 0;
-
-    const totalFeesUsd = totalFeesUsdt + (totalFeesBtc * (closingBalance?.btc_price || 0));
-
-    // Calculate ROI and CAGR (requires inception date from customer_strategies)
-    const inceptionDate = strategy.created_at ? new Date(strategy.created_at) : startDate;
-    const daysSinceInception = (new Date(endDateStr).getTime() - inceptionDate.getTime()) / (1000 * 60 * 60 * 24);
-    const yearsSinceInception = daysSinceInception / 365.25;
-    
-    // ROI = (Current NAV - Total Contributions) / Total Contributions * 100
-    const totalContribsCum = closingBalance ? parseFloat(closingBalance.contrib_gross_cum || 0) : 0;
-    const roi = totalContribsCum > 0 ? ((closingNav - totalContribsCum) / totalContribsCum * 100) : 0;
-    
-    // CAGR = ((Final NAV / Initial NAV)^(1/years)) - 1) * 100
-    const cagr = yearsSinceInception > 0 && openingNav > 0 
-      ? (Math.pow(closingNav / openingNav, 1 / yearsSinceInception) - 1) * 100 
-      : 0;
-
-    // Standard DCA benchmark metrics
-    const stdDcaOpeningNav = stdDcaOpening ? parseFloat(stdDcaOpening.nav_usd) : 0;
-    const stdDcaClosingNav = stdDcaClosing ? parseFloat(stdDcaClosing.nav_usd) : 0;
-    const stdDcaRoi = totalContribsCum > 0 ? ((stdDcaClosingNav - totalContribsCum) / totalContribsCum * 100) : 0;
-    const stdDcaCagr = yearsSinceInception > 0 && stdDcaOpeningNav > 0 
-      ? (Math.pow(stdDcaClosingNav / stdDcaOpeningNav, 1 / yearsSinceInception) - 1) * 100 
-      : 0;
-
-    // Generate PDF
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    let yPosition = 20;
-
-    // Set default text color to #032C48
-    doc.setTextColor(3, 44, 72);
-
-    // Header with Logo (embedded 20x20 sized logo)
-    try {
-      // Using a smaller, optimized version of the logo (will be added separately)
-      const logoData = "data:image/png;base64,iVBORw0KGgo..."; // Placeholder - will compress separately
-      // Uncomment when logo is optimized:
-      // doc.addImage(logoData, 'PNG', 15, yPosition - 2, 20, 20);
-    } catch (e) {
-      console.error("Logo load error:", e);
-    }
-
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    doc.text("Investment Dashboard", 15, yPosition + 5);
-
-    // Customer info (right-aligned)
-    doc.setFontSize(10);
-    const customerName = `${customer.first_names} ${customer.last_name}`;
-    doc.text(customerName, pageWidth - 15, yPosition, { align: "right" });
-    doc.text(`Customer ID: ${customer_id}`, pageWidth - 15, yPosition + 5, { align: "right" });
-    doc.text(`Statement Period: ${month}/${year}`, pageWidth - 15, yPosition + 10, { align: "right" });
-
-    yPosition += 25;
-
-    // Horizontal line
-    doc.setDrawColor(3, 44, 72);
-    doc.setLineWidth(0.5);
-    doc.line(15, yPosition, pageWidth - 15, yPosition);
-    yPosition += 10;
-
-    // Performance Summary Section
-    doc.setFontSize(14);
-    doc.setFont(undefined, "bold");
-    doc.text("Performance Summary", 15, yPosition);
-    yPosition += 8;
-
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-
-    // Left-aligned labels, right-aligned values
-    const valueX = 120; // X position for right-aligned values
-    
-    doc.text(`Opening Net Asset Value (${prevMonthEnd}):`, 20, yPosition);
-    doc.text(`$${openingNav.toFixed(2)}`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`Closing Net Asset Value (${endDateStr}):`, 20, yPosition);
-    doc.text(`$${closingNav.toFixed(2)}`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`Contributions this month:`, 20, yPosition);
-    doc.text(`$${totalContributions.toFixed(2)}`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`Net Change:`, 20, yPosition);
-    doc.text(`${netChange >= 0 ? "+" : ""}$${netChange.toFixed(2)} (${percentChange >= 0 ? "+" : ""}${percentChange.toFixed(2)}%)`, valueX, yPosition, { align: "right" });
-    yPosition += 8; // Extra spacing before new metrics
-
-    // New performance metrics
-    doc.text(`ROI:`, 20, yPosition);
-    doc.text(`${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`CAGR:`, 20, yPosition);
-    doc.text(`${cagr >= 0 ? "+" : ""}${cagr.toFixed(2)}%`, valueX, yPosition, { align: "right" });
-    yPosition += 8;
-    
-    // Fee breakdown (all current fees are exchange fees from VALR)
-    doc.text(`Platform Fees:`, 20, yPosition);
-    doc.text(`$0.00`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`Performance Fees:`, 20, yPosition);
-    doc.text(`$0.00`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.text(`Exchange Fees:`, 20, yPosition);
-    doc.text(`$${totalFeesUsd.toFixed(2)}`, valueX, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    doc.setFont(undefined, "bold");
-    doc.text(`Total Fees Paid:`, 20, yPosition);
-    doc.text(`$${totalFeesUsd.toFixed(2)}`, valueX, yPosition, { align: "right" });
-    doc.setFont(undefined, "normal");
-    yPosition += 8;
-
-    if (closingBalance) {
-      doc.text(`BTC Balance:`, 20, yPosition);
-      doc.text(`${parseFloat(closingBalance.btc_balance).toFixed(8)} BTC`, valueX, yPosition, { align: "right" });
-      yPosition += 6;
-      
-      doc.text(`USDT Balance:`, 20, yPosition);
-      doc.text(`$${parseFloat(closingBalance.usdt_balance).toFixed(2)}`, valueX, yPosition, { align: "right" });
-      yPosition += 12; // Extra spacing before Benchmark
-    }
-
-    // Benchmark Comparison Section (Table Format)
-    doc.setFontSize(14);
-    doc.setFont(undefined, "bold");
-    doc.text("Benchmark Comparison", 15, yPosition);
-    yPosition += 8;
-
-    doc.setFontSize(9);
-    
-    // Table setup
-    const col1X = 20;
-    const col2X = 95;
-    const col3X = 155;
-    const tableWidth = 175;
-    
-    // Header row
-    doc.setFont(undefined, "bold");
-    doc.setFillColor(3, 44, 72);
-    doc.setTextColor(255, 255, 255);
-    doc.rect(col1X, yPosition - 4, tableWidth, 7, "F");
-    
-    doc.text("Metric", col1X + 2, yPosition);
-    doc.text("LTH PVR Bitcoin DCA", col2X + 2, yPosition);
-    doc.text("Standard DCA", col3X + 2, yPosition);
-    yPosition += 7;
-    
-    // Reset text color
-    doc.setTextColor(3, 44, 72);
-    doc.setFont(undefined, "normal");
-    
-    // NAV row
-    doc.text("NAV", col1X + 2, yPosition);
-    doc.text(`$${closingNav.toFixed(2)}`, col2X + 55, yPosition, { align: "right" });
-    doc.text(`$${stdDcaClosingNav.toFixed(2)}`, col3X + 40, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    // ROI row
-    doc.text("ROI", col1X + 2, yPosition);
-    doc.text(`${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%`, col2X + 55, yPosition, { align: "right" });
-    doc.text(`${stdDcaRoi >= 0 ? "+" : ""}${stdDcaRoi.toFixed(2)}%`, col3X + 40, yPosition, { align: "right" });
-    yPosition += 6;
-    
-    // CAGR row
-    doc.text("CAGR", col1X + 2, yPosition);
-    doc.text(`${cagr >= 0 ? "+" : ""}${cagr.toFixed(2)}%`, col2X + 55, yPosition, { align: "right" });
-    doc.text(`${stdDcaCagr >= 0 ? "+" : ""}${stdDcaCagr.toFixed(2)}%`, col3X + 40, yPosition, { align: "right" });
-    yPosition += 8;
-
-    // Outperformance summary
-    const outperformance = roi - stdDcaRoi;
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(10);
-    doc.text(`Outperformance: ${outperformance >= 0 ? "+" : ""}${outperformance.toFixed(2)}%`, col1X, yPosition);
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(9);
-    yPosition += 12; // Extra spacing before Transaction History
-
-    // Transaction History Section
-    doc.setFontSize(14);
-    doc.setFont(undefined, "bold");
-    doc.text("Transaction History", 15, yPosition);
-    yPosition += 8;
-
-    doc.setFontSize(9);
-    doc.setFont(undefined, "normal");
-
-    if (!transactions || transactions.length === 0) {
-      doc.text("No transactions this month", 20, yPosition);
-      yPosition += 10;
-    } else {
-      // Table headers with column positions
-      const dateCol = 15;
-      const typeCol = 40;
-      const btcCol = 88; // Right-align position
-      const usdtCol = 113; // Right-align position
-      const feeBtcCol = 138; // Right-align position
-      const feeUsdtCol = 163; // Right-align position
-      const btcBalCol = 188; // Right-align position
-      const usdtBalCol = pageWidth - 15; // Right-align position
-      
-      doc.setFont(undefined, "bold");
-      doc.text("Date", dateCol, yPosition);
-      doc.text("Type", typeCol, yPosition);
-      doc.text("BTC", btcCol, yPosition, { align: "right" });
-      doc.text("USDT", usdtCol, yPosition, { align: "right" });
-      doc.text("Fee (BTC)", feeBtcCol, yPosition, { align: "right" });
-      doc.text("Fee (USDT)", feeUsdtCol, yPosition, { align: "right" });
-      doc.text("BTC Bal", btcBalCol, yPosition, { align: "right" });
-      doc.text("USDT Bal", usdtBalCol, yPosition, { align: "right" });
-      yPosition += 6;
-      doc.setFont(undefined, "normal");
-
-      // Running balances
-      let runningBtc = openingBalance ? parseFloat(openingBalance.btc_balance) : 0;
-      let runningUsdt = openingBalance ? parseFloat(openingBalance.usdt_balance) : 0;
-
-      // Totals accumulators
-      let totalBtc = 0;
-      let totalUsdt = 0;
-      let totalFeeBtcSum = 0;
-      let totalFeeUsdtSum = 0;
-
-      // Table rows
-      for (const tx of transactions) {
-        if (yPosition > pageHeight - 30) {
-          doc.addPage();
-          yPosition = 20;
-        }
-
-        const amountBtc = parseFloat(tx.amount_btc || 0);
-        const amountUsdt = parseFloat(tx.amount_usdt || 0);
-        const feeBtc = parseFloat(tx.fee_btc || 0);
-        const feeUsdt = parseFloat(tx.fee_usdt || 0);
-
-        // Update running balances
-        runningBtc += amountBtc;
-        runningUsdt += amountUsdt;
-
-        // Accumulate totals
-        totalBtc += amountBtc;
-        totalUsdt += amountUsdt;
-        totalFeeBtcSum += feeBtc;
-        totalFeeUsdtSum += feeUsdt;
-
-        // Replace "topup" with "deposit"
-        const txType = tx.kind === "topup" ? "deposit" : tx.kind;
-
-        doc.text(tx.trade_date, dateCol, yPosition);
-        doc.text(txType, typeCol, yPosition);
-        doc.text(amountBtc.toFixed(8), btcCol, yPosition, { align: "right" });
-        doc.text(amountUsdt.toFixed(2), usdtCol, yPosition, { align: "right" });
-        doc.text(feeBtc.toFixed(8), feeBtcCol, yPosition, { align: "right" });
-        doc.text(feeUsdt.toFixed(2), feeUsdtCol, yPosition, { align: "right" });
-        doc.text(runningBtc.toFixed(8), btcBalCol, yPosition, { align: "right" });
-        doc.text(runningUsdt.toFixed(2), usdtBalCol, yPosition, { align: "right" });
-        yPosition += 5;
-      }
-
-      // Totals row
-      yPosition += 2;
-      doc.setLineWidth(0.3);
-      doc.line(15, yPosition, pageWidth - 15, yPosition);
-      yPosition += 5;
-      doc.setFont(undefined, "bold");
-      doc.text("TOTAL", dateCol, yPosition);
-      doc.text(totalBtc.toFixed(8), btcCol, yPosition, { align: "right" });
-      doc.text(totalUsdt.toFixed(2), usdtCol, yPosition, { align: "right" });
-      doc.text(totalFeeBtcSum.toFixed(8), feeBtcCol, yPosition, { align: "right" });
-      doc.text(totalFeeUsdtSum.toFixed(2), feeUsdtCol, yPosition, { align: "right" });
-      doc.setFont(undefined, "normal");
-      yPosition += 8;
-    }
-
-    // Strategy Details
-    doc.setFontSize(14);
-    doc.setFont(undefined, "bold");
-    doc.text("Strategy Details", 15, yPosition);
-    yPosition += 8;
-
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    doc.text(`Strategy: ${strategy.strategy_code || 'LTH_PVR'}`, 20, yPosition);
-    yPosition += 6;
-    doc.text(`Status: ${strategy.live_enabled ? 'ACTIVE' : 'INACTIVE'}`, 20, yPosition);
-    yPosition += 6;
-    doc.text(`Exchange: VALR`, 20, yPosition);
-    yPosition += 10;
-
-    // Footer (increased margin to prevent overflow)
-    const footerY = pageHeight - 12; // Changed from 15 to 12
-    doc.setFontSize(8);
-    doc.setTextColor(128, 128, 128);
-    
-    // SDD File Naming Convention: CCYY-MM-DD_LastName_FirstNames_statement_M##_CCYY.pdf
-    const lastName = customer.last_name.replace(/\s+/g, "_");
-    const firstNames = customer.first_names.replace(/\s+/g, "_");
-    const monthPadded = month.toString().padStart(2, "0");
-    const filename = `${endDateStr}_${lastName}_${firstNames}_statement_M${monthPadded}_${year}.pdf`;
-    
-    doc.text(filename, 15, footerY);
-    doc.text(`Generated: ${new Date().toISOString().split("T")[0]}`, pageWidth - 15, footerY, { align: "right" });
-    doc.text("Page 1", pageWidth / 2, footerY, { align: "center" });
-
-    // Generate PDF as blob
-    const pdfOutput = doc.output("arraybuffer");
-
-    // Upload to Supabase Storage bucket: customer-statements
-    const storagePath = `${ORG_ID}/customer-${customer_id}/${filename}`;
-    
-    const { data: uploadData, error: uploadError } = await supabase
-      .storage
-      .from("customer-statements")
-      .upload(storagePath, pdfOutput, {
-        contentType: "application/pdf",
-        upsert: true, // Allow overwriting if re-generated
-      });
-
-    if (uploadError) {
-      console.error("Storage upload error:", uploadError);
-      // Fallback: Return PDF directly if storage fails
-      return new Response(pdfOutput, {
+    // Preview mode: return HTML, no PDF, no DB writes.
+    if (previewMode) {
+      return new Response(html, {
         status: 200,
-        headers: {
-          ...CORS,
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${filename}"`,
-        },
+        headers: { ...CORS, "Content-Type": "text/html; charset=utf-8" },
       });
     }
 
-    // Get public URL (for private bucket, use signed URL)
-    const { data: signedData } = await supabase
-      .storage
+    // Idempotency check (skippable with force=true).
+    if (!force) {
+      const { data: existing } = await supabase
+        .from("statements_sent")
+        .select("statement_id, storage_path")
+        .eq("org_id", ORG_ID)
+        .eq("customer_id", customer_id)
+        .eq("statement_month", built.statementMonth)
+        .maybeSingle();
+      if (existing) {
+        const { data: signed } = await supabase.storage
+          .from("customer-statements")
+          .createSignedUrl(existing.storage_path, 60 * 60 * 24 * 30);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            already_generated: true,
+            filename: built.filename,
+            downloadUrl: signed?.signedUrl ?? "",
+            message: "Statement already generated for this period; pass force=true to regenerate.",
+          }),
+          { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    const pdfBytes = await htmlToPdf(html);
+
+    const { error: uploadErr } = await supabase.storage
       .from("customer-statements")
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 30); // 30-day expiry
+      .upload(built.storagePath, pdfBytes, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
 
-    const downloadUrl = signedData?.signedUrl || "";
+    const { data: signed } = await supabase.storage
+      .from("customer-statements")
+      .createSignedUrl(built.storagePath, 60 * 60 * 24 * 30);
+    const downloadUrl = signed?.signedUrl ?? "";
 
-    // Return success with download URL
+    await supabase
+      .from("statements_sent")
+      .upsert({
+        org_id: ORG_ID,
+        customer_id,
+        statement_month: built.statementMonth,
+        storage_path: built.storagePath,
+        filename: built.filename,
+        download_url: downloadUrl,
+        pdf_bytes: pdfBytes.byteLength,
+        generated_at: new Date().toISOString(),
+        generator_version: "v2-html",
+      }, { onConflict: "org_id,customer_id,statement_month" });
+
     return new Response(
       JSON.stringify({
         success: true,
-        filename,
+        filename: built.filename,
         downloadUrl,
+        bytes: pdfBytes.byteLength,
         message: "Statement generated and uploaded successfully",
       }),
-      {
-        status: 200,
-        headers: { ...CORS, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...CORS, "Content-Type": "application/json" } },
     );
-
   } catch (error) {
-    console.error("Error generating statement:", error);
+    const message = (error as Error).message ?? String(error);
+    console.error("[ef_generate_statement] error:", message);
+    try {
+      await logAlert(
+        supabase,
+        "ef_generate_statement",
+        "error",
+        message,
+        { stack: (error as Error).stack?.slice(0, 1000) },
+        ORG_ID,
+        null,
+      );
+    } catch (_) { /* best-effort */ }
     return new Response(
-      JSON.stringify({ error: error.message || "Failed to generate statement" }),
-      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }
+      JSON.stringify({ error: message }),
+      { status: 500, headers: { ...CORS, "Content-Type": "application/json" } },
     );
   }
 });

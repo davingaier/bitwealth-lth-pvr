@@ -1,5 +1,9 @@
 // Edge Function: ef_fee_monthly_close
-// Purpose: Monthly fee aggregation and invoice generation
+// Purpose: Internal monthly fee aggregation. Rolls up fee ledger lines into
+//          rows in `lth_pvr.fee_invoices` for BitWealth's own bookkeeping and
+//          emails the admin a digest. NEVER sent to customers — customers
+//          receive a polished monthly statement (see ef_generate_statement and
+//          ef_monthly_statement_generator) which already itemises fees.
 // Schedule: pg_cron on 1st of month at 00:10 UTC (after performance fees at 00:05)
 // Deployed with: --no-verify-jwt
 
@@ -177,6 +181,28 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Pull running accumulated-fee balances for every customer with new fees.
+    // These reflect amounts that have been transferred OUT of customer subaccounts
+    // into BitWealth's collection wallets but not yet swept to fiat / settled.
+    const customerIds = Array.from(feesByCustomer.values()).map((a) => a.customer_id);
+    const accumByCustomer = new Map<number, { btc: number; usdt: number }>();
+    if (customerIds.length > 0) {
+      const { data: accumRows, error: accumErr } = await supabase
+        .from("customer_accumulated_fees")
+        .select("customer_id, accumulated_btc, accumulated_usdt")
+        .eq("org_id", orgId)
+        .in("customer_id", customerIds);
+      if (accumErr) {
+        console.warn(`Could not load customer_accumulated_fees: ${accumErr.message}`);
+      }
+      for (const row of accumRows ?? []) {
+        accumByCustomer.set(Number((row as any).customer_id), {
+          btc: Number((row as any).accumulated_btc ?? 0),
+          usdt: Number((row as any).accumulated_usdt ?? 0),
+        });
+      }
+    }
+
     // Create invoices
     const invoicesToInsert = [];
     const dueDate = new Date(now.getFullYear(), now.getMonth(), 15).toISOString().split('T')[0]; // 15th of current month
@@ -187,6 +213,7 @@ Deno.serve(async (req) => {
       
       // Calculate total platform fees in USD
       const platformFeesUsd = agg.platform_fees_usdt + (agg.platform_fees_btc * btcPrice);
+      const accum = accumByCustomer.get(agg.customer_id) ?? { btc: 0, usdt: 0 };
       
       invoicesToInsert.push({
         org_id: orgId,
@@ -197,8 +224,8 @@ Deno.serve(async (req) => {
         // Store breakdown in new columns (from 20260124 migration)
         platform_fees_transferred_btc: agg.platform_fees_btc,
         platform_fees_transferred_usdt: agg.platform_fees_usdt,
-        platform_fees_accumulated_btc: 0,  // TODO: Pull from customer_accumulated_fees
-        platform_fees_accumulated_usdt: 0,
+        platform_fees_accumulated_btc: accum.btc,
+        platform_fees_accumulated_usdt: accum.usdt,
         due_date: dueDate,
         status: "unpaid",
       });

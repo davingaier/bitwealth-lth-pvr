@@ -104,8 +104,11 @@ serve(async (_req) => {
       total: strategies?.length || 0,
       generated: 0,
       emailed: 0,
+      skipped: 0,
       errors: [] as any[],
     };
+
+    const statementMonth = startDate; // YYYY-MM-01
 
     const { data: ciRow } = await supabase
       .schema("lth_pvr")
@@ -128,7 +131,24 @@ serve(async (_req) => {
       try {
         console.log(`[ef_monthly_statement_generator] Processing customer ${customerId}`);
 
-        // 1. Generate the PDF (unchanged)
+        // 0. Idempotency: skip if a statement for this period was already emailed.
+        //    A row with `emailed_at IS NULL` means the PDF exists but the email
+        //    failed last time — we re-attempt the email below without re-rendering.
+        const { data: existingSent } = await supabase
+          .from("statements_sent")
+          .select("statement_id, emailed_at, download_url")
+          .eq("org_id", ORG_ID)
+          .eq("customer_id", customerId)
+          .eq("statement_month", statementMonth)
+          .maybeSingle();
+        if (existingSent?.emailed_at) {
+          console.log(`[ef_monthly_statement_generator] Skipping customer ${customerId} — already emailed at ${existingSent.emailed_at}`);
+          results.skipped++;
+          continue;
+        }
+
+        // 1. Generate the PDF (idempotent: ef_generate_statement returns the existing
+        //    signed URL if a row already exists in statements_sent).
         const statementResponse = await fetch(
           `${SUPABASE_URL}/functions/v1/ef_generate_statement`,
           {
@@ -295,6 +315,14 @@ serve(async (_req) => {
             const errBody = await emailResponse.text();
             throw new Error(`ef_send_email failed (${emailResponse.status}): ${errBody}`);
           }
+
+          // Mark as emailed for idempotency on the next monthly run.
+          await supabase
+            .from("statements_sent")
+            .update({ emailed_at: new Date().toISOString() })
+            .eq("org_id", ORG_ID)
+            .eq("customer_id", customerId)
+            .eq("statement_month", statementMonth);
 
           results.emailed++;
           console.log(`[ef_monthly_statement_generator] Email sent to ${customer.email}`);

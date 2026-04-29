@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BitWealth Statement – Davin Gaier – Mar 2026</title>
+<style>
+  /* ----------- Page setup for A4 print ----------- */
+  @page { size: A4; margin: 18mm 16mm 22mm 16mm; }
+  @media print { .no-print { display: none !important; } }
+
+  :root {
+    --navy:  #032C48;
+    --gold:  #C9A04A;
+    --ink:   #1f2937;
+    --muted: #6b7280;
+    --line:  #e5e7eb;
+    --soft:  #f8fafc;
+    --green: #10b981;
+    --red:   #dc2626;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page { max-width: 178mm; margin: 0 auto; padding: 6mm 0; }
+
+  /* ----------- Header ----------- */
+  header.brand {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--navy);
+  }
+  header.brand .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  header.brand .logo .mark {
+    width: 44px; height: 44px; border-radius: 8px;
+    background: var(--navy); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 18pt;
+    letter-spacing: -1px;
+  }
+  header.brand .logo .name {
+    font-weight: 700; font-size: 16pt; color: var(--navy); line-height: 1;
+  }
+  header.brand .logo .name small {
+    display: block; font-weight: 400; font-size: 8.5pt;
+    color: var(--muted); margin-top: 3px; letter-spacing: 0.4px;
+  }
+  header.brand .meta { text-align: right; font-size: 9.5pt; color: var(--ink); }
+  header.brand .meta .title { font-size: 13pt; font-weight: 700; color: var(--navy); }
+  header.brand .meta .row { margin-top: 2px; }
+  header.brand .meta .row span { color: var(--muted); margin-right: 4px; }
+
+  /* ----------- Section heading ----------- */
+  h2.section {
+    font-size: 11pt; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--navy); margin: 18px 0 8px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ----------- KPI strip ----------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .kpi {
+    background: var(--soft); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .kpi .label { font-size: 8pt; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; }
+  .kpi .value { font-size: 14pt; font-weight: 700; color: var(--navy); margin-top: 4px; }
+  .kpi .sub   { font-size: 8.5pt; color: var(--muted); margin-top: 2px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+
+  /* ----------- Two-column layout ----------- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* ----------- Tables ----------- */
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  table.kv td { padding: 4px 0; vertical-align: top; }
+  table.kv td.k { color: var(--muted); }
+  table.kv td.v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+  table.kv tr.total td { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; color: var(--navy); }
+
+  table.tx { margin-top: 6px; }
+  table.tx th, table.tx td { padding: 6px 6px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
+  table.tx th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.tx td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.tx tr:last-child td { border-bottom: none; }
+  table.tx tfoot td { font-weight: 700; border-top: 2px solid var(--navy); border-bottom: none; padding-top: 8px; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8.5pt; font-weight: 600; }
+  .tag.deposit  { background: #dcfce7; color: #166534; }
+  .tag.buy      { background: #dbeafe; color: #1e40af; }
+  .tag.fee      { background: #fef3c7; color: #92400e; }
+  .tag.withdraw { background: #fee2e2; color: #991b1b; }
+
+  /* ----------- Fees blocks (Mockup B) ----------- */
+  .fee-block {
+    border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: #fff;
+  }
+  .fee-block + .fee-block { margin-top: 10px; }
+  .fee-block.accrued { border-color: var(--amber); background: #fffbeb; }
+  .fee-block h3 { margin: 0 0 6px; font-size: 10.5pt; color: var(--navy); }
+  .fee-block.accrued h3 { color: #92400e; }
+  .fee-block .next { margin-top: 8px; font-size: 9pt; color: var(--muted); }
+
+  /* ----------- Benchmark ----------- */
+  table.bench { margin-top: 6px; }
+  table.bench th, table.bench td { padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
+  table.bench th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; }
+  table.bench td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .outperf { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #dcfce7; color: #166534; font-weight: 700; margin-top: 6px; }
+
+  /* ----------- Spark chart (inline SVG) ----------- */
+  .spark { margin-top: 10px; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .spark .legend { display: flex; gap: 14px; font-size: 8.5pt; color: var(--muted); margin-top: 4px; }
+  .spark .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+  /* ----------- Footer ----------- */
+  footer.foot {
+    margin-top: 18px; padding-top: 8px;
+    border-top: 1px solid var(--line);
+    font-size: 8pt; color: var(--muted);
+    display: flex; justify-content: space-between;
+  }
+
+  /* ----------- Disclaimer ----------- */
+  .disclaim {
+    margin-top: 12px;
+    font-size: 8pt; color: var(--muted); line-height: 1.5;
+    border-left: 3px solid var(--line); padding-left: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============== Header ============== -->
+  <header class="brand">
+    <div class="logo">
+      <div class="mark">B</div>
+      <div class="name">
+        BitWealth
+        <small>LTH PVR Bitcoin DCA</small>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="title">Monthly Statement</div>
+      <div class="row"><span>Period:</span> 1 – 31 March 2026</div>
+      <div class="row"><span>Account:</span> Davin Gaier (#999)</div>
+      <div class="row"><span>Generated:</span> 29 Apr 2026 14:32 UTC</div>
+    </div>
+  </header>
+
+  <!-- ============== KPI strip ============== -->
+  <section class="kpis">
+    <div class="kpi">
+      <div class="label">Closing NAV</div>
+      <div class="value">$ 1 122.57</div>
+      <div class="sub">R 20 678.79</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Net change this month</div>
+      <div class="value pos">+ $ 817.44</div>
+      <div class="sub pos">+ 267.90 %</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Bitcoin held</div>
+      <div class="value">0.00000000 ₿</div>
+      <div class="sub">Awaiting next buy signal</div>
+    </div>
+    <div class="kpi">
+      <div class="label">USDT cash</div>
+      <div class="value">$ 1 122.57</div>
+      <div class="sub">Available for trading</div>
+    </div>
+  </section>
+
+  <!-- ============== Performance summary ============== -->
+  <h2 class="section">Performance summary</h2>
+  <div class="cols">
+    <div>
+      <table class="kv">
+        <tr><td class="k">Opening NAV (28 Feb 2026)</td><td class="v">$ 305.13</td></tr>
+        <tr><td class="k">Contributions this month</td><td class="v">+ $ 817.45</td></tr>
+        <tr><td class="k">Withdrawals this month</td><td class="v">– $ 0.00</td></tr>
+        <tr><td class="k">Trading P&amp;L</td><td class="v pos">+ $ 0.41</td></tr>
+        <tr><td class="k">Fees deducted</td><td class="v neg">– $ 0.42</td></tr>
+        <tr class="total"><td>Closing NAV (31 Mar 2026)</td><td class="v">$ 1 122.57</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="kv">
+        <tr><td class="k">Time-weighted return (TWR)</td><td class="v pos">+ 0.13 %</td></tr>
+        <tr><td class="k">Inception-to-date ROI</td><td class="v pos">+ 1.84 %</td></tr>
+        <tr><td class="k">Annualised return (CAGR)</td><td class="v pos">+ 7.21 %</td></tr>
+        <tr><td class="k">Cost basis</td><td class="v">$ 1 102.58</td></tr>
+        <tr><td class="k">FX rate at close</td><td class="v">USD 1 = ZAR 18.42</td></tr>
+        <tr><td class="k">FX source / time</td><td class="v" style="font-size:8.5pt; color: var(--muted);">VALR · 29 Apr 2026 14:32 UTC</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============== NAV chart ============== -->
+  <div class="spark">
+    <strong style="color: var(--navy); font-size: 10pt;">NAV vs Standard DCA — last 30 days</strong>
+    <svg viewBox="0 0 600 120" width="100%" height="110" preserveAspectRatio="none" style="margin-top:6px;">
+      <!-- gridlines -->
+      <line x1="0" y1="20"  x2="600" y2="20"  stroke="#e5e7eb" stroke-width="1"/>
+      <line x1="0" y1="60"  x2="600" y2="60"  stroke="#e5e7eb" stroke-width="1"/>
+      <line x1="0" y1="100" x2="600" y2="100" stroke="#e5e7eb" stroke-width="1"/>
+      <!-- Std DCA -->
+      <polyline fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4,3"
+        points="0,95 30,93 60,90 90,88 120,85 150,82 180,78 210,75 240,71 270,68 300,65 330,60 360,55 390,50 420,46 450,42 480,38 510,34 540,30 570,28 600,26"/>
+      <!-- LTH PVR -->
+      <polyline fill="none" stroke="#032C48" stroke-width="2.5"
+        points="0,95 30,92 60,87 90,84 120,79 150,73 180,67 210,61 240,55 270,49 300,42 330,36 360,30 390,26 420,22 450,19 480,17 510,15 540,13 570,12 600,11"/>
+      <!-- end markers -->
+      <circle cx="600" cy="11" r="3.5" fill="#032C48"/>
+      <circle cx="600" cy="26" r="3.5" fill="#94a3b8"/>
+    </svg>
+    <div class="legend">
+      <span><span class="dot" style="background:#032C48;"></span>LTH PVR DCA — $ 1 122.57</span>
+      <span><span class="dot" style="background:#94a3b8;"></span>Standard DCA benchmark — $ 903.68</span>
+    </div>
+  </div>
+
+  <!-- ============== Fees (Mockup B layout) ============== -->
+  <h2 class="section">Fees</h2>
+  <div class="fee-block">
+    <h3>Deducted this month</h3>
+    <table class="kv">
+      <tr><td class="k">Platform fee (0.75% of net contributions)</td><td class="v">$ 6.13</td></tr>
+      <tr><td class="k">Exchange fees (VALR fills)</td><td class="v">$ 0.42</td></tr>
+      <tr class="total"><td>Total deducted</td><td class="v">$ 6.55</td></tr>
+    </table>
+  </div>
+
+  <div class="fee-block accrued">
+    <h3>Accrued — to be billed later</h3>
+    <table class="kv">
+      <tr><td class="k">Performance fee — March 2026 <small style="color:var(--muted);">(10% of monthly gain, HWM)</small></td><td class="v">$ 24.18</td></tr>
+      <tr class="total"><td>Year-to-date accrual</td><td class="v">$ 48.91</td></tr>
+    </table>
+    <div class="next">
+      Performance fee accrues monthly and is collected on your <strong>annual fee anniversary, 15 Jan 2027</strong>. The figures above are interim estimates and may be adjusted at year-end based on final NAV and high-water-mark.
+    </div>
+  </div>
+
+  <!-- ============== Benchmark ============== -->
+  <h2 class="section">Benchmark comparison</h2>
+  <table class="bench">
+    <thead>
+      <tr><th>Metric</th><th class="num">LTH PVR DCA</th><th class="num">Standard DCA</th><th class="num">Difference</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Closing NAV</td><td class="num">$ 1 122.57</td><td class="num">$ 903.68</td><td class="num pos">+ $ 218.89</td></tr>
+      <tr><td>ROI (inception-to-date)</td><td class="num">+ 1.84 %</td><td class="num">– 18.04 %</td><td class="num pos">+ 19.88 pp</td></tr>
+      <tr><td>CAGR</td><td class="num">+ 7.21 %</td><td class="num">– 64.50 %</td><td class="num pos">+ 71.71 pp</td></tr>
+    </tbody>
+  </table>
+  <div class="outperf">Outperformance vs Standard DCA: +19.88 pp</div>
+
+  <!-- ============== Transactions ============== -->
+  <h2 class="section">Transaction history</h2>
+  <table class="tx">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th class="num">BTC</th>
+        <th class="num">USDT</th>
+        <th class="num">ZAR</th>
+        <th class="num">Fee (USD)</th>
+        <th class="num">BTC bal.</th>
+        <th class="num">USDT bal.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>25 Mar 2026</td><td><span class="tag deposit">deposit</span></td>
+        <td class="num">—</td><td class="num">305.13</td><td class="num">5 622.49</td>
+        <td class="num">—</td><td class="num">0.00000000</td><td class="num">305.13</td>
+      </tr>
+      <tr>
+        <td>26 Mar 2026</td><td><span class="tag deposit">deposit</span></td>
+        <td class="num">—</td><td class="num">817.45</td><td class="num">15 057.43</td>
+        <td class="num">—</td><td class="num">0.00000000</td><td class="num">1 122.58</td>
+      </tr>
+      <tr>
+        <td>26 Mar 2026</td><td><span class="tag fee">platform fee</span></td>
+        <td class="num">—</td><td class="num">– 6.13</td><td class="num">– 112.93</td>
+        <td class="num">6.13</td><td class="num">0.00000000</td><td class="num">1 116.45</td>
+      </tr>
+      <tr>
+        <td>27 Mar 2026</td><td><span class="tag buy">buy</span></td>
+        <td class="num">+ 0.00000000</td><td class="num">— </td><td class="num">— </td>
+        <td class="num">0.42</td><td class="num">0.00000000</td><td class="num">1 116.03</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">Totals (4 transactions)</td>
+        <td class="num">0.00000000</td>
+        <td class="num">1 116.45</td>
+        <td class="num">20 567.00</td>
+        <td class="num">6.55</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <!-- ============== Strategy details ============== -->
+  <h2 class="section">Strategy details</h2>
+  <div class="cols">
+    <table class="kv">
+      <tr><td class="k">Strategy</td><td class="v">LTH PVR Bitcoin DCA</td></tr>
+      <tr><td class="k">Status</td><td class="v"><span class="tag deposit">Active</span></td></tr>
+      <tr><td class="k">Exchange</td><td class="v">VALR (subaccount)</td></tr>
+      <tr><td class="k">Inception</td><td class="v">15 Jan 2026</td></tr>
+    </table>
+    <table class="kv">
+      <tr><td class="k">Platform fee</td><td class="v">0.75 % · immediate</td></tr>
+      <tr><td class="k">Performance fee</td><td class="v">10.00 % · annual (HWM)</td></tr>
+      <tr><td class="k">Next fee anniversary</td><td class="v">15 Jan 2027</td></tr>
+      <tr><td class="k">High-water mark</td><td class="v">$ 1 102.58</td></tr>
+    </table>
+  </div>
+
+  <!-- ============== Disclaimer ============== -->
+  <div class="disclaim">
+    This statement is provided for information only and does not constitute financial advice. NAV figures reflect end-of-day BTC mid-market prices on VALR. Cryptocurrency investments are volatile; past performance does not guarantee future returns. BitWealth is registered in South Africa. For queries please contact <a href="mailto:support@bitwealth.co.za" style="color:var(--navy);">support@bitwealth.co.za</a>.
+  </div>
+
+  <!-- ============== Footer ============== -->
+  <footer class="foot">
+    <span>2026-03-31_Gaier_Davin_statement_M03_2026.pdf</span>
+    <span>Page 1 of 1</span>
+    <span>BitWealth · bitwealth.co.za</span>
+  </footer>
+
+</div>
+</body>
+</html>
