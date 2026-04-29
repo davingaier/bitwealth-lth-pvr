@@ -113,6 +113,63 @@
         .back-link:hover {
             color: var(--gold);
         }
+
+        /* ───── Legal modal ───── */
+        .legal-modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center; justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .legal-modal-backdrop.open { display: flex; }
+        .legal-modal {
+            background: #fff;
+            color: #1f2937;
+            width: 100%; max-width: 880px;
+            max-height: 90vh;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        .legal-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+            flex-shrink: 0;
+        }
+        .legal-modal-title { font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+        .legal-modal-close {
+            background: none; border: none; cursor: pointer;
+            font-size: 24px; line-height: 1; color: #6b7280;
+            padding: 4px 10px; border-radius: 6px;
+        }
+        .legal-modal-close:hover { background: #e5e7eb; color: #1f2937; }
+        .legal-modal-body {
+            overflow-y: auto;
+            padding: 24px 32px;
+            flex: 1 1 auto;
+        }
+        .legal-modal-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #e5e7eb;
+            display: flex; justify-content: flex-end; gap: 10px;
+            background: #f9fafb;
+            flex-shrink: 0;
+        }
+        .legal-modal-footer button {
+            padding: 8px 18px; border-radius: 6px;
+            border: 1px solid #d1d5db;
+            background: #fff; cursor: pointer;
+            font-size: 14px; font-weight: 500;
+        }
+        .legal-modal-footer button.primary {
+            background: var(--gold); border-color: var(--gold); color: #032c48;
+        }
+        .legal-modal-loading { text-align: center; color: #6b7280; padding: 40px 0; }
     </style>
 </head>
 <body>
@@ -165,17 +222,17 @@
                 <div class="checkbox-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="acceptTerms" name="acceptTerms" required>
-                        <span>I accept the <a href="#" target="_blank">Terms of Service</a></span>
+                        <span>I accept the <a href="legal/terms-of-service.html" data-legal="terms-of-service" target="_blank" rel="noopener">Terms of Service</a></span>
                     </label>
                     
                     <label class="checkbox-label">
                         <input type="checkbox" id="acceptPrivacy" name="acceptPrivacy" required>
-                        <span>I accept the <a href="#" target="_blank">Privacy Policy</a></span>
+                        <span>I accept the <a href="legal/privacy-policy.html" data-legal="privacy-policy" target="_blank" rel="noopener">Privacy Policy</a></span>
                     </label>
                     
                     <label class="checkbox-label">
                         <input type="checkbox" id="signDisclaimer" name="signDisclaimer" required>
-                        <span>I have read and understood the <a href="#" target="_blank">Investment Disclaimer</a></span>
+                        <span>I have read and understood the <a href="legal/investment-disclaimer.html" data-legal="investment-disclaimer" target="_blank" rel="noopener">Investment Disclaimer</a></span>
                     </label>
                 </div>
                 
@@ -189,8 +246,78 @@
             <a href="index.html" class="back-link">← Back to Home</a>
         </div>
     </div>
+
+    <!-- Legal document modal -->
+    <link rel="stylesheet" href="legal/_legal.css">
+    <div class="legal-modal-backdrop" id="legalModal" role="dialog" aria-modal="true" aria-labelledby="legalModalTitle">
+        <div class="legal-modal">
+            <div class="legal-modal-header">
+                <span class="legal-modal-title" id="legalModalTitle">Document</span>
+                <button type="button" class="legal-modal-close" aria-label="Close" onclick="closeLegalModal()">&times;</button>
+            </div>
+            <div class="legal-modal-body" id="legalModalBody">
+                <div class="legal-modal-loading">Loading…</div>
+            </div>
+            <div class="legal-modal-footer">
+                <button type="button" class="primary" onclick="closeLegalModal()">Close</button>
+            </div>
+        </div>
+    </div>
     
     <script>
+        // ───── Legal modal ─────────────────────────────────────────────
+        // Intercept clicks on links carrying data-legal="<slug>" and open the
+        // matching legal page (under /legal/) inside an in-page modal so the
+        // registration form state is preserved. The same pages remain reachable
+        // via direct URL (or a middle-click / right-click → open in new tab),
+        // so SEO and shareability are unaffected.
+        const __legalCache = new Map();
+        async function openLegalModal(slug) {
+            const modal = document.getElementById('legalModal');
+            const body  = document.getElementById('legalModalBody');
+            const title = document.getElementById('legalModalTitle');
+            const titleMap = {
+                'terms-of-service':     'Terms of Service',
+                'privacy-policy':       'Privacy Policy',
+                'investment-disclaimer':'Investment Disclaimer',
+            };
+            title.textContent = titleMap[slug] || 'Document';
+            body.innerHTML = '<div class="legal-modal-loading">Loading…</div>';
+            modal.classList.add('open');
+            document.body.style.overflow = 'hidden';
+            try {
+                let html = __legalCache.get(slug);
+                if (!html) {
+                    const res = await fetch(`legal/${slug}.html`, { credentials: 'omit' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const raw = await res.text();
+                    const doc = new DOMParser().parseFromString(raw, 'text/html');
+                    const main = doc.querySelector('#legal-content');
+                    html = main ? main.outerHTML : raw;
+                    __legalCache.set(slug, html);
+                }
+                body.innerHTML = html;
+                body.scrollTop = 0;
+            } catch (err) {
+                console.error('Legal modal load failed:', err);
+                body.innerHTML = '<div class="legal-modal-loading" style="color:#b91c1c;">Failed to load. Please <a href="legal/' + slug + '.html" target="_blank" rel="noopener">open in a new tab</a> instead.</div>';
+            }
+        }
+        function closeLegalModal() {
+            const modal = document.getElementById('legalModal');
+            modal.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+        // Wire links + close-on-Escape + close-on-backdrop
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('a[data-legal]');
+            if (a) { e.preventDefault(); openLegalModal(a.dataset.legal); return; }
+            if (e.target && e.target.id === 'legalModal') closeLegalModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeLegalModal();
+        });
+
         // Toggle password visibility
         function togglePassword(inputId, button) {
             const input = document.getElementById(inputId);

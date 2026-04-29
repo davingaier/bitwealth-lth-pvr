@@ -1,0 +1,92 @@
+/* Shared styling for standalone legal pages and the in-app legal modal.
+   Kept self-contained so the modal can inject the content into a host page
+   that does not need to load the rest of the site CSS. */
+:root {
+  --legal-navy: #032C48;
+  --legal-gold: #C9A04A;
+  --legal-text: #1f2937;
+  --legal-muted: #6b7280;
+  --legal-line: #e5e7eb;
+  --legal-warn-bg: #fffbeb;
+  --legal-warn-border: #f59e0b;
+}
+.legal-doc {
+  font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+  color: var(--legal-text);
+  line-height: 1.65;
+  font-size: 15px;
+}
+.legal-doc h1 {
+  color: var(--legal-navy);
+  font-size: 26px;
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+.legal-doc .legal-meta {
+  color: var(--legal-muted);
+  font-size: 13px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--legal-line);
+  padding-bottom: 12px;
+}
+.legal-doc h2 {
+  color: var(--legal-navy);
+  font-size: 17px;
+  margin: 28px 0 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--legal-line);
+  padding-bottom: 4px;
+}
+.legal-doc h3 {
+  color: var(--legal-navy);
+  font-size: 14px;
+  margin: 18px 0 6px;
+  font-weight: 600;
+}
+.legal-doc p { margin: 8px 0; }
+.legal-doc ul, .legal-doc ol { margin: 8px 0 8px 22px; padding: 0; }
+.legal-doc li { margin: 4px 0; }
+.legal-doc strong { color: var(--legal-navy); }
+.legal-doc .callout {
+  background: var(--legal-warn-bg);
+  border-left: 4px solid var(--legal-warn-border);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.legal-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.legal-doc th, .legal-doc td {
+  border: 1px solid var(--legal-line);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.legal-doc th { background: #f9fafb; font-weight: 600; color: var(--legal-navy); }
+.legal-doc a { color: var(--legal-gold); text-decoration: none; }
+.legal-doc a:hover { text-decoration: underline; }
+
+/* Standalone-page chrome (hidden when injected into the modal) */
+.legal-page-shell {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  background: #fff;
+  min-height: 100vh;
+}
+.legal-page-shell .back {
+  display: inline-block;
+  margin-bottom: 24px;
+  color: var(--legal-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.legal-page-shell .back:hover { color: var(--legal-gold); }
+body.legal-body { background: #f5f5f5; margin: 0; }
