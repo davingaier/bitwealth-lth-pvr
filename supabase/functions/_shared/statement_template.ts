@@ -221,7 +221,7 @@ export function renderStatementHtml(d: StatementData): string {
 
   header.brand { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 2px solid var(--navy); }
   header.brand .logo { display: flex; align-items: center; gap: 12px; }
-  header.brand .logo img { height: 72px; width: auto; display: block; }
+  header.brand .logo img { height: 180px; width: 180px; display: block; max-width: none; }
   header.brand .meta { text-align: right; font-size: 9.5pt; }
   header.brand .meta .title { font-size: 13pt; font-weight: 700; color: var(--navy); }
   header.brand .meta .row { margin-top: 2px; }
@@ -347,8 +347,6 @@ export function renderStatementHtml(d: StatementData): string {
         <tr><td class="k">Inception-to-date ROI</td><td class="v ${d.itd_roi_positive ? "pos" : "neg"}">${e(d.itd_roi_pct)}</td></tr>
         <tr><td class="k">Annualised return (CAGR)</td><td class="v ${d.cagr_positive ? "pos" : "neg"}">${e(d.cagr_pct)}</td></tr>
         <tr><td class="k">Cost basis</td><td class="v">${e(d.cost_basis_usd)}</td></tr>
-        <tr><td class="k">FX rate at close</td><td class="v">${e(d.fx_rate_label)}</td></tr>
-        <tr><td class="k">FX source / time</td><td class="v" style="font-size:8.5pt; color: var(--muted);">${e(d.fx_source_label)}</td></tr>
       </table>
     </div>
   </div>
