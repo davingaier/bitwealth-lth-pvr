@@ -406,7 +406,19 @@
                                     <!-- Rows will be inserted here -->
                                 </tbody>
                             </table>
-                        </div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 4px; flex-wrap: wrap; gap: 10px;">
+                                    <div id="transactionCount" style="font-size: 13px; color: var(--text-secondary);"></div>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <label for="transactionPageSize" style="font-size: 13px; color: var(--text-secondary);">Rows per page:</label>
+                                        <select id="transactionPageSize" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: var(--text-primary); border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer;">
+                                            <option value="25" selected>25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                            <option value="all">All</option>
+                                        </select>
+                                    </div>
+                            </div>
                         <div id="noTransactions" style="display: none; text-align: center; padding: 40px; color: var(--text-secondary);">
                             <p style="font-size: 16px; margin-bottom: 10px;">📭 No transactions yet</p>
                             <p style="font-size: 14px;">Transactions will appear here after your first trade.</p>
@@ -1522,11 +1534,16 @@
             }
         }
 
+        // Cached, already-merged transaction rows (most-recent first as returned by RPC).
+        // Populated by loadTransactionHistory and re-sliced by renderTransactionRows when
+        // the user changes the rows-per-page dropdown.
+        let __txRowsCache = [];
+
         async function loadTransactionHistory(customerId) {
             try {
                 const { data: transactions, error } = await sb.rpc('list_customer_transactions', {
                     p_customer_id: customerId,
-                    p_limit: 100
+                    p_limit: 5000
                 });
 
                 if (error) throw error;
@@ -1572,9 +1589,37 @@
                     }
                 }
 
-                // Populate table
-                const tbody = document.getElementById('transactionTableBody');
-                tbody.innerHTML = ordered.map(tx => {
+                // Cache the merged set and render the first page.
+                __txRowsCache = ordered;
+                const pageSizeSel = document.getElementById('transactionPageSize');
+                if (pageSizeSel && !pageSizeSel.dataset.bound) {
+                    pageSizeSel.addEventListener('change', renderTransactionRows);
+                    pageSizeSel.dataset.bound = '1';
+                }
+                renderTransactionRows();
+            } catch (error) {
+                console.error('Error loading transaction history:', error);
+                document.getElementById('transactionLoading').style.display = 'none';
+                document.getElementById('transactionError').style.display = 'block';
+            }
+        }
+
+        function renderTransactionRows() {
+            const tbody = document.getElementById('transactionTableBody');
+            const countEl = document.getElementById('transactionCount');
+            const sel = document.getElementById('transactionPageSize');
+            const sizeRaw = sel ? sel.value : '25';
+            const total = __txRowsCache.length;
+            const limit = sizeRaw === 'all' ? total : Math.min(parseInt(sizeRaw, 10) || 25, total);
+            const slice = __txRowsCache.slice(0, limit);
+            if (countEl) {
+                countEl.textContent = total === 0
+                    ? ''
+                    : (limit >= total
+                        ? `Showing all ${total} transaction${total === 1 ? '' : 's'}`
+                        : `Showing ${limit} of ${total} transactions`);
+            }
+            tbody.innerHTML = slice.map(tx => {
                     // Format date as DD/MM/YYYY
                     const dateObj = new Date(tx.trade_date);
                     const day = String(dateObj.getDate()).padStart(2, '0');
@@ -1706,12 +1751,6 @@
                         </tr>
                     `;
                 }).join('');
-
-            } catch (error) {
-                console.error('Error loading transaction history:', error);
-                document.getElementById('transactionLoading').style.display = 'none';
-                document.getElementById('transactionError').style.display = 'block';
-            }
         }
 
         async function downloadStatement() {
