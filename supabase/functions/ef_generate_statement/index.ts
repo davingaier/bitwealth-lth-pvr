@@ -262,11 +262,35 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     .maybeSingle();
   const btcPrice = Number(ciRow?.btc_price ?? 0);
 
-  // ── FX rate placeholder ──
-  // ledger_lines doesn't carry an FX rate, so we don't have a per-fill USD/ZAR.
-  // Leaving as 0 means the closing-NAV ZAR equivalent and the FX-rate footer row
-  // will display as "—". (Future: pull last fill's rate from order_fills.)
-  const fxRate = 0;
+  // ── FX rate (USDT/ZAR) ──
+  // ledger_lines does not carry a per-fill USD/ZAR rate, and pending_zar_conversions
+  // has not yet recorded a completed conversion. As a pragmatic best-effort, fetch
+  // VALR's public USDT/ZAR mid-price (no auth required) so the closing-NAV ZAR
+  // equivalent and the FX-rate footer row render with a real number rather than
+  // an em-dash. This is an "as-of statement-generation" rate, not the rate that
+  // was applied to any specific historical fill — the footer label makes that
+  // explicit. If the call fails the value falls back to 0 and the report
+  // gracefully renders "—" exactly as before.
+  let fxRate = 0;
+  let fxSourceLabel = "No FX rate available";
+  try {
+    const fxRes = await fetch("https://api.valr.com/v1/public/USDTZAR/marketsummary", {
+      headers: { "Accept": "application/json" },
+    });
+    if (fxRes.ok) {
+      const fxJson = await fxRes.json();
+      const bid = Number(fxJson?.bidPrice ?? 0);
+      const ask = Number(fxJson?.askPrice ?? 0);
+      const last = Number(fxJson?.lastTradedPrice ?? 0);
+      const mid = (bid > 0 && ask > 0) ? (bid + ask) / 2 : last;
+      if (mid > 0) {
+        fxRate = mid;
+        fxSourceLabel = `As of ${fmtTimestampUtc(new Date())} · VALR USDT/ZAR mid`;
+      }
+    }
+  } catch (e) {
+    console.warn("[ef_generate_statement] VALR USDT/ZAR fetch failed:", (e as Error).message);
+  }
 
   // ── Aggregates from ledger_lines ──────────────────────────────────
   let contributionsUsd = 0;
@@ -548,7 +572,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     cagr_positive: cagr >= 0,
     cost_basis_usd: fmtUsd(costBasisUsd),
     fx_rate_label: fxRate > 0 ? `USD 1 = ZAR ${fxRate.toFixed(2)}` : "—",
-    fx_source_label: fxRate > 0 ? `Last fill in period · VALR` : "No fills in period",
+    fx_source_label: fxRate > 0 ? fxSourceLabel : "No FX rate available",
 
     show_chart: showChart,
     chart_lth_points: sparkLthPoints,
@@ -652,7 +676,7 @@ serve(async (req) => {
       if (existing) {
         const { data: signed } = await supabase.storage
           .from("customer-statements")
-          .createSignedUrl(existing.storage_path, 60 * 60 * 24 * 30);
+          .createSignedUrl(existing.storage_path, 60 * 60 * 24 * 365);
         return new Response(
           JSON.stringify({
             success: true,
@@ -678,7 +702,7 @@ serve(async (req) => {
 
     const { data: signed } = await supabase.storage
       .from("customer-statements")
-      .createSignedUrl(built.storagePath, 60 * 60 * 24 * 30);
+      .createSignedUrl(built.storagePath, 60 * 60 * 24 * 365);
     const downloadUrl = signed?.signedUrl ?? "";
 
     await supabase
