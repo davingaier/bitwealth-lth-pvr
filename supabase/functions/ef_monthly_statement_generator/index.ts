@@ -74,6 +74,9 @@ serve(async (_req) => {
 
     console.log(`[ef_monthly_statement_generator] Window: ${startDate} .. ${endDate}`);
 
+    // Only email statements to customers whose strategy is active AND whose
+    // registration is fully active. `registration_status` distinguishes
+    // active customers from prospects, KYC-in-progress, and inactive ones.
     const { data: strategies, error: strategyError } = await supabase
       .schema("public")
       .from("customer_strategies")
@@ -88,11 +91,13 @@ serve(async (_req) => {
           customer_id,
           first_names,
           last_name,
-          email
+          email,
+          registration_status
         )
       `)
       .eq("org_id", ORG_ID)
-      .eq("status", "active");
+      .eq("status", "active")
+      .ilike("customer_details.registration_status", "active");
 
     if (strategyError) {
       throw new Error(`Failed to fetch strategies: ${strategyError.message}`);

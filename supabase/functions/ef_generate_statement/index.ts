@@ -164,7 +164,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: customer, error: customerErr } = await supabase
     .schema("public")
     .from("customer_details")
-    .select("customer_id, first_names, last_name, email, org_id")
+    .select("customer_id, first_names, last_name, email, org_id, trade_start_date, account_model")
     .eq("customer_id", customerId)
     .single();
   if (customerErr || !customer) throw new Error(`Customer ${customerId} not found`);
@@ -181,7 +181,14 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const platRate = Number(strategy.platform_fee_rate ?? 0.0075);
   const perfSchedule = String(strategy.performance_fee_schedule ?? "monthly");
   const platSchedule = String(strategy.platform_fee_schedule ?? "immediate");
-  const inceptionDate = strategy.created_at ? new Date(strategy.created_at) : periodStart;
+  // Inception = the date the customer's account became active. We prefer the
+  // human-curated `customer_details.trade_start_date` and fall back to the
+  // strategy creation timestamp only when no activation date has been recorded.
+  const inceptionDate = customer.trade_start_date
+    ? new Date(customer.trade_start_date + "T00:00:00Z")
+    : (strategy.created_at ? new Date(strategy.created_at) : periodStart);
+  const accountModel = String(customer.account_model ?? "subaccount").toLowerCase();
+  const exchangeLabel = accountModel === "api" ? "VALR (API)" : "VALR (subaccount)";
 
   // ── Balances (opening = last row ≤ prev-month-end; closing = last row ≤ end) ──
   const { data: openingBal } = await supabase
@@ -227,15 +234,22 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const inceptionAnchorStr = inceptionBal?.date ?? inceptionStr;
 
   // ── Transactions for the month ────────────────────────────────────
-  const { data: txRows } = await supabase
+  // NB: lth_pvr.ledger_lines does NOT have an exchange_rate column. Selecting
+  // a non-existent column makes PostgREST return null `data` silently, which
+  // previously caused the entire Performance Summary + Transaction History to
+  // render as empty (issues #2 and #6, 2026-05-01 review).
+  const { data: txRows, error: txRowsErr } = await supabase
     .schema("lth_pvr")
     .from("ledger_lines")
-    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, exchange_rate, note")
+    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, note")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .gte("trade_date", startStr)
     .lte("trade_date", endStr)
     .order("trade_date", { ascending: true });
+  if (txRowsErr) {
+    console.error("[ef_generate_statement] ledger_lines query failed:", txRowsErr);
+  }
 
   // ── BTC price (used for fee USD conversion when the line is BTC-denominated) ──
   const { data: ciRow } = await supabase
@@ -248,11 +262,11 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     .maybeSingle();
   const btcPrice = Number(ciRow?.btc_price ?? 0);
 
-  // ── Most recent USD/ZAR rate from the period (or empty) ──
-  const fxRows = (txRows ?? [])
-    .map((t: any) => Number(t.exchange_rate ?? 0))
-    .filter((r) => r > 0);
-  const fxRate = fxRows.length ? fxRows[fxRows.length - 1] : 0;
+  // ── FX rate placeholder ──
+  // ledger_lines doesn't carry an FX rate, so we don't have a per-fill USD/ZAR.
+  // Leaving as 0 means the closing-NAV ZAR equivalent and the FX-rate footer row
+  // will display as "—". (Future: pull last fill's rate from order_fills.)
+  const fxRate = 0;
 
   // ── Aggregates from ledger_lines ──────────────────────────────────
   let contributionsUsd = 0;
@@ -373,7 +387,10 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   // ── Fee classification per Mockup B ───────────────────────────────
   const accruedFees: StatementFeeRow[] = [];
   const deductedFees: StatementFeeRow[] = [];
-  let accruedYtdUsd = 0;
+  // Year-to-date accrual is split between platform and performance so customers
+  // can distinguish the two on the PDF (issue #5, 2026-05-01 review).
+  let accruedYtdPlatformUsd = 0;
+  let accruedYtdPerformanceUsd = 0;
   let nextBillingDateLabel = "—";
 
   const totalFeesDeductedUsd = exchangeFeesUsd
@@ -395,6 +412,19 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   if (exchangeFeesUsd > 0) {
     deductedFees.push({ label: "Exchange fees (VALR fills)", amount_usd: fmtUsd(exchangeFeesUsd) });
   }
+
+  // ── HWM lookup (used by the interim performance-fee formula and the strategy block) ──
+  const { data: hwmRow } = await supabase
+    .schema("lth_pvr")
+    .from("customer_state_daily")
+    .select("high_water_mark_usd, hwm_contrib_net_cum")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const hwmUsd = Number(hwmRow?.high_water_mark_usd ?? 0);
+  const hwmContribCum = Number(hwmRow?.hwm_contrib_net_cum ?? 0);
 
   // ── Annual accrual lookup (if either fee is on annual schedule) ──
   if (platSchedule === "annual" || perfSchedule === "annual") {
@@ -418,18 +448,23 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
           amount_usd: fmtUsd(platformFeeUsdSum),
         });
       }
-      accruedYtdUsd += accruedPlatUsd;
+      accruedYtdPlatformUsd += accruedPlatUsd;
     }
     if (perfSchedule === "annual") {
-      // Conservative interim monthly slice — final figure is set by ef_collect_annual_fees.
-      const interimMonthlyPerfUsd = Math.max(0, (closingNav - openingNav - contributionsUsd + withdrawalsUsd)) * perfRate;
+      // Interim monthly slice using the proper HWM-aware formula:
+      //   gain_above_hwm = max(0, closingNav - HWM - contributions_since_HWM)
+      //   contributions_since_HWM = cum_net_contrib_to_date - hwm_contrib_net_cum
+      // This prevents deposits from being treated as performance (issue #4).
+      const contribsSinceHwm = Math.max(0, costBasisUsd - hwmContribCum);
+      const hwmThreshold = hwmUsd + contribsSinceHwm;
+      const interimMonthlyPerfUsd = Math.max(0, closingNav - hwmThreshold) * perfRate;
       if (interimMonthlyPerfUsd > 0) {
         accruedFees.push({
           label: `Performance fee — ${MONTH_NAMES[monthIdx]} ${year} (interim)`,
           amount_usd: fmtUsd(interimMonthlyPerfUsd),
         });
       }
-      accruedYtdUsd += Number(latestAccrual?.accrued_performance_fee_usdt ?? 0);
+      accruedYtdPerformanceUsd += Number(latestAccrual?.accrued_performance_fee_usdt ?? 0);
     }
 
     // Anniversary = next yearly anniversary of inception after today.
@@ -523,9 +558,10 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
     deducted_fees: deductedFees,
     deducted_total_usd: fmtUsd(totalFeesDeductedUsd),
-    show_accrued_block: accruedFees.length > 0 || accruedYtdUsd > 0,
+    show_accrued_block: accruedFees.length > 0 || accruedYtdPlatformUsd > 0 || accruedYtdPerformanceUsd > 0,
     accrued_fees: accruedFees,
-    accrued_ytd_usd: fmtUsd(accruedYtdUsd),
+    accrued_ytd_platform_usd: fmtUsd(accruedYtdPlatformUsd),
+    accrued_ytd_performance_usd: fmtUsd(accruedYtdPerformanceUsd),
     next_billing_date: nextBillingDateLabel,
 
     std_dca_closing_nav_usd: fmtUsd(stdClosingNav),
@@ -543,27 +579,13 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
     strategy_name: strategy.strategy_code === "STD_DCA" ? "Standard Bitcoin DCA" : "LTH PVR Bitcoin DCA",
     strategy_status: String(strategy.status ?? (strategy.live_enabled ? "active" : "paused")).replace(/^\w/, (c: string) => c.toUpperCase()),
-    exchange_label: "VALR (subaccount)",
+    exchange_label: exchangeLabel,
     inception_label: fmtDateLong(inceptionDate.toISOString().split("T")[0]),
     platform_fee_label: `${(platRate * 100).toFixed(2)} % · ${platSchedule}`,
     performance_fee_label: `${(perfRate * 100).toFixed(2)} % · ${perfSchedule} (HWM)`,
     next_anniversary_label: nextBillingDateLabel,
-    hwm_usd: "—",
+    hwm_usd: hwmUsd > 0 ? fmtUsd(hwmUsd) : "—",
   };
-
-  // HWM (best-effort lookup; statement still renders if missing).
-  const { data: hwmRow } = await supabase
-    .schema("lth_pvr")
-    .from("customer_state_daily")
-    .select("high_water_mark_usd")
-    .eq("org_id", orgId)
-    .eq("customer_id", customerId)
-    .order("date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (hwmRow?.high_water_mark_usd != null) {
-    data.hwm_usd = fmtUsd(Number(hwmRow.high_water_mark_usd));
-  }
 
   return { data, filename, storagePath, statementMonth };
 }

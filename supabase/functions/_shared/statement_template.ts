@@ -83,7 +83,10 @@ export interface StatementData {
   deducted_total_usd: string;
   show_accrued_block: boolean;
   accrued_fees: StatementFeeRow[];
-  accrued_ytd_usd: string;
+  /** Year-to-date platform-fee accrual (formatted USD). */
+  accrued_ytd_platform_usd: string;
+  /** Year-to-date performance-fee accrual (formatted USD). */
+  accrued_ytd_performance_usd: string;
   next_billing_date: string;     // "15 Jan 2027"
 
   // ── Benchmark comparison ────────────────────────────────────────────
@@ -301,7 +304,7 @@ export function renderStatementHtml(d: StatementData): string {
     <div class="meta">
       <div class="title">Monthly Statement</div>
       <div class="row"><span>Period:</span> ${e(d.period_label)}</div>
-      <div class="row"><span>Account:</span> ${e(d.customer_name)} (#${e(d.customer_id)})</div>
+      <div class="row"><span>Account:</span> ${e(d.customer_name)}</div>
       <div class="row"><span>Generated:</span> ${e(d.generated_at)}</div>
     </div>
   </header>
@@ -336,10 +339,13 @@ export function renderStatementHtml(d: StatementData): string {
         <tr><td class="k">Opening NAV (${e(d.opening_date)})</td><td class="v">${e(d.opening_nav_usd)}</td></tr>
         <tr><td class="k">Contributions this month</td><td class="v">${e(d.contributions_usd)}</td></tr>
         <tr><td class="k">Withdrawals this month</td><td class="v">${e(d.withdrawals_usd)}</td></tr>
-        <tr><td class="k">Trading P&amp;L</td><td class="v ${d.trading_pnl_positive ? "pos" : "neg"}">${e(d.trading_pnl_usd)}</td></tr>
+        <tr><td class="k">Trading P&amp;L (excl. contributions)</td><td class="v ${d.trading_pnl_positive ? "pos" : "neg"}">${e(d.trading_pnl_usd)}</td></tr>
         <tr><td class="k">Fees deducted</td><td class="v neg">${e(d.fees_deducted_usd)}</td></tr>
         <tr class="total"><td>Closing NAV (${e(d.closing_date)})</td><td class="v">${e(d.closing_nav_usd)}</td></tr>
       </table>
+      <div style="margin-top:6px; font-size:8pt; color: var(--muted); line-height:1.45;">
+        <strong>Trading P&amp;L</strong> isolates market movement: closing NAV minus opening NAV, with contributions and withdrawals removed. It differs from <strong>Net change this month</strong> at the top of the statement, which is the <em>gross</em> NAV change — inclusive of any deposits or withdrawals during the month.
+      </div>
     </div>
     <div>
       <table class="kv">
@@ -385,7 +391,8 @@ export function renderStatementHtml(d: StatementData): string {
     <h3>Accrued — to be billed later</h3>
     <table class="kv">
       ${renderFeeRows(d.accrued_fees)}
-      <tr class="total"><td>Year-to-date accrual</td><td class="v">${e(d.accrued_ytd_usd)}</td></tr>
+      <tr class="total"><td>Year-to-date accrual — platform fee</td><td class="v">${e(d.accrued_ytd_platform_usd)}</td></tr>
+      <tr class="total"><td>Year-to-date accrual — performance fee</td><td class="v">${e(d.accrued_ytd_performance_usd)}</td></tr>
     </table>
     <div class="next">
       Accrued fees will be collected on your <strong>annual fee anniversary, ${e(d.next_billing_date)}</strong>. The figures above are interim estimates and may be adjusted at year-end based on final NAV and high-water-mark.
