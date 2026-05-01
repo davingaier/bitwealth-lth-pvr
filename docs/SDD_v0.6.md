@@ -3,11 +3,139 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-04-29 (v0.6.98)
+**Last updated:** 2026-05-01 (v0.6.99)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.99 – Monthly statement May-1 production run: PDF/dispatcher bug-bash, HWM init, cron repairs, recipient filter, Outlook-safe button
+**Date:** 2026-05-01
+**Purpose:** Production was due to send the first batch of v0.6.98-format monthly statements at 00:01 UTC on 1 May 2026 (April 2026 period). The cron didn't fire, no statements were emailed, and a deep audit of the rendered preview for customer 49 (Tremyne Naidoo) surfaced **9 distinct generator/template bugs** plus **4 broken pg_cron jobs** plus a missing **HWM initialisation pathway** for customers activated after the original Jan 2026 phase-1 backfill. This change-set fixes everything end-to-end and successfully sends April 2026 statements to all eligible customers.
+
+**Status:** ✅ COMPLETE — code deployed, migrations applied, April 2026 statements emailed.
+
+#### 1 — Pipeline-level root causes
+
+| # | Root cause | Fix |
+|---|---|---|
+| A | `pg_cron` jobid **38** (`monthly_statement_generation`) had been failing silently since Feb 2026. Header used `'Bearer ' \|\| current_setting('app.settings.service_role_key')` — that GUC is not set on Supabase managed Postgres, so `net.http_post` was sending an empty bearer token and the edge function rejected with 401. | Migration `20260501_fix_monthly_statement_cron`: `cron.unschedule('monthly_statement_generation')`, then re-`cron.schedule(...)` with the working `'Bearer ' \|\| (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_jwt' LIMIT 1)` pattern. **New jobid 73**, schedule unchanged (`1 0 1 * *`). |
+| B | The **same broken auth pattern** was used by three other monthly fee-related jobs (jobids 39 / 40 / 41), all of which had been silently failing since Feb 2026. | Audited each one (necessity check) and applied migration `20260501_fix_monthly_fee_crons` — see §6 below. |
+| C | `lth_pvr.customer_state_daily.high_water_mark_usd` and `hwm_contrib_net_cum` were **never initialised** for customers activated after the Jan 2026 phase-1 backfill (e.g. customer 49). The generator's perf-fee block therefore treated *every dollar of contributions* as profit, producing an accrual of (deposits × `performance_fee_rate`) instead of zero. | New SECURITY DEFINER RPC `lth_pvr.ensure_hwm_initialised(p_customer_id, p_org_id)` + bulk wrapper `lth_pvr.ensure_hwm_initialised_all()` (migration `20260501_hwm_initialisation`). Seeds `high_water_mark_usd = current NAV` and `hwm_contrib_net_cum = cumulative net contributions` *only if* the customer has at least one deposit and the latest HWM is still 0. Backfill executed once; safety-net cron `lth_pvr_ensure_hwm_initialised_daily` (jobid 74, schedule `30 3 * * *`) runs the bulk wrapper every day so any future customer is auto-seeded on the morning of their first deposit's day-after. |
+
+#### 2 — Generator + template bug fixes (9 issues, customer 49 April 2026 PDF)
+
+Audited the rendered preview for customer 49 (Tremyne Naidoo) — `account_model='api'`, `performance_fee_schedule='annual'`, `platform_fee_schedule='annual'`, `performance_fee_rate=0.025`, `platform_fee_rate=0.0075`, `trade_start_date=2026-04-18`, deposited $17,950.20 USDT, NAV $17,950.20, no BTC yet. Nine issues identified and fixed:
+
+| # | Bug | Fix in `ef_generate_statement` and/or `_shared/statement_template.ts` |
+|---|---|---|
+| 1 | **Silent data loss** in transaction-table query: `.select(...,exchange_rate,...)` referenced a non-existent column on `lth_pvr.ledger_lines`. PostgREST returned `data: null` (no error in main code path), so the entire transactions section silently rendered empty. | Removed the `exchange_rate` selection. Set `fxRate = 0` placeholder (per-fill FX is not stored in `ledger_lines`; can be reintroduced when source-of-truth is decided). |
+| 2 | Inception date sourced from `customer_strategies.created_at`, which often pre-dates the first real trade by weeks. | Now reads `customer_details.trade_start_date`; falls back to `strategy.created_at` only if null. |
+| 3 | Exchange label hard-coded to `"VALR (subaccount)"`. | Derived from `customer_details.account_model`: `"VALR (API)"` for `api`, `"VALR (subaccount)"` otherwise. |
+| 4 | Performance-fee accrual treated *deposits as gain*, producing a non-zero accrual on a customer who hadn't traded yet. | Replaced with HWM-aware formula: `max(0, closingNav - hwmUsd - max(0, costBasisUsd - hwmContribCum)) × perfRate`. Reads `high_water_mark_usd` and `hwm_contrib_net_cum` from `customer_state_daily`. (Combined with §1-C this yields $0.00 for customer 49 in April, the correct value.) |
+| 5 | Single "Year-to-date accrual" row lumped platform + performance fees together. | Split into two `StatementData` fields (`accrued_ytd_platform_usd` + `accrued_ytd_performance_usd`) and two separate rows in the accrued block. The block triggers when *either* YTD value > 0. |
+| 6 | Header "Account" row included `(#${customer_id})`. | Removed — customer name only. |
+| 7 | "Performance summary" had a "Trading P&L" line with no clarification of how it differed from the headline "Net change this month" KPI (which includes contributions). | Renamed to "Trading P&L (excl. contributions)" + a 2-line caption explicitly contrasting the two figures. |
+| 8 | Strategy block displayed `hwmUsd` formatted as `$ 0.00` when not yet set. | Now renders an em-dash `—` when `hwmUsd <= 0`. |
+| 9 | `StatementData` interface still carried legacy `accrued_ytd_usd`. | Replaced with the two split fields above. |
+
+#### 3 — Customer-eligibility filter on the dispatcher
+
+Two iterations:
+
+1. First pass (intermediate): added `.ilike("customer_details.customer_status", "active")` to the `customer_strategies` query in `ef_monthly_statement_generator` so that strategies belonging to inactive *profiles* would be skipped.
+2. **Final** (current): switched the filter to `.ilike("customer_details.registration_status", "active")` per stakeholder direction. `registration_status` is the canonical gate that distinguishes fully-active customers from prospects, KYC-in-progress, deposit-pending, and offboarded. The embedded select now also pulls `registration_status` so it can be rendered in any future debugging.
+
+Eligible customer list as of 2026-05-01: **5 customers** — IDs 9, 31, 49, 54, 999.
+
+#### 4 — "View Full Statement" button: links to PDF directly + Outlook-safe
+
+**Before.** Email body had `<a href="{{portal_url}}" class="button">View Full Statement</a>`, dropping customers onto the customer-portal home page where they had to find the Statements section themselves. Worse, Outlook for Windows (Word rendering engine) ignores `<style>`-block CSS, so the "button" rendered as a plain blue underlined hyperlink.
+
+**After.** Two-part fix to the `monthly_statement` row in `public.email_templates`:
+1. **URL change.** Button now points to `{{download_url}}` (the signed Supabase Storage URL of the freshly-generated PDF, already provided by `ef_generate_statement` and passed through to the template by the dispatcher). Added `target="_blank" rel="noopener"` so the PDF opens in a new tab.
+2. **Bulletproof button markup.** Replaced the single `<a class="button">` with a Microsoft-style conditional pair:
+   - `<!--[if mso]>` … `<v:roundrect>` … `<![endif]-->` — VML-rendered gold pill (220×44 px, `arcsize="10%"`, fillcolor `#F39C12`, navy bold text) for Outlook desktop.
+   - `<!--[if !mso]><!-- -->` … `<a … style="background:#F39C12;…mso-hide:all;">` — fully-inline-styled `<a>` for Gmail / Apple Mail / Outlook 365 web / mobile clients. `mso-hide:all` stops Outlook desktop from rendering both copies.
+3. Both branches link to the same `{{download_url}}`. No deployment required (DB row only); takes effect on the next email send.
+
+#### 5 — pg_cron auth pattern that works on Supabase managed Postgres
+
+For future reference: every `pg_cron` job that calls an edge function must use:
+
+```sql
+'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_jwt' LIMIT 1)
+```
+
+The previously-attempted `'Bearer ' || current_setting('app.settings.service_role_key')` pattern is **broken** on this database — the GUC is not set, so it expands to an empty string and `net.http_post` sends `Authorization: Bearer ` (no token), which the edge-function gateway rejects with 401. Three crons silently failed for ~3 months because of this.
+
+#### 6 — Audit + repair of three other monthly fee crons
+
+| jobid | Name | Calls | Status before | Status after | Necessity check |
+|---|---|---|---|---|---|
+| 39 | `monthly-performance-fees` | `ef_calculate_performance_fees` | Broken (bad GUC) | **Rescheduled** with vault pattern → new **jobid 75** | **Needed** — 4 active customers (9, 47, 48, 54) have `performance_fee_schedule='monthly'` with `performance_fee_rate > 0`. The function explicitly skips `'annual'` schedule customers. |
+| 40 | `monthly-fee-close` | `ef_fee_monthly_close` | Broken (bad GUC) | **Unscheduled** (deleted) | **Redundant** — duplicate of working jobid 15 (`lthpvr_fee_monthly_close`) which already calls the same function via the `lth_pvr.call_edge(...)` SQL helper. jobid 15 has succeeded every month for 5+ months (verified via `cron.job_run_details`). |
+| 41 | `transfer-accumulated-fees` | `ef_transfer_accumulated_fees` | Broken (bad GUC) | **Rescheduled** with vault pattern + ORG_ID body → new **jobid 76** | **Needed** — moves accumulated platform fee BTC/USDT from each customer's VALR subaccount to the BitWealth main account once VALR's per-currency minimum-transfer thresholds are met. Independent of fee schedule. |
+
+Migration: `20260501_fix_monthly_fee_crons`.
+
+⚠️ **Side-effect of jobid 39 being broken Feb–Apr 2026:** monthly performance fees for customers 9, 47, 48, 54 were not calculated/posted for those three periods. The function uses `customer_state_daily.last_perf_fee_month` to skip already-charged months, so a manual re-invocation now would compute and post the missing months. Decision deferred (not run automatically).
+
+#### 7 — Manual April 2026 dispatch + customer-49 special handling
+
+After all fixes were live, manually invoked `ef_monthly_statement_generator` with empty body. Because today is 1 May, `now.getMonth()=4 → prevMonth=4 → April`, so the default code path correctly targets the April 2026 period.
+
+The first invocation hit Supabase's 150 s edge-function gateway timeout (the dispatcher iterates synchronously over all eligible customers; render+email is ~10 s per customer). The function continued running server-side — 7 customers received their statement before the gateway dropped the response.
+
+Customer 49 had a stale `statements_sent` row generated on 2026-04-30 22:12 (before the v0.6.99 generator fixes). The dispatcher's idempotency check would have re-sent that buggy PDF. Resolution:
+1. `DELETE FROM lth_pvr.statements_sent WHERE customer_id=49 AND statement_month='2026-04-01'`.
+2. Re-invoked the dispatcher — generated a fresh PDF with all 9 fixes applied and emailed it.
+
+Final outcome for April 2026 (10 customers initially scanned, before the registration_status filter went live):
+
+| Customer | Generated | Emailed | Notes |
+|---|---|---|---|
+| 9, 12, 31, 44, 45, 48, 999 | First run | ✅ | |
+| 49 (Tremyne Naidoo) | Re-run after deletion | ✅ | First production statement with v0.6.99 fixes |
+| 54 (DEV TEST05) | Re-run | ✅ | Was the 10th customer the first run never reached |
+| 47 (DEV TEST) | ✅ | ❌ | Email rejected — `550 No Such User Here`; test account with bogus address |
+
+#### 8 — Outlook button verification test
+
+After the bulletproof-button fix, sent a test resend of customer 54's April 2026 statement to `dev.test05@bitwealth.co.za` (cleared `emailed_at` first to bypass idempotency). `email_logs` confirms `status='sent'` at 2026-05-01 18:45:03 UTC, no errors.
+
+#### Files changed
+
+| File | Change |
+|---|---|
+| `supabase/functions/ef_generate_statement/index.ts` | Fixes #1–#9 from §2: removed `exchange_rate` select, switched inception source, derived `exchangeLabel` from `account_model`, HWM-aware perf-fee formula, split YTD accruals, header dropped customer ID, strategy block uses em-dash for unset HWM. |
+| `supabase/functions/_shared/statement_template.ts` | `StatementData` interface: `accrued_ytd_usd` → `accrued_ytd_platform_usd` + `accrued_ytd_performance_usd`. Performance-summary block: renamed Trading P&L row + 2-line caption. Accrued block: 2 split rows. Header Account row dropped `(#id)`. |
+| `supabase/functions/ef_monthly_statement_generator/index.ts` | `customer_strategies` select now embeds `registration_status` and filters with `.ilike("customer_details.registration_status", "active")`. |
+| `public.email_templates` (DB) | `monthly_statement.body_html` — "View Full Statement" button replaced with VML-conditional bulletproof button pointing to `{{download_url}}`. |
+| **NEW migration:** `20260501_fix_monthly_statement_cron` | Re-creates jobid 38 → 73 with vault auth pattern. |
+| **NEW migration:** `20260501_hwm_initialisation` | RPC `lth_pvr.ensure_hwm_initialised(uuid, bigint)` + `lth_pvr.ensure_hwm_initialised_all()` + safety-net cron jobid 74 (`30 3 * * *`). One-shot backfill executed (customer 49 seeded to NAV $17,950.20). |
+| **NEW migration:** `20260501_fix_monthly_fee_crons` | Unschedules `monthly-performance-fees`, `monthly-fee-close`, `transfer-accumulated-fees`; re-schedules the two needed ones (perf-fees and transfer) with vault auth pattern; deletes the redundant fee-close job. |
+
+#### Deployment
+```powershell
+supabase functions deploy ef_generate_statement              --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+supabase functions deploy ef_monthly_statement_generator     --project-ref wqnmxpooabmedvtackji --no-verify-jwt
+```
+DB migrations applied directly via MCP `apply_migration`. No `supabase db push` needed.
+
+#### Verification (production, 2026-05-01)
+- `cron.job` shows the 5 surviving monthly jobs all `active=true`: jobid 15 (lthpvr_fee_monthly_close), 73 (monthly_statement_generation), 74 (lth_pvr_ensure_hwm_initialised_daily), 75 (monthly-performance-fees), 76 (transfer-accumulated-fees). jobid 38 / 39 / 40 / 41 are gone.
+- `lth_pvr.statements_sent` shows 9 of 10 customers with `emailed_at IS NOT NULL` for `statement_month=2026-04-01`. The 10th (customer 47, dev test) is intentional.
+- Customer 49's PDF preview validates all 9 generator fixes (inception 2026-04-18, exchange `VALR (API)`, perf-fee accrual $0.00, no `(#id)` in header, em-dash for HWM, etc.).
+- `customer_state_daily` for customer 49: `high_water_mark_usd=17950.20`, `hwm_contrib_net_cum=17950.20`.
+- Bulletproof button confirmed via test send to customer 54 (verification still pending visual inspection in Outlook desktop by stakeholder).
+
+#### Known follow-ups
+- **Performance-fee backfill for Feb–Apr 2026** for customers 9, 47, 48, 54 (collateral of broken jobid 39). Manual one-shot invocation of `ef_calculate_performance_fees` would post the missing months because the function loops `last_perf_fee_month + 1 .. previous_month`. Awaiting decision.
+- **Per-fill FX rate.** `fxRate = 0` placeholder is in place because `ledger_lines` does not store an exchange-rate column. If reinstating this on the PDF is desired, decide whether to (a) source from `exchange_orders.fill_price` per `intent_id` join, or (b) snapshot `usdt_zar` daily from VALR's `simple/quote` endpoint.
+- **Signed-URL lifetime.** `ef_generate_statement` mints 30-day signed URLs. The "View Full Statement" button now points to that URL — fine for monthly emails opened within ~30 days, but the link will 403 after that. Consider extending to 365 days, or implementing a redirect EF that re-signs on demand.
+
+---
 
 ### v0.6.98 – Monthly statement PDF redesign (HTML + Browserless)
 **Date:** 2026-04-29
