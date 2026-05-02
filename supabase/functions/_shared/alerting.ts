@@ -4,6 +4,7 @@
 // Minimal type for Supabase client - avoids import issues in shared files
 interface SupabaseClient {
   from(table: string): any;
+  schema(name: string): { from(table: string): any };
 }
 
 export type AlertSeverity = "info" | "warn" | "error" | "critical";
@@ -22,9 +23,12 @@ export interface AlertContext {
 }
 
 /**
- * Log an alert to lth_pvr.alert_events table
- * 
- * @param sb - Supabase client (must be configured with lth_pvr schema)
+ * Log an alert to public.alert_events table.
+ * (Table was relocated from lth_pvr -> public on 2026-05-02 because
+ * alerts are strategy-agnostic. We always schema-qualify so this works
+ * regardless of the client's default schema.)
+ *
+ * @param sb - Supabase client
  * @param component - Component name (e.g., 'ef_generate_decisions')
  * @param severity - Alert severity level
  * @param message - Human-readable alert message
@@ -54,7 +58,7 @@ export async function logAlert(
     if (customerId) payload.customer_id = customerId;
     if (portfolioId) payload.portfolio_id = portfolioId;
 
-    await sb.from("alert_events").insert(payload);
+    await sb.schema("public").from("alert_events").insert(payload);
   } catch (e) {
     console.error(`${component}: alert_events insert failed`, e);
   }
@@ -77,6 +81,7 @@ export async function hasUnresolvedAlert(
 ): Promise<boolean> {
   try {
     let query = sb
+      .schema("public")
       .from("alert_events")
       .select("alert_id")
       .eq("component", component)

@@ -4,6 +4,7 @@
 // Minimal type for Supabase client - avoids import issues in shared files
 interface SupabaseClient {
   from(table: string): any;
+  schema(name: string): { from(table: string): any };
 }
 
 export type AlertSeverity = "info" | "warn" | "error" | "critical";
@@ -54,7 +55,7 @@ export async function logAlert(
     if (customerId) payload.customer_id = customerId;
     if (portfolioId) payload.portfolio_id = portfolioId;
 
-    await sb.from("alert_events").insert(payload);
+    await sb.schema("public").from("alert_events").insert(payload);
   } catch (e) {
     console.error(`${component}: alert_events insert failed`, e);
   }
@@ -77,6 +78,7 @@ export async function hasUnresolvedAlert(
 ): Promise<boolean> {
   try {
     let query = sb
+      .schema("public")
       .from("alert_events")
       .select("alert_id")
       .eq("component", component)

@@ -62,7 +62,7 @@ The system runs a **6-step sequential pipeline** every trading day:
   - Decision tables: `ci_bands_daily`, `decisions_daily`, `order_intents`
   - Exchange integration: `exchange_orders`, `order_fills`
   - Accounting: `ledger_lines`, `balances_daily`, `customer_state_daily`
-  - Monitoring: `alert_events`, `ci_bands_guard_log`
+  - Monitoring: `ci_bands_guard_log` (note: `alert_events` lives in `public` since 2026-05-02 — strategy-agnostic)
   - Benchmark: `std_dca_balances_daily`, `std_dca_ledger`
 
 - **`lth_pvr_bt`** - Back-testing (isolated from live data)
@@ -116,7 +116,7 @@ await logAlert(
 
 **Alert Digest Email:**
 - `ef_alert_digest` runs daily at 05:00 UTC via `pg_cron`
-- Queries unnotified error/critical alerts from `lth_pvr.alert_events`
+- Queries unnotified error/critical alerts from `public.alert_events` (relocated from `lth_pvr` on 2026-05-02; backwards-compat view kept temporarily)
 - Sends email via Resend API, updates `notified_at` timestamp
 - **UI:** Administration module displays alert badge with count, filterable by component
 

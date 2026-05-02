@@ -113,6 +113,54 @@ User noted that `customer 9` (an `ADV_DCA`-only customer) had no business having
 - `supabase/migrations/` — `20260502_lth_pvr_only_state_invariant`
 - `docs/SDD_v0.6.md` — this addendum
 
+#### Addendum #3 (same day) — Strategy-purity audit: `alert_events` relocated to `public`, LTH_PVR-only invariant extended to all per-strategy tables
+
+The user authorized a follow-up audit covering every other `lth_pvr.*` table that is keyed on `(customer_id, org_id)`. Two structural changes were applied:
+
+**Change 1 — `alert_events` is strategy-AGNOSTIC and now lives in `public`.**
+The table was originally created in `lth_pvr.alert_events`, but in practice every edge function (back-test, exchange ops, KYC, withdrawal, FIC compliance, deposit scanner, etc.) writes to it, and the UI reads it via the `public.list_lth_alert_events()` RPC. It violates the project convention that strategy-specific schemas only hold strategy-specific data. Migration `20260502_move_alert_events_to_public`:
+1. Creates `public.alert_events` with identical structure (incl. `notified_at`), indexes, and RLS policies.
+2. Copies all **46,172 existing rows** preserving `alert_id` and timestamps (`ON CONFLICT DO NOTHING` for idempotency).
+3. Drops `lth_pvr.v_alert_events_open` and `lth_pvr.v_alert_events_summary_7d`, renames the old table to `lth_pvr.alert_events_old_backup`, then creates **`lth_pvr.alert_events` as a transparent SELECT/INSERT/UPDATE/DELETE-able view over `public.alert_events`**. Existing callers that haven't been repointed yet keep working unchanged.
+4. Recreates the two operational views over `public.alert_events`.
+
+Migration `20260502_repoint_alert_event_fns_to_public` then rewrites every SQL function to target `public.alert_events` directly: `lth_pvr.raise_alert`, `lth_pvr.alert_ack`, `lth_pvr.get_pipeline_status`, `lth_pvr.resume_daily_pipeline`, `public.list_lth_alert_events`, `public.resolve_lth_alert_event`, `public.get_admin_dashboard_metrics`.
+
+All edge-function writers were updated to `sb.schema("public").from("alert_events")`:
+- Canonical helper: `supabase/functions/_shared/alerting.ts`
+- Per-EF stale clones (kept in sync): `ef_execute_orders/alerting.ts`, `ef_poll_orders/alerting.ts`, `ef_create_order_intents/alerting.ts`, `ef_generate_decisions/alerting.ts`
+- Direct inserts in 8 EFs: `ef_renew_rb_token`, `ef_fetch_rb_bands`, `ef_fetch_ci_bands`, `ef_atms_monitor` (×2), `ef_bt_execute`, `ef_tfs_screen`, `ef_valr_ws_monitor`, `ef_alert_digest` (read + update)
+
+A new deploy script `deploy-alert-events-relocation.ps1` redeployed all **33 affected edge functions** with the correct per-function `--no-verify-jwt` setting (28 internal/cron, 5 public/auth). All 33 deployed successfully. Smoke test confirmed live writes from `ef_post_ledger_and_balances` and `ef_sync_valr_transactions` are landing in `public.alert_events` post-deploy.
+
+The UI (`ui/Advanced BTC DCA Strategy.html` line 8955) calls `rpc('list_lth_alert_events', ...)` — no UI change needed because the RPC's signature is unchanged.
+
+**Change 2 — LTH_PVR-only invariant extended to all per-strategy tables.**
+
+Migration `20260502_audit_lth_pvr_strategy_specific_tables` does three things:
+1. **Generalizes** `lth_pvr.enforce_lth_pvr_customer()` to use `TG_TABLE_SCHEMA`/`TG_TABLE_NAME` in the error message so a single trigger function can guard any table.
+2. **DELETEs 45 orphan rows** (all customer 9, ADV_DCA only) discovered by the audit:
+   - `decisions_daily` — 38 rows (Apr–May 2026)
+   - `exchange_funding_events`, `ledger_lines` — 2 each
+   - `balances_daily`, `hodl_balances_daily`, `statements_sent` — 1 each
+3. **Attaches `trg_enforce_lth_pvr_customer` BEFORE INSERT/UPDATE** triggers to **20 strategy-specific `lth_pvr.*` tables**:
+   - Core daily pipeline: `decisions_daily`, `balances_daily`, `ledger_lines`, `hodl_balances_daily`, `exchange_funding_events`, `statements_sent`, `order_intents`
+   - Fees / accounting: `customer_accumulated_fees`, `fee_invoices`, `fees_monthly`, `annual_fee_accrual`, `fee_conversion_approvals`, `carry_buckets`
+   - Benchmark (Standard DCA shadow strategy): `std_dca_balances_daily`, `std_dca_config`, `std_dca_ledger`
+   - Exchange-ops (currently LTH_PVR-only by usage): `pending_zar_conversions`, `valr_transfer_log`, `withdrawal_requests`, `withdrawal_fee_snapshots`
+
+Smoke-tested: direct `INSERT INTO lth_pvr.decisions_daily VALUES (..., customer_id=9, ...)` correctly raises `check_violation`.
+
+**Why exchange-ops tables too?** They currently hold only LTH_PVR rows because no other live strategy uses VALR yet. The trigger guarantees that if/when another strategy is activated, those writes won't accidentally leak into the LTH_PVR schema — the developer will hit a hard error and be forced to migrate the table to `public` (or to the new strategy's schema) first.
+
+**`lth_pvr.alert_events` cleanup:** the backwards-compatibility view + `lth_pvr.alert_events_old_backup` table are kept until the next maintenance window so we can validate live traffic for ≥7 days before dropping them. Drop SQL is queued for the next migration.
+
+**Files touched (addendum #3):**
+- DB: migrations `20260502_move_alert_events_to_public`, `20260502_repoint_alert_event_fns_to_public`, `20260502_audit_lth_pvr_strategy_specific_tables`
+- Edge functions: 33 EFs (see deploy script). Canonical changes in `supabase/functions/_shared/alerting.ts`; mirror changes in 4 stale per-EF clones; direct repoints in 8 EFs.
+- New: `deploy-alert-events-relocation.ps1`
+- `docs/SDD_v0.6.md` — this addendum
+
 ---
 
 ### v0.6.99 – Monthly statement May-1 production run: PDF/dispatcher bug-bash, HWM init, cron repairs, recipient filter, Outlook-safe button

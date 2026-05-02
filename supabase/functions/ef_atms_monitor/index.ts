@@ -162,14 +162,14 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── Step 4: Log to lth_pvr.alert_events if new alerts were raised ────
+    // ── Step 4: Log to public.alert_events if new alerts were raised ────
     if (result.new_alerts_created > 0) {
       const summary = Object.entries(result.by_rule)
         .filter(([, s]) => s.inserted > 0)
         .map(([rule, s]) => `${rule}:${s.inserted}`)
         .join(", ");
 
-      await sb.schema("lth_pvr").from("alert_events").insert({
+      await sb.schema("public").from("alert_events").insert({
         org_id:     ORG_ID,
         component:  "ef_atms_monitor",
         severity:   result.by_rule["ATMS-07"]?.inserted > 0 || result.by_rule["ATMS-03"]?.inserted > 0
@@ -191,7 +191,7 @@ Deno.serve(async (req: Request) => {
     console.error(`[ef_atms_monitor] Fatal error: ${message}`);
 
     // Log operational failure to alert_events
-    await sb.schema("lth_pvr").from("alert_events").insert({
+    await sb.schema("public").from("alert_events").insert({
       org_id:    ORG_ID,
       component: "ef_atms_monitor",
       severity:  "error",

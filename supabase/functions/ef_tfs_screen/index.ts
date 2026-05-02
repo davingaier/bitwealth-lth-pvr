@@ -499,10 +499,10 @@ async function writeScreeningResult(
       console.error(`Failed to create compliance alert for customer ${customer.customer_id}:`, alertErr.message);
     }
 
-    // For confirmed matches, also log to lth_pvr.alert_events for the main alert digest
+    // For confirmed matches, also log to public.alert_events for the main alert digest
     if (result === "confirmed_match") {
       await sb
-        .schema("lth_pvr")
+        .schema("public")
         .from("alert_events")
         .insert({
           org_id:    ORG_ID,

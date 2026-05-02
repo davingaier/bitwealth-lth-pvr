@@ -42,7 +42,8 @@ Deno.serve(async (req: Request) => {
 
   // 1) Load NEW open error/critical alerts (never notified)
   const { data, error } = await sb
-    .from<AlertRow>("alert_events")
+    .schema("public")
+    .from("alert_events")
     .select("alert_id, created_at, severity, component, message")
     .eq("org_id", org_id)
     .in("severity", ["error", "critical"])
@@ -94,8 +95,9 @@ Deno.serve(async (req: Request) => {
   }
 
   // 3) Mark alerted rows as notified
-  const ids = alerts.map((a) => a.alert_id);
+  const ids = alerts.map((a: AlertRow) => a.alert_id);
   const { error: updErr } = await sb
+    .schema("public")
     .from("alert_events")
     .update({ notified_at: new Date().toISOString() })
     .in("alert_id", ids);

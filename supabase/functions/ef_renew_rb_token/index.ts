@@ -39,7 +39,7 @@ async function logAlert(
       context,
     };
     if (orgId) payload.org_id = orgId;
-    await sb.schema("lth_pvr").from("alert_events").insert(payload);
+    await sb.schema("public").from("alert_events").insert(payload);
   } catch (e) {
     console.error("ef_renew_rb_token: alert_events insert failed", e);
   }

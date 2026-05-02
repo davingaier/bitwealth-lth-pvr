@@ -48,7 +48,7 @@ async function logAlert(
     if (customerId) payload.customer_id = customerId;
     if (portfolioId) payload.portfolio_id = portfolioId;
 
-    await sb.from("alert_events").insert(payload);
+    await sb.schema("public").from("alert_events").insert(payload);
   } catch (e) {
     console.error(`${component}: alert_events insert failed`, e);
   }

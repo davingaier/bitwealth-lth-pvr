@@ -817,7 +817,7 @@ Deno.serve(async (req)=>{
       // Log an alert so the failure appears in the Admin UI alert panel
       try {
         const sb = getServiceClient();
-        await sb.schema("lth_pvr").from("alert_events").insert({
+        await sb.schema("public").from("alert_events").insert({
           component: "ef_bt_execute",
           severity: "error",
           org_id: Deno.env.get("ORG_ID") ?? null,

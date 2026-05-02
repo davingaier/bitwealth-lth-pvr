@@ -48,7 +48,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Simple alert helper writing to lth_pvr.alert_events
+  // Simple alert helper writing to public.alert_events
   async function logAlert(
     severity: "info" | "warn" | "error" | "critical",
     message: string,
@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
         context,
       };
       if (orgId) payload.org_id = orgId;
-      await sb.schema("lth_pvr").from("alert_events").insert(payload);
+      await sb.schema("public").from("alert_events").insert(payload);
     } catch (e) {
       console.error("ef_fetch_ci_bands: alert_events insert failed", e);
     }
