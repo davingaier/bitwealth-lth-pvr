@@ -3,7 +3,7 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-02 (v0.6.100)
+**Last updated:** 2026-05-02 (v0.6.101)
 
 ---
 
@@ -200,6 +200,78 @@ The relocation surfaced an underlying noise problem: **46,172 historical alert r
 **Future considerations (not done):**
 - Demote routine "Batch transfer found 0 customers" / "Batch transfer check: thresholds…" / per-fill withdrawal-detection messages from `info`-severity alerts to plain `console.log()` — they're operational debug, not alerts. (Touches `ef_post_ledger_and_balances` and `ef_sync_valr_transactions`. Out of scope for this change-set; flagged.)
 - Add an "Auto-resolve stale info alerts after N days" sweeper job, or simply let the staleness-cutoff churn through them naturally.
+
+#### Addendum #5 (same day) — Fee-schedule cadence rule + `monthly` platform schedule + UI guard
+
+**Background.** The system supports per-customer `platform_fee_schedule` ∈ {`immediate`, `annual`} and `performance_fee_schedule` ∈ {`monthly`, `annual`} as independent settings on `public.customer_strategies`. There was no validation preventing nonsensical combinations such as `platform=annual + performance=monthly`, where customers would still be transacted-against monthly for the perf fee while the platform fee accrues silently — defeating the cost/UX rationale of choosing `annual` in the first place, and (for api-model customers) also paying 12× monthly on-chain withdrawal fees plus a separate annual one. User also requested adding `monthly` as a platform-schedule option for greater flexibility.
+
+**Design rule (single source of truth).** Platform-fee schedule must be **at least as frequent** as performance-fee schedule:
+
+> `rank(platform) ≤ rank(performance)`, where ranks are `immediate=1`, `monthly=2`, `annual=3` (lower rank = more frequent).
+
+This kills the only nonsensical combination (`annual` + `monthly`) and is forward-compatible if `weekly`/`quarterly` are added later. The valid matrix is:
+
+| Platform ↓ \ Performance → | monthly | annual |
+|---|---|---|
+| **immediate** | ✅ | ✅ |
+| **monthly**   | ✅ | ✅ |
+| **annual**    | ❌ | ✅ |
+
+**Defense in depth — three enforcement layers.**
+
+1. **Migration `20260502_fee_schedule_cadence_rule`:**
+   - New helper `public.fee_schedule_rank(text) returns int` (IMMUTABLE).
+   - Pre-flight DO block aborts the migration if any existing row would violate the rule (none did).
+   - Replaces `customer_strategies_platform_fee_schedule_check` to permit `monthly`: now allows {`immediate`, `monthly`, `annual`}.
+   - Adds `customer_strategies_fee_cadence_check`: `platform IS NULL OR performance IS NULL OR rank(platform) ≤ rank(performance)`. (NULL on either side passes — partial configs allowed during onboarding; final state enforced at the API/UI layer.)
+
+2. **`supabase/functions/ef_confirm_strategy/index.ts`:** new validation block before insert returns HTTP 400 with explanatory message for any of:
+   - Invalid `platform_fee_schedule` value (not in {immediate, monthly, annual})
+   - Invalid `performance_fee_schedule` value (not in {monthly, annual})
+   - `rank(platform_fee_schedule) > rank(performance_fee_schedule)`
+
+3. **UI (`ui/Advanced BTC DCA Strategy.html`):**
+   - Added `Monthly` option to all four `platform_fee_schedule` selects (Customer Maintenance, Strategy Confirmation Modal, Customer Setup Modal, Finance fee-edit table).
+   - All cadence-paired selects now carry `data-cadence-platform` / `data-cadence-performance` attributes.
+   - New global helper `window.applyFeeCadenceGuards()` — finds each pair within the nearest common ancestor (`form|fieldset|tr|#setupModal|#strategyModal|…`), wires `change` listeners that disable invalid `<option>`s in real time and snap the partner select to its closest valid value if the user creates a conflict. Re-runs automatically on DOM mutations via `MutationObserver` so dynamically-rendered modals/tables get wired without explicit calls.
+
+**Smoke-tested:**
+- Direct INSERT of `('annual', 'monthly')` raises `check_violation` ✅
+- All 5 legal combos pass ✅
+- Existing 10 active customer rows: no violations.
+
+**Files touched (addendum #5):**
+- DB: migration `20260502_fee_schedule_cadence_rule`
+- `supabase/functions/ef_confirm_strategy/index.ts` (deployed `--no-verify-jwt`)
+- `ui/Advanced BTC DCA Strategy.html` (4 select sites + cadence-guard helper at top of Real Orders script block)
+
+#### Addendum #6 (same day) — Group B fee-routing extension to monthly/annual settlement + alert noise fix
+
+Two follow-ups from the platform-fee schedule-gate work earlier in v0.6.100/v0.6.99 that left behind known fragile code paths.
+
+**Issue 1 — `ef_calculate_performance_fees` would re-trigger the original "null from_subaccount_id" bug for api-model customers on `monthly` performance schedule.** The function previously imported `transferToMainAccount` directly and built a manual `exchange_accounts` lookup that only knew about subaccount IDs. With `monthly` perf fee on customer 9 (api-model), the next 1st-of-month run would have failed identically to the pre-fix Group B failure mode.
+
+**Issue 2 — `ef_transfer_accumulated_fees` (the monthly batch drain) had the same shape.** It was safe today only because no api-model customer was on a deferred platform schedule that would route through it; with `monthly` platform now selectable (addendum #5), this would become a live failure.
+
+**Fix.** Both functions now route through `_shared/valrTransfer.ts → withdrawFeeFromCustomerAccount(sb, customerId, currency, amount, ledgerId?, transferType?)`, which resolves credentials internally via `resolveCustomerCredentials()` and branches:
+
+- `subaccount` model → internal sub→main transfer (same as before)
+- `api` model → on-chain VALR withdrawal to the address in `public.wallet_config` for the matching `(asset, is_active=true)` row
+
+`ef_transfer_accumulated_fees` lost its `customer_strategies` + `exchange_accounts` joins and the `customerAccountMap` it built — all redundant once the helper does the lookup itself.
+
+**Issue 3 — Recurring info alerts in the Administration UI.** The screenshot showed `ZAR withdrawal: Jemaica Gaier withdrew 50 ZAR` with `occurrence_count=8` despite repeated Resolves. Root cause: `ef_sync_valr_transactions` calls `logAlert(...)` for ZAR withdrawals **before** the per-transaction idempotency check (`exchange_funding_events.idempotency_key = VALR_TX_<id>`). The funding event itself was correctly skipped on subsequent cron passes, but the alert had already fired again, so each Resolve simply opened the door for the next 30-min cron pass to bump (or recreate) the dedup row. The dedup trigger from addendum #4 was working correctly — it just had no way to suppress a re-emission once the prior row was resolved.
+
+**Fix.** Both alert sites in `ef_sync_valr_transactions` (the INTERNAL_TRANSFER OUT manual withdrawal branch and the FIAT_WITHDRAWAL/SIMPLE_SELL ZAR branch) now probe `exchange_funding_events` for `VALR_TX_${transactionId}` first and only emit the alert when no prior funding event exists for that VALR transaction id. The current open occurrence was resolved manually with `resolution_note='system_dedup_fix'`.
+
+**Files touched (addendum #6):**
+- `supabase/functions/ef_calculate_performance_fees/index.ts` — replaced `transferToMainAccount` import + manual `exchange_accounts` lookup with single `withdrawFeeFromCustomerAccount(supabase, customerId, "USDT", performanceFee, ledgerId, "performance_fee")` call (deployed `--no-verify-jwt`)
+- `supabase/functions/ef_transfer_accumulated_fees/index.ts` — same swap for both BTC and USDT batch drains; removed redundant `customerAccountMap` and joins (deployed `--no-verify-jwt`)
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — both withdrawal-alert sites guarded by pre-existence check on the VALR transaction id (deployed `--no-verify-jwt`)
+- DB: one-row UPDATE on `public.alert_events` resolving the open ZAR-withdrawal info alert (no migration)
+
+**Open follow-up (not done in this change-set):**
+- Demote routine info-severity alerts in `ef_sync_valr_transactions` and `ef_post_ledger_and_balances` to `console.log()` (carried forward from addendum #4 future-considerations).
 
 ---
 
