@@ -1582,13 +1582,13 @@
                 <label><span class="label-line">Upfront contribution (BTC)</span><input name="upfront_contribution_btc" type="number" min="0" step="0.00000001" /></label>
                 <label><span class="label-line">Platform fee rate</span><input name="platform_fee_rate" type="number" step="0.0025" min="0" max="0.10" /></label>
                 <label><span class="label-line">Platform fee schedule</span>
-                  <select name="platform_fee_schedule">
-                    <option value="immediate">Immediate</option><option value="annual">Annual</option>
+                  <select name="platform_fee_schedule" data-cadence-platform>
+                    <option value="immediate">Immediate</option><option value="monthly">Monthly</option><option value="annual">Annual</option>
                   </select>
                 </label>
                 <label><span class="label-line">Performance fee rate</span><input name="performance_fee_rate" type="number" step="0.005" min="0" max="0.5" /></label>
                 <label><span class="label-line">Performance fee schedule</span>
-                  <select name="performance_fee_schedule">
+                  <select name="performance_fee_schedule" data-cadence-performance>
                     <option value="monthly">Monthly</option><option value="annual">Annual</option>
                   </select>
                 </label>
@@ -1729,8 +1729,9 @@
               </div>
               <div>
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Schedule</label>
-                <select id="strategyModalPlatformSchedule" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                <select id="strategyModalPlatformSchedule" data-cadence-platform style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
                   <option value="immediate">Immediate</option>
+                  <option value="monthly">Monthly</option>
                   <option value="annual" selected>Annual</option>
                 </select>
               </div>
@@ -1740,7 +1741,7 @@
               </div>
               <div>
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Perf. Fee Schedule</label>
-                <select id="strategyModalPerfSchedule" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                <select id="strategyModalPerfSchedule" data-cadence-performance style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
                   <option value="monthly">Monthly</option>
                   <option value="annual" selected>Annual</option>
                 </select>
@@ -2460,6 +2461,59 @@
 
     <!-- ANCHOR: Real Orders (VALR) JS START -->
     <script>
+    // ─── Fee-schedule cadence guard (mirrors public.fee_schedule_rank) ──────
+    // Rule: rank(platform) <= rank(performance) where immediate=1, monthly=2,
+    // annual=3. Disables conflicting <option>s so users can't pick e.g.
+    // "annual platform + monthly performance". Pairs are matched within the
+    // nearest common ancestor (form / fieldset / modal). Exposed globally so
+    // newly rendered selects (modals, table editors) can re-run wiring.
+    window.feeScheduleRank = function (s) {
+      return ({ immediate: 1, monthly: 2, annual: 3 })[s] ?? null;
+    };
+    window.applyFeeCadenceGuards = function (root) {
+      const scope = root || document;
+      const platSelects = scope.querySelectorAll('select[data-cadence-platform]');
+      platSelects.forEach((plat) => {
+        const container = plat.closest('form,fieldset,#setupModal,#strategyModal,tr,div,section,body');
+        if (!container) return;
+        const perf = container.querySelector('select[data-cadence-performance]');
+        if (!perf || perf.dataset.cadenceWired === '1') return;
+        perf.dataset.cadenceWired = '1';
+        plat.dataset.cadenceWired = '1';
+        const sync = (changed) => {
+          const platRank = window.feeScheduleRank(plat.value);
+          const perfRank = window.feeScheduleRank(perf.value);
+          // Disable perf options that are MORE frequent than platform.
+          Array.from(perf.options).forEach((o) => {
+            const r = window.feeScheduleRank(o.value);
+            o.disabled = r != null && platRank != null && r < platRank;
+          });
+          // Disable platform options that are LESS frequent than perf.
+          Array.from(plat.options).forEach((o) => {
+            const r = window.feeScheduleRank(o.value);
+            o.disabled = r != null && perfRank != null && r > perfRank;
+          });
+          // If current selection is now invalid, snap to the closest valid.
+          if (platRank != null && perfRank != null && platRank > perfRank) {
+            if (changed === plat) {
+              const nextPerf = Array.from(perf.options).find((o) => !o.disabled);
+              if (nextPerf) perf.value = nextPerf.value;
+            } else {
+              const nextPlat = Array.from(plat.options).find((o) => !o.disabled);
+              if (nextPlat) plat.value = nextPlat.value;
+            }
+          }
+        };
+        plat.addEventListener('change', () => sync(plat));
+        perf.addEventListener('change', () => sync(perf));
+        sync(null);
+      });
+    };
+    // Initial wire-up + global delegated re-scan whenever DOM mutates a modal.
+    document.addEventListener('DOMContentLoaded', () => window.applyFeeCadenceGuards());
+    new MutationObserver(() => window.applyFeeCadenceGuards())
+      .observe(document.body, { childList: true, subtree: true });
+
     document.addEventListener('DOMContentLoaded', () => {
       const sb = () => {
         const c = window.supabaseClient;
@@ -10738,7 +10792,7 @@
                 </div>
                 <div>
                   <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Performance Schedule:</label>
-                  <select id="setupModal_perfSched"
+                  <select id="setupModal_perfSched" data-cadence-performance
                           style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                     <option value="monthly"${perfSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                     <option value="annual"${perfSched === 'annual' ? ' selected' : ''}>Annual</option>
@@ -10753,9 +10807,10 @@
                 </div>
                 <div>
                   <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Platform Schedule:</label>
-                  <select id="setupModal_platSched"
+                  <select id="setupModal_platSched" data-cadence-platform
                           style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                     <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
+                    <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                     <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
                   </select>
                 </div>
@@ -11460,7 +11515,7 @@
             </td>
             <td class="perf-schedule-cell">
               <span class="schedule-display">${scheduleLabel(perfSched)}</span>
-              <select class="schedule-input" style="display:none;padding:4px;">
+              <select class="schedule-input" data-cadence-performance style="display:none;padding:4px;">
                 <option value="monthly"${perfSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                 <option value="annual"${perfSched === 'annual' ? ' selected' : ''}>Annual</option>
               </select>
@@ -11471,8 +11526,9 @@
             </td>
             <td class="plat-schedule-cell">
               <span class="schedule-display">${scheduleLabel(platSched)}</span>
-              <select class="schedule-input" style="display:none;padding:4px;">
+              <select class="schedule-input" data-cadence-platform style="display:none;padding:4px;">
                 <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
+                <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                 <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
               </select>
             </td>

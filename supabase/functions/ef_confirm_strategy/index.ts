@@ -59,6 +59,47 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ─── Fee-schedule cadence rule ─────────────────────────────────────────
+    // Mirrors public.fee_schedule_rank() / customer_strategies_fee_cadence_check.
+    // Platform fee schedule must be at least as frequent as performance.
+    // Ranks: immediate=1 (most frequent), monthly=2, annual=3 (least).
+    const rank = (s?: string) =>
+      s === "immediate" ? 1 : s === "monthly" ? 2 : s === "annual" ? 3 : null;
+    const allowedPlat = ["immediate", "monthly", "annual"];
+    const allowedPerf = ["monthly", "annual"];
+    if (platform_fee_schedule && !allowedPlat.includes(platform_fee_schedule)) {
+      return new Response(
+        JSON.stringify({
+          error: `Invalid platform_fee_schedule '${platform_fee_schedule}'. Allowed: ${allowedPlat.join(", ")}.`,
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    if (performance_fee_schedule && !allowedPerf.includes(performance_fee_schedule)) {
+      return new Response(
+        JSON.stringify({
+          error: `Invalid performance_fee_schedule '${performance_fee_schedule}'. Allowed: ${allowedPerf.join(", ")}.`,
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    if (platform_fee_schedule && performance_fee_schedule) {
+      const pr = rank(platform_fee_schedule)!;
+      const fr = rank(performance_fee_schedule)!;
+      if (pr > fr) {
+        return new Response(
+          JSON.stringify({
+            error:
+              `Invalid combination: platform_fee_schedule='${platform_fee_schedule}' ` +
+              `is less frequent than performance_fee_schedule='${performance_fee_schedule}'. ` +
+              `Platform fees must be collected at least as often as performance fees ` +
+              `(immediate > monthly > annual).`,
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Get customer details
     const { data: customer, error: customerError } = await supabase
       .from("customer_details")
