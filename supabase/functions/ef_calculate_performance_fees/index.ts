@@ -151,6 +151,25 @@ Deno.serve(async (req) => {
           const initialHWM = Math.max(0, balance.nav_usd - netContribUsd);
 
           if (!currentState) {
+            // Carry-forward strategy-state flags from the most recent prior row
+            // in the same org so we don't pollute the table with default
+            // bear_pause=false rows that misrepresent the current market regime.
+            // (bear_pause is org-wide while all live customers share one variation.)
+            const { data: carryRows } = await supabase
+              .from("customer_state_daily")
+              .select("bear_pause,was_above_p1,was_above_p15,r1_armed,r15_armed")
+              .eq("org_id", orgId)
+              .lt("date", lastDayStr)
+              .order("date", { ascending: false })
+              .limit(1);
+            const carry = carryRows?.[0] ?? {
+              bear_pause: false,
+              was_above_p1: false,
+              was_above_p15: false,
+              r1_armed: true,
+              r15_armed: true,
+            };
+
             // No row exists yet — insert a new one
             const { error: insertStateError } = await supabase
               .from("customer_state_daily")
@@ -161,6 +180,11 @@ Deno.serve(async (req) => {
                 high_water_mark_usd: initialHWM,
                 hwm_contrib_net_cum: netContribUsd,
                 last_perf_fee_month: lastMonthFirstDay,
+                bear_pause: !!carry.bear_pause,
+                was_above_p1: !!carry.was_above_p1,
+                was_above_p15: !!carry.was_above_p15,
+                r1_armed: !!carry.r1_armed,
+                r15_armed: !!carry.r15_armed,
               });
 
             if (insertStateError) {

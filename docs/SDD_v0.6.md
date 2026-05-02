@@ -3,11 +3,86 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-01 (v0.6.99)
+**Last updated:** 2026-05-02 (v0.6.100)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.100 – `ef_generate_decisions` aborted batch on misconfigured customer; pipeline silently dead 2026-04-27 → 2026-05-01
+**Date:** 2026-05-02
+**Status:** ✅ FIXED — code patched & deployed; offending customer suspended; missed days back-filled.
+
+#### Symptom
+No new rows were written to `lth_pvr.decisions_daily` for **5 consecutive trading days** (2026-04-27 → 2026-05-01). Edge-function logs showed every invocation throwing:
+> `ef_generate_decisions error: Customer 999 has no strategy_variation_id assigned or variation not found`
+Because the throw happened **before** the per-customer loop, *zero* decisions were written for *any* customer, and the downstream pipeline (intents → orders → fills → ledger) silently produced no work for those days.
+
+#### Root cause (two interacting issues)
+1. **Latent data defect.** `public.customer_strategies` row for customer 999 (an internal test profile, `is_test=true`) was `status='active'`, `live_enabled=true`, but `strategy_variation_id IS NULL`. It had been like that since 2026-01-25 with no impact.
+2. **Brittle code path.** In `supabase/functions/ef_generate_decisions/index.ts`, the function picks `custs[0]` to derive a `defaultConfig` for the `computeBearPauseAt()` call, and **throws** if that customer's variation isn't in the lookup map. The `custs` array is the result of a PostgREST `.select(...)` with **no `ORDER BY`**, so its order is PostgreSQL heap order — non-deterministic and unstable across DML.
+3. **Trigger.** On 2026-04-26 customer 54 was activated (`effective_from='2026-04-26'`), the new `customer_strategies` row shifted heap order, and customer 999 became `custs[0]` from the next invocation onward. Every cron run from 03:05 UTC on 2026-04-27 threw before writing anything.
+
+#### Fix — code (defensive)
+`supabase/functions/ef_generate_decisions/index.ts`:
+- `defaultVariation` is now derived from `custs.find(c => variationsMap.has(...))` — the first customer that *has* a resolvable variation, regardless of heap order. If no eligible customer has one, the function returns `{ok:false, reason:"no_resolvable_variation"}` and logs an `error` alert (does **not** throw).
+- Any "live" customer missing a variation is logged via `logAlert(... "warn" ...)` once per run with the full list of offending `customer_id`s and is then skipped by the existing per-customer guard (`if (!variation) continue;`) inside the loop.
+- New optional `?signal_date=YYYY-MM-DD` query param added so a missed day can be replayed deterministically (trade_date = signal_date + 1). Used for this incident's back-fill.
+
+#### Fix — data
+```sql
+UPDATE public.customer_strategies
+   SET live_enabled = false,
+       status       = 'suspended'
+ WHERE customer_id = 999
+   AND strategy_code = 'LTH_PVR'
+   AND strategy_variation_id IS NULL;
+```
+
+#### Back-fill executed
+Replayed `ef_generate_decisions?signal_date=…` sequentially for signal dates 2026-04-26 → 2026-05-01 (in order — per-customer state cascades day-to-day via `customer_state_daily`). Result: `decisions_daily` is now contiguous through `trade_date = 2026-05-02` for the 3 currently-eligible live customers (31, 49, 54). **No order intents, exchange orders, or fills were back-filled** — those days are accepted as a known trading gap (decisions only; preserves analytics continuity).
+
+#### Files touched
+- `supabase/functions/ef_generate_decisions/index.ts` — defensive default-variation pick, alert instead of throw, optional `signal_date` query param.
+- `public.customer_strategies` — row update for customer 999 (DML only, no schema change).
+- `docs/SDD_v0.6.md` — this entry + new gotcha in §11 (Common Gotchas).
+
+#### New gotcha (also added to copilot-instructions context)
+> **Unordered PostgREST `.select()` queries are heap-ordered.** Any code that reads `result[0]` to derive shared/global state will eventually break when an unrelated `INSERT` shuffles the heap. Either add an explicit `.order(...)`, or pick the first row that satisfies the actual constraint you need (e.g. `array.find(x => x.something_required)`).
+
+#### Follow-up (not done in this change-set; recommend tracking)
+- Add a DB constraint or trigger that prevents `live_enabled=true` when `strategy_variation_id IS NULL` for `LTH_PVR` strategies.
+- Add a daily heartbeat alert: if `decisions_daily` has zero rows for the previous trade_date and any customer was eligible, raise `critical`. This would have surfaced the outage the morning after it began rather than 5 days later.
+
+#### Addendum (same day) — `bear_pause` regime flags carry-forward in non-decision writers
+
+While reviewing the back-fill the user spotted that `lth_pvr.customer_state_daily` rows for customer 9 (2026-04-30) and customer 999 (2026-05-01) showed `bear_pause=FALSE` despite BTC being unambiguously in a bear regime (every adjacent LTH_PVR-customer row was `TRUE`). Investigation found that `customer_state_daily` has **three writers**, only one of which actually computes the regime flags:
+
+| Writer | Sets regime flags? |
+|---|---|
+| `ef_generate_decisions` (UPSERT, daily, LTH_PVR live cohort only) | ✅ Yes — via `decideTrade()` |
+| `ef_calculate_performance_fees` (INSERT branch when no prior state row exists) | ❌ Was omitting them → defaulted to `false/false/false/true/true` |
+| `lth_pvr.ensure_hwm_initialised(...)` SQL fn (INSERT branch) | ❌ Same |
+
+Column defaults on `customer_state_daily` are `bear_pause=false, was_above_p1=false, was_above_p15=false, r1_armed=true, r15_armed=true` — which is **exactly** the pattern shown on the offending rows.
+
+**Impact today:** cosmetic — `bear_pause` is read only by `ef_generate_decisions`, and that read uses strict `< signalStr` so today's HWM-init row at `date=today` is never consumed for today's run, and any same-date collision with `decisions_daily` is overwritten by the daily UPSERT. Customer 9 (ADV_DCA) and customer 999 (suspended) are both excluded from the read path entirely.
+
+**Latent risk:** if a perf-fee or HWM-init writer ever inserted a row at a date that `ef_generate_decisions` would later read but never overwrite, the bear-regime gate would fail-open into a buy. Worth fixing pre-emptively.
+
+**Fix applied (in addition to the above):**
+1. `supabase/functions/ef_calculate_performance_fees/index.ts` — the HWM-init INSERT branch now reads the most recent prior `customer_state_daily` row in the same org and carries `bear_pause / was_above_p1 / was_above_p15 / r1_armed / r15_armed` forward. Only falls back to column defaults if no prior row exists in the org. (UPDATE branch already preserved them implicitly.)
+2. Migration `20260502_state_flags_carry_forward` — replaces `lth_pvr.ensure_hwm_initialised(p_org_id, p_customer_id)` with the same carry-forward logic on its INSERT branch. UPDATE branch unchanged.
+3. **One-off historical back-fill** in the same migration: every row whose five regime flags simultaneously match the all-defaults pattern (`F/F/F/T/T`) was rewritten by copying the flags from the most recent prior row in the same org that does *not* match that pattern (i.e., the most recent decision-written row). The pattern is reliable because `decideTrade()` flips at least one flag in any non-trivial regime, so true decision-written rows almost never look "all default". Rows for which no prior decision-written row exists in the org were left alone. Result: 0 defaulted rows remain; both rows the user flagged now correctly show `bear_pause=true`.
+
+This works because all live LTH_PVR customers currently share a single strategy variation (`f7ec6155-…`), so `bear_pause` is effectively an org-wide market-regime flag and any recent decision-written row is a faithful proxy. **If this assumption ever changes** (multiple variations with different `bearPauseEnterSigma`/`bearPauseExitSigma`), the carry-forward source must be narrowed to "most recent row for a customer using the same variation" — flagged here as a future consideration, not a current bug.
+
+**Files touched (addendum):**
+- `supabase/functions/ef_calculate_performance_fees/index.ts`
+- `supabase/migrations/` — `20260502_state_flags_carry_forward`
+- `docs/SDD_v0.6.md` — this addendum
+
+---
 
 ### v0.6.99 – Monthly statement May-1 production run: PDF/dispatcher bug-bash, HWM init, cron repairs, recipient filter, Outlook-safe button
 **Date:** 2026-05-01

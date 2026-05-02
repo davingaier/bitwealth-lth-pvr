@@ -11,7 +11,7 @@ async function getCI(sb: any, dateStr: string) {
   return data && data[0] ? data[0] : null;
 }
 // --- Handler -------------------------------------------------
-Deno.serve(async (_req: any)=>{
+Deno.serve(async (req: Request)=>{
   const started = Date.now();
   try {
     const sb = getServiceClient(); // lth_pvr schema
@@ -23,11 +23,23 @@ Deno.serve(async (_req: any)=>{
       });
     }
     // signal = yesterday (UTC); trade = today
+    // Optional override (?signal_date=YYYY-MM-DD) for back-fill of missed days.
+    // When provided, trade_date = signal_date + 1.
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    const signalDate = new Date(today.getTime() - 24 * 3600 * 1000);
+    let signalDate = new Date(today.getTime() - 24 * 3600 * 1000);
+    let tradeDate = today;
+    try {
+      const url = new URL(req.url);
+      const overrideSignal = url.searchParams.get("signal_date");
+      if (overrideSignal && /^\d{4}-\d{2}-\d{2}$/.test(overrideSignal)) {
+        signalDate = new Date(`${overrideSignal}T00:00:00Z`);
+        tradeDate = new Date(signalDate.getTime() + 24 * 3600 * 1000);
+        console.info(`ef_generate_decisions: backfill mode signal=${overrideSignal}`);
+      }
+    } catch (_e) { /* ignore url parse issues */ }
     const signalStr = signalDate.toISOString().slice(0, 10);
-    const tradeStr = today.toISOString().slice(0, 10);
+    const tradeStr = tradeDate.toISOString().slice(0, 10);
     // CI + momentum
     const ci = await getCI(sb, signalStr);
     if (!ci) {
@@ -127,12 +139,45 @@ Deno.serve(async (_req: any)=>{
       return new Response(JSON.stringify({ ok: true, wrote: 0, reason: "no_active_customers" }), { headers: { "Content-Type": "application/json" }});
     }
     
-    // Get default production config for computeBearPauseAt (uses first customer's variation as proxy)
-    // All customers currently use same variation (progressive), so this is safe
-    const firstCustomer = custs[0];
-    const defaultVariation = variationsMap.get(String(firstCustomer.strategy_variation_id));
-    if (!defaultVariation) {
-      throw new Error(`Customer ${firstCustomer.customer_id} has no strategy_variation_id assigned or variation not found`);
+    // Get default production config for computeBearPauseAt.
+    // Pick the first customer that actually has a resolvable variation (heap order from
+    // PostgREST is non-deterministic, and a misconfigured customer with a NULL
+    // strategy_variation_id must not abort the whole batch).
+    const defaultCustomer = custs.find(c => variationsMap.has(String(c.strategy_variation_id)));
+    if (!defaultCustomer) {
+      await logAlert(
+        sb,
+        "ef_generate_decisions",
+        "error",
+        `No active customer has a resolvable strategy_variation_id`,
+        {
+          signal_date: signalStr,
+          trade_date: tradeStr,
+          customer_ids_missing_variation: custs.map(c => c.customer_id),
+        },
+        org_id
+      );
+      return new Response(
+        JSON.stringify({ ok: false, wrote: 0, reason: "no_resolvable_variation" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    const defaultVariation = variationsMap.get(String(defaultCustomer.strategy_variation_id));
+    // Alert (non-fatal) for any customer flagged live but missing a variation
+    const orphanCustomers = custs.filter(c => !variationsMap.has(String(c.strategy_variation_id)));
+    if (orphanCustomers.length > 0) {
+      await logAlert(
+        sb,
+        "ef_generate_decisions",
+        "warn",
+        `${orphanCustomers.length} live customer(s) have no resolvable strategy_variation_id and will be skipped`,
+        {
+          signal_date: signalStr,
+          trade_date: tradeStr,
+          customer_ids: orphanCustomers.map(c => c.customer_id),
+        },
+        org_id
+      );
     }
     
     const defaultConfig: StrategyConfig = {
