@@ -1,5 +1,5 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
-import { transferToMainAccount } from "../_shared/valrTransfer.ts";
+import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 /**
@@ -34,7 +34,9 @@ Deno.serve(async () => {
       return new Response("ORG_ID missing", { status: 500 });
     }
 
-    const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
+    // mainAccountId removed 2026-05-02: routing handled internally by
+    // withdrawFeeFromCustomerAccount() (subaccount→main internal transfer for
+    // subaccount model, on-chain wallet for api model).
 
     console.log(`[ef_transfer_accumulated_fees] Starting monthly batch transfer for org=${org_id}`);
 
@@ -107,46 +109,9 @@ Deno.serve(async () => {
 
     console.log(`[ef_transfer_accumulated_fees] Found ${rows.length} customers with accumulated fees`);
 
-    // ----------- 3) Get exchange account info for all customers -----------
-    const customerIds = rows.map((r) => r.customer_id);
-
-    const { data: customerStrategies, error: stratErr } = await sb
-      .schema("public")
-      .from("customer_strategies")
-      .select("customer_id, exchange_account_id")
-      .in("customer_id", customerIds);
-
-    if (stratErr) {
-      console.error("Error fetching customer strategies", stratErr);
-      return new Response(`Error fetching customer strategies: ${stratErr.message}`, {
-        status: 500,
-      });
-    }
-
-    const exchangeAccountIds = (customerStrategies ?? []).map((cs: any) => cs.exchange_account_id);
-
-    const { data: exchangeAccounts, error: exAcctErr } = await sb
-      .schema("public")
-      .from("exchange_accounts")
-      .select("exchange_account_id, subaccount_id")
-      .in("exchange_account_id", exchangeAccountIds)
-      .eq("exchange", "VALR");
-
-    if (exAcctErr) {
-      console.error("Error fetching exchange accounts", exAcctErr);
-      return new Response(`Error fetching exchange accounts: ${exAcctErr.message}`, {
-        status: 500,
-      });
-    }
-
-    // Build customer_id -> subaccount_id map
-    const customerAccountMap: Map<number, string> = new Map();
-    for (const cs of (customerStrategies ?? [])) {
-      const exAcct = (exchangeAccounts ?? []).find((ea: any) => ea.exchange_account_id === cs.exchange_account_id);
-      if (exAcct) {
-        customerAccountMap.set(cs.customer_id, exAcct.subaccount_id);
-      }
-    }
+    // ----------- 3) (Removed 2026-05-02) Per-customer subaccount lookup -----------
+    // No longer needed: withdrawFeeFromCustomerAccount() resolves credentials
+    // (subaccount_id or api key) internally via resolveCustomerCredentials().
 
     // ----------- 4) Process each customer: transfer accumulated fees -----------
     let transferredCount = 0;
@@ -158,22 +123,6 @@ Deno.serve(async () => {
       const customerId = row.customer_id;
       const accumBtc = Number(row.accumulated_btc || 0);
       const accumUsdt = Number(row.accumulated_usdt || 0);
-      const subaccountId = customerAccountMap.get(customerId);
-
-      if (!subaccountId) {
-        await logAlert(
-          sb,
-          "ef_transfer_accumulated_fees",
-          "error",
-          `No exchange account found for customer ${customerId}`,
-          { customer_id: customerId },
-          org_id,
-          customerId,
-        );
-        console.error(`[ef_transfer_accumulated_fees] No subaccount for customer ${customerId}, skipping`);
-        failedCount++;
-        continue;
-      }
 
       console.log(
         `[ef_transfer_accumulated_fees] Processing customer ${customerId}: BTC ${accumBtc}, USDT ${accumUsdt}`,
@@ -186,17 +135,18 @@ Deno.serve(async () => {
       if (accumBtc >= minTransferBtc) {
         console.log(`[ef_transfer_accumulated_fees] Transferring ${accumBtc} BTC for customer ${customerId}`);
 
-        const btcResult = await transferToMainAccount(
+        // Refactored 2026-05-02: was raw transferToMainAccount which assumed
+        // subaccount model and threw `null from_subaccount_id` for api-model
+        // customers. withdrawFeeFromCustomerAccount routes by account_model:
+        //   subaccount → internal sub→main transfer
+        //   api        → on-chain VALR withdrawal to public.wallet_config
+        const btcResult = await withdrawFeeFromCustomerAccount(
           sb,
-          {
-            fromSubaccountId: subaccountId,
-            toAccount: mainAccountId,
-            currency: "BTC",
-            amount: accumBtc,
-            transferType: "platform_fee",
-          },
           customerId,
-          null, // No specific ledger_id for monthly batch
+          "BTC",
+          accumBtc,
+          undefined, // No specific ledger_id for monthly batch drain
+          "fee_batch",
         );
 
         if (btcResult.success) {
@@ -311,17 +261,14 @@ Deno.serve(async () => {
       if (accumUsdt >= minTransferUsdt) {
         console.log(`[ef_transfer_accumulated_fees] Transferring ${accumUsdt} USDT for customer ${customerId}`);
 
-        const usdtResult = await transferToMainAccount(
+        // Account-model-aware routing (see BTC branch above for rationale).
+        const usdtResult = await withdrawFeeFromCustomerAccount(
           sb,
-          {
-            fromSubaccountId: subaccountId,
-            toAccount: mainAccountId,
-            currency: "USDT",
-            amount: accumUsdt,
-            transferType: "platform_fee",
-          },
           customerId,
-          null, // No specific ledger_id for monthly batch
+          "USDT",
+          accumUsdt,
+          undefined, // No specific ledger_id for monthly batch drain
+          "fee_batch",
         );
 
         if (usdtResult.success) {

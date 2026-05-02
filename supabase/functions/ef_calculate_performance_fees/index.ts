@@ -4,7 +4,7 @@
 // Deployed with: --no-verify-jwt (called by pg_cron)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { transferToMainAccount } from "../_shared/valrTransfer.ts";
+import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -372,44 +372,19 @@ Deno.serve(async (req) => {
 
         const ledgerId = ledgerData?.ledger_id;
 
-        // Transfer fee to BitWealth main account
-        const { data: exchangeAcct, error: exAcctError } = await supabase
-          .schema("public")
-          .from("exchange_accounts")
-          .select("subaccount_id, account_id")
-          .eq("customer_id", customerId)
-          .eq("exchange", "VALR")
-          .single();
-
-        if (exAcctError || !exchangeAcct) {
-          await logAlert(
-            supabase,
-            "ef_calculate_performance_fees",
-            "error",
-            `No exchange account found for customer ${customerId}`,
-            { customer_id: customerId, ledger_id: ledgerId },
-            orgId,
-            customerId
-          );
-          console.error(`No exchange account for customer ${customerId}`);
-          results.errors++;
-          continue;
-        }
-
-        const subaccountId = exchangeAcct.subaccount_id;
-        const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
-
-        const transferResult = await transferToMainAccount(
+        // Transfer fee to BitWealth fee-collection wallet.
+        // Routing is account-model aware:
+        //   subaccount → internal sub→main transfer
+        //   api        → on-chain VALR withdrawal to public.wallet_config address
+        // (Refactored 2026-05-02 from raw transferToMainAccount which assumed
+        //  subaccount model and threw `null from_subaccount_id` for api customers.)
+        const transferResult = await withdrawFeeFromCustomerAccount(
           supabase,
-          {
-            fromSubaccountId: subaccountId,
-            toAccount: mainAccountId,
-            currency: "USDT",
-            amount: performanceFee,
-            transferType: "performance_fee",
-          },
           customerId,
-          ledgerId
+          "USDT",
+          performanceFee,
+          ledgerId,
+          "performance_fee",
         );
 
         if (!transferResult.success) {

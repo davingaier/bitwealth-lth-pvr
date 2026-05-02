@@ -439,24 +439,37 @@ Deno.serve(async (req) => {
                   isDeposit = false; // No platform fee on withdrawals
                   fundingKind = currency === "ZAR" ? "zar_withdrawal" : "withdrawal";
                   console.log(`  💸 INTERNAL_TRANSFER OUT (customer withdrawal): ${amount} ${currency}`);
-                  
-                  // Log alert for admin notification
-                  await logAlert(
-                    supabase,
-                    "ef_sync_valr_transactions",
-                    "info",
-                    `${currency} withdrawal: ${customerName} withdrew ${amount} ${currency}`,
-                    {
-                      customer_id: customerId,
-                      customer_name: customerName,
-                      amount: amount,
-                      currency: currency,
-                      transaction_id: transactionId,
-                      occurred_at: transactedAt,
-                    },
-                    orgId,
-                    customerId
-                  );
+
+                  // Only emit the admin alert the FIRST time we see this VALR
+                  // transaction. Without this guard, every cron run re-fires
+                  // the same info alert (alert_events dedup_key gets re-opened
+                  // after each Resolve, producing repeated counts in the UI).
+                  const wdIdempKey = `VALR_TX_${transactionId}`;
+                  const { data: existingWdAlert } = await supabase
+                    .from("exchange_funding_events")
+                    .select("funding_id")
+                    .eq("idempotency_key", wdIdempKey)
+                    .maybeSingle();
+
+                  if (!existingWdAlert) {
+                    // Log alert for admin notification
+                    await logAlert(
+                      supabase,
+                      "ef_sync_valr_transactions",
+                      "info",
+                      `${currency} withdrawal: ${customerName} withdrew ${amount} ${currency}`,
+                      {
+                        customer_id: customerId,
+                        customer_name: customerName,
+                        amount: amount,
+                        currency: currency,
+                        transaction_id: transactionId,
+                        occurred_at: transactedAt,
+                      },
+                      orgId,
+                      customerId
+                    );
+                  }
                 }
               } else {
                 console.warn(`  Skipping unexpected INTERNAL_TRANSFER:`, tx);
@@ -817,25 +830,38 @@ Deno.serve(async (req) => {
               isDeposit = false;
               fundingKind = "zar_withdrawal";
               console.log(`  💸 ZAR WITHDRAWAL: R${amount} (to bank account)`);
-              
-              // Log alert for admin notification
-              await logAlert(
-                supabase,
-                "ef_sync_valr_transactions",
-                "info",
-                `ZAR withdrawal: R${amount.toFixed(2)} sent to ${customerName}'s bank account`,
-                {
-                  customer_id: customerId,
-                  customer_name: customerName,
-                  zar_amount: amount,
-                  transaction_id: transactionId,
-                  occurred_at: transactedAt,
-                  bank_name: tx.additionalInfo?.bankName,
-                  withdrawal_id: tx.additionalInfo?.withdrawalId,
-                },
-                orgId,
-                customerId
-              );
+
+              // Only emit the admin alert the FIRST time we see this VALR
+              // transaction. Without this guard, every cron run re-fires
+              // the same info alert (alert_events dedup_key gets re-opened
+              // after each Resolve, producing repeated counts in the UI).
+              const zarWdIdempKey = `VALR_TX_${transactionId}`;
+              const { data: existingZarWdAlert } = await supabase
+                .from("exchange_funding_events")
+                .select("funding_id")
+                .eq("idempotency_key", zarWdIdempKey)
+                .maybeSingle();
+
+              if (!existingZarWdAlert) {
+                // Log alert for admin notification
+                await logAlert(
+                  supabase,
+                  "ef_sync_valr_transactions",
+                  "info",
+                  `ZAR withdrawal: R${amount.toFixed(2)} sent to ${customerName}'s bank account`,
+                  {
+                    customer_id: customerId,
+                    customer_name: customerName,
+                    zar_amount: amount,
+                    transaction_id: transactionId,
+                    occurred_at: transactedAt,
+                    bank_name: tx.additionalInfo?.bankName,
+                    withdrawal_id: tx.additionalInfo?.withdrawalId,
+                  },
+                  orgId,
+                  customerId
+                );
+              }
             }
             // ================================================================
             // BLOCKCHAIN_RECEIVE - External crypto deposits
