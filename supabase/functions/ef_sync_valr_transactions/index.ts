@@ -579,7 +579,7 @@ Deno.serve(async (req) => {
                   await logAlert(
                     supabase,
                     "ef_sync_valr_transactions",
-                    "warn",
+                    "info",  // demoted from 'warn' 2026-05-02: funds are correctly recorded; excess just means a direct VALR ZAR deposit (legacy or external) outside the pending-deposit flow
                     `Excess ZAR→USDT conversion: R${remainingZar.toFixed(2)} without matching pending deposit`,
                     {
                       customer_id: customerId,

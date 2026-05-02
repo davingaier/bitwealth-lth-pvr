@@ -141,20 +141,10 @@ Deno.serve(async ()=>{
         // SELL % of BTC (amount_pct is stored as decimal 0.0-1.0, not 0-100)
         qtyBase = +(Number(bal.btc_balance) * Number(d.amount_pct)).toFixed(8);
         if (qtyBase <= 0) {
-          await logAlert(
-            sb,
-            "ef_create_order_intents",
-            "warn",
-            `Zero BTC balance for SELL order`,
-            {
-              customer_id: d.customer_id,
-              trade_date: d.trade_date,
-              btc_balance: bal.btc_balance,
-              amount_pct: d.amount_pct
-            },
-            org_id,
-            d.customer_id
-          );
+          // Silently skip — a customer with no BTC simply has nothing to sell.
+          // This is the normal state for new/unfunded customers and dev/test profiles
+          // and was historically alert-spam (681 occurrences/customer pre-dedup).
+          // No alert raised; just count and continue.
           skipCount++;
           continue;
         }

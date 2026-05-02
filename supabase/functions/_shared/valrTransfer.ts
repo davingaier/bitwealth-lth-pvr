@@ -283,7 +283,7 @@ export async function withdrawFeeFromCustomerAccount(
   currency: "USDT" | "BTC",
   amount: number,
   ledgerId?: string,
-  transferType: "platform_fee" | "performance_fee" = "performance_fee",
+  transferType: "platform_fee" | "performance_fee" | "fee_batch" = "performance_fee",
 ): Promise<TransferResult> {
   const orgId = Deno.env.get("ORG_ID");
 
@@ -291,18 +291,18 @@ export async function withdrawFeeFromCustomerAccount(
   const { data: walletRow, error: walletErr } = await sb
     .schema("public")
     .from("wallet_config")
-    .select("wallet_address")
-    .eq("currency", currency)
+    .select("address")
+    .eq("asset", currency)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
-  if (walletErr || !walletRow?.wallet_address) {
+  if (walletErr || !walletRow?.address) {
     return {
       success: false,
-      errorMessage: `wallet_config missing for currency=${currency}: ${walletErr?.message ?? "no row"}`,
+      errorMessage: `wallet_config missing for asset=${currency}: ${walletErr?.message ?? "no active row"}`,
     };
   }
-  const destinationAddress: string = walletRow.wallet_address;
+  const destinationAddress: string = walletRow.address;
 
   // ── 2. Resolve this customer's VALR credentials ───────────────────────────
   let creds: Awaited<ReturnType<typeof resolveCustomerCredentials>>;

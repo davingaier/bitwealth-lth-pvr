@@ -1,5 +1,6 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { transferToMainAccount } from "../_shared/valrTransfer.ts";
+import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import Decimal from "npm:decimal.js@10.4.3";
 
@@ -439,6 +440,60 @@ Deno.serve(async (req: Request) => {
           const feeBtc = Number(row.platform_fee_btc ?? 0);
           const feeUsdt = Number(row.platform_fee_usdt ?? 0);
 
+          // ── Schedule gate (added 2026-05-02) ────────────────────────────
+          // Only customers on the 'immediate' schedule should have per-fill fee
+          // transfers. Customers on 'monthly' or 'annual' schedules accumulate
+          // fees here and are settled by ef_calculate_performance_fees /
+          // ef_collect_annual_fees / ef_transfer_accumulated_fees.
+          // Without this gate, an api-model + annual customer (e.g. customer 49)
+          // would attempt an on-chain withdrawal per fill — wrong economics
+          // and the prior bug (null from_subaccount_id) would still trigger.
+          const customerSchedule = feeScheduleMap.get(customerId) ?? "immediate";
+          if (customerSchedule !== "immediate") {
+            // Accumulate without transferring
+            if (feeBtc > 0 || feeUsdt > 0) {
+              try {
+                const { data: existingAccum } = await sb
+                  .from("customer_accumulated_fees")
+                  .select("accumulated_btc, accumulated_usdt")
+                  .eq("customer_id", customerId)
+                  .eq("org_id", org_id)
+                  .maybeSingle();
+
+                const newBtc  = Number(existingAccum?.accumulated_btc  ?? 0) + feeBtc;
+                const newUsdt = Number(existingAccum?.accumulated_usdt ?? 0) + feeUsdt;
+
+                if (existingAccum) {
+                  await sb
+                    .from("customer_accumulated_fees")
+                    .update({
+                      accumulated_btc: newBtc,
+                      accumulated_usdt: newUsdt,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("customer_id", customerId)
+                    .eq("org_id", org_id);
+                } else {
+                  await sb.from("customer_accumulated_fees").insert({
+                    org_id,
+                    customer_id: customerId,
+                    accumulated_btc: newBtc,
+                    accumulated_usdt: newUsdt,
+                    transfer_count: 0,
+                  });
+                }
+                console.log(
+                  `[ef_post_ledger_and_balances] Customer ${customerId} (schedule=${customerSchedule}) — accumulated +${feeBtc} BTC / +${feeUsdt} USDT`,
+                );
+              } catch (e) {
+                console.error(
+                  `Accumulation failed for customer ${customerId}: ${(e as Error).message}`,
+                );
+              }
+            }
+            continue;  // skip immediate-transfer path
+          }
+
           // Get customer's exchange account info via customer_strategies join
           const { data: customerStrat, error: stratErr } = await sb
             .schema("public")
@@ -490,17 +545,15 @@ Deno.serve(async (req: Request) => {
           if (feeBtc > 0) {
             if (feeBtc >= minBtc) {
               // Fee meets minimum - transfer immediately
-              const transferResult = await transferToMainAccount(
+              // Use withdrawFeeFromCustomerAccount: routes by account_model
+              // (subaccount → internal transfer; api → on-chain withdrawal to wallet_config)
+              const transferResult = await withdrawFeeFromCustomerAccount(
                 sb,
-                {
-                  fromSubaccountId: subaccountId,
-                  toAccount: mainAccountId,
-                  currency: "BTC",
-                  amount: feeBtc,
-                  transferType: "platform_fee",
-                },
                 customerId,
+                "BTC",
+                feeBtc,
                 ledgerId,
+                "platform_fee",
               );
 
               if (!transferResult.success) {
@@ -804,17 +857,15 @@ Deno.serve(async (req: Request) => {
             
             if (totalUsdtToTransfer >= minUsdt) {
               // Total meets minimum - transfer immediately
-              const transferResult = await transferToMainAccount(
+              // Use withdrawFeeFromCustomerAccount: routes by account_model
+              // (subaccount → internal transfer; api → on-chain USDT withdrawal to wallet_config)
+              const transferResult = await withdrawFeeFromCustomerAccount(
                 sb,
-                {
-                  fromSubaccountId: subaccountId,
-                  toAccount: mainAccountId,
-                  currency: "USDT",
-                  amount: totalUsdtToTransfer,
-                  transferType: accumulatedAmount > 0 ? "fee_batch" : "platform_fee",
-                },
                 customerId,
+                "USDT",
+                totalUsdtToTransfer,
                 ledgerId,
+                accumulatedAmount > 0 ? "fee_batch" : "platform_fee",
               );
 
               if (transferResult.success) {
@@ -1227,19 +1278,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // ----------- FINAL: Check for accumulated fees ready for batch transfer -----------
-    console.log("[ef_post_ledger_and_balances] === BATCH TRANSFER CHECK START ===");
-    
-    // Log to alerts for debugging
-    await logAlert(
-      sb,
-      "ef_post_ledger_and_balances",
-      "info",
-      `Batch transfer check: thresholds BTC=${minBtc}, USDT=${minUsdt}`,
-      { org_id, minBtc, minUsdt },
-      org_id,
-      null,
-    );
-    
+    // Note: routine info-level logAlert calls in this block were demoted to console.log
+    // on 2026-05-02 (they were generating ~2230 alerts/customer pre-dedup; not actionable).
+    console.log(`[ef_post_ledger_and_balances] === BATCH TRANSFER CHECK START === thresholds BTC=${minBtc}, USDT=${minUsdt}`);
+
     const { data: customersWithFees, error: feeQueryErr } = await sb
       .from("customer_accumulated_fees")
       .select("customer_id, accumulated_btc, accumulated_usdt, transfer_count")
@@ -1258,32 +1300,16 @@ Deno.serve(async (req: Request) => {
         null,
       );
     }
-    
-    await logAlert(
-      sb,
-      "ef_post_ledger_and_balances",
-      "info",
-      `Batch transfer: found ${customersWithFees?.length || 0} customers`,
-      { count: customersWithFees?.length || 0 },
-      org_id,
-      null,
-    );
+
+    console.log(`[ef_post_ledger_and_balances] Batch transfer scan: ${customersWithFees?.length || 0} customers above threshold`);
 
     if (customersWithFees && customersWithFees.length > 0) {
       console.log(`Found ${customersWithFees.length} customer(s) with fees ready for transfer`);
 
       for (const customer of customersWithFees) {
         const customerId = customer.customer_id;
-        
-        await logAlert(
-          sb,
-          "ef_post_ledger_and_balances",
-          "info",
-          `Processing batch transfer for customer ${customerId}`,
-          { customer_id: customerId, accumulated_btc: customer.accumulated_btc },
-          org_id,
-          customerId,
-        );
+
+        console.log(`[ef_post_ledger_and_balances] Processing batch transfer for customer ${customerId} (BTC=${customer.accumulated_btc}, USDT=${customer.accumulated_usdt})`);
 
         // Get exchange account via customer_strategies
         const { data: customerStrat, error: stratErr } = await sb

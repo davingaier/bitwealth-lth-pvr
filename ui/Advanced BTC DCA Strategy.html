@@ -9024,7 +9024,22 @@
         return;
       }
 
-      const rowsHtml = filteredData.map((row) => {
+      // Group by severity for collapsible sections (2026-05-02)
+      const SEV_ORDER = ['critical', 'error', 'warn', 'info'];
+      const SEV_LABELS = {
+        critical: '🔴 Critical',
+        error:    '🟠 Error',
+        warn:     '🟡 Warn',
+        info:     '🔵 Info',
+      };
+      const groups = {};
+      for (const sev of SEV_ORDER) groups[sev] = [];
+      for (const row of filteredData) {
+        const sev = (row.severity || 'info').toLowerCase();
+        (groups[sev] || groups.info).push(row);
+      }
+
+      const rowHtml = (row) => {
         const firstSeen = fmtDate(row.first_seen_at || row.created_at);
         const lastSeen  = fmtDate(row.last_seen_at  || row.created_at);
         const resolved  = row.resolved_at ? fmtDate(row.resolved_at) : '';
@@ -9036,13 +9051,16 @@
         const countCell = count > 1
           ? `<strong title="Repeated ${count} times since first seen">${count}</strong>`
           : '<span class="muted">1</span>';
-
         const resolveBtn = row.resolved_at
           ? ''
           : '<button type="button" class="btn btn-secondary-sm js-alert-resolve">Resolve</button>';
-
+        // AI proposal button — only for error/critical when a pending proposal exists
+        const sevLow = (row.severity || '').toLowerCase();
+        const aiBtn = (!row.resolved_at && (sevLow === 'error' || sevLow === 'critical'))
+          ? `<button type="button" class="btn btn-secondary-sm js-alert-ai-view" style="margin-left:6px;" title="View AI triage proposal">🤖 AI</button>`
+          : '';
         return `
-          <tr data-alert-id="${row.alert_id}">
+          <tr data-alert-id="${row.alert_id}" data-sev-group="${(row.severity || 'info').toLowerCase()}">
             <td><span class="status-pill ${sevClass}">${sevLabel}</span></td>
             <td style="text-align:right;">${countCell}</td>
             <td>${component}</td>
@@ -9050,12 +9068,143 @@
             <td>${firstSeen}</td>
             <td>${lastSeen}</td>
             <td>${resolved}</td>
-            <td>${resolveBtn}</td>
+            <td>${resolveBtn}${aiBtn}</td>
           </tr>
         `;
+      };
+
+      const sectionsHtml = SEV_ORDER.map((sev) => {
+        const rows = groups[sev];
+        if (!rows.length) return '';
+        // Default-collapsed for warn/info when >5 items, else expanded
+        const collapsedByDefault = (sev === 'warn' || sev === 'info') && rows.length > 5;
+        const stateAttr = collapsedByDefault ? 'collapsed' : 'expanded';
+        const arrow = collapsedByDefault ? '▶' : '▼';
+        const headerRow = `
+          <tr class="alerts-group-header" data-sev-toggle="${sev}" data-state="${stateAttr}"
+              style="cursor:pointer; background:rgba(255,255,255,0.03); border-top:2px solid rgba(255,255,255,0.1);">
+            <td colspan="8" style="padding:8px 12px; font-weight:600;">
+              <span class="alerts-group-arrow">${arrow}</span>
+              ${SEV_LABELS[sev] || sev} <span class="muted">(${rows.length})</span>
+            </td>
+          </tr>
+        `;
+        const rowsForGroup = rows.map(rowHtml).join('');
+        return headerRow + (collapsedByDefault
+          ? rowsForGroup.replace(/<tr data-alert-id/g, '<tr style="display:none;" data-alert-id')
+          : rowsForGroup);
       }).join('');
 
-      tableBody.innerHTML = rowsHtml;
+      tableBody.innerHTML = sectionsHtml;
+    }
+
+    // Toggle handler for alerts severity group headers (2026-05-02)
+    function handleAlertsGroupToggle(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const header = target.closest('.alerts-group-header');
+      if (!header || !tableBody.contains(header)) return;
+      const sev = header.getAttribute('data-sev-toggle');
+      if (!sev) return;
+      const isCollapsed = header.getAttribute('data-state') === 'collapsed';
+      const arrow = header.querySelector('.alerts-group-arrow');
+      // Toggle visibility of all rows of this severity
+      tableBody.querySelectorAll(`tr[data-sev-group="${sev}"]`).forEach((tr) => {
+        tr.style.display = isCollapsed ? '' : 'none';
+      });
+      header.setAttribute('data-state', isCollapsed ? 'expanded' : 'collapsed');
+      if (arrow) arrow.textContent = isCollapsed ? '▼' : '▶';
+    }
+
+    // ── AI proposal modal (2026-05-02) ───────────────────────────────────
+    async function handleAiViewClick(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest('.js-alert-ai-view');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      const alertId = tr?.getAttribute('data-alert-id');
+      if (!alertId) return;
+
+      // Fetch most recent proposal for this alert
+      const { data: proposals, error } = await supabaseClient
+        .from('alert_triage_proposals')
+        .select('proposal_id, model, cost_usd, root_cause, severity_assessment, proposed_fix, confidence, files_to_touch, accepted_at, rejected_at, reviewer_note, created_at')
+        .eq('alert_id', alertId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) { alert('Error loading proposal: ' + error.message); return; }
+      if (!proposals || proposals.length === 0) {
+        alert('No AI proposal yet — the agent runs every 5 min and may take up to ~10 min after the alert first fires.');
+        return;
+      }
+      const p = proposals[0];
+      const status = p.accepted_at ? `✅ Accepted ${fmtDate(p.accepted_at)}` :
+                     p.rejected_at ? `❌ Rejected ${fmtDate(p.rejected_at)}` :
+                     '⏳ Awaiting review';
+      const filesHtml = (p.files_to_touch && p.files_to_touch.length)
+        ? '<ul style="margin:4px 0 0 16px;">' + p.files_to_touch.map(f => `<li><code>${escapeHtml(f)}</code></li>`).join('') + '</ul>'
+        : '<em class="muted">none</em>';
+
+      let modal = document.getElementById('aiProposalModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'aiProposalModal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+        document.body.appendChild(modal);
+      }
+      const reviewable = !p.accepted_at && !p.rejected_at;
+      modal.innerHTML = `
+        <div style="background:var(--card-bg,#1a1d24);color:var(--text,#e8e8e8);max-width:760px;width:100%;max-height:90vh;overflow-y:auto;border-radius:8px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,0.5);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h3 style="margin:0;">🤖 AI Triage Proposal</h3>
+            <button id="aiModalClose" class="btn btn-secondary-sm">Close</button>
+          </div>
+          <div style="margin-bottom:12px;font-size:0.9em;" class="muted">
+            Model: <code>${escapeHtml(p.model)}</code> &nbsp;•&nbsp;
+            Cost: $${Number(p.cost_usd ?? 0).toFixed(4)} &nbsp;•&nbsp;
+            Confidence: <strong>${escapeHtml(p.confidence || 'unknown')}</strong> &nbsp;•&nbsp;
+            ${escapeHtml(status)}
+          </div>
+          <h4 style="margin:16px 0 6px;">Root cause</h4>
+          <div style="white-space:pre-wrap;background:rgba(255,255,255,0.04);padding:10px;border-radius:4px;">${escapeHtml(p.root_cause || '(none)')}</div>
+          <h4 style="margin:16px 0 6px;">Severity assessment</h4>
+          <div style="white-space:pre-wrap;background:rgba(255,255,255,0.04);padding:10px;border-radius:4px;">${escapeHtml(p.severity_assessment || '(none)')}</div>
+          <h4 style="margin:16px 0 6px;">Proposed fix</h4>
+          <div style="white-space:pre-wrap;background:rgba(255,255,255,0.04);padding:10px;border-radius:4px;">${escapeHtml(p.proposed_fix || '(none)')}</div>
+          <h4 style="margin:16px 0 6px;">Files likely to touch</h4>
+          ${filesHtml}
+          ${p.reviewer_note ? `<h4 style="margin:16px 0 6px;">Reviewer note</h4><div class="muted">${escapeHtml(p.reviewer_note)}</div>` : ''}
+          ${reviewable ? `
+            <div style="margin-top:20px;display:flex;gap:8px;justify-content:flex-end;">
+              <button id="aiReject" class="btn btn-secondary-sm">Reject</button>
+              <button id="aiAccept" class="btn">Accept</button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+      modal.style.display = 'flex';
+
+      document.getElementById('aiModalClose').onclick = () => { modal.style.display = 'none'; };
+      modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+
+      if (reviewable) {
+        const review = async (action) => {
+          const note = window.prompt(`Optional reviewer note for ${action.toUpperCase()}:`, '');
+          if (note === null) return;
+          const { error: rErr } = await supabaseClient.rpc('review_triage_proposal', {
+            p_proposal_id: p.proposal_id,
+            p_action: action,
+            p_reviewer: 'admin-ui',
+            p_note: note.trim() || null,
+          });
+          if (rErr) { alert('Review failed: ' + rErr.message); return; }
+          modal.style.display = 'none';
+          loadAlerts();
+        };
+        document.getElementById('aiAccept').onclick = () => review('accept');
+        document.getElementById('aiReject').onclick = () => review('reject');
+      }
     }
 
     async function handleResolveClick(ev) {
@@ -9112,6 +9261,8 @@
     if (componentFilter) componentFilter.addEventListener('change', loadAlerts);
     if (severityFilter) severityFilter.addEventListener('change', loadAlerts);
     tableBody.addEventListener('click', handleResolveClick);
+    tableBody.addEventListener('click', handleAlertsGroupToggle);
+    tableBody.addEventListener('click', handleAiViewClick);
 
     // Stop auto-refresh when leaving admin module
     document.querySelectorAll('nav a').forEach(link => {
