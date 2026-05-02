@@ -7,6 +7,9 @@ import { sendTextEmail } from "../_shared/smtp.ts";
 type AlertRow = {
   alert_id: string;
   created_at: string;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  occurrence_count: number | null;
   severity: string;
   component: string;
   message: string;
@@ -44,7 +47,7 @@ Deno.serve(async (req: Request) => {
   const { data, error } = await sb
     .schema("public")
     .from("alert_events")
-    .select("alert_id, created_at, severity, component, message")
+    .select("alert_id, created_at, first_seen_at, last_seen_at, occurrence_count, severity, component, message")
     .eq("org_id", org_id)
     .in("severity", ["error", "critical"])
     .is("resolved_at", null)
@@ -70,11 +73,19 @@ Deno.serve(async (req: Request) => {
   lines.push("");
 
   for (const a of alerts) {
-    const when = new Date(a.created_at).toISOString();
+    const first = new Date(a.first_seen_at ?? a.created_at).toISOString();
+    const last  = new Date(a.last_seen_at  ?? a.created_at).toISOString();
+    const count = Number(a.occurrence_count ?? 1);
+    const countStr = count > 1 ? ` (×${count})` : "";
     lines.push(
-      `• [${a.severity.toUpperCase()}] ${a.component} @ ${when}`,
+      `• [${a.severity.toUpperCase()}] ${a.component}${countStr}`,
     );
     lines.push(`    ${a.message}`);
+    if (count > 1) {
+      lines.push(`    First seen: ${first}  •  Last seen: ${last}`);
+    } else {
+      lines.push(`    Seen: ${first}`);
+    }
     lines.push("");
   }
 

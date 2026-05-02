@@ -161,6 +161,46 @@ Smoke-tested: direct `INSERT INTO lth_pvr.decisions_daily VALUES (..., customer_
 - New: `deploy-alert-events-relocation.ps1`
 - `docs/SDD_v0.6.md` — this addendum
 
+#### Addendum #4 (same day) — Alert deduplication, severity-first ordering, UI legend & filter
+
+The relocation surfaced an underlying noise problem: **46,172 historical alert rows** with **only ~80 distinct unresolved (component, severity, message) combinations** — the worst offender (`ef_post_ledger_and_balances` info "Batch transfer found 0 customers") had **2,778 identical open rows**. The Admin UI was unusable: 100-row pages of repeats hid any genuinely actionable error.
+
+**Approach.** Rather than retrofit dedup logic into every caller (`logAlert()` + 8 direct inserters + 4 stale per-EF clones), apply the dedup at the database layer via a `BEFORE INSERT` trigger on `public.alert_events`. All existing writers are untouched.
+
+**Migration `20260502_alert_events_dedup`:**
+1. **New columns** on `public.alert_events`: `dedup_key text`, `first_seen_at timestamptz`, `last_seen_at timestamptz`, `occurrence_count integer NOT NULL DEFAULT 1`.
+2. **Helper** `public.alert_events_compute_dedup_key(...)` — IMMUTABLE function returning either an explicit `context->>'_dedup_key'` (caller override) or `md5(component | severity | org_id | customer_id | portfolio_id | message)`. The default key is intentionally message-sensitive so genuinely different errors don't collapse together.
+3. **Backfill** all existing rows: dedup_key computed, first/last_seen_at = created_at.
+4. **Partial index** `ix_alert_events_dedup_open ON (dedup_key, last_seen_at DESC) WHERE resolved_at IS NULL` for fast trigger lookup.
+5. **Trigger** `trg_alert_events_dedup BEFORE INSERT FOR EACH ROW EXECUTE FUNCTION public.alert_events_dedup_insert()` —
+   - If an unresolved row with the same `dedup_key` exists and was last seen **within 30 days**, the trigger UPDATEs it (`occurrence_count++`, refreshes `last_seen_at`, replaces `message`/`context` with the latest values, preserves `notified_at` so the digest doesn't re-spam) and returns `NULL` to drop the new INSERT.
+   - Otherwise the new row goes in normally with `occurrence_count = 1`.
+   - The 30-day staleness cutoff prevents one chronic alert from accumulating forever — once the trigger ages out, a new row starts. Resolving an alert always creates a fresh row on the next occurrence regardless of timing.
+6. **Historical cleanup** — collapsed all open duplicates into the earliest row per dedup_key, summing occurrence_count. Result: **46,172 → 13,110 total rows; ~46,000 → 40 OPEN rows**. Resolved historical rows untouched.
+7. **`public.list_lth_alert_events(p_only_open, p_limit, p_severity)`** — added severity filter param + returns the new `first_seen_at`, `last_seen_at`, `occurrence_count` columns. Server-side ordering changed to: **open-first, then severity rank (`critical → error → warn → info`), then last_seen_at DESC**. This means the admin sees the most urgent unresolved alerts at the top by default.
+
+**`ef_alert_digest` updated** to select + format the new columns. Email body now reads `• [ERROR] ef_generate_decisions (×153)` with first-seen and last-seen timestamps for repeated alerts. Deployed.
+
+**UI changes (`ui/Advanced BTC DCA Strategy.html`, Administration → System Alerts card):**
+- **Severity legend matrix** — 4-card responsive grid above the toolbar showing each severity pill with a one-line plain-English definition (critical = halt/funds-at-risk, error = action today, warn = recoverable, info = audit only).
+- **Severity filter dropdown** — passed through to the RPC's new `p_severity` param, server-side filter (no client-side limit-100 truncation problem).
+- **Component filter** — extended with `ef_post_ledger_and_balances` and `ef_sync_valr_transactions`, the two highest-volume components.
+- **Table columns** restructured to put the actionable info first: `Severity | Count | Component | Message | First Seen | Last Seen | Resolved | [Resolve]`. The single `Created` column is gone — `First Seen` is its replacement and `Last Seen` is new. The Count cell shows `1` muted vs. e.g. `2,778` bold for repeats.
+
+**Side effect — digest behaviour with dedup.** Once a dedup_key has been emailed (its row's `notified_at` is set), subsequent occurrences only bump the existing row and do **not** reset `notified_at`, so the digest will not re-spam the same issue. This is the desired behaviour. If the alert is resolved and re-occurs later, the new INSERT creates a fresh row with `notified_at = NULL` and the digest picks it up again. (If a chronic, never-resolved error needs to keep nagging, set its alert's `notified_at` back to NULL via SQL — or resolve it; same effect.)
+
+**Smoke-tested:** 5 identical INSERTs into `public.alert_events` with `component='dedup_smoke_test'` produce a single row with `occurrence_count=5`. RPC with `p_severity='warn'` returns it correctly.
+
+**Files touched (addendum #4):**
+- DB: migration `20260502_alert_events_dedup` (columns, trigger, backfill, RPC rewrite)
+- `supabase/functions/ef_alert_digest/index.ts` (deployed)
+- `ui/Advanced BTC DCA Strategy.html` — System Alerts card markup + JS
+- `docs/SDD_v0.6.md` — this addendum
+
+**Future considerations (not done):**
+- Demote routine "Batch transfer found 0 customers" / "Batch transfer check: thresholds…" / per-fill withdrawal-detection messages from `info`-severity alerts to plain `console.log()` — they're operational debug, not alerts. (Touches `ef_post_ledger_and_balances` and `ef_sync_valr_transactions`. Out of scope for this change-set; flagged.)
+- Add an "Auto-resolve stale info alerts after N days" sweeper job, or simply let the staleness-cutoff churn through them naturally.
+
 ---
 
 ### v0.6.99 – Monthly statement May-1 production run: PDF/dispatcher bug-bash, HWM init, cron repairs, recipient filter, Outlook-safe button

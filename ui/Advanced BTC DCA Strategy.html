@@ -4053,7 +4053,28 @@
       <!-- Alerts card -->
       <div class="card" id="alertsCard">
         <h3>System Alerts</h3>
-        <p class="small-muted">Open alerts across all strategies for your organisation.</p>
+        <p class="small-muted">Open alerts across all strategies for your organisation. Repeats of the same issue are collapsed into a single row with an occurrence count.</p>
+
+        <!-- Severity legend -->
+        <div id="alertsSeverityLegend" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.5rem;margin:.5rem 0 .85rem;">
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.45rem .6rem;display:flex;align-items:center;gap:.55rem;">
+            <span class="status-pill critical" style="flex:none;">critical</span>
+            <span class="small-muted" style="font-size:.78rem;line-height:1.25;">Trading halted or funds at risk. Resolve immediately.</span>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.45rem .6rem;display:flex;align-items:center;gap:.55rem;">
+            <span class="status-pill error" style="flex:none;">error</span>
+            <span class="small-muted" style="font-size:.78rem;line-height:1.25;">A pipeline step or order failed. Action required today.</span>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.45rem .6rem;display:flex;align-items:center;gap:.55rem;">
+            <span class="status-pill warn" style="flex:none;">warn</span>
+            <span class="small-muted" style="font-size:.78rem;line-height:1.25;">Degraded condition or recoverable issue. Review when convenient.</span>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.45rem .6rem;display:flex;align-items:center;gap:.55rem;">
+            <span class="status-pill info" style="flex:none;">info</span>
+            <span class="small-muted" style="font-size:.78rem;line-height:1.25;">Routine event recorded for audit. No action needed.</span>
+          </div>
+        </div>
+
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap;">
           <button id="alertsRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
           <label style="display:flex;align-items:center;font-size:.8rem;gap:.35rem;">
@@ -4064,6 +4085,13 @@
             <input id="alertsAutoRefreshChk" type="checkbox">
             <span>Auto-refresh (30s)</span>
           </label>
+          <select id="alertsSeverityFilter" class="context-select" style="min-width:160px;height:36px;" title="Filter by severity">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="error">Error</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+          </select>
           <select id="alertsComponentFilter" class="context-select" style="min-width:200px;height:36px;">
             <option value="">All Components</option>
             <option value="ef_fetch_ci_bands">ef_fetch_ci_bands</option>
@@ -4071,22 +4099,26 @@
             <option value="ef_create_order_intents">ef_create_order_intents</option>
             <option value="ef_execute_orders">ef_execute_orders</option>
             <option value="ef_poll_orders">ef_poll_orders</option>
+            <option value="ef_post_ledger_and_balances">ef_post_ledger_and_balances</option>
+            <option value="ef_sync_valr_transactions">ef_sync_valr_transactions</option>
           </select>
         </div>
         <div class="table-scroll" id="alertsTableContainer">
           <table id="alertsTable">
             <thead>
               <tr>
-                <th style="min-width:140px;">Created</th>
                 <th style="min-width:90px;">Severity</th>
+                <th style="min-width:60px;text-align:right;" title="Number of times this alert was raised">Count</th>
                 <th style="min-width:140px;">Component</th>
                 <th>Message</th>
+                <th style="min-width:140px;" title="When this alert was first raised">First Seen</th>
+                <th style="min-width:140px;" title="Most recent occurrence of this alert">Last Seen</th>
                 <th style="min-width:140px;">Resolved</th>
                 <th style="min-width:80px;"></th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="6" class="muted">No alerts.</td></tr>
+              <tr><td colspan="8" class="muted">No alerts.</td></tr>
             </tbody>
           </table>
         </div>
@@ -8899,6 +8931,7 @@
     const openOnlyChk = document.getElementById('alertsOpenOnlyChk');
     const autoRefreshChk = document.getElementById('alertsAutoRefreshChk');
     const componentFilter = document.getElementById('alertsComponentFilter');
+    const severityFilter  = document.getElementById('alertsSeverityFilter');
     const alertBadge = document.getElementById('alertBadge');
 
     if (!tableBody || !refreshBtn) return;
@@ -8934,12 +8967,12 @@
     async function loadAlerts() {
       // Check if authenticated first
       if (!supabaseClient) {
-        tableBody.innerHTML = '<tr><td colspan="6">Loading Supabase client…</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8">Loading Supabase client…</td></tr>';
         return;
       }
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session?.user) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="muted">Please sign in via Administration tab to view alerts.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8" class="muted">Please sign in via Administration tab to view alerts.</td></tr>';
         if (alertBadge) {
           alertBadge.textContent = '0';
           alertBadge.classList.add('zero');
@@ -8948,13 +8981,15 @@
       }
 
       // Load alerts
-      tableBody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
       const onlyOpen = !openOnlyChk || openOnlyChk.checked;
       const component = componentFilter ? componentFilter.value : '';
+      const severity  = severityFilter ? severityFilter.value : '';
 
       const { data, error } = await supabaseClient.rpc('list_lth_alert_events', {
         p_only_open: onlyOpen,
-        p_limit: 100
+        p_limit: 100,
+        p_severity: severity || null
       });
 
       // Filter by component on client side if specified
@@ -8966,7 +9001,7 @@
       if (error) {
         console.error('loadAlerts error', error);
         tableBody.innerHTML =
-          '<tr><td colspan="6" class="error">Failed to load alerts: ' +
+          '<tr><td colspan="8" class="error">Failed to load alerts: ' +
           escapeHtml(error.message || String(error)) +
           '</td></tr>';
         return;
@@ -8985,17 +9020,22 @@
 
       if (!filteredData || filteredData.length === 0) {
         tableBody.innerHTML =
-          '<tr><td colspan="6" class="muted">No alerts.</td></tr>';
+          '<tr><td colspan="8" class="muted">No alerts.</td></tr>';
         return;
       }
 
       const rowsHtml = filteredData.map((row) => {
-        const created  = fmtDate(row.created_at);
-        const resolved = row.resolved_at ? fmtDate(row.resolved_at) : '';
-        const sevClass = severityClass(row.severity);
-        const sevLabel = escapeHtml(row.severity || '');
+        const firstSeen = fmtDate(row.first_seen_at || row.created_at);
+        const lastSeen  = fmtDate(row.last_seen_at  || row.created_at);
+        const resolved  = row.resolved_at ? fmtDate(row.resolved_at) : '';
+        const sevClass  = severityClass(row.severity);
+        const sevLabel  = escapeHtml(row.severity || '');
         const component = escapeHtml(row.component || '');
         const message   = escapeHtml(row.message || '');
+        const count     = Number(row.occurrence_count || 1);
+        const countCell = count > 1
+          ? `<strong title="Repeated ${count} times since first seen">${count}</strong>`
+          : '<span class="muted">1</span>';
 
         const resolveBtn = row.resolved_at
           ? ''
@@ -9003,10 +9043,12 @@
 
         return `
           <tr data-alert-id="${row.alert_id}">
-            <td>${created}</td>
             <td><span class="status-pill ${sevClass}">${sevLabel}</span></td>
+            <td style="text-align:right;">${countCell}</td>
             <td>${component}</td>
             <td>${message}</td>
+            <td>${firstSeen}</td>
+            <td>${lastSeen}</td>
             <td>${resolved}</td>
             <td>${resolveBtn}</td>
           </tr>
@@ -9068,6 +9110,7 @@
     if (openOnlyChk) openOnlyChk.addEventListener('change', loadAlerts);
     if (autoRefreshChk) autoRefreshChk.addEventListener('change', toggleAutoRefresh);
     if (componentFilter) componentFilter.addEventListener('change', loadAlerts);
+    if (severityFilter) severityFilter.addEventListener('change', loadAlerts);
     tableBody.addEventListener('click', handleResolveClick);
 
     // Stop auto-refresh when leaving admin module
