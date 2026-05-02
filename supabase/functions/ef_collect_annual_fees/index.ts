@@ -101,11 +101,14 @@ Deno.serve(async (req) => {
     console.log(`[ef_collect_annual_fees] Found ${accruals.length} mature accrual period(s) to collect`);
 
     // ─── Step 2: Get annual customer strategies for performance fee calc ──────
+    // LTH_PVR-only: lth_pvr.customer_state_daily (the HWM source) is
+    // strategy-specific.
     const { data: annualStrategies, error: stratErr } = await sb
       .schema("public")
       .from("customer_strategies")
       .select("customer_id, performance_fee_rate, performance_fee_schedule")
       .eq("org_id", orgId)
+      .eq("strategy_code", "LTH_PVR")
       .eq("status", "active")
       .eq("live_enabled", true)
       .eq("performance_fee_schedule", "annual");

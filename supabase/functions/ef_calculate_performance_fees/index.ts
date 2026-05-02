@@ -48,12 +48,16 @@ Deno.serve(async (req) => {
 
     console.log(`Calculating performance fees for ${lastMonthStr} (last day: ${lastDayStr})`);
 
-    // Get all active customers with monthly performance fee strategies
+    // Get all active customers with monthly performance fee strategies.
+    // Restricted to LTH_PVR — lth_pvr.customer_state_daily (the table that
+    // stores HWM) is strategy-specific; ADV_DCA and other strategies must
+    // use their own state tables.
     const { data: activeStrategies, error: strategyError } = await supabase
       .schema("public")
       .from("customer_strategies")
       .select("customer_id, customer_strategy_id, performance_fee_rate, performance_fee_schedule")
       .eq("org_id", orgId)
+      .eq("strategy_code", "LTH_PVR")
       .eq("status", "active")
       .eq("live_enabled", true)
       .gt("performance_fee_rate", 0)

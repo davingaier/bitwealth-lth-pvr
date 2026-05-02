@@ -82,6 +82,37 @@ This works because all live LTH_PVR customers currently share a single strategy 
 - `supabase/migrations/` — `20260502_state_flags_carry_forward`
 - `docs/SDD_v0.6.md` — this addendum
 
+#### Addendum #2 (same day) — `lth_pvr.customer_state_daily` is LTH_PVR-only (invariant now enforced)
+
+User noted that `customer 9` (an `ADV_DCA`-only customer) had no business having any rows in `lth_pvr.customer_state_daily` at all — the table lives in the `lth_pvr` schema and per the project's architectural principle ("public schema for strategy-agnostic objects, per-strategy schemas for strategy-specific ones") it must hold rows for `LTH_PVR` customers exclusively. Audit found **41 spurious rows** for customer 9 (Jan–Feb 2026 + 2026-04-30), all written by the monthly perf-fee job which had no `strategy_code` filter on its `customer_strategies` query.
+
+**Root cause:** Both `ef_calculate_performance_fees` and `ef_collect_annual_fees` queried `public.customer_strategies` filtering only on `status='active'`, `live_enabled=true`, and `performance_fee_*` — never on `strategy_code='LTH_PVR'`. Since fees are configured at the `customer_strategies` level (not LTH_PVR-specific by data shape), an `ADV_DCA` strategy with a non-zero performance-fee rate would silently get pulled in and the perf-fee path would write into `lth_pvr.customer_state_daily`, the LTH_PVR-only HWM table.
+
+**Fixes applied:**
+1. **EF query filter** — added `.eq("strategy_code","LTH_PVR")` to the `customer_strategies` query in:
+   - `supabase/functions/ef_calculate_performance_fees/index.ts`
+   - `supabase/functions/ef_collect_annual_fees/index.ts`
+2. **SQL function guards** — migration `20260502_lth_pvr_only_state_invariant`:
+   - `lth_pvr.ensure_hwm_initialised_all()` now iterates only `customer_strategies WHERE strategy_code='LTH_PVR' AND status='active'`.
+   - `lth_pvr.ensure_hwm_initialised(p_org_id, p_customer_id)` returns `{status:'skipped', reason:'not_lth_pvr_customer'}` if the customer has no LTH_PVR strategy in that org.
+3. **DB-level invariant (defense in depth)** — same migration adds:
+   ```sql
+   CREATE TRIGGER trg_enforce_lth_pvr_customer
+     BEFORE INSERT OR UPDATE OF customer_id, org_id ON lth_pvr.customer_state_daily
+     FOR EACH ROW EXECUTE FUNCTION lth_pvr.enforce_lth_pvr_customer();
+   ```
+   The trigger raises `check_violation` if the (`org_id`, `customer_id`) pair has no `customer_strategies` row with `strategy_code='LTH_PVR'`. This is the authoritative gate — any future writer (admin tooling, ad-hoc SQL, new edge function) is now structurally prevented from leaking non-LTH_PVR rows into the table.
+4. **One-off cleanup** — same migration `DELETE`s every existing row whose customer has no LTH_PVR strategy. 41 rows removed (all customer 9). The single legitimate row for customer 999 (which does have an LTH_PVR strategy, just suspended) was retained.
+5. **Trigger smoke-tested** — attempted insert for customer 9 (ADV_DCA) correctly raises `check_violation`.
+
+**Architectural reinforcement:** the same pattern should be applied to other `lth_pvr.*` tables that may be written by strategy-agnostic code paths (e.g. `lth_pvr.balances_daily`, `lth_pvr.ledger_lines`, `lth_pvr.customer_accumulated_fees`). Not done in this change-set — flagged as a follow-up audit. The principle: any table in a per-strategy schema should reject writes for customers that don't have the matching strategy.
+
+**Files touched (addendum #2):**
+- `supabase/functions/ef_calculate_performance_fees/index.ts`
+- `supabase/functions/ef_collect_annual_fees/index.ts`
+- `supabase/migrations/` — `20260502_lth_pvr_only_state_invariant`
+- `docs/SDD_v0.6.md` — this addendum
+
 ---
 
 ### v0.6.99 – Monthly statement May-1 production run: PDF/dispatcher bug-bash, HWM init, cron repairs, recipient filter, Outlook-safe button
