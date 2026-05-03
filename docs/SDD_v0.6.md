@@ -3,11 +3,111 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-02 (v0.6.101)
+**Last updated:** 2026-05-03 (v0.6.102)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.102 – Day-of admin UI build, conversion-display unification, ledger fee-key compatibility, sync filter loosening, batch-sweep cadence gate, ZAR→USDT maker pricing
+**Date:** 2026-05-03
+**Status:** ✅ DEPLOYED — eleven commits on 2026-05-03 covering edge functions, admin UI, customer portal, and one Postgres function. Grouped into seven parts below in the order they were made.
+
+#### Part A — `ef_convert_zar_to_usdt` precision and `exchange_orders` schema fix (commits dcff8fb, 709d582)
+
+Two follow-ups to v0.6.101 that surfaced when customer 49's ZAR→USDT conversion was first run end-to-end:
+
+1. **Quantity rounding.** USDTZAR has `tickSize=0.0001` (price 4dp) and `baseDecimalPlaces=4` (qty 4dp). The previous code computed `qtyUsdt = zarAmount / limitPrice` and shipped it with `.toFixed(6)`, which VALR silently re-rounded — and any upward rounding made `qty * price > available ZAR` and triggered "Insufficient balance" rejections. Now the qty is **floored** to 4dp (`Math.floor(qtyUsdtRaw * 1e4) / 1e4`) and both price and qty are stringified at exactly 4dp before submission.
+2. **`exchange_orders` insert reshape.** The original insert used columns that don't exist (`customer_id`, `quantity`, `valr_order_id`, `customer_order_id`, `source`, `created_at`, `order_type`, `fill_price`) and omitted required ones (`exchange_account_id NOT NULL`, `ext_order_id`, `qty`, `submitted_at`). Now the insert resolves the customer's `exchange_account_id` from `public.customer_strategies`, writes the schema-correct columns, and stuffs the bookkeeping extras (customer_id, customer_order_id, fill_price, zar_amount, conversion_id, order_type) into the `raw` JSONB blob. Wrapped in try/catch — failure is non-fatal because `ef_sync_valr_transactions` will re-create the funding event from VALR's own history.
+
+#### Part B — `ef_post_ledger_and_balances`: cadence gate on auto-sweep + fee-key compatibility (commits 6b90775, 39cfe0e)
+
+**Cadence gate (6b90775).** The end-of-pipeline batch transfer block was sweeping every customer with a positive `accumulated_btc` / `accumulated_usdt` balance whenever the threshold was met. That broke customer 49 (api-model, **annual** performance fee schedule): each pipeline run attempted a withdrawal, the dedicated annual-settlement EF was the actual owner of those balances, and the redundant attempt was failing at the `valr_transfer_log` not-null constraint. Three changes:
+
+1. **Schedule lookup added.** Strategy query now reads `platform_fee_schedule` and `performance_fee_schedule` from `public.customer_strategies` (also fixed the schema — was reading from a non-existent `lth_pvr.customer_strategies`).
+2. **Gate.** If `platform_fee_schedule != 'immediate' AND performance_fee_schedule != 'immediate'`, the customer is skipped with a log line and left to the dedicated settlement EFs (`ef_calculate_performance_fees`, `ef_transfer_accumulated_fees`, `ef_collect_annual_fees`). Customers with at least one immediate-cadence fee component continue to be auto-swept here.
+3. **Account-model awareness.** Replaced the hand-rolled `transferToMainAccount` (subaccount-only) call with the existing `withdrawFeeFromCustomerAccount` helper, which dispatches subaccount-model customers to internal transfer and api-model customers to on-chain withdraw against `wallet_config`. Also removed a dead duplicated `ledger_lines` insert in the BTC branch.
+
+**Fee-key compatibility (39cfe0e).** The `kind='topup'` / `kind='withdrawal'` ledger inserts were extracting VALR exchange fees from `f.metadata.exchange_fee_asset` / `exchange_fee` only. New funding events written by `ef_sync_valr_transactions` and `ef_convert_zar_to_usdt` use `conversion_fee_asset` / `conversion_fee_amount` (and the legacy misnamed `conversion_fee_zar` whose value is actually denominated in USDT for USDT-credit legs). The fee extraction is now an IIFE that accepts all three key sets, so `ledger_lines.fee_btc` / `fee_usdt` are populated for both legacy and current conversion paths. Without this fix, the customer-49 conversion legs would have shown `fee_usdt=0` instead of `fee_usdt=41.91`.
+
+#### Part C — `ef_sync_valr_transactions`: customer filter loosened + diagnostics (commit 24660e9)
+
+The sync was filtering customers on `registration_status='active'`, which silently excluded any customer in `'suspended'`, `'cancelled'`, `'pending'` — meaning ZAR or crypto landing in their VALR wallet would never be seen by us. Two changes:
+
+1. **Customer-filter loosened.** Removed `.eq("registration_status","active")`. The authoritative gate is now `exchange_accounts.status='active'` only — once a subaccount is operational, we ingest its transactions regardless of customer registration status.
+2. **Account-status filter tightened.** Added `.eq("status","active")` to the `exchange_accounts` query (was previously fetching all rows, including disabled ones).
+3. **Per-customer diagnostics.** The `results.details` payload now includes `since_datetime`, `oldest_tx`, `newest_tx`, and a `tx_types` breakdown (count by `transactionType.type`). Useful for triaging "why did this customer's deposit not show up?" without reading raw EF logs.
+
+#### Part D — Real-time Transaction Monitor in Admin UI (commit 54a2a78, +524 lines)
+
+New `Live Pipeline Card` and `History Card` added to the LTH_PVR Transactions module of [ui/Advanced BTC DCA Strategy.html](ui/Advanced%20BTC%20DCA%20Strategy.html). Wraps the existing `lth_pvr.get_pipeline_status()` RPC and per-customer state into a live operational view:
+
+- **Org-wide steps strip** — six lights (CI bands → decisions → intents → orders → polling → ledger) for the selected trade date, with state mapped to `complete / in_progress / failed / not_started / na`.
+- **Per-customer table** — one row per active LTH_PVR customer, with the same six-step lights repeated per customer plus a registration-status badge and a free-text subtitle ("waiting for fill", "bear pause", etc.).
+- **Auto-refresh** with a pulsing "live" indicator; manual date picker for replaying historical days.
+- **History modal** — selectable customer, free-text type filter, paginated rendering of `list_customer_transactions` output (built before the server-side conversion merge in Part F — see Part E for the column updates).
+
+#### Part E — Admin UI polish: theming, alignment, fee column split, n/a lights (commits cdafd0a, 146f7c0, f17c55e)
+
+Three rapid follow-ups to Part D once dark-mode and operator-feedback issues surfaced:
+
+1. **Dark-mode / theme variable conversion (cdafd0a, +66/-47).** Every hardcoded color in the Live Pipeline + History markup was replaced with theme variables (`var(--ink)`, `var(--bg-soft)`, `var(--bg-elev)`, `var(--bg-table-head)`, `var(--accent)`, `var(--success)`, `var(--warn)`, `var(--danger)`, `var(--bg-modal)`, etc.) so the new card respects the existing light/dark toggle. Also: badge backgrounds switched from solid pastel hexes to `rgba(...,0.18)` overlays of the semantic color so they read correctly on both backgrounds. The `orgId()` helper was hardened to validate UUID shape (`UUID_RE.test(...)`) before accepting any value, preventing the card from "loading" with a placeholder string. An `orgSelect` `change` listener was added so switching org reloads the card immediately.
+2. **Header centering + History fee column split (146f7c0).** Both `.lp-table thead th` and `.lp-hist-table thead th` switched from `text-align:left` to `center` (operator feedback). The History modal's single `Fee` column was split into four numeric columns: `Exch Fee (BTC)`, `Exch Fee (USDT)`, `Plat Fee (BTC)`, `Plat Fee (USDT)` so exchange vs. platform fees are no longer conflated. Colspan placeholders updated 9→11. A `fmtFee(v, dp)` helper renders empty values as `—` instead of `0.0000`.
+3. **Bear-pause "n/a" light made readable (f17c55e).** The dashed circle for steps that don't apply to a given customer was nearly invisible (`1px dashed var(--muted-2)`, opacity 1). Bumped to `2px dashed var(--muted)` with `opacity:.85` so it's clearly distinguishable from a muted "not started" light without competing with the live colored states.
+
+#### Part F — Conversion-leg display unified server-side (commit 2349fde + Postgres function rewrite)
+
+**Symptom.** On the customer portal Transactions tab, a single ZAR→USDT conversion (e.g. customer 49's 2026-05-03 conversion of 200,000 ZAR → 11,931.56 USDT) rendered as two adjacent rows: one ZAR-only `withdrawal` line and one USDT-only `topup` line, both pointing at the same VALR fill. The previous JS-side merge (keyed on `raw.ext_ref`) was unreliable because the two ledger legs don't share an `ext_ref` — they share `conversion_metadata->>'original_transaction_id'` and/or `conversion_approval_id`.
+
+**Fix (option 2 — server-side merge).** Rewrote `public.list_customer_transactions(p_customer_id, p_limit)` (applied via MCP, no migration file):
+- Adds a `conv_key` derived as `COALESCE(NULLIF(ll.conversion_metadata->>'original_transaction_id',''), ll.conversion_approval_id::text)`.
+- A `conv_groups` CTE filters to keys where `count(*) > 1` (so single-leg conversion-tagged rows pass through unchanged).
+- Grouped legs collapse into a single row with `kind='conversion'`, summed `amount_zar / amount_usdt / amount_btc / fee_usdt / platform_fee_usdt`, `MAX(created_at)` for ordering, and the metadata leg containing `conversion_to / conversion_from / conversion_rate` for label rendering.
+
+**UI cleanup.** [website/customer-portal.html](website/customer-portal.html) (~lines 1594–1620) — removed the entire JS merge loop (`mergedById` Map keyed on `raw.ext_ref`), replaced with a comment noting that merging is now server-side. No other UI code paths needed updating.
+
+**Verification.** SQL spot-check on customer 49's 2026-05-03 conversion now returns a single row: `amount_zar=-200000`, `amount_usdt=11931.56`, `fee_usdt=41.91`, `platform_fee_usdt=89.49`, `conversion_to=USDT`, `conversion_rate=16.762267937782237`.
+
+#### Part G — ZAR→USDT converter switched to maker-first pricing (commit c8264cc)
+
+**Symptom.** Customer 49's 2026-05-03 conversion was charged 41.91 USDT VALR fee on ~11,973 USDT gross = **0.350 %**, exceeding the maker rate (~0.18 %) and even the user's recollection of the taker rate (0.30 %). The figure matches VALR's published Tier-0 **taker** rate for stablecoin pairs (~0.35 %).
+
+**Root cause.** [supabase/functions/ef_convert_zar_to_usdt/index.ts](supabase/functions/ef_convert_zar_to_usdt/index.ts) was placing a LIMIT BUY on USDTZAR priced at the **best ask** with `postOnly: false`. Because the limit price equalled the top of the offer, the order crossed the spread immediately and was matched as a **taker fill** — the LIMIT wrapper just capped the price; it did not make the customer a maker.
+
+**Fix.** Same file:
+1. **Price source:** `bestAsk` → `bestBid` (BUY rests in the book as a maker).
+2. **`postOnly`:** `false` → `true` (VALR rejects rather than crossing the spread, structurally guaranteeing the maker fee tier when filled).
+3. **Placement-failure handling:** if VALR rejects the postOnly order (e.g. zero spread, book moved between fetch and place), we no longer abort the conversion with a 502. Instead we log a `warn` alert and fall straight through to step 8's existing **MARKET fallback** path. This means the existing `pollUntilFilled()` (24 × 5 s = 2 min) + cancel + MARKET safety net now also covers "maker didn't fill in time" — the user's explicit design choice for not adding a separate configurable timeout.
+
+**Net effect.** Expected fee on subsequent conversions:
+- Maker fill (typical case, bid holds for ~2 min): ~0.18 %.
+- Maker times out → MARKET fallback: same ~0.35 % as today (no regression).
+
+The platform-fee leg (`platform_fee_usdt`, charged separately at the BitWealth rate) is unaffected — this change only touches the VALR exchange fee.
+
+#### Files touched (all of v0.6.102)
+- [supabase/functions/ef_convert_zar_to_usdt/index.ts](supabase/functions/ef_convert_zar_to_usdt/index.ts) — Parts A & G (3 commits).
+- [supabase/functions/ef_post_ledger_and_balances/index.ts](supabase/functions/ef_post_ledger_and_balances/index.ts) — Part B (2 commits).
+- [supabase/functions/ef_sync_valr_transactions/index.ts](supabase/functions/ef_sync_valr_transactions/index.ts) — Part C.
+- [ui/Advanced BTC DCA Strategy.html](ui/Advanced%20BTC%20DCA%20Strategy.html) — Parts D & E (4 commits).
+- [website/customer-portal.html](website/customer-portal.html) — Part F.
+- `public.list_customer_transactions(int, int)` — Part F (function body rewritten via MCP, no migration file).
+- `docs/SDD_v0.6.md` — this entry.
+
+#### New gotchas (added to §11)
+> **A LIMIT order priced at the opposite top-of-book is still a taker.** VALR (and most CLOB exchanges) classify maker/taker by whether the order *rests* in the book before matching, not by the order endpoint used. To guarantee maker treatment: price at or beyond your own side of the book (bid for BUY, ask for SELL) **and** set `postOnly: true` so the exchange rejects the order rather than crossing. Pair this with a market-fallback path so unfilled maker orders don't strand the workflow.
+>
+> **Ledger fee-extraction code must accept multiple metadata key sets.** Funding events flowing into `ef_post_ledger_and_balances` come from at least three writers (`ef_deposit_scan`, `ef_sync_valr_transactions`, `ef_convert_zar_to_usdt`) and have used three different metadata key conventions historically (`exchange_fee_asset`/`exchange_fee`, `conversion_fee_asset`/`conversion_fee_amount`, and the misnamed `conversion_fee_zar` that's actually denominated in USDT on USDT-credit legs). Always check all three when reading exchange fees from `funding_events.metadata`.
+>
+> **`registration_status` is not the right gate for transaction ingestion.** A customer can be `cancelled` or `suspended` and still have funds landing in their VALR wallet that we are obliged to account for. The authoritative "operational" flag is `exchange_accounts.status='active'`. Don't conflate the two.
+>
+> **Auto-sweep blocks must check fee-cadence schedules.** Any code that reads `accumulated_btc / accumulated_usdt` and tries to settle them must skip customers whose fees are scheduled (`monthly`/`quarterly`/`annual`) — those are owned exclusively by the dedicated settlement EFs. Otherwise the auto-sweep races the scheduled job and one of them fails at a not-null constraint.
+
+#### Follow-up (not done in this change-set)
+- The sister function [supabase/functions/ef_execute_orders/index.ts](supabase/functions/ef_execute_orders/index.ts) places BTCUSDT LIMIT orders at the opposite-side top-of-book with `postOnly: false` for the same reason and is therefore also paying taker fees on every fill. Worth porting the same maker-first + market-fallback pattern, but the trade-offs are different (BTC moves faster than USDT/ZAR, and the LTH PVR pipeline has a tighter daily window) — flagged for a focused review.
+- The Postgres function rewrite for `list_customer_transactions` was applied via MCP only; should be back-ported into a dated migration file for parity with the rest of the migration history.
+
+---
 
 ### v0.6.100 – `ef_generate_decisions` aborted batch on misconfigured customer; pipeline silently dead 2026-04-27 → 2026-05-01
 **Date:** 2026-05-02
