@@ -170,10 +170,16 @@ Deno.serve(async (req) => {
   // ── 4. Calculate LIMIT order quantities ────────────────────────────────────
   // USDTZAR BUY: spending ZAR, receiving USDT
   // quantity = USDT to receive = ZAR_amount / ask_price
+  // VALR USDTZAR pair specs: tickSize=0.0001 (price 4dp), baseDecimalPlaces=4 (qty 4dp).
+  // We must round the quantity DOWN so qty * price never exceeds the available ZAR
+  // (otherwise VALR rejects with "Insufficient balance").
   const limitPrice = bestAsk;
-  const qtyUsdt = zarAmount / limitPrice;
+  const qtyUsdtRaw = zarAmount / limitPrice;
+  const qtyUsdt = Math.floor(qtyUsdtRaw * 1e4) / 1e4; // round down to 4 dp
+  const priceStr = limitPrice.toFixed(4);
+  const qtyStr = qtyUsdt.toFixed(4);
 
-  console.log(`ZAR ${zarAmount} ÷ ${limitPrice} = ${qtyUsdt.toFixed(6)} USDT`);
+  console.log(`ZAR ${zarAmount} ÷ ${priceStr} = ${qtyStr} USDT (raw ${qtyUsdtRaw.toFixed(8)})`);
 
   // ── 5. Place LIMIT BUY (or mock in test mode) ─────────────────────────────
   const customerOrderId = `zar-conv-${conversion_id}`;
@@ -187,8 +193,8 @@ Deno.serve(async (req) => {
         {
           side: "BUY",
           pair,
-          price: limitPrice.toFixed(4),
-          quantity: qtyUsdt.toFixed(6),
+          price: priceStr,
+          quantity: qtyStr,
           customerOrderId,
           timeInForce: "GTC",
           postOnly: false,
