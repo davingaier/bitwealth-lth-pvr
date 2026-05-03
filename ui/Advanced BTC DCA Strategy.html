@@ -2339,7 +2339,7 @@
 
           /* Customer rows table */
           .lp-table{width:100%;border-collapse:collapse;font-size:.88rem;color:var(--ink)}
-          .lp-table thead th{text-align:left;padding:.5rem .75rem;font-size:.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);background:var(--bg-table-head)}
+          .lp-table thead th{text-align:center;padding:.5rem .75rem;font-size:.7rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);background:var(--bg-table-head)}
           .lp-table tbody td{padding:.6rem .75rem;border-bottom:1px solid var(--border);vertical-align:top}
           .lp-table tbody tr:hover{background:var(--bg-row-hover)}
           .lp-cust-name{font-weight:600;color:var(--ink)}
@@ -2380,7 +2380,7 @@
           .lp-hist-toolbar button{cursor:pointer;background:var(--bg-elev)}
           .lp-hist-toolbar button:hover{background:var(--bg-soft)}
           .lp-hist-table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;color:var(--ink)}
-          .lp-hist-table thead th{position:sticky;top:0;background:var(--bg-table-head);text-align:left;padding:.5rem .75rem;font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);z-index:1}
+          .lp-hist-table thead th{position:sticky;top:0;background:var(--bg-table-head);text-align:center;padding:.5rem .75rem;font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);z-index:1}
           .lp-hist-table tbody td{padding:.45rem .75rem;border-bottom:1px solid var(--border)}
           .lp-hist-table .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
           .lp-hist-table .pos{color:var(--success)}
@@ -2482,7 +2482,7 @@
                   <option value="">All types</option>
                 </select>
               </label>
-              <button type="button" id="histReload" style="margin-top:.85rem;padding:.35rem .8rem;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer">Apply</button>
+              <button type="button" id="histReload" style="margin-top:.85rem;padding:.35rem .8rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);color:var(--ink);cursor:pointer">Apply</button>
               <div style="flex:1"></div>
               <div id="histCount" style="margin-top:.85rem;font-size:.75rem;color:var(--muted)"></div>
             </div>
@@ -2498,12 +2498,14 @@
                     <th class="num">Qty</th>
                     <th class="num">Price</th>
                     <th class="num">Value</th>
-                    <th class="num">Fee</th>
-                    <th>Status / Note</th>
+                    <th class="num">Exch Fee (BTC)</th>
+                    <th class="num">Exch Fee (USDT)</th>
+                    <th class="num">Plat Fee (BTC)</th>
+                    <th class="num">Plat Fee (USDT)</th>
                   </tr>
                 </thead>
                 <tbody id="histRows">
-                  <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>
+                  <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -2764,7 +2766,7 @@
         histTo.value   = todayUtc();
         histFrom.value = past.toISOString().slice(0,10);
         histType.innerHTML = `<option value="">All types</option>`;
-        histRows.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>`;
+        histRows.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>`;
         histModal.classList.add('open');
         loadHistory();
       });
@@ -2789,7 +2791,7 @@
           renderHistRows();
         } catch (e) {
           console.error('[History] load failed:', e);
-          histRows.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#b91c1c;padding:2rem">Error: ${escapeHtml(e.message || String(e))}</td></tr>`;
+          histRows.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--danger);padding:2rem">Error: ${escapeHtml(e.message || String(e))}</td></tr>`;
         }
       }
 
@@ -2811,9 +2813,13 @@
         });
         histCount.textContent = `${rows.length} of ${histCache.length} rows`;
         if (!rows.length) {
-          histRows.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">No transactions in this range.</td></tr>`;
+          histRows.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:2rem">No transactions in this range.</td></tr>`;
           return;
         }
+        const fmtFee = (v, dp) => {
+          const n = parseFloat(v || 0);
+          return n ? fmt(n, dp) : '—';
+        };
         histRows.innerHTML = rows.map(r => {
           const meta = r.conversion_metadata || {};
           // Determine asset/pair
@@ -2822,8 +2828,6 @@
                       : parseFloat(r.amount_zar || 0) ? 'ZAR' : '—';
           const qty = parseFloat(r.amount_btc || 0) || parseFloat(r.amount_usdt || 0) || parseFloat(r.amount_zar || 0) || 0;
           const side = qty > 0 ? 'IN' : qty < 0 ? 'OUT' : '—';
-          const fee = parseFloat(r.fee_btc || 0) ? `${r.fee_btc} BTC` :
-                      parseFloat(r.fee_usdt || 0) ? `${parseFloat(r.fee_usdt).toFixed(4)} USDT` : '—';
           const value = (r.amount_zar && parseFloat(r.amount_zar)) ? `R ${Math.abs(parseFloat(r.amount_zar)).toFixed(2)}`
                        : (r.amount_usdt && parseFloat(r.amount_usdt)) ? `$ ${Math.abs(parseFloat(r.amount_usdt)).toFixed(2)}`
                        : '—';
@@ -2841,8 +2845,10 @@
               <td class="num">${qty ? fmt(qty, asset==='BTC'?8:asset==='USDT'?4:2) : '—'}</td>
               <td class="num">${escapeHtml(price)}</td>
               <td class="num">${escapeHtml(value)}</td>
-              <td class="num">${escapeHtml(fee)}</td>
-              <td>${escapeHtml(r.note || '')}</td>
+              <td class="num">${fmtFee(r.fee_btc, 8)}</td>
+              <td class="num">${fmtFee(r.fee_usdt, 4)}</td>
+              <td class="num">${fmtFee(r.platform_fee_btc, 8)}</td>
+              <td class="num">${fmtFee(r.platform_fee_usdt, 4)}</td>
             </tr>`;
         }).join('');
       }
