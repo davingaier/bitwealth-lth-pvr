@@ -138,25 +138,38 @@ Deno.serve(async ()=>{
           continue;
         }
       } else {
-        // --- LIMIT ORDER PATH ---
-        // Fetch current order book to get best bid/ask
+        // --- LIMIT ORDER PATH (maker-first) ---
+        // Price the LIMIT on OUR side of the book and submit postOnly:true so
+        // VALR rests it as a MAKER. Pricing on the opposite side (best ask for
+        // a BUY / best bid for a SELL) crosses the spread immediately and gets
+        // matched as a TAKER — even though it's submitted via the LIMIT
+        // endpoint — which costs roughly 2x the maker fee on BTCUSDT.
+        //
+        // Trade-off: a maker order may not fill quickly. The existing
+        // ef_poll_orders + ef_market_fallback safety nets cancel any LIMIT
+        // that's still open after 5 minutes (or 0.25% adverse price move) and
+        // replace it with a MARKET order. We additionally fall straight
+        // through to a MARKET here if VALR rejects the postOnly placement
+        // (e.g. zero spread, book moved between fetch and place) so the
+        // intent never strands.
+        let isMakerOrder = true;
         try {
           const orderBook = await getOrderBook(pair);
           
           if (side === "BUY") {
-            // BUY: Use lowest ASK (best price to buy at - what sellers are asking)
-            if (!orderBook.Asks || orderBook.Asks.length === 0) {
-              throw new Error("No asks available in order book");
-            }
-            orderBookPrice = orderBook.Asks[0].price;
-            console.log(`BUY LIMIT order: using best ask price ${orderBookPrice}`);
-          } else {
-            // SELL: Use highest BID (best price to sell at - what buyers are willing to pay)
+            // BUY maker: rest at best BID
             if (!orderBook.Bids || orderBook.Bids.length === 0) {
               throw new Error("No bids available in order book");
             }
             orderBookPrice = orderBook.Bids[0].price;
-            console.log(`SELL LIMIT order: using best bid price ${orderBookPrice}`);
+            console.log(`BUY LIMIT (maker) order: using best bid price ${orderBookPrice}`);
+          } else {
+            // SELL maker: rest at best ASK
+            if (!orderBook.Asks || orderBook.Asks.length === 0) {
+              throw new Error("No asks available in order book");
+            }
+            orderBookPrice = orderBook.Asks[0].price;
+            console.log(`SELL LIMIT (maker) order: using best ask price ${orderBookPrice}`);
           }
         } catch (obErr) {
           const obErrMsg = obErr instanceof Error ? obErr.message : String(obErr);
@@ -187,20 +200,60 @@ Deno.serve(async ()=>{
             quantity: qtyStr,
             customerOrderId: i.intent_id,
             timeInForce: "GTC",
-            postOnly: false
+            postOnly: true,
           }, subaccountId, credentials);
         } catch (e) {
           const errMsg = e instanceof Error ? e.message : String(e);
-          console.error("VALR LIMIT order failed", e);
-          
           const isRateLimit = errMsg.toLowerCase().includes("rate limit") || errMsg.includes("429");
-          const severity = isRateLimit ? "warn" : "error";
-          
+          // postOnly rejections are expected when the book has zero spread or
+          // moved between our snapshot and our submission. Treat any
+          // non-rate-limit failure as a "fall through to MARKET" event rather
+          // than a hard error — operationally the intent must still execute.
+          if (isRateLimit) {
+            console.error("VALR LIMIT order rate-limited", e);
+            await logAlert(
+              sb,
+              "ef_execute_orders",
+              "warn",
+              `VALR LIMIT order rate-limited: ${errMsg}`,
+              {
+                customer_id: i.customer_id,
+                intent_id: i.intent_id,
+                side,
+                pair,
+                price: orderBookPrice,
+                quantity: qtyStr,
+                error: errMsg,
+                rate_limited: true,
+              },
+              org_id,
+              i.customer_id
+            );
+            await sb.from("exchange_orders").insert({
+              org_id,
+              exchange_account_id,
+              intent_id: i.intent_id,
+              pair: "BTC/USDT",
+              side,
+              price: Number(orderBookPrice),
+              qty: i.amount,
+              status: "error",
+              raw: { error: errMsg, order_type: "LIMIT", rate_limited: true },
+            });
+            await sb.from("order_intents").update({
+              status: "error",
+              reason: `LIMIT rate-limited: ${errMsg}`,
+            }).eq("intent_id", i.intent_id);
+            errorCount++;
+            continue;
+          }
+
+          console.warn(`postOnly LIMIT placement failed, falling back to MARKET: ${errMsg}`);
           await logAlert(
             sb,
             "ef_execute_orders",
-            severity,
-            `VALR LIMIT order failed: ${errMsg}`,
+            "warn",
+            `postOnly LIMIT placement failed; using MARKET fallback: ${errMsg}`,
             {
               customer_id: i.customer_id,
               intent_id: i.intent_id,
@@ -209,35 +262,75 @@ Deno.serve(async ()=>{
               price: orderBookPrice,
               quantity: qtyStr,
               error: errMsg,
-              rate_limited: isRateLimit
             },
             org_id,
             i.customer_id
           );
-          
-          await sb.from("exchange_orders").insert({
-            org_id,
-            exchange_account_id,
-            intent_id: i.intent_id,
-            pair: "BTC/USDT",
-            side,
-            price: Number(orderBookPrice),
-            qty: i.amount,
-            status: "error",
-            raw: {
-              error: errMsg,
-              order_type: "LIMIT"
-            }
-          });
-          await sb.from("order_intents").update({
-            status: "error"
-          }).eq("intent_id", i.intent_id);
-          errorCount++;
-          continue;
+
+          isMakerOrder = false;
+          try {
+            valrResp = await placeMarketOrder(
+              pair,
+              side,
+              qtyStr,
+              i.intent_id,
+              subaccountId,
+              credentials
+            );
+          } catch (mktErr) {
+            const mktErrMsg = mktErr instanceof Error ? mktErr.message : String(mktErr);
+            console.error("MARKET fallback also failed", mktErr);
+            await logAlert(
+              sb,
+              "ef_execute_orders",
+              "error",
+              `MARKET fallback after postOnly rejection failed: ${mktErrMsg}`,
+              {
+                customer_id: i.customer_id,
+                intent_id: i.intent_id,
+                side,
+                pair,
+                quantity: qtyStr,
+                limit_error: errMsg,
+                market_error: mktErrMsg,
+              },
+              org_id,
+              i.customer_id
+            );
+            await sb.from("exchange_orders").insert({
+              org_id,
+              exchange_account_id,
+              intent_id: i.intent_id,
+              pair: "BTC/USDT",
+              side,
+              price: 0,
+              qty: i.amount,
+              status: "error",
+              raw: {
+                error: mktErrMsg,
+                order_type: "MARKET",
+                fallback_from: "LIMIT_postOnly",
+                limit_error: errMsg,
+              },
+            });
+            await sb.from("order_intents").update({
+              status: "error",
+              reason: `LIMIT+MARKET both failed: ${mktErrMsg}`,
+            }).eq("intent_id", i.intent_id);
+            errorCount++;
+            continue;
+          }
         }
+        // Mark whether this run actually placed a maker LIMIT (vs MARKET fallback)
+        // for the exchange_orders.raw bookkeeping below.
+        (i as any)._isMakerOrder = isMakerOrder;
       }
       
       // --- RECORD ORDER IN DATABASE ---
+      // Effective order type: MARKET intent OR a LIMIT-postOnly that was
+      // rejected and fell back to MARKET above. The maker LIMIT case is the
+      // common (and cheap) path; the fallback is recorded for audit.
+      const effIsMarket = isMarketOrder || ((i as any)._isMakerOrder === false);
       const extId = valrResp?.orderId ?? valrResp?.id;
       const eo = await sb.from("exchange_orders").insert({
         org_id,
@@ -246,16 +339,18 @@ Deno.serve(async ()=>{
         ext_order_id: extId,
         pair: "BTC/USDT",
         side,
-        price: isMarketOrder ? 0 : Number(orderBookPrice),
+        price: effIsMarket ? 0 : Number(orderBookPrice),
         qty: i.amount,
         status: "submitted",
         raw: {
           valr: valrResp,
           subaccountId,
-          order_type: isMarketOrder ? "MARKET" : "LIMIT",
+          order_type: effIsMarket ? "MARKET" : "LIMIT",
+          post_only: !effIsMarket,
+          fallback_from: (!isMarketOrder && effIsMarket) ? "LIMIT_postOnly" : null,
           order_book_price: orderBookPrice,
-          intent_price: i.limit_price
-        }
+          intent_price: i.limit_price,
+        },
       });
       if (eo.error) {
         console.error(eo.error);

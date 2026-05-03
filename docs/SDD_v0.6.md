@@ -3,11 +3,53 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-03 (v0.6.102)
+**Last updated:** 2026-05-03 (v0.6.103)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.103 – v0.6.102 follow-ups: maker-first pricing extended to LTH PVR daily orders; conversion-merge SQL back-ported to migration file
+**Date:** 2026-05-03
+**Status:** ✅ DEPLOYED — `ef_execute_orders` redeployed; migration file added.
+
+#### Part A — `ef_execute_orders` switched to maker-first pricing with built-in MARKET fallback
+
+The same fee anti-pattern v0.6.102 / Part G fixed in `ef_convert_zar_to_usdt` existed in [supabase/functions/ef_execute_orders/index.ts](supabase/functions/ef_execute_orders/index.ts) for the LTH PVR daily BTCUSDT pipeline:
+
+- BUY priced at the best **ask** with `postOnly: false` → crossed the spread, charged **taker** fees
+- SELL priced at the best **bid** with `postOnly: false` → same problem in reverse
+
+Every BTC buy/sell decision the strategy executed was paying ~2× the maker rate. Changes:
+
+1. **Side-aware bid/ask flip.** BUY now prices at `Bids[0].price` (rests as maker); SELL now prices at `Asks[0].price` (rests as maker). The order-book fetch and intent-price fallback paths are unchanged.
+2. **`postOnly: true`.** VALR rejects rather than crossing, structurally guaranteeing the maker fee tier when filled.
+3. **Inline MARKET fallback on postOnly rejection.** If VALR rejects the postOnly placement (zero spread, book moved between fetch and place), we no longer mark the intent `error`. Instead we log a `warn` alert and immediately call `placeMarketOrder()` for the same intent. If that *also* fails, only then is the intent marked `error` with both error messages captured in `raw`.
+4. **Rate-limit (429) is preserved as a hard error.** Unlike a postOnly rejection, a 429 means VALR can't talk to us at all; falling through to MARKET would just hit the same rate limit. So the original error path is kept for that one case.
+5. **`exchange_orders.raw` audit fields.** New keys: `post_only` (bool) and `fallback_from: "LIMIT_postOnly" | null`, so pipeline operators can later filter on rows that took the fallback path.
+
+The existing 5-minute / 0.25 %-price-move safety nets in [supabase/functions/ef_poll_orders/index.ts](supabase/functions/ef_poll_orders/index.ts) and [supabase/functions/ef_market_fallback/index.ts](supabase/functions/ef_market_fallback/index.ts) are unchanged and now serve double duty as the "maker LIMIT didn't fill in time" escape hatch — exactly as Part G's user-stated design choice intended.
+
+**Expected fee impact (Tier 0):**
+- BTCUSDT maker: ~0.10 % (vs taker ~0.20 %) — roughly **half** the per-trade exchange fee on the LTH PVR daily pipeline.
+- Maker rejected + immediate MARKET fallback: same ~0.20 % as today (no regression, plus a `warn` alert so operators can see how often it happens).
+- Stale-LIMIT MARKET fallback (5 min later): same ~0.20 % as today.
+
+#### Part B — `list_customer_transactions` rewrite back-ported to migration file
+
+The Postgres function rewrite from v0.6.102 / Part F was applied via MCP only. Now back-ported into a dated migration file for parity with the rest of the migration history:
+
+- [supabase/migrations/20260503_list_customer_transactions_merge_conversions.sql](supabase/migrations/20260503_list_customer_transactions_merge_conversions.sql) — `CREATE OR REPLACE FUNCTION` body identical to what's in production (verified via `pg_get_functiondef`); idempotent so re-running is safe.
+
+#### Files touched (v0.6.103)
+- [supabase/functions/ef_execute_orders/index.ts](supabase/functions/ef_execute_orders/index.ts) — Part A.
+- [supabase/migrations/20260503_list_customer_transactions_merge_conversions.sql](supabase/migrations/20260503_list_customer_transactions_merge_conversions.sql) — Part B (new file).
+- `docs/SDD_v0.6.md` — this entry.
+
+#### Follow-up
+- Maker pricing for `ef_execute_orders` is now consistent with `ef_convert_zar_to_usdt`. The remaining VALR-order surface (`ef_process_withdrawal_queue` ZAR→USDT/BTC sell-leg, the legacy `valr-convert-zar` function) should be audited for the same pattern when next touched. Not done in this change-set.
+
+---
 
 ### v0.6.102 – Day-of admin UI build, conversion-display unification, ledger fee-key compatibility, sync filter loosening, batch-sweep cadence gate, ZAR→USDT maker pricing
 **Date:** 2026-05-03
