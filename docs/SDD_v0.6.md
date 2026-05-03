@@ -3,11 +3,58 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-03 (v0.6.103)
+**Last updated:** 2026-05-03 (v0.6.104)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.104 – Maker-first audit completed across all VALR-order surfaces
+**Date:** 2026-05-03
+**Status:** ✅ DEPLOYED — `ef_process_withdrawal_queue` redeployed; legacy `valr-convert-zar` confirmed already-correct.
+
+Closes the residual follow-up from v0.6.103: every place in the codebase that submits a LIMIT order to VALR has now been audited for the maker/taker fee anti-pattern.
+
+#### Audit results
+
+| Function | Pair / Side | Pre-audit | Post-audit |
+|---|---|---|---|
+| `ef_convert_zar_to_usdt` | USDTZAR BUY | bestAsk + postOnly:false → **TAKER** | bestBid + postOnly:true → **MAKER** (fixed v0.6.102) |
+| `ef_execute_orders` | BTCUSDT BUY/SELL | opposite-side top + postOnly:false → **TAKER** | own-side top + postOnly:true → **MAKER** (fixed v0.6.103) |
+| `ef_process_withdrawal_queue` | USDTZAR SELL | bestBid + postOnly:undef → **TAKER** | bestAsk + postOnly:true → **MAKER** (fixed this entry) |
+| `ef_process_withdrawal_queue` | BTCZAR SELL | bestBid + postOnly:undef → **TAKER** | bestAsk + postOnly:true → **MAKER** (fixed this entry) |
+| `valr-convert-zar` (legacy) | USDTZAR BUY | bestBid + postOnly:default-true → **MAKER** | unchanged — already correct |
+
+#### Part A — `ef_process_withdrawal_queue` SELL legs flipped to maker-first
+
+[supabase/functions/ef_process_withdrawal_queue/index.ts](supabase/functions/ef_process_withdrawal_queue/index.ts) was placing both ZAR-payout conversion legs (USDTZAR SELL and BTCZAR SELL) at the **best bid** with `postOnly` unspecified. For a SELL, that's the buyers' price → crosses the spread → matched as a **taker**. With `postOnly` undefined VALR also doesn't reject it. Same anti-pattern as the others; same fix:
+
+1. **Side flip:** `Bids[0].price` → `Asks[0].price` (SELL maker rests at the ask).
+2. **`postOnly: true`** added to both `placeLimitOrder()` calls.
+3. **Failure mode softened.** Previously a placement exception called `markFailed()`, killing the entire withdrawal request. Now it logs a `warn` alert via `logAlert()`, calls `bumpAttempt()`, and returns — leaving the row in `'converting'` so the next 5-minute tick retries. After `MARKET_FALLBACK_AFTER_ATTEMPTS = 3` ticks (~15 min) the existing market-fallback path runs unconditionally and converts whatever's still unfilled. This matches the design pattern established in v0.6.102/v0.6.103 (maker-first with a built-in market escape hatch).
+
+#### Part B — Legacy `valr-convert-zar` confirmed already-correct (no change)
+
+Audit of [supabase/functions/valr-convert-zar/index.ts](supabase/functions/valr-convert-zar/index.ts) (lines 100-120) shows it has been doing maker-first all along: BUY priced at `bestBid` with `postOnly = post_only !== false` (defaults to true), and `useMarket=true` is an explicit caller opt-in for taker fills. No change required. Worth noting in case anyone is tempted to "harmonise" it against the old `ef_convert_zar_to_usdt` pattern — that would be a regression.
+
+#### Expected fee impact (Tier 0)
+
+For a typical ZAR-payout withdrawal that converts USDT→ZAR before the fiat withdrawal:
+- Maker fill (typical case, ~15 min window): **~0.18 %** (was ~0.35 %).
+- Maker times out → MARKET fallback after ~15 min: same as today (no regression).
+
+For BTCZAR SELL legs (less common — only when customer holds BTC and wants ZAR):
+- Maker fill: **~0.10 %** (was ~0.20 %, BTCZAR fee tier).
+- Maker times out: same as today.
+
+#### Files touched (v0.6.104)
+- [supabase/functions/ef_process_withdrawal_queue/index.ts](supabase/functions/ef_process_withdrawal_queue/index.ts) — Part A (USDTZAR + BTCZAR SELL legs).
+- `docs/SDD_v0.6.md` — this entry.
+
+#### Follow-up
+- None. The maker-first audit is closed across all VALR-order surfaces. Any *new* function that places a LIMIT order should follow the established pattern: own-side top-of-book + `postOnly: true` + a market-fallback path (either inline on placement rejection, like `ef_execute_orders` and `ef_convert_zar_to_usdt`, or via a deferred timeout, like `ef_process_withdrawal_queue`).
+
+---
 
 ### v0.6.103 – v0.6.102 follow-ups: maker-first pricing extended to LTH PVR daily orders; conversion-merge SQL back-ported to migration file
 **Date:** 2026-05-03

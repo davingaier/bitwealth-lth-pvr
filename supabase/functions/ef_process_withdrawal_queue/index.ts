@@ -365,19 +365,32 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
     }
     if (!orderId) {
       try {
+        // Maker-first SELL: rest at the best ASK with postOnly:true so VALR
+        // never crosses the spread (which would charge taker fees, ~0.35% on
+        // USDTZAR vs ~0.18% maker). The 15-min market-fallback further down
+        // (MARKET_FALLBACK_AFTER_ATTEMPTS) handles the case where the maker
+        // never fills.
         const book = await getOrderBook("USDTZAR");
-        const bid  = Number(book.Bids?.[0]?.price);
-        if (!bid || bid <= 0) throw new Error("USDTZAR no bid");
+        const ask  = Number(book.Asks?.[0]?.price);
+        if (!ask || ask <= 0) throw new Error("USDTZAR no ask");
         const res: any = TEST_MODE
           ? { id: `test-usdt-${row.request_id}` }
           : await placeLimitOrder(
-              { side: "SELL", pair: "USDTZAR", price: bid.toFixed(4), quantity: usdtToSell.toFixed(6), customerOrderId },
+              { side: "SELL", pair: "USDTZAR", price: ask.toFixed(4), quantity: usdtToSell.toFixed(6), customerOrderId, postOnly: true },
               ctx.subaccountId, ctx.creds);
         orderId = (res?.id ?? res?.orderId ?? customerOrderId);
-        trace.push(`zar_pending:usdt_order_placed id=${orderId}`);
+        trace.push(`zar_pending:usdt_order_placed id=${orderId} (maker)`);
       } catch (e) {
+        // postOnly rejection is non-fatal — leave the row in 'converting' and
+        // the next tick will retry. After MARKET_FALLBACK_AFTER_ATTEMPTS
+        // ticks the market-fallback path runs unconditionally.
         trace.push(`zar_pending:usdt_order_failed ${(e as Error).message}`);
-        return await markFailed(row, ctx, `USDTZAR limit order failed: ${(e as Error).message}`);
+        await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "warn",
+          `USDTZAR maker SELL placement failed; will retry / fall back to MARKET: ${(e as Error).message}`,
+          { request_id: row.request_id, customer_id: row.customer_id, customer_order_id: customerOrderId },
+          ORG_ID, row.customer_id);
+        await bumpAttempt(row);
+        return;
       }
     }
     // Persist order id IMMEDIATELY before placing the next leg.
@@ -401,19 +414,26 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
     }
     if (!orderId) {
       try {
+        // Maker-first SELL: rest at the best ASK with postOnly:true. See the
+        // USDTZAR leg above for rationale.
         const book = await getOrderBook("BTCZAR");
-        const bid  = Number(book.Bids?.[0]?.price);
-        if (!bid || bid <= 0) throw new Error("BTCZAR no bid");
+        const ask  = Number(book.Asks?.[0]?.price);
+        if (!ask || ask <= 0) throw new Error("BTCZAR no ask");
         const res: any = TEST_MODE
           ? { id: `test-btc-${row.request_id}` }
           : await placeLimitOrder(
-              { side: "SELL", pair: "BTCZAR", price: bid.toFixed(2), quantity: btcToSell.toFixed(8), customerOrderId },
+              { side: "SELL", pair: "BTCZAR", price: ask.toFixed(2), quantity: btcToSell.toFixed(8), customerOrderId, postOnly: true },
               ctx.subaccountId, ctx.creds);
         orderId = (res?.id ?? res?.orderId ?? customerOrderId);
-        trace.push(`zar_pending:btc_order_placed id=${orderId}`);
+        trace.push(`zar_pending:btc_order_placed id=${orderId} (maker)`);
       } catch (e) {
         trace.push(`zar_pending:btc_order_failed ${(e as Error).message}`);
-        return await markFailed(row, ctx, `BTCZAR limit order failed: ${(e as Error).message}`);
+        await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "warn",
+          `BTCZAR maker SELL placement failed; will retry / fall back to MARKET: ${(e as Error).message}`,
+          { request_id: row.request_id, customer_id: row.customer_id, customer_order_id: customerOrderId },
+          ORG_ID, row.customer_id);
+        await bumpAttempt(row);
+        return;
       }
     }
     await sbLthPvr
