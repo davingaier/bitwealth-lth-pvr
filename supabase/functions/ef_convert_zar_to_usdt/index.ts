@@ -291,22 +291,45 @@ Deno.serve(async (req) => {
       })
       .eq("id", conversion_id);
 
-    // Log to exchange_orders
-    await sb.from("exchange_orders").insert({
-      org_id: ORG_ID,
-      customer_id: customerId,
-      pair,
-      side: "BUY",
-      order_type: "limit",
-      quantity: qtyUsdt,
-      price: limitPrice,
-      status: "filled",
-      fill_price: fillResult.fillPrice,
-      valr_order_id: fillResult.valrOrderId,
-      customer_order_id: customerOrderId,
-      source: "ef_convert_zar_to_usdt",
-      created_at: new Date().toISOString(),
-    }).catch((e: Error) => console.warn("exchange_orders insert failed:", e.message));
+    // Log to exchange_orders. Schema columns: org_id, exchange_account_id (NOT NULL),
+    // pair, side, qty, status, submitted_at (all NOT NULL), price, ext_order_id, raw.
+    // Look up the customer's exchange_account_id (best-effort — the funding event will
+    // also be re-created by ef_sync_valr_transactions when it polls VALR history).
+    try {
+      const { data: ea } = await sb
+        .schema("public")
+        .from("customer_strategies")
+        .select("exchange_account_id")
+        .eq("customer_id", customerId)
+        .order("effective_from", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const exchangeAccountId = ea?.exchange_account_id;
+      if (exchangeAccountId) {
+        await sb.from("exchange_orders").insert({
+          org_id: ORG_ID,
+          exchange_account_id: exchangeAccountId,
+          ext_order_id: fillResult.valrOrderId ?? limitOrderId ?? customerOrderId,
+          pair,
+          side: "BUY",
+          price: limitPrice,
+          qty: convertedUsdt,
+          status: "filled",
+          submitted_at: new Date().toISOString(),
+          raw: {
+            source: "ef_convert_zar_to_usdt",
+            customer_order_id: customerOrderId,
+            customer_id: customerId,
+            order_type: "limit",
+            fill_price: fillResult.fillPrice,
+            zar_amount: zarAmount,
+            conversion_id,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("exchange_orders insert failed:", (e as Error).message);
+    }
 
     return json({
       success: true,
