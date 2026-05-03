@@ -155,13 +155,18 @@ Deno.serve(async (req) => {
     return json({ error: "Failed to resolve customer credentials" }, 500);
   }
 
-  // ── 3. Get USDTZAR best ask price ──────────────────────────────────────────
+  // ── 3. Get USDTZAR best bid price ──────────────────────────────────────────
+  // We price the BUY at the best BID (not ask) so the order rests in the book
+  // as a MAKER. Posting at/above the ask would lift the offer immediately and
+  // get charged the TAKER fee (~0.35% on USDTZAR) instead of the MAKER fee
+  // (~0.18%). If the maker order doesn't fill within the 2-min poll window,
+  // step 8 cancels it and falls back to a MARKET (taker) order.
   const pair = "USDTZAR";
-  let bestAsk: number;
+  let bestBid: number;
   try {
     const book = await getOrderBook(pair);
-    bestAsk = Number(book.Asks[0]?.price);
-    if (!bestAsk || bestAsk <= 0) throw new Error("No ask in order book");
+    bestBid = Number(book.Bids[0]?.price);
+    if (!bestBid || bestBid <= 0) throw new Error("No bid in order book");
   } catch (e) {
     await logAlert(sb, "ef_convert_zar_to_usdt", "error", `Order book fetch failed: ${e.message}`, { conversion_id }, ORG_ID, customerId);
     return json({ error: "Failed to fetch USDTZAR order book" }, 502);
@@ -169,24 +174,30 @@ Deno.serve(async (req) => {
 
   // ── 4. Calculate LIMIT order quantities ────────────────────────────────────
   // USDTZAR BUY: spending ZAR, receiving USDT
-  // quantity = USDT to receive = ZAR_amount / ask_price
+  // quantity = USDT to receive = ZAR_amount / bid_price
   // VALR USDTZAR pair specs: tickSize=0.0001 (price 4dp), baseDecimalPlaces=4 (qty 4dp).
   // We must round the quantity DOWN so qty * price never exceeds the available ZAR
   // (otherwise VALR rejects with "Insufficient balance").
-  const limitPrice = bestAsk;
+  const limitPrice = bestBid;
   const qtyUsdtRaw = zarAmount / limitPrice;
   const qtyUsdt = Math.floor(qtyUsdtRaw * 1e4) / 1e4; // round down to 4 dp
   const priceStr = limitPrice.toFixed(4);
   const qtyStr = qtyUsdt.toFixed(4);
 
-  console.log(`ZAR ${zarAmount} ÷ ${priceStr} = ${qtyStr} USDT (raw ${qtyUsdtRaw.toFixed(8)})`);
+  console.log(`ZAR ${zarAmount} ÷ ${priceStr} (bid, postOnly) = ${qtyStr} USDT (raw ${qtyUsdtRaw.toFixed(8)})`);
 
-  // ── 5. Place LIMIT BUY (or mock in test mode) ─────────────────────────────
+  // ── 5. Place LIMIT BUY postOnly (or mock in test mode) ────────────────────
+  // postOnly:true → VALR rejects the order rather than crossing the spread,
+  // guaranteeing the maker fee tier when it fills. If placement fails (e.g.
+  // bid == ask, book moved), we fall straight through to the MARKET fallback
+  // in step 8 instead of aborting the conversion.
   const customerOrderId = `zar-conv-${conversion_id}`;
   let limitOrderId: string | undefined;
+  let limitPlaced = false;
 
   if (TEST_MODE) {
     console.log("TEST_MODE: skipping LIMIT order placement");
+    limitPlaced = true;
   } else {
     try {
       const orderRes: any = await placeLimitOrder(
@@ -197,30 +208,42 @@ Deno.serve(async (req) => {
           quantity: qtyStr,
           customerOrderId,
           timeInForce: "GTC",
-          postOnly: false,
+          postOnly: true,
         },
         subaccountId,
         creds,
       );
       limitOrderId = orderRes?.id ?? orderRes?.orderId;
+      limitPlaced = true;
     } catch (e) {
-      await logAlert(sb, "ef_convert_zar_to_usdt", "error", `LIMIT order failed: ${e.message}`, { conversion_id, zarAmount }, ORG_ID, customerId);
-      return json({ error: `LIMIT order placement failed: ${e.message}` }, 502);
+      // Don't abort — log and let the MARKET fallback below handle it.
+      console.warn(`postOnly LIMIT placement failed, will fall back to MARKET: ${e.message}`);
+      await logAlert(
+        sb,
+        "ef_convert_zar_to_usdt",
+        "warn",
+        `postOnly LIMIT placement failed; using MARKET fallback: ${e.message}`,
+        { conversion_id, zarAmount, priceStr, qtyStr },
+        ORG_ID,
+        customerId,
+      );
     }
   }
 
   // ── 6. Update pending_zar_conversions → limit_placed ──────────────────────
-  await sb
-    .from("pending_zar_conversions")
-    .update({
-      status: "limit_placed",
-      order_id: limitOrderId ?? customerOrderId,
-      pair,
-      order_side: "BUY",
-      limit_price: limitPrice,
-      order_type: "limit",
-    })
-    .eq("id", conversion_id);
+  if (limitPlaced) {
+    await sb
+      .from("pending_zar_conversions")
+      .update({
+        status: "limit_placed",
+        order_id: limitOrderId ?? customerOrderId,
+        pair,
+        order_side: "BUY",
+        limit_price: limitPrice,
+        order_type: "limit",
+      })
+      .eq("id", conversion_id);
+  }
 
   // ── 7. Poll for fill ───────────────────────────────────────────────────────
   let fillResult: { filled: boolean; fillPrice?: number; fillQty?: number; valrOrderId?: string };
@@ -228,6 +251,9 @@ Deno.serve(async (req) => {
   if (TEST_MODE) {
     // Simulate instant fill in test mode
     fillResult = { filled: true, fillPrice: limitPrice, fillQty: qtyUsdt };
+  } else if (!limitPlaced) {
+    // postOnly placement was rejected — go straight to MARKET fallback
+    fillResult = { filled: false };
   } else {
     fillResult = await pollUntilFilled(customerOrderId, pair, limitPrice, subaccountId, creds);
   }
