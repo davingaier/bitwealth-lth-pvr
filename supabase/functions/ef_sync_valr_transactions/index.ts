@@ -77,12 +77,17 @@ Deno.serve(async (req) => {
     console.log("Starting VALR transaction sync...");
     console.log("Org ID:", orgId);
 
-    // Get all active customers with exchange accounts
+    // Load all customers in this org. We deliberately do NOT filter by
+    // registration_status here — once a customer has a live VALR subaccount
+    // and an active exchange_accounts row, we must keep ingesting their
+    // transactions regardless of registration_status, otherwise any ZAR or
+    // crypto that lands in their wallet silently disappears from our books.
+    // The downstream filter on exchange_accounts.status = 'active' is the
+    // authoritative gate for whether the account is operational.
     const { data: customers, error: customerError } = await supabase.schema("public")
       .from("customer_details")
-      .select("customer_id, first_names, last_name, email, customer_status")
-      .eq("org_id", orgId)
-      .eq("registration_status", "active");
+      .select("customer_id, first_names, last_name, email, customer_status, registration_status")
+      .eq("org_id", orgId);
 
     if (customerError) {
       console.error("Error loading customers:", customerError);
@@ -119,8 +124,9 @@ Deno.serve(async (req) => {
     const exchangeAccountIds = (strategies || []).map(s => s.exchange_account_id);
     const { data: accounts, error: accountError } = await supabase.schema("public")
       .from("exchange_accounts")
-      .select("exchange_account_id, subaccount_id, label")
+      .select("exchange_account_id, subaccount_id, label, status")
       .eq("exchange", "VALR")
+      .eq("status", "active")
       .in("exchange_account_id", exchangeAccountIds);
 
     if (accountError) {
@@ -1029,12 +1035,31 @@ Deno.serve(async (req) => {
         results.synced++;
         results.new_transactions += newTransactions;
 
+        // Diagnostic: per-customer transaction-type breakdown + date range so we
+        // can see at-a-glance whether VALR returned dormant data, whether the
+        // sinceDatetime filter excluded everything, or whether unmapped types
+        // are silently being dropped.
+        const txTypeBreakdown: Record<string, number> = {};
+        let oldestTs: number | null = null;
+        let newestTs: number | null = null;
+        for (const tx of transactions) {
+          const t = tx.transactionType?.type || "UNKNOWN";
+          txTypeBreakdown[t] = (txTypeBreakdown[t] || 0) + 1;
+          const ts = new Date(tx.eventAt).getTime();
+          if (oldestTs === null || ts < oldestTs) oldestTs = ts;
+          if (newestTs === null || ts > newestTs) newestTs = ts;
+        }
+
         results.details.push({
           customer_id: customer.customer_id,
           customer_name: `${customer.first_names} ${customer.last_name}`,
           transactions_found: transactions.length,
           funding_transactions: fundingTransactions.length,
           new_transactions: newTransactions,
+          since_datetime: sinceDatetime.toISOString(),
+          oldest_tx: oldestTs ? new Date(oldestTs).toISOString() : null,
+          newest_tx: newestTs ? new Date(newestTs).toISOString() : null,
+          tx_types: txTypeBreakdown,
         });
 
       } catch (error) {
