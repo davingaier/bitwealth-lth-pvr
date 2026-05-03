@@ -402,9 +402,28 @@ Deno.serve(async (req: Request) => {
           kind: isDeposit ? "topup" : "withdrawal",
           amount_btc: amountBtc,
           amount_usdt: amountUsdt,
-          // VALR exchange fees from conversion metadata (API-model customers)
-          fee_btc: (f.metadata?.exchange_fee_asset === "BTC" ? f.metadata.exchange_fee : 0) || 0,
-          fee_usdt: (f.metadata?.exchange_fee_asset === "USDT" ? f.metadata.exchange_fee : 0) || 0,
+          // VALR exchange fees from conversion metadata (API-model customers).
+          // Accept legacy keys (exchange_fee_asset/exchange_fee from ef_deposit_scan)
+          // AND newer keys (conversion_fee_asset/conversion_fee_amount from
+          // ef_sync_valr_transactions and ef_convert_zar_to_usdt). The USDT-credit
+          // leg of a ZAR→USDT conversion uses the historically misnamed
+          // `conversion_fee_zar` key whose value is actually denominated in USDT.
+          fee_btc: (() => {
+            const m = f.metadata ?? {};
+            if (m.exchange_fee_asset === "BTC") return Number(m.exchange_fee) || 0;
+            if (m.conversion_fee_asset === "BTC") {
+              return Number(m.conversion_fee_amount ?? m.conversion_fee_zar) || 0;
+            }
+            return 0;
+          })(),
+          fee_usdt: (() => {
+            const m = f.metadata ?? {};
+            if (m.exchange_fee_asset === "USDT") return Number(m.exchange_fee) || 0;
+            if (m.conversion_fee_asset === "USDT") {
+              return Number(m.conversion_fee_amount ?? m.conversion_fee_zar) || 0;
+            }
+            return 0;
+          })(),
           platform_fee_btc: platformFeeBtc,
           platform_fee_usdt: platformFeeUsdt,
           note,
