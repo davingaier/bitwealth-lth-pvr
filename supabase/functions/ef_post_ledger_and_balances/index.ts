@@ -1311,25 +1311,35 @@ Deno.serve(async (req: Request) => {
 
         console.log(`[ef_post_ledger_and_balances] Processing batch transfer for customer ${customerId} (BTC=${customer.accumulated_btc}, USDT=${customer.accumulated_usdt})`);
 
-        // Get exchange account via customer_strategies
+        // Get exchange account + fee schedules via customer_strategies.
+        // Cadence gate (added 2026-05-03): only 'immediate' customers may have
+        // their accumulated fees auto-swept here. Customers on monthly / quarterly
+        // / annual schedules are settled exclusively by the dedicated settlement
+        // EFs (ef_calculate_performance_fees, ef_transfer_accumulated_fees,
+        // ef_collect_annual_fees). Without this gate, an api-model + annual
+        // customer (e.g. customer 49) would have their accumulated balance
+        // attempted on every pipeline run and fail at the valr_transfer_log
+        // not-null constraint.
         const { data: customerStrat, error: stratErr } = await sb
-          .schema("lth_pvr")
+          .schema("public")
           .from("customer_strategies")
-          .select("exchange_account_id")
+          .select("exchange_account_id, platform_fee_schedule, performance_fee_schedule")
           .eq("customer_id", customerId)
-          .eq("live_enabled", true)
+          .eq("status", "active")
+          .order("effective_from", { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (stratErr || !customerStrat) {
-          console.warn(`No customer strategy found for customer ${customerId}`);
-          await logAlert(
-            sb,
-            "ef_post_ledger_and_balances",
-            "warn",
-            `No customer strategy found for customer ${customerId}`,
-            { customer_id: customerId, error: stratErr },
-            org_id,
-            customerId,
+          console.warn(`No active customer strategy for customer ${customerId}; skipping batch sweep`);
+          continue;
+        }
+
+        const platformSched = (customerStrat.platform_fee_schedule ?? "immediate").toLowerCase();
+        const perfSched     = (customerStrat.performance_fee_schedule ?? "immediate").toLowerCase();
+        if (platformSched !== "immediate" && perfSched !== "immediate") {
+          console.log(
+            `[BATCH] Skipping customer ${customerId} — platform=${platformSched} performance=${perfSched}; deferred to scheduled settlement EF.`,
           );
           continue;
         }
@@ -1347,26 +1357,21 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        const subaccountId = exchangeAcct.subaccount_id;
-        const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "main";
-
         // Batch transfer BTC if threshold met
         if (customer.accumulated_btc >= minBtc) {
           console.log(
             `[BATCH] Transferring ${customer.accumulated_btc} BTC for customer ${customerId}`,
           );
 
-          const batchResult = await transferToMainAccount(
+          // Account-model aware: subaccount → internal transfer; api → on-chain
+          // withdrawal to wallet_config destination.
+          const batchResult = await withdrawFeeFromCustomerAccount(
             sb,
-            {
-              fromSubaccountId: subaccountId,
-              toAccount: mainAccountId,
-              currency: "BTC",
-              amount: customer.accumulated_btc,
-              transferType: "fee_batch",
-            },
             customerId,
-            null,
+            "BTC",
+            customer.accumulated_btc,
+            undefined,
+            "fee_batch",
           );
 
           if (batchResult.success) {
@@ -1380,18 +1385,7 @@ Deno.serve(async (req: Request) => {
               .eq("customer_id", customerId)
               .eq("org_id", org_id);
             console.log(`[BATCH] BTC transfer successful for customer ${customerId}`);
-            
-            // Create ledger entry for batch transfer out
-            await sb.from("ledger_lines").insert({
-              org_id,
-              customer_id: customerId,
-              trade_date: yyyymmdd(new Date()),
-              kind: "transfer",
-              amount_btc: -customer.accumulated_btc,
-              amount_usdt: 0,
-              note: `Fee batch transfer: ${batchResult.transferId}`,
-            });
-            
+
             // Create ledger entry for batch transfer out
             await sb.from("ledger_lines").insert({
               org_id,
@@ -1421,17 +1415,13 @@ Deno.serve(async (req: Request) => {
             `[BATCH] Transferring ${customer.accumulated_usdt} USDT for customer ${customerId}`,
           );
 
-          const batchResult = await transferToMainAccount(
+          const batchResult = await withdrawFeeFromCustomerAccount(
             sb,
-            {
-              fromSubaccountId: subaccountId,
-              toAccount: mainAccountId,
-              currency: "USDT",
-              amount: customer.accumulated_usdt,
-              transferType: "fee_batch",
-            },
             customerId,
-            null,
+            "USDT",
+            customer.accumulated_usdt,
+            undefined,
+            "fee_batch",
           );
 
           if (batchResult.success) {
@@ -1445,7 +1435,7 @@ Deno.serve(async (req: Request) => {
               .eq("customer_id", customerId)
               .eq("org_id", org_id);
             console.log(`[BATCH] USDT transfer successful for customer ${customerId}`);
-            
+
             // Create ledger entry for batch transfer out
             await sb.from("ledger_lines").insert({
               org_id,
