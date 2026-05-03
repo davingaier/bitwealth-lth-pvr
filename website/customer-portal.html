@@ -1591,36 +1591,10 @@
                     return;
                 }
 
-                // Merge paired conversion legs into a single row.
-                // VALR Simple Sell / Simple Buy emits two funding events sharing the same
-                // ext_ref (one for the crypto debit, one for the ZAR credit). They are
-                // booked as two ledger_lines; here we collapse them so the customer sees
-                // one row with negative crypto + positive ZAR (or vice-versa).
-                const mergedById = new Map();
-                const ordered = [];
-                for (const raw of transactions) {
-                    const meta = raw.conversion_metadata || {};
-                    const isConv = !!(meta.conversion_to || meta.conversion_from);
-                    if (isConv && raw.ext_ref) {
-                        const existing = mergedById.get(raw.ext_ref);
-                        if (existing) {
-                            existing.amount_btc  = (parseFloat(existing.amount_btc  || 0) + parseFloat(raw.amount_btc  || 0)).toString();
-                            existing.amount_usdt = (parseFloat(existing.amount_usdt || 0) + parseFloat(raw.amount_usdt || 0)).toString();
-                            existing.amount_zar  = (parseFloat(existing.amount_zar  || 0) + parseFloat(raw.amount_zar  || 0)).toString();
-                            existing.fee_btc          = (parseFloat(existing.fee_btc          || 0) + parseFloat(raw.fee_btc          || 0)).toString();
-                            existing.fee_usdt         = (parseFloat(existing.fee_usdt         || 0) + parseFloat(raw.fee_usdt         || 0)).toString();
-                            existing.platform_fee_btc  = (parseFloat(existing.platform_fee_btc  || 0) + parseFloat(raw.platform_fee_btc  || 0)).toString();
-                            existing.platform_fee_usdt = (parseFloat(existing.platform_fee_usdt || 0) + parseFloat(raw.platform_fee_usdt || 0)).toString();
-                            existing.kind = 'conversion';
-                            continue;
-                        }
-                        const cloned = { ...raw, kind: 'conversion' };
-                        mergedById.set(raw.ext_ref, cloned);
-                        ordered.push(cloned);
-                    } else {
-                        ordered.push(raw);
-                    }
-                }
+                // Conversion legs are merged server-side by list_customer_transactions
+                // (grouped on conversion_metadata.original_transaction_id), so each
+                // conversion already arrives as a single row with kind='conversion'.
+                const ordered = transactions.slice();
 
                 // Cache the merged set and render the first page.
                 __txRowsCache = ordered;
