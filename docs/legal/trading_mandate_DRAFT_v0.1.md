@@ -16,7 +16,7 @@
 
 ## 2. Definitions
 
-- **"Strategy"** means the *Long-Term Holder Price Variance Ratio (LTH PVR)* Bitcoin trading strategy as published by BitWealth at `[URL]` and as updated from time to time in accordance with clause 11.
+- **"Strategy"** means the *Long-Term Holder Profit-to-Volatility Ratio (LTH PVR)* Bitcoin trading strategy as published by BitWealth at https://bitwealth.co.za/lth-pvr and as updated from time to time in accordance with clause 11.
 - **"Exchange"** means VALR (Pty) Ltd, a South African crypto asset service provider, or any successor or replacement venue notified to the Customer in writing.
 - **"Subaccount"** means the dedicated VALR subaccount registered in the Customer's name and linked to the Customer's BitWealth profile.
 - **"BTC"** means Bitcoin.
@@ -32,7 +32,7 @@
 
 3.2 The authority granted under this Mandate is **limited to**:
 
-  (a) buying and selling **BTC against ZAR** (and/or `[USDT — confirm]`) on the Exchange;
+  (a) buying and selling **BTC against USDT and/or ZAR** on the Exchange;
   
   (b) placing **LIMIT** orders, and **MARKET** orders only as a fallback after a LIMIT order has remained unfilled for the period defined in the Strategy Rules (currently 5 minutes);
   
@@ -100,7 +100,7 @@
 
 ## 6. Fees
 
-6.1 BitWealth's fees for executing the Strategy are set out in the Fee Schedule published at `[URL]` and incorporated into this Mandate by reference.
+6.1 BitWealth's fees for executing the Strategy are set out in the Fee Schedule published at https://bitwealth.co.za/lth-pvr and incorporated into this Mandate by reference.
 
 6.2 The Customer authorises BitWealth to **deduct fees** from the Subaccount in the manner described in the Fee Schedule (e.g., via periodic ZAR debit, performance fee on realised gains, or BTC-denominated fee — `[LEGAL/FINANCE: confirm mechanism]`).
 
@@ -114,9 +114,9 @@
 
 7.1 The Customer will have access to a real-time dashboard reflecting Orders, fills, balances, NAV, and performance against the Strategy benchmark and a Standard DCA benchmark.
 
-7.2 BitWealth will make available `[monthly / quarterly]` statements via the dashboard and/or by email.
+7.2 BitWealth will make available monthly and annual statements via the dashboard and by email.
 
-7.3 The Customer is responsible for verifying their statements and notifying BitWealth in writing of any disputed entry within `[30]` days of the statement date, failing which the statement is deemed accepted.
+7.3 The Customer is responsible for verifying their statements and notifying BitWealth in writing of any disputed entry within 30 days of the statement date, failing which the statement is deemed accepted.
 
 ---
 
@@ -134,7 +134,7 @@
 
   (a) using the "Pause Strategy" or "Terminate Mandate" function in the BitWealth dashboard; or
   
-  (b) notifying BitWealth in writing at `[email]`.
+  (b) notifying BitWealth in writing at admin@bitwealth.co.za.
 
 9.2 On revocation:
 
