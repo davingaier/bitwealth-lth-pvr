@@ -3075,11 +3075,35 @@
                 }
                 const sizeFor = amt => Math.max(4, Math.min(14, Math.sqrt(amt) / 3));
 
+                // Current HWM = most recent non-null high_water_mark_usd. Plot
+                // as a flat horizontal gold dashed line across the full chart
+                // range so the customer can see how today's NAV compares to
+                // the level above which performance fees would accrue.
+                let currentHwm = null;
+                for (let i = daily.length - 1; i >= 0; i--) {
+                    const v = parseFloat(daily[i].high_water_mark_usd ?? 0);
+                    if (v > 0) { currentHwm = v; break; }
+                }
+                const hwmSeries = currentHwm !== null ? daily.map(() => currentHwm) : null;
+
                 datasets = [
                     { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
                     { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
                     { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
                     { label: 'Cost Basis', data: daily.map(d => d.cost_basis_usd ?? 0), borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
+                    ...(hwmSeries ? [{
+                        label: `High-Water Mark ($${currentHwm.toLocaleString('en-US',{maximumFractionDigits:0})})`,
+                        data: hwmSeries,
+                        borderColor: PERF_COLORS.lthPvr,
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        borderDash: [8,4],
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        spanGaps: true
+                    }] : []),
                     {
                         label: 'Deposit', type: 'scatter',
                         data: depositMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),

@@ -1252,45 +1252,23 @@ Deno.serve(async (req: Request) => {
 
           balancesUpserted++;
 
-          // ── HODL benchmark: buy-and-hold with same deposits ──
+          // ── HODL benchmark: rebased buy-and-hold ──
+          // The HODL line is "what would current cost basis be worth had it
+          // been invested upfront on day 1?" — every recompute rewrites the
+          // entire history with today's net CB ÷ day-0 BTC price, so a new
+          // deposit shifts the whole curve, not just future days. The
+          // server-side recompute_hodl_balances() function is idempotent
+          // (DELETE + re-INSERT). See SDD v0.6.105.
           try {
-            // Previous HODL balance
-            const { data: prevHodl } = await sb
-              .from("hodl_balances_daily")
-              .select("btc_balance, contrib_cum_usd")
-              .eq("org_id", org_id)
-              .eq("customer_id", customer_id)
-              .lt("date", dateStr)
-              .order("date", { ascending: false })
-              .limit(1);
-
-            let hodlBtc = Number(prevHodl?.[0]?.btc_balance ?? 0);
-            let hodlContrib = Number(prevHodl?.[0]?.contrib_cum_usd ?? 0);
-
-            // Today's deposits (topup ledger lines) — buy BTC at today's price
-            const { data: topups } = await sb
-              .from("ledger_lines")
-              .select("amount_usdt")
-              .eq("org_id", org_id)
-              .eq("customer_id", customer_id)
-              .eq("trade_date", dateStr)
-              .eq("kind", "topup");
-
-            for (const t of (topups ?? []) as any[]) {
-              const depositUsdt = Number(t.amount_usdt ?? 0);
-              if (depositUsdt > 0 && px > 0) {
-                hodlBtc += depositUsdt / px;
-                hodlContrib += depositUsdt;
-              }
+            const { error: hodlErr } = await sb.rpc("recompute_hodl_balances", {
+              p_customer_id: customer_id,
+              p_org_id: org_id,
+            });
+            if (hodlErr) {
+              console.error("Error recomputing hodl_balances_daily", { dateStr, customer_id, hodlErr });
             }
-
-            const hodlNav = hodlBtc * px;
-            await sb.from("hodl_balances_daily").upsert(
-              { org_id, customer_id, date: dateStr, btc_balance: hodlBtc, contrib_cum_usd: hodlContrib, nav_usd: hodlNav },
-              { onConflict: "org_id,customer_id,date" },
-            );
           } catch (hodlErr) {
-            console.error("Error upserting hodl_balances_daily", { dateStr, customer_id, hodlErr });
+            console.error("Error recomputing hodl_balances_daily", { dateStr, customer_id, hodlErr });
           }
         }
       }

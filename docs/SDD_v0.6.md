@@ -3,11 +3,89 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-03 (v0.6.104)
+**Last updated:** 2026-05-04 (v0.6.105)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.105 – HODL benchmark rebases to current cost basis; HWM line on portal NAV chart
+**Date:** 2026-05-04
+**Status:** ✅ DEPLOYED — migration applied; `ef_post_ledger_and_balances` redeployed; portal HTML updated.
+
+#### Problem
+
+Customer 49's portal NAV chart showed the HODL line "stepping up" on each new deposit instead of rebasing across the entire history. The Cost Basis tooltip in [website/customer-portal.html](website/customer-portal.html) explicitly promises:
+
+> *"HODL is modelled as if your current Cost Basis had been invested upfront on day 1 at that day's BTC price… historical HODL line will rebase across the entire chart whenever you deposit or withdraw."*
+
+But the live `lth_pvr.recompute_hodl_balances()` and the inline writer in `ef_post_ledger_and_balances` were both using the **per-day cumulative cost basis** for `btc_eq`, so old rows kept their old `cb / day0_price` and only post-deposit rows reflected the new contribution. Visible step on Cust 49's chart at 2026-05-03: BTC equivalent jumped 0.237 → 0.389 going forward, days before May 3 stayed at the old 0.237.
+
+#### Part A — `recompute_hodl_balances` rewritten to use today's CB
+
+[supabase/migrations/20260504_hodl_rebase_to_current_cost_basis.sql](supabase/migrations/20260504_hodl_rebase_to_current_cost_basis.sql) (also applied live via `mcp_supabase_apply_migration`).
+
+```sql
+-- One number for the whole curve
+SELECT GREATEST(0,
+         SUM(amount_usdt) FILTER (WHERE kind='topup')
+       - SUM(ABS(amount_usdt)) FILTER (WHERE kind='withdrawal'))
+INTO today_cb FROM lth_pvr.ledger_lines …;
+btc_eq := today_cb / day0_price;
+-- Loop: every row gets (btc_eq, today_cb, btc_eq * cur_price[d])
+```
+
+Verified on customer 49: every row in `lth_pvr.hodl_balances_daily` now carries `btc_balance = 0.39457768`, `contrib_cum_usd = 29881.76`. NAV column tracks the BTC price curve smoothly; no step on 2026-05-03.
+
+Edge case: `today_cb ≤ 0` (customer fully withdrawn) → all HODL rows deleted. Returns `{status:'ok', reason:'today_cb=0'}`.
+
+#### Part B — Inline HODL writer in `ef_post_ledger_and_balances` replaced with RPC call
+
+[supabase/functions/ef_post_ledger_and_balances/index.ts](supabase/functions/ef_post_ledger_and_balances/index.ts) had its own per-day incremental upsert:
+
+```typescript
+// OLD — buys at each day's price; would re-introduce the step bug
+hodlBtc += depositUsdt / px;
+```
+
+That's a different model from the SQL function (true per-deposit DCA vs rebased). With both writers active, the table state depended on which one ran most recently. Now replaced with a single idempotent RPC:
+
+```typescript
+await sb.rpc("recompute_hodl_balances", { p_customer_id: customer_id, p_org_id: org_id });
+```
+
+The recompute fn rebuilds the entire history from scratch on each call (DELETE + re-INSERT), so a daily run for ~17 days × N customers is cheap. Only one model now, and it matches the tooltip.
+
+#### Part C — `get_customer_performance_data` exposes current HWM
+
+Added `LEFT JOIN lth_pvr.customer_state_daily cs … high_water_mark_usd` to the daily array. No new RPC; the field rides along the existing payload.
+
+#### Part D — Portal chart adds horizontal gold dashed HWM line
+
+[website/customer-portal.html](website/customer-portal.html) (Portfolio Performance → "LTH PVR vs Benchmarks (Cost Basis)" view). New flat dataset injected before the deposit/withdrawal scatter:
+
+```javascript
+let currentHwm = null;
+for (let i = daily.length - 1; i >= 0; i--) {
+    const v = parseFloat(daily[i].high_water_mark_usd ?? 0);
+    if (v > 0) { currentHwm = v; break; }
+}
+const hwmSeries = currentHwm !== null ? daily.map(() => currentHwm) : null;
+// dataset: borderColor: PERF_COLORS.lthPvr (#FFB400), borderDash: [8,4]
+```
+
+Label includes the dollar value (`"High-Water Mark ($29,882)"`) so the legend is self-documenting. Spans the full chart range. Only renders if a non-zero HWM exists in the series (new customers / clean-state ones don't get a noisy zero-line).
+
+#### Files touched (v0.6.105)
+- [supabase/migrations/20260504_hodl_rebase_to_current_cost_basis.sql](supabase/migrations/20260504_hodl_rebase_to_current_cost_basis.sql) — Parts A + C.
+- [supabase/functions/ef_post_ledger_and_balances/index.ts](supabase/functions/ef_post_ledger_and_balances/index.ts) — Part B.
+- [website/customer-portal.html](website/customer-portal.html) — Part D.
+- `docs/SDD_v0.6.md` — this entry.
+
+#### Follow-up
+- None. Behaviour now matches the long-standing tooltip wording.
+
+---
 
 ### v0.6.104 – Maker-first audit completed across all VALR-order surfaces
 **Date:** 2026-05-03
