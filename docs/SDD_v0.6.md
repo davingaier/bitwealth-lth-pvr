@@ -3,11 +3,69 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-04 (v0.6.105)
+**Last updated:** 2026-05-04 (v0.6.106)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.106 – HODL ROI math fixed for rebased benchmark; chart-zoom plugin URL repaired
+**Date:** 2026-05-04
+**Status:** ✅ DEPLOYED — portal HTML only; no edge function or SQL changes.
+
+Two follow-ups from v0.6.105 surfaced on the customer 49 portal:
+
+#### Part A — HODL ROI was wildly inflated on early days
+
+After v0.6.105, `hodl_nav[d] = today_cb × (cur_price[d] / day0_price)`. The portal's ROI chart then divided by the **per-day** `cost_basis_usd` to compute the HODL ROI line:
+
+```javascript
+// BUG (v0.6.105)
+const hodlRoi = daily.map(d => calcRoi(d.hodl_nav, basisOf(d)));
+```
+
+On day-0 of customer 49, `cost_basis_usd ≈ $17,950` but `hodl_nav` is built from `today_cb ≈ $29,882`, so the division gave `~17,950 × (1.00) / 17,950 = … no wait — early-day hodl_nav is `29,882 × (price[d]/day0)`; on day 0 that's $29,882 and dividing by historical $17,950 yields +66% ROI on a day where literally nothing has happened. That's exactly the +47% jump visible in the screenshot at chart start.
+
+**Fix:** HODL is now a *single-CB* benchmark, so its ROI must use **today's CB** as the denominator on every day. That collapses to the pure BTC return since day 1, which is what the rebased line economically represents:
+
+```javascript
+const todayCb  = basisOf(daily[daily.length - 1] || {});
+const hodlRoi = daily.map(d => calcRoi(d.hodl_nav, todayCb));
+```
+
+LTH PVR ROI and Std DCA ROI continue to use the per-day cost basis — those benchmarks track contributions over time, not a single rebased number.
+
+The same correction was applied to the metrics table below the chart (which had identical math for both the chart line and the per-period rows).
+
+#### Part B — Chart-zoom plugin returning 404 → wheel/pinch zoom dead
+
+The script tag pointed at a filename that doesn't exist on the published `chartjs-plugin-zoom@2.0.1` package:
+
+```html
+<!-- 404 -->
+<script src="…/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
+```
+
+`v2.x` ships only `chartjs-plugin-zoom.min.js` (no `.umd.` suffix). With the script failing to load, `window['chartjs-plugin-zoom']` was undefined and the existing `Chart.register(zoomPlugin)` silently swallowed the missing dependency. Result: `plugins.zoom = { pan, zoom: { wheel, pinch } }` was inert.
+
+**Fix:**
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+```
+
+Bumped to `2.2.0` (latest stable, compatible with Chart.js 4.4.x), corrected the filename, and reordered so `hammerjs` loads before the zoom plugin (the plugin probes for `Hammer` at load time for pinch support on touch devices).
+
+#### Files touched (v0.6.106)
+- [website/customer-portal.html](website/customer-portal.html) — Parts A + B.
+- `docs/SDD_v0.6.md` — this entry.
+
+#### Follow-up
+- None.
+
+---
 
 ### v0.6.105 – HODL benchmark rebases to current cost basis; HWM line on portal NAV chart
 **Date:** 2026-05-04

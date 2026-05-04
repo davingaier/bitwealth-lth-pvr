@@ -11,8 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
@@ -3161,14 +3161,23 @@
             const showStd = document.getElementById('perfRoiStdDca').checked;
             const showHodl = document.getElementById('perfRoiHodl').checked;
 
-            // ROI is now measured against Cost Basis (capital currently at work),
+            // ROI is measured against Cost Basis (capital currently at work),
             // matching the NAV chart's Cost Basis line. Falls back to gross
             // contributions for legacy rows where cost_basis_usd is null.
+            //
+            // HODL has special semantics: since v0.6.105, hodl_nav is rebased
+            // to TODAY's cost basis on every recompute (every row uses
+            // today_cb ÷ day0_price × cur_price). Dividing it by the per-day
+            // historical cost basis would inflate early-day ROI massively
+            // (today_cb is much larger than the cb on day 1). So HODL ROI uses
+            // today's cost basis as a constant denominator on every row —
+            // matching the underlying calculation that produced hodl_nav.
             const calcRoi = (nav, basis) => basis > 0 ? ((nav / basis) - 1) * 100 : 0;
             const basisOf  = d => parseFloat(d.cost_basis_usd ?? d.contrib_cum_usd ?? 0);
+            const todayCb  = basisOf(daily[daily.length - 1] || {});
             const lthRoi  = daily.map(d => calcRoi(d.nav_usd,    basisOf(d)));
             const stdRoi  = daily.map(d => calcRoi(d.std_dca_nav, basisOf(d)));
-            const hodlRoi = daily.map(d => calcRoi(d.hodl_nav,    basisOf(d)));
+            const hodlRoi = daily.map(d => calcRoi(d.hodl_nav,    todayCb));
 
             const datasets = [
                 { label: 'LTH PVR ROI', data: lthRoi, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 }
@@ -3248,9 +3257,14 @@
                     // Match the chart: ROI is measured against Cost Basis, with
                     // a fallback to gross contributions for legacy rows.
                     const basis = parseFloat(last?.cost_basis_usd ?? last?.contrib_cum_usd ?? 0) || 1;
+                    // HODL is rebased to today's CB on every recompute (see
+                    // v0.6.105), so its ROI must use today's CB as the
+                    // denominator on every period \u2014 not the period-end CB.
+                    const todayLast = daily[daily.length - 1];
+                    const todayCb = parseFloat(todayLast?.cost_basis_usd ?? todayLast?.contrib_cum_usd ?? 0) || 1;
                     const lthRoi = ((last?.nav_usd || 0) / basis - 1) * 100;
                     const stdRoi = ((last?.std_dca_nav || 0) / basis - 1) * 100;
-                    const hodlRoi = ((last?.hodl_nav || 0) / basis - 1) * 100;
+                    const hodlRoi = ((last?.hodl_nav || 0) / todayCb - 1) * 100;
                     const alpha = lthRoi - stdRoi;
                     const alphaColor = alpha > 0 ? '#10b981' : alpha < 0 ? '#ef4444' : 'inherit';
                     return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${fmtPct(lthRoi)}</td><td style="${valStyle}">${fmtPct(stdRoi)}</td><td style="${valStyle}">${fmtPct(hodlRoi)}</td><td style="${valStyle}color:${alphaColor};">${fmtPct(alpha)}</td></tr>`;
