@@ -3,11 +3,65 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-04 (v0.6.106)
+**Last updated:** 2026-05-05 (v0.6.107)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.107 – Operational: customer 56 email correction + duplicate `email_address` column dropped
+**Date:** 2026-05-05
+**Status:** ✅ DEPLOYED — migration applied; 4 edge functions redeployed; admin UI + portal HTML edited.
+
+**Operational fix:** Prospect customer 56 (Pieter Heydenreich) signed up on 2026-05-04 with `pieter@admo.com`; the correct address is `pieter@admoeng.co.za`. Updated `public.customer_details.email` for `customer_id=56` and re-sent the `prospect_confirmation` email (request id 376314 → 200 OK, message id `<2f9896cd-dc76-e5bd-887a-4db09b7a987e@bitwealth.co.za>`).
+
+**Schema cleanup:** `public.customer_details` historically had **two** email columns:
+- `email` — canonical, used by every edge function and the auth/portal layer.
+- `email_address` — legacy column kept in sync via UI back-mirroring (`custPatch.email = custPatch.email_address`) and `ef_prospect_submit` writes. Only ever read as a fallback by 3 support-ticket edge functions.
+
+Dropped `email_address` and consolidated all read/write paths on `email`.
+
+**Migration:** `supabase/migrations/20260505_drop_duplicate_email_address_column.sql`
+1. Defensive backfill (`UPDATE … SET email = email_address WHERE email IS NULL`).
+2. Drop dependent objects: views `lth_pvr.v_fills_with_customer` and `public.v_fic_kyc_completeness`; functions `list_fic_kyc_incomplete()` and `list_fic_tfs_alerts(boolean)` (return-type rename forces drop).
+3. `ALTER TABLE public.customer_details DROP COLUMN email_address`.
+4. Recreate the two views and the two dropped functions sourcing from `cd.email` (return columns renamed `email_address` → `email`).
+5. `CREATE OR REPLACE` for `list_fic_atms_alerts`, `list_support_tickets`, `get_support_ticket`, `is_ticket_owner` (signatures unchanged; six dependent RLS policies on `is_ticket_owner` retained).
+
+**Edge functions redeployed (`--no-verify-jwt`):**
+- `ef_prospect_submit` — dropped `email_address` from the prospect insert.
+- `ef_create_support_ticket` — dropped `email_address` from select + `.or()` filter; lookup is now `eq("email", user.email)`.
+- `ef_post_ticket_reply` — dropped `email_address` from selects and the `cdEmail` / `customerEmail` fallbacks.
+- `ef_update_support_ticket` — dropped `email_address` from select and the `to` fallback.
+
+**UI changes:**
+- `ui/Advanced BTC DCA Strategy.html`:
+  - Renamed three form input `name="email_address"` → `name="email"` (prospect form, Customer Maintenance create form, modern editor modal).
+  - Updated `cmCreateCustomer`, `cmUpdateCustomer`, `cmLoadCustomer`, `cmFillForm`, `cmSerialize`, `cmSaveAll`, and `CM_MODAL_FIELDS.personal` to use `email` only.
+  - Removed the email backfill (`if(!cust.email_address && cust.email) cmSetField(...)`) and the patch-mirror (`if(custPatch.email_address) custPatch.email = custPatch.email_address;`) — no longer needed with a single column.
+  - Customer search/list `select(...)` and filter array trimmed.
+  - FIC TFS-alerts and KYC-incomplete table cells now read `r.email` (RPC return columns renamed).
+- `website/upload-kyc.html`: removed the `cust.email_address` fallback from the email field auto-fill.
+
+**Verification:**
+```sql
+SELECT column_name FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='customer_details' AND column_name LIKE '%email%';
+-- → returns: email   (only)
+```
+
+**Files:**
+| File | Change |
+|---|---|
+| `supabase/migrations/20260505_drop_duplicate_email_address_column.sql` | NEW — drops column + recreates 2 views + 2 RPCs; replaces 4 RPCs |
+| `supabase/functions/ef_prospect_submit/index.ts` | Drop email_address insert |
+| `supabase/functions/ef_create_support_ticket/index.ts` | Drop email_address from select/filter/fallback |
+| `supabase/functions/ef_post_ticket_reply/index.ts` | Drop email_address from 2 selects + 2 fallbacks |
+| `supabase/functions/ef_update_support_ticket/index.ts` | Drop email_address from select + fallback |
+| `ui/Advanced BTC DCA Strategy.html` | Rename form fields + remove mirror/backfill (~13 edits) |
+| `website/upload-kyc.html` | Drop email_address fallback (line 880) |
+
+---
 
 ### v0.6.106 – HODL ROI math fixed for rebased benchmark; chart-zoom plugin URL repaired
 **Date:** 2026-05-04

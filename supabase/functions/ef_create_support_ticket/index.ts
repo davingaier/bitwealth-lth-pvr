@@ -84,8 +84,8 @@ serve(async (req) => {
     // Resolve customer by user email
     const { data: cd, error: cdErr } = await sb
       .from("customer_details")
-      .select("customer_id, org_id, first_names, last_name, email, email_address, phone_number")
-      .or(`email.eq.${user.email},email_address.eq.${user.email}`)
+      .select("customer_id, org_id, first_names, last_name, email, phone_number")
+      .eq("email", user.email)
       .order("customer_id", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -134,7 +134,7 @@ serve(async (req) => {
     if (mErr) throw mErr;
 
     // ---- Customer ack email ----
-    const customerEmail = cd.email ?? cd.email_address ?? user.email;
+    const customerEmail = cd.email ?? user.email;
     const customerName  = `${cd.first_names ?? ""} ${cd.last_name ?? ""}`.trim() || "there";
     const ackHtml = html(`
       <div class="h"><h1>✅ We've received your support request</h1></div>

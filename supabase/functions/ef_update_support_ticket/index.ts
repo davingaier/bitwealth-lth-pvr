@@ -92,9 +92,9 @@ serve(async (req) => {
     if (notify_customer && status) {
       for (const t of statusChanged) {
         const { data: cd } = await sb.from("customer_details")
-          .select("first_names, last_name, email, email_address")
+          .select("first_names, last_name, email")
           .eq("customer_id", t.customer_id).maybeSingle();
-        const to = cd?.email ?? cd?.email_address;
+        const to = cd?.email;
         if (!to) continue;
         const name = `${cd?.first_names ?? ""} ${cd?.last_name ?? ""}`.trim() || "Customer";
         const h = `<p>Hi ${name},</p><p>Your support ticket <b>${t.ticket_number}</b> has been updated to status <b>${status}</b>.</p><p><a href="${PORTAL_URL}#support">View ticket</a></p>`;

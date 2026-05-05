@@ -77,10 +77,10 @@ serve(async (req) => {
     } else {
       // Verify customer ownership via email
       const { data: cd } = await sb.from("customer_details")
-        .select("customer_id, email, email_address")
+        .select("customer_id, email")
         .eq("customer_id", ticket.customer_id)
         .maybeSingle();
-      const cdEmail = (cd?.email ?? cd?.email_address ?? "").toLowerCase();
+      const cdEmail = (cd?.email ?? "").toLowerCase();
       if (!cd || cdEmail !== (user.email ?? "").toLowerCase()) {
         return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: CORS });
       }
@@ -104,9 +104,9 @@ serve(async (req) => {
     if (!internal) {
       // Look up customer email for outbound
       const { data: cd } = await sb.from("customer_details")
-        .select("first_names, last_name, email, email_address")
+        .select("first_names, last_name, email")
         .eq("customer_id", ticket.customer_id).maybeSingle();
-      const customerEmail = cd?.email ?? cd?.email_address;
+      const customerEmail = cd?.email;
       const customerName  = `${cd?.first_names ?? ""} ${cd?.last_name ?? ""}`.trim() || "Customer";
 
       try {

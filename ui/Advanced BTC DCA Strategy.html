@@ -1193,7 +1193,7 @@
             </label>
             <label>
               <span class="label-line">Email address <span class="req">*</span></span>
-              <input name="email_address" type="email" required />
+              <input name="email" type="email" required />
             </label>
             <label>
               <span class="label-line">Cellphone number <span class="req">*</span></span>
@@ -1306,7 +1306,7 @@
           <div class="cm-grid">
             <label><span class="label-line">First names <span class="req">*</span></span> <input name="first_names" required /></label>
             <label><span class="label-line">Last name <span class="req">*</span></span> <input name="last_name" required /></label>
-            <label><span class="label-line">Email address <span class="req">*</span></span> <input name="email_address" type="email" required /></label>
+            <label><span class="label-line">Email address <span class="req">*</span></span> <input name="email" type="email" required /></label>
             <label><span class="label-line">Cellphone number <span class="req">*</span></span> <input name="cellphone_number" required /></label>
             <label>
               <span class="label-line">ID number <span class="req">*</span></span>
@@ -1448,7 +1448,7 @@
                     <option value="">--</option><option>Male</option><option>Female</option><option>Other</option><option>Prefer not to say</option>
                   </select>
                 </label>
-                <label><span class="label-line">Email address <span class="req">*</span></span><input name="email_address" type="email" data-cm-required /></label>
+                <label><span class="label-line">Email address <span class="req">*</span></span><input name="email" type="email" data-cm-required /></label>
                 <label><span class="label-line">Phone country code</span><input name="phone_country_code" placeholder="+27" /></label>
                 <label><span class="label-line">Cellphone number <span class="req">*</span></span><input name="cellphone_number" data-cm-required /></label>
                 <label><span class="label-line">Country of residence</span><input name="country_of_residence" placeholder="South Africa" /></label>
@@ -6829,7 +6829,7 @@
         // Search filter (name, email, or customer_id)
         if (searchTerm) {
           const fullName = `${r.first_names || ''} ${r.last_name || ''}`.toLowerCase();
-          const email = String(r.email_address || '').toLowerCase();
+          const email = String(r.email || '').toLowerCase();
           const id = String(r.customer_id || '');
           
           if (!fullName.includes(searchTerm) && 
@@ -7658,7 +7658,7 @@
       const row = {
         first_names: payload.first_names.trim(),
         last_name: payload.last_name.trim(),
-        email_address: payload.email_address.trim(),
+        email: payload.email.trim(),
         cellphone_number: payload.cellphone_number.trim(),
         id_number: payload.id_number.trim(),
         trade_start_date: cmDate(payload.trade_start_date),
@@ -7683,7 +7683,7 @@
       const row = {
         first_names: payload.first_names.trim(),
         last_name: payload.last_name.trim(),
-        email_address: payload.email_address.trim(),
+        email: payload.email.trim(),
         cellphone_number: payload.cellphone_number.trim(),
         id_number: payload.id_number.trim(),
         trade_start_date: cmDate(payload.trade_start_date),
@@ -7720,7 +7720,7 @@
     async function cmLoadCustomer(id){
       const { data, error } = await supabaseClient
         .from('customer_details')
-        .select('customer_id, first_names, last_name, email_address, cellphone_number, id_number, trade_start_date, recurring_contribution_frequency, recurring_contribution_zar, upfront_contribution_zar, upfront_contribution_btc, exchange_api_name, exchange_username, exchange_password, customer_status')
+        .select('customer_id, first_names, last_name, email, cellphone_number, id_number, trade_start_date, recurring_contribution_frequency, recurring_contribution_zar, upfront_contribution_zar, upfront_contribution_btc, exchange_api_name, exchange_username, exchange_password, customer_status')
         .eq('customer_id', id).single();
       if(error) throw error;
       return data;
@@ -7729,7 +7729,7 @@
     function cmFillForm(formEl, row){
       formEl.reset();
       const set = (name, val) => { const el=formEl.querySelector(`[name="${name}"]`); if(!el) return; if(el.type==='date' && val){ el.value = String(val).slice(0,10); } else { el.value = (val ?? ''); } };
-      ['first_names','last_name','email_address','cellphone_number','id_number','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','exchange_api_name','exchange_username','exchange_password','customer_status'].forEach(k=>set(k,row[k]));
+      ['first_names','last_name','email','cellphone_number','id_number','recurring_contribution_frequency','recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','exchange_api_name','exchange_username','exchange_password','customer_status'].forEach(k=>set(k,row[k]));
       set('trade_start_date', row.trade_start_date);
       cmWireFrequency(formEl);
     }
@@ -7738,7 +7738,7 @@
       const data = Object.fromEntries(new FormData(formEl).entries());
 
       // Required basics (includes frequency)
-      const must = ['first_names','last_name','email_address','cellphone_number','id_number','recurring_contribution_frequency','customer_status'];
+      const must = ['first_names','last_name','email','cellphone_number','id_number','recurring_contribution_frequency','customer_status'];
       for(const k of must){ if(!String(data[k]||'').trim()) throw new Error(`Please complete the "${k.replaceAll('_',' ')}" field.`); }
 
       // ID number 13-digit check
@@ -7952,7 +7952,7 @@
     /* Two-button entry on main page → Picker modal (search/list) → Editor modal (7 tabs).
        Backed by public.customer_details + customer_strategies + exchange_accounts. */
     const CM_MODAL_FIELDS = {
-      personal: ['first_names','middle_name','last_name','date_of_birth','gender','email_address','phone_country_code','cellphone_number','country_of_residence','country_of_origin','nationality','nationality_secondary','occupation','tax_number'],
+      personal: ['first_names','middle_name','last_name','date_of_birth','gender','email','phone_country_code','cellphone_number','country_of_residence','country_of_origin','nationality','nationality_secondary','occupation','tax_number'],
       kyc:      ['id_type','id_number','id_passport_number','id_issuing_country','id_issue_date','id_expiry_date','kyc_source_of_income'],
       portal:   ['registration_status','customer_status'],
       compliance:['is_pep','pep_details','fic_source_of_funds','compliance_frozen','compliance_frozen_note','is_test'],
@@ -7995,7 +7995,7 @@
     async function cmFetchPickerRows(){
       const { data, error } = await supabaseClient
         .from('customer_details')
-        .select('customer_id, first_names, last_name, email_address, email, cellphone_number, id_number, registration_status, customer_status, created_at')
+        .select('customer_id, first_names, last_name, email, cellphone_number, id_number, registration_status, customer_status, created_at')
         .order('customer_id', { ascending: false });
       if(error) throw error;
       return data || [];
@@ -8008,7 +8008,7 @@
       const filtered = rows.filter(r => {
         if(status && String(r.registration_status||'').toLowerCase() !== status) return false;
         if(!term) return true;
-        const hay = [r.first_names, r.last_name, r.email_address, r.email, r.id_number, r.customer_id]
+        const hay = [r.first_names, r.last_name, r.email, r.id_number, r.customer_id]
           .map(x=>String(x||'').toLowerCase()).join(' ');
         return hay.includes(term);
       });
@@ -8021,7 +8021,7 @@
         const status = String(r.registration_status||'').toLowerCase() || 'inactive';
         const badge = `<span class="cm-picker-badge cm-pb-${status}">${status}</span>`;
         const name = `${r.last_name||''}, ${r.first_names||''}`.trim().replace(/^,\s*/,'');
-        const email = r.email_address || r.email || '';
+        const email = r.email || '';
         return `<div class="cm-picker-row" data-cid="${r.customer_id}">
           <div class="pid">#${r.customer_id}</div>
           <div class="pname">${name||'(no name)'}</div>
@@ -8110,9 +8110,6 @@
       // Personal + KYC + Portal + Compliance + a few from customer_details
       [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
         .forEach(k => cmSetField(k, cust[k]));
-
-      // Email backfill
-      if(!cust.email_address && cust.email) cmSetField('email_address', cust.email);
 
       // Banking (from public.bank_accounts) — most fields are read-only displays
       // populated from the latest VALR sync; only bank_account_type remains an
@@ -8351,7 +8348,7 @@
       cmEditorAlertHide();
       const payload = cmCollectEditorPayload();
       // Required fields
-      if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email_address||'').trim() || !String(payload.cellphone_number||'').trim()){
+      if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email||'').trim() || !String(payload.cellphone_number||'').trim()){
         throw new Error('First name, last name, email, and cellphone are required.');
       }
 
@@ -8361,11 +8358,9 @@
         .forEach(k => { if(k in payload) custPatch[k] = payload[k] === '' ? null : payload[k]; });
       // Numerics already coerced
       // Trim strings
-      ['first_names','last_name','email_address','cellphone_number'].forEach(k => {
+      ['first_names','last_name','email','cellphone_number'].forEach(k => {
         if(typeof custPatch[k] === 'string') custPatch[k] = custPatch[k].trim();
       });
-      // email shadow column kept in sync
-      if(custPatch.email_address) custPatch.email = custPatch.email_address;
 
       let custId = cmEditorState.customerId;
       if(custId){
@@ -15638,7 +15633,7 @@ self.onmessage = function(e) {
         return `<tr class="${rowClass}">
           <td style="text-align:left;">
             <strong>${r.first_names} ${r.last_name}</strong><br>
-            <span style="font-size:.75rem;color:#6b7280;">${r.email_address || '—'}</span>
+            <span style="font-size:.75rem;color:#6b7280;">${r.email || '—'}</span>
           </td>
           <td style="font-size:.8rem;">${fmtDate(r.created_at)}</td>
           <td>${severityPill(r.severity)}</td>
@@ -15795,7 +15790,7 @@ self.onmessage = function(e) {
         return `<tr>
           <td style="text-align:left;">
             <strong>${r.first_names} ${r.last_name}</strong><br>
-            <span style="font-size:.75rem;color:#6b7280;">${r.email_address || ''}</span>
+            <span style="font-size:.75rem;color:#6b7280;">${r.email || ''}</span>
           </td>
           <td>${scoreBar(r.fic_completeness_score, r.fic_completeness_max)}</td>
           <td style="text-align:left;">${missing || '—'}</td>

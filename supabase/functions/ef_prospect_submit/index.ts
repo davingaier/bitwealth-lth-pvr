@@ -114,7 +114,6 @@ serve(async (req) => {
         first_names,
         last_name,
         email: email.toLowerCase(),
-        email_address: email.toLowerCase(),
         phone_number,
         phone_country_code,
         country,
