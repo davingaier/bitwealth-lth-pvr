@@ -130,15 +130,25 @@
 }
 
 .dashboard-sidebar {
+    /* 2026-05-16: switched from position:fixed + margin-left on main to a sticky
+       flex-item layout. The previous approach relied on `.dashboard-main { margin-left: 280px }`
+       to compensate for the sidebar being removed from flow. If anything killed that
+       margin (browser extensions injecting CSS, Chrome's "Minimum font size"
+       accessibility setting, custom user stylesheets, or zoom interacting with the
+       responsive breakpoints) the main column slid under the sidebar with no safety
+       net — the symptom reported by customer 45. As a real flex item with sticky
+       positioning, the sidebar now physically occupies its 280px column and cannot
+       overlap main content regardless of external CSS interference. */
     width: 280px;
+    flex-shrink: 0;
     background: var(--bg-darker);
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     flex-direction: column;
-    position: fixed;
-    left: 0;
+    position: sticky;
     top: 0;
-    bottom: 0;
+    height: 100vh;
+    overflow-y: auto;
     z-index: 100;
 }
 
@@ -198,8 +208,12 @@
 }
 
 .dashboard-main {
-    margin-left: 280px;
+    /* 2026-05-16: margin-left removed — sidebar is now a real flex item, so the
+       main column is positioned by flex layout, not by margin compensation.
+       min-width:0 prevents long content (chart canvases, long table cells)
+       from forcing the flex item wider than the available column. */
     flex: 1;
+    min-width: 0;
     padding: 32px;
 }
 
@@ -484,10 +498,7 @@
     .nav-item {
         justify-content: center;
     }
-    
-    .dashboard-main {
-        margin-left: 70px;
-    }
+    /* No margin-left override needed — main column auto-resizes via flex. */
 }
 
 @media (max-width: 640px) {
@@ -496,7 +507,6 @@
     }
     
     .dashboard-main {
-        margin-left: 0;
         padding: 16px;
     }
     
