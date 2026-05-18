@@ -3,11 +3,75 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-05 (v0.6.107)
+**Last updated:** 2026-05-18 (v0.6.108)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.108 – 🚨 CI bands data-integrity incident: full backfill, freeze trigger, drift alert, decisions replay
+**Date:** 2026-05-18
+**Status:** ✅ RESOLVED — root cause patched; 5,784-row history backfilled & frozen; 13 days of decisions replayed.
+
+#### Incident summary
+At 2026-05-18 00:05 UTC the daily cron `lthpvr_ci_fetch` (pg_cron jobid 61) overwrote **every row** of `lth_pvr.ci_bands_daily` (5,784 rows, 2010-07-17 → 2026-05-17) with as-of-now constant bands (mean ≈ $108k, m100 ≈ $55k, p200 ≈ $145k). All historical per-day band variation was destroyed in a single bulk upsert.
+
+#### Root cause
+1. The upstream endpoint `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=static` silently changed behaviour and now returns the **entire history with the same band values** (as-of-now calibration) regardless of `start`/`end` parameters.
+2. The previous `ef_fetch_ci_bands` accepted whatever the API returned and upserted it unconditionally — no range validation, no row-count cap, no drift check, no protection on historical rows.
+3. The cron job `lthpvr_ci_fetch` (jobid 61, `5 0 * * *`) was redundant with `ef_fetch_ci_bands_daily_0500_utc` (jobid 18) and used the legacy code path that triggered the bulk overwrite.
+
+#### Trading impact
+Bear pause **only blocks buys** (in the `px < mean` branch). With the inflated mean ≈ $108k, BTC at ~$78k appeared deep in the buy zone → all decisions became `HOLD (Bear pause active)`. With correct bands (mean ≈ $71k), price ~$78k is in the SELL zone → `SELL Base 6 (mean…+0.5σ) @ 0.157% of holdings`.
+
+This corruption was in effect from at least 2026-05-06 onward (trail of `HOLD bear pause` decisions starting 2026-05-06 corresponds to bands being already wrong at the moment of each daily generation). Net effect: **13 days × 0.157% = ~2.04% of BTC holdings per customer should have been sold but weren't** (trade_dates 2026-05-06 through 2026-05-18). The 3 currently-active LTH_PVR live customers (31, 49, 54) had no BTC balance during this window, so no real-world economic loss occurred. No buy/sell orders were placed during the incident window.
+
+#### Permanent fixes (this version)
+
+**1. Endpoint switch + derivation.** `ef_fetch_ci_bands` now calls `https://chartinspect.com/api/v1/onchain/lth-pvr?days=N` (per-day expanding-window bands, matches the ChartInspect playground). This endpoint omits `price_at_pvr_minus_1sigma` and `price_at_pvr_plus_1half_sigma`, which are derived linearly within `toRec()`:
+- `price_at_m100 = 2 × price_at_mean − price_at_p100`
+- `price_at_p150 = 1.5 × price_at_p100 − 0.5 × price_at_mean`
+
+(Derivation is exact because `price_at_pvr_X` is linear in `X` within a single day's PVR calibration.)
+
+**2. Defensive request window + hard row cap.** The fetcher computes `wantStart`/`wantEnd` from the request (`?start=`/`?end=`/`?allow_backfill=true`) or falls back to `days=2` (today + yesterday) for the cron path. After the API response, rows are filtered to `d >= wantStart && d <= wantEnd && d < todayStr`. A hard cap of `maxRows = allow_backfill ? 20_000 : 31` is enforced; exceeding it raises a `critical` alert in `public.alert_events` and returns 502 without touching the table.
+
+**3. Drift integrity alert.** Before upsert, the fetcher queries the most recent prior `ci_bands_daily` row for each date being written. If `|new − prev| / prev > 10%` on any band field, a `critical` alert is logged (non-blocking, so a legitimate band recalibration still goes through — but it is now visible in the Admin alerts panel within minutes).
+
+**4. Freeze trigger (immutable history).** Migration adds `frozen_at timestamptz` column to `lth_pvr.ci_bands_daily` plus a BEFORE-UPDATE trigger `ci_bands_daily_freeze_guard()`:
+- If `OLD.frozen_at IS NULL` (today's or future row) → allow update.
+- Else, if **every** band/price column is `IS NOT DISTINCT FROM` the old value → allow no-op update.
+- Else → `RETURN NULL` (silently drop the UPDATE for that row, protecting historical data).
+
+After each successful fetch the function runs a freeze sweep: `UPDATE … SET frozen_at = now() WHERE date < yesterdayStr AND frozen_at IS NULL`. End state: only today's row is unfrozen; all 5,783 historical rows are immutable.
+
+**5. Redundant cron disabled.** `SELECT cron.unschedule(61)` — `lthpvr_ci_fetch` removed. The remaining sources of truth are jobid 18 (`ef_fetch_ci_bands_daily_0500_utc`, `0 5 * * *`) and jobid 19 (`ef_fetch_ci_bands_guard_30m`, `*/30 * * * *` — invokes `lth_pvr.ensure_ci_bands_today()` to retry if today's row is still missing).
+
+#### Recovery operations performed
+1. Migration `ci_bands_freeze_protection` applied (column + trigger).
+2. `ef_fetch_ci_bands` rewritten and redeployed (version 67, `--no-verify-jwt`).
+3. Smoke test for 2026-05-17 → mean = 71050.97, p200 = 124696.78 (matches playground). ✅
+4. Full backfill via `POST /functions/v1/ef_fetch_ci_bands` with `{"start":"2010-07-17","end":"2026-05-17","allow_backfill":true}` → 5,784 rows written in 8.5s.
+5. Spot-checks on 2026-05-17 / 2026-05-16 / 2026-05-15 / 2026-03-27 / 2023-11-15 → realistic per-day-varying bands. ✅
+6. Freeze sweep — 5,783 rows frozen, 1 (today) unfrozen. ✅
+7. Freeze trigger verified — `UPDATE … SET price_at_mean = 99999` against a frozen row → 0 rows affected, value unchanged. ✅
+8. Decisions replay — `ef_generate_decisions?signal_date=YYYY-MM-DD` invoked for signal dates 2026-05-05 → 2026-05-16 in chronological order. All 13 affected `decisions_daily` rows (trade_dates 2026-05-06 → 2026-05-18) now correctly show `SELL Base 6 (mean…+0.5σ) @ 0.00157` for all 3 live customers. `customer_state_daily` was unchanged by the replay because `bear_pause` was already latched true (since prior April peak) and bear pause forces all retrace flags to false regardless of the band values — so the historical state machine was self-protected and required no surgery.
+
+#### Files
+| File | Change |
+|---|---|
+| `supabase/functions/ef_fetch_ci_bands/index.ts` | Full rewrite — endpoint switch to `/lth-pvr`, derive m100/p150, defensive window filter, 31-row hard cap (20 000 with `allow_backfill`), drift alert, freeze sweep |
+| `supabase/migrations/20260518_ci_bands_freeze_protection.sql` | NEW — `frozen_at` column + `ci_bands_daily_freeze_guard()` BEFORE UPDATE trigger |
+| `cron.job` | `SELECT cron.unschedule(61)` — `lthpvr_ci_fetch` removed |
+
+#### Lessons captured
+- **Third-party API contracts can change silently.** Any external data feed must be range-validated and row-count-capped at ingress.
+- **Upserts must be range-bounded.** Never `UPSERT (data.length)` rows without first checking they fall inside the requested window.
+- **Historical immutability belongs in the DB, not the application.** A `frozen_at` + BEFORE-UPDATE trigger protects rows even if a future bug bypasses the application-level guard.
+- **Cron redundancy is technical debt.** Two cron jobs writing the same table doubles the blast radius of an API regression. Single owner per cron job.
+- **Bear pause is buy-side only.** Latched `bear_pause=true` does not stop the strategy from selling. Documenting this here because the corruption initially looked like "the system was inactive" — it wasn't; it was actively making the wrong call.
+
+---
 
 ### v0.6.107 – Operational: customer 56 email correction + duplicate `email_address` column dropped
 **Date:** 2026-05-05

@@ -1,13 +1,36 @@
 // ef_fetch_ci_bands/index.ts
-// Fetch CI bands and upsert into lth_pvr.ci_bands_daily,
-// with alert logging into lth_pvr.alert_events.
+// Fetch CI bands from ChartInspect's /lth-pvr endpoint and upsert into
+// lth_pvr.ci_bands_daily.
+//
+// History note (2026-05-18):
+//   We previously used /lth-pvr-bands?mode=static, which silently changed
+//   behaviour and started returning a single set of "as-of-now" bands
+//   applied to every historical date — overwriting all 5,784 historical
+//   rows on the nightly cron run. We now use /lth-pvr (matches the
+//   ChartInspect playground) which returns per-day expanding-window
+//   bands, plus:
+//     - Defensive filtering: only rows inside the requested [start,end]
+//       window are upserted.
+//     - Hard safety cap: if more rows survive the filter than expected
+//       (default 31 for a daily call), abort with a critical alert.
+//     - Frozen-row protection: rows with a date older than yesterday are
+//       marked frozen, and a BEFORE UPDATE trigger silently rejects any
+//       future attempt to mutate them.
+//
+// The /lth-pvr endpoint does NOT return -1σ or +1.5σ band fields. Because
+// price_at_pvr_X is exactly linear in X (within a single day's params),
+// we derive them as:
+//   price_at_m100 = 2*mean - p100
+//   price_at_p150 = 1.5*p100 - 0.5*mean
 
 import { getServiceClient } from "./client.ts";
+
+const CI_BASE = "https://chartinspect.com/api/v1/onchain/lth-pvr";
+const ALLOWED_FIELD_DRIFT_PCT = 0.10; // 10% day-over-day drift => alert
 
 Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
 
-  // ---- small helpers -------------------------------------------------
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
   async function fetchJSONWithRetry(
@@ -15,30 +38,23 @@ Deno.serve(async (req: Request) => {
     headers: Record<string, string>,
     attempts = 5,
   ) {
-    let wait = 1000; // 1s -> 2s -> 4s -> 8s -> 15s cap
+    let wait = 1000;
     let lastError: unknown = null;
-    let lastStatus: number | null = null;
-    let lastStatusText: string | null = null;
-
     for (let i = 0; i < attempts; i++) {
       try {
         const resp = await fetch(url, { headers });
         if (resp.ok) return await resp.json();
-        
-        // Capture HTTP error details for logging
-        lastStatus = resp.status;
-        lastStatusText = resp.statusText;
         const errorBody = await resp.text().catch(() => "");
-        lastError = `HTTP ${resp.status} ${resp.statusText}${errorBody ? ": " + errorBody.substring(0, 200) : ""}`;
-        
-        console.warn(`Attempt ${i + 1}/${attempts} failed: HTTP ${resp.status} ${resp.statusText}`);
-        
+        lastError =
+          `HTTP ${resp.status} ${resp.statusText}` +
+          (errorBody ? `: ${errorBody.substring(0, 200)}` : "");
+        console.warn(`CI attempt ${i + 1}/${attempts} failed: ${lastError}`);
         const ra = Number(resp.headers.get("retry-after"));
         await sleep(ra ? ra * 1000 : wait);
         wait = Math.min(wait * 2, 15000);
       } catch (e) {
         lastError = e;
-        console.warn(`Attempt ${i + 1}/${attempts} failed: ${String(e)}`);
+        console.warn(`CI attempt ${i + 1}/${attempts} failed: ${String(e)}`);
         await sleep(wait);
         wait = Math.min(wait * 2, 15000);
       }
@@ -48,7 +64,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Simple alert helper writing to public.alert_events
   async function logAlert(
     severity: "info" | "warn" | "error" | "critical",
     message: string,
@@ -56,7 +71,7 @@ Deno.serve(async (req: Request) => {
     orgId?: string | null,
   ) {
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         component: "ef_fetch_ci_bands",
         severity,
         message,
@@ -65,12 +80,31 @@ Deno.serve(async (req: Request) => {
       if (orgId) payload.org_id = orgId;
       await sb.schema("public").from("alert_events").insert(payload);
     } catch (e) {
-      console.error("ef_fetch_ci_bands: alert_events insert failed", e);
+      console.error("alert_events insert failed", e);
     }
   }
-  // --------------------------------------------------------------------
 
-  // parse payload once (it may be empty {})
+  const asNum = (v: unknown): number | null => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+
+  const isoDate = (msFromUTCMidnightOffset = 0) => {
+    const now = new Date();
+    const todayUTC = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+    return new Date(todayUTC + msFromUTCMidnightOffset)
+      .toISOString()
+      .slice(0, 10);
+  };
+
   let body: any = {};
   try {
     body = await req.json();
@@ -83,29 +117,21 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("ORG_ID") ||
     null;
 
+  // mode is retained as a label only — we always hit /lth-pvr now.
   const mode: string =
     (typeof body.mode === "string" && body.mode) || "static";
 
-  // optional range inputs for catch-up/backfill
   const start =
     typeof body.start === "string" && body.start ? body.start : null;
   const end = typeof body.end === "string" && body.end ? body.end : null;
+  const allowBackfill = body.allow_backfill === true; // bypasses 31-row cap
 
-  // CRITICAL: When called by daily pipeline, we want YESTERDAY's data only (not today)
-  // Today's CI bands data changes throughout the day and is only finalized at day's close.
-  // Trading decisions made today are based on yesterday's CI bands.
-  
-  // Calculate yesterday's date (signal_date) - MUST use UTC to avoid timezone issues
-  const now = new Date();
-  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
-  const yesterdayStr = new Date(yesterdayUTC).toISOString().slice(0, 10);
-  
-  // If neither start nor end provided, default to fetching yesterday's data only
-  // (unless explicitly overridden with days parameter)
-  const days = Number.isFinite(Number(body?.days)) && Number(body.days) > 0
-    ? Number(body.days)
-    : 1; // Changed from 5 to 1 (fetch yesterday only)
+  const todayStr = isoDate(0);
+  const yesterdayStr = isoDate(-24 * 60 * 60 * 1000);
+
+  // Effective window: explicit start/end if given; else yesterday only.
+  const wantStart = start ?? yesterdayStr;
+  const wantEnd = end ?? yesterdayStr;
 
   if (!org_id) {
     await logAlert(
@@ -116,175 +142,134 @@ Deno.serve(async (req: Request) => {
         env_org_id: Deno.env.get("ORG_ID") ?? null,
       },
     );
-    return new Response(
-      "missing org_id (set ORG_ID secret or pass in payload)",
-      {
-        status: 400,
-        headers: { "content-type": "text/plain" },
-      },
-    );
+    return new Response("missing org_id", {
+      status: 400,
+      headers: { "content-type": "text/plain" },
+    });
   }
 
   const apiKey = Deno.env.get("CI_API_KEY");
   if (!apiKey) {
-    await logAlert(
-      "critical",
-      "CI_API_KEY missing in environment for ef_fetch_ci_bands",
-      { org_id },
-      org_id,
-    );
+    await logAlert("critical", "CI_API_KEY missing", { org_id }, org_id);
     return new Response("CI_API_KEY missing", { status: 500 });
   }
 
-  // Build URL; prefer explicit range else fetch yesterday's data
-  let url =
-    `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=${
-      encodeURIComponent(mode)
-    }`;
-  if (start) url += `&start=${encodeURIComponent(start)}`;
-  if (end) url += `&end=${encodeURIComponent(end)}`;
-  // If no explicit range, fetch yesterday's data (signal_date)
-  if (!start && !end) {
-    url += `&start=${encodeURIComponent(yesterdayStr)}&end=${encodeURIComponent(yesterdayStr)}`;
+  // Build URL. /lth-pvr supports ?days=N (count back from today).
+  // If explicit start/end requested, use a `days` value wide enough to cover.
+  let url: string;
+  if (start || end) {
+    const startDate = new Date(`${wantStart}T00:00:00Z`).getTime();
+    const endDate = new Date(`${wantEnd}T00:00:00Z`).getTime();
+    const todayMs = new Date(`${todayStr}T00:00:00Z`).getTime();
+    const daysBack = Math.ceil((todayMs - startDate) / 86_400_000) + 1;
+    if (!Number.isFinite(daysBack) || daysBack < 1 || endDate < startDate) {
+      await logAlert(
+        "error",
+        "Invalid start/end window passed to ef_fetch_ci_bands",
+        { org_id, start: wantStart, end: wantEnd },
+        org_id,
+      );
+      return new Response("bad window", { status: 400 });
+    }
+    url = `${CI_BASE}?days=${daysBack}`;
+  } else {
+    // Default cron path: days=2 covers today + yesterday.
+    url = `${CI_BASE}?days=2`;
   }
 
-  console.info("CI GET", url);
+  console.info("CI GET", url, "window", wantStart, "→", wantEnd);
 
   let json: any;
   try {
     json = await fetchJSONWithRetry(url, { "X-API-Key": apiKey });
   } catch (e) {
-    console.error("ef_fetch_ci_bands: CI fetch failed", e);
     await logAlert(
       "error",
-      "CI API fetch failed in ef_fetch_ci_bands",
-      {
-        org_id,
-        mode,
-        start,
-        end,
-        days,
-        url,
-        error: String((e as any)?.message ?? e),
-      },
+      "CI API fetch failed",
+      { org_id, url, error: String((e as any)?.message ?? e) },
       org_id,
     );
     return new Response("CI fetch failed", { status: 502 });
   }
 
-  const data = Array.isArray(json?.data) ? json.data : [];
-  console.info("ci status ok; rows:", data.length);
+  const rawData = Array.isArray(json?.data) ? json.data : [];
   console.info(
-    "ci fetch ok; rows:",
-    data.length,
+    "ci rows:",
+    rawData.length,
     "first:",
-    data[0]?.date,
+    rawData[0]?.date,
     "last:",
-    data.at(-1)?.date,
+    rawData.at(-1)?.date,
   );
 
-  // CRITICAL: Filter data to exclude today's date
-  // API sometimes returns multiple days including today, which changes throughout the day
-  // We only want finalized data from dates < today
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const filteredData = data.filter((row: any) => {
-    const rowDate = typeof row?.date === 'string' ? row.date : '';
-    return rowDate && rowDate < todayStr;
+  // Defensive: keep only rows whose date falls inside [wantStart, wantEnd]
+  // AND strictly before today. This is the critical guard that prevents
+  // a misbehaving API from rewriting unrelated rows.
+  const filteredData = rawData.filter((row: any) => {
+    const d = typeof row?.date === "string" ? row.date : "";
+    return d && d >= wantStart && d <= wantEnd && d < todayStr;
   });
-  
-  if (filteredData.length < data.length) {
-    console.warn(`Filtered out ${data.length - filteredData.length} rows with today's or future dates`);
+
+  if (filteredData.length < rawData.length) {
+    console.warn(
+      `dropped ${rawData.length - filteredData.length} rows outside window/in future`,
+    );
   }
 
-  if (!Array.isArray(filteredData) || filteredData.length === 0) {
+  if (filteredData.length === 0) {
     await logAlert(
       "warn",
-      "CI API returned no data in ef_fetch_ci_bands",
-      {
-        org_id,
-        mode,
-        start,
-        end,
-        days,
-        url,
-      },
+      "CI API returned no data for requested window",
+      { org_id, url, wantStart, wantEnd, rawRows: rawData.length },
       org_id,
     );
-    return new Response("No data", { status: 502 });
+    return new Response("No data in window", { status: 502 });
   }
 
-  // --- helpers for safe numeric lookups ---
-  const asNum = (v: unknown): number | null => {
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() !== "") {
-      const n = Number(v);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  };
+  // Hard safety cap.
+  const maxRows = allowBackfill ? 20_000 : 31;
+  if (filteredData.length > maxRows) {
+    await logAlert(
+      "critical",
+      `CI API returned ${filteredData.length} rows for window — refusing to upsert (max ${maxRows})`,
+      { org_id, url, wantStart, wantEnd, rows: filteredData.length, allowBackfill },
+      org_id,
+    );
+    return new Response("Too many rows for window", { status: 502 });
+  }
 
-  const pickNum = (obj: any, ...keys: string[]) => {
-    for (const k of keys) {
-      if (obj && Object.prototype.hasOwnProperty.call(obj, k)) {
-        const n = asNum((obj as any)[k]);
-        if (n !== null) return n;
-      }
-    }
-    return null;
-  };
-
-  const pickByRegex = (obj: any, ...regexes: (RegExp | string)[]) => {
-    for (const r of regexes) {
-      const re = r instanceof RegExp ? r : new RegExp(r as string, "i");
-      for (const [k, v] of Object.entries(obj ?? {})) {
-        if (re.test(k)) {
-          const n = asNum(v);
-          if (n !== null) return n;
-        }
-      }
-    }
-    return null;
-  };
-
-  // --- row normalizer ---
+  // --- row normaliser ----------------------------------------------
+  // Field name reference (response from /lth-pvr):
+  //   price_at_pvr_mean
+  //   price_at_pvr_minus_quarter_sigma          -> m025
+  //   price_at_pvr_minus_half_sigma             -> m050
+  //   price_at_pvr_minus_three_quarters_sigma   -> m075
+  //   price_at_pvr_plus_half_sigma              -> p050
+  //   price_at_pvr_plus_1sigma                  -> p100
+  //   price_at_pvr_plus_2sigma                  -> p200
+  //   price_at_pvr_plus_2half_sigma             -> p250
+  //   (-1σ and +1.5σ are derived linearly from mean and p100.)
   const toRec = (r: any) => {
-    // Use UTC-safe yesterday calculation for fallback
-    const now = new Date();
-    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
-    const fallbackDate = new Date(yesterdayUTC).toISOString().slice(0, 10);
-    
-    const dstr =
-      (typeof r?.date === "string" && r.date)
-        ? r.date
-        : fallbackDate;
-
-    const val = (...aliasesOrRegex: any[]) =>
-      pickNum(
-        r,
-        ...aliasesOrRegex.filter((a) => typeof a === "string"),
-      ) ??
-      pickByRegex(r, ...aliasesOrRegex);
+    const mean = asNum(r?.price_at_pvr_mean);
+    const p100 = asNum(r?.price_at_pvr_plus_1sigma);
+    const m100 = mean !== null && p100 !== null ? 2 * mean - p100 : null;
+    const p150 = mean !== null && p100 !== null ? 1.5 * p100 - 0.5 * mean : null;
 
     return {
       org_id,
-      date: dstr,
+      date: r.date,
       mode,
-      btc_price: val("lth_price", "btc_price", "price", "close", /^(btc_)?price$/i),
-      price_at_mean: val(
-        "price_at_pvr_mean",
-        "lth_realized_price",
-        "mean_price",
-      ),
-      price_at_m025: val("price_at_pvr_minus_quarter_sigma"),
-      price_at_m050: val("price_at_pvr_minus_half_sigma"),
-      price_at_m075: val("price_at_pvr_minus_three_quarters_sigma"),
-      price_at_m100: val("price_at_pvr_minus_1sigma"),
-      price_at_p050: val("price_at_pvr_plus_half_sigma"),
-      price_at_p100: val("price_at_pvr_plus_1sigma"),
-      price_at_p150: val("price_at_pvr_plus_1half_sigma"),
-      price_at_p200: val("price_at_pvr_plus_2sigma"),
-      price_at_p250: val("price_at_pvr_plus_2half_sigma"),
+      btc_price: asNum(r?.btc_price),
+      price_at_mean: mean,
+      price_at_m025: asNum(r?.price_at_pvr_minus_quarter_sigma),
+      price_at_m050: asNum(r?.price_at_pvr_minus_half_sigma),
+      price_at_m075: asNum(r?.price_at_pvr_minus_three_quarters_sigma),
+      price_at_m100: m100,
+      price_at_p050: asNum(r?.price_at_pvr_plus_half_sigma),
+      price_at_p100: p100,
+      price_at_p150: p150,
+      price_at_p200: asNum(r?.price_at_pvr_plus_2sigma),
+      price_at_p250: asNum(r?.price_at_pvr_plus_2half_sigma),
       fetched_at: new Date().toISOString(),
       source_hash: crypto.randomUUID(),
     };
@@ -292,118 +277,88 @@ Deno.serve(async (req: Request) => {
 
   const records = filteredData.map(toRec);
 
-  const up = await sb
-    .schema("lth_pvr")
-    .from("ci_bands_daily")
-    .upsert(records, {
-      onConflict: "org_id,date,mode",
-    })
-    .select();
-
-  // If yesterday's row is still missing, try a 1-day refetch once.
-  // CI bands are always for dates < today, so "yesterday" is the
-  // latest date we expect to exist.
+  // --- drift sanity check on the most-recent row ------------------
+  // Flags incidents like the 2026-05-18 overwrite (mean jumped ~47%).
   try {
-    // Calculate yesterday's date using UTC-safe approach
-    const now = new Date();
-    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const yesterdayUTC = todayUTC - 24 * 60 * 60 * 1000;
-    const expectedDate = new Date(yesterdayUTC).toISOString().slice(0, 10);
-
-    const chk = await sb.schema("lth_pvr").from("ci_bands_daily")
-      .select("date")
-      .eq("org_id", org_id)
-      .eq("mode", mode)
-      .eq("date", expectedDate)
-      .maybeSingle();
-
-    if (!chk.data) {
-      console.warn("latest CI day missing (yesterday), refetching 1 day window");
-      // CRITICAL: Use explicit start/end dates to fetch yesterday only
-      // Using &days=1 would fetch today's data which changes throughout the day
-      const url1d =
-        `https://chartinspect.com/api/v1/onchain/lth-pvr-bands?mode=${
-          encodeURIComponent(mode)
-        }&start=${encodeURIComponent(expectedDate)}&end=${encodeURIComponent(expectedDate)}`;
-      try {
-        const json2 = await fetchJSONWithRetry(
-          url1d,
-          { "X-API-Key": apiKey },
-          3,
-        );
-        const data2 = Array.isArray(json2?.data) ? json2.data : [];
-        // Filter to exclude today's date from self-heal refetch too
-        const todayStr2 = new Date().toISOString().slice(0, 10);
-        const filteredData2 = data2.filter((row: any) => {
-          const rowDate = typeof row?.date === 'string' ? row.date : '';
-          return rowDate && rowDate < todayStr2;
-        });
-        if (filteredData2.length) {
-          const rec2 = filteredData2.map(toRec);
-          await sb.schema("lth_pvr").from("ci_bands_daily").upsert(rec2, {
-            onConflict: "org_id,date,mode",
-          });
-        } else {
+    const latestNew = records
+      .filter((r) => r.price_at_mean !== null)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    if (latestNew) {
+      const { data: prev } = await sb
+        .schema("lth_pvr")
+        .from("ci_bands_daily")
+        .select("date, price_at_mean")
+        .eq("org_id", org_id)
+        .eq("mode", mode)
+        .lt("date", latestNew.date)
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const prevMean = prev?.price_at_mean ? Number(prev.price_at_mean) : null;
+      if (prevMean && latestNew.price_at_mean !== null) {
+        const drift = Math.abs(latestNew.price_at_mean - prevMean) / prevMean;
+        if (drift > ALLOWED_FIELD_DRIFT_PCT) {
           await logAlert(
-            "warn",
-            "Self-heal refetch (1-day window) returned no data for expected CI date",
+            "critical",
+            `CI mean band drifted ${(drift * 100).toFixed(1)}% day-over-day`,
             {
               org_id,
-              mode,
-              url: url1d,
-              expectedDate,
+              previous: { date: prev?.date, price_at_mean: prevMean },
+              new: { date: latestNew.date, price_at_mean: latestNew.price_at_mean },
+              threshold_pct: ALLOWED_FIELD_DRIFT_PCT * 100,
             },
             org_id,
           );
         }
-      } catch (e) {
-        console.error("self-heal check/refetch failed", e);
-        await logAlert(
-          "warn",
-          "Self-heal refetch failed in ef_fetch_ci_bands",
-          {
-            org_id,
-            mode,
-            url: url1d,
-            expectedDate,
-            error: String((e as any)?.message ?? e),
-          },
-          org_id,
-        );
       }
     }
   } catch (e) {
-    console.error("self-heal check failed", e);
-    await logAlert(
-      "warn",
-      "Self-heal presence check failed in ef_fetch_ci_bands",
-      {
-        org_id,
-        mode,
-        error: String((e as any)?.message ?? e),
-      },
-      org_id,
-    );
+    console.warn("drift check failed", e);
   }
+
+  // Upsert. The trigger lth_pvr.ci_bands_daily_freeze_guard silently
+  // drops UPDATEs on frozen rows.
+  const up = await sb
+    .schema("lth_pvr")
+    .from("ci_bands_daily")
+    .upsert(records, { onConflict: "org_id,date,mode" })
+    .select();
 
   if (up.error) {
-    console.error("UPSERT ERROR", up.error);
     await logAlert(
       "error",
-      "ci_bands_daily upsert failed in ef_fetch_ci_bands",
-      {
-        org_id,
-        mode,
-        rows: records.length,
-        error: up.error.message ?? up.error,
-      },
+      "ci_bands_daily upsert failed",
+      { org_id, mode, rows: records.length, error: up.error.message ?? up.error },
       org_id,
     );
-    return new Response(up.error.message, {
-      status: 500,
-    });
+    return new Response(up.error.message, { status: 500 });
   }
 
-  console.info("upsert ok", up.data?.[0] ?? null);
-  return new Response("ok");
+  // Freeze any row now older than yesterday and not yet frozen.
+  try {
+    const { error: fz } = await sb
+      .schema("lth_pvr")
+      .from("ci_bands_daily")
+      .update({ frozen_at: new Date().toISOString() })
+      .eq("org_id", org_id)
+      .lt("date", yesterdayStr)
+      .is("frozen_at", null);
+    if (fz) console.warn("freeze sweep error", fz);
+  } catch (e) {
+    console.warn("freeze sweep failed", e);
+  }
+
+  console.info("upsert ok", {
+    written: up.data?.length ?? 0,
+    window: [wantStart, wantEnd],
+  });
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      url,
+      window: { start: wantStart, end: wantEnd },
+      written: up.data?.length ?? 0,
+    }),
+    { headers: { "content-type": "application/json" } },
+  );
 });
