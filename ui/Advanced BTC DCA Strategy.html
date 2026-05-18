@@ -2453,7 +2453,7 @@
             <canvas id="bandsChart"></canvas>
           </div>
           <div class="bc-status">
-            <span class="bc-hint">Drag to zoom · double-click chart to reset · click legend items to hide/show bands. Use this view to cross-check our stored bands against ChartInspect.</span>
+            <span class="bc-hint">Drag to zoom · double-click chart to reset · click legend items to hide/show bands. Bands are rendered in log-space (geometric σ spacing) from the stored mean and +1σ to match ChartInspect's display; the strategy itself uses the linear-space values stored in <code>ci_bands_daily</code>.</span>
           </div>
         </div>
 
@@ -2643,20 +2643,36 @@
       let zoomRegistered = false;
       const cache = { ci: null, rb: null };
 
-      // Band styling — order matters (top to bottom)
+      // Band styling — order matters (top to bottom).
+      // `k` = sigma multiple. Bands are rendered in LOG-space (display only)
+      // using the API-supplied mean and +1σ as the two anchor points:
+      //   price_at_kσ = mean * (p100 / mean)^k
+      // This matches ChartInspect's website rendering, which keeps all bands
+      // positive on a log axis. The strategy itself continues to use the
+      // linear-space values stored in ci_bands_daily.
       const BANDS = [
-        { key: 'p250', label: '+2.5σ', color: '#7c3aed' },
-        { key: 'p200', label: '+2σ',   color: '#a78bfa' },
-        { key: 'p150', label: '+1.5σ', color: '#c084fc' },
-        { key: 'p100', label: '+1σ',   color: '#e879f9' },
-        { key: 'p050', label: '+0.5σ', color: '#f472b6' },
-        { key: 'mean', label: 'Mean',  color: '#0ea5e9', width: 2 },
-        { key: 'm025', label: '-0.25σ',color: '#fbbf24' },
-        { key: 'm050', label: '-0.5σ', color: '#f59e0b' },
-        { key: 'm075', label: '-0.75σ',color: '#f97316' },
-        { key: 'm100', label: '-1σ',   color: '#ef4444' },
+        { key: 'p250', label: '+2.5σ', color: '#7c3aed', k:  2.5  },
+        { key: 'p200', label: '+2σ',   color: '#a78bfa', k:  2.0  },
+        { key: 'p150', label: '+1.5σ', color: '#c084fc', k:  1.5  },
+        { key: 'p100', label: '+1σ',   color: '#e879f9', k:  1.0  },
+        { key: 'p050', label: '+0.5σ', color: '#f472b6', k:  0.5  },
+        { key: 'mean', label: 'Mean',  color: '#0ea5e9', k:  0,    width: 2 },
+        { key: 'm025', label: '-0.25σ',color: '#fbbf24', k: -0.25 },
+        { key: 'm050', label: '-0.5σ', color: '#f59e0b', k: -0.5  },
+        { key: 'm075', label: '-0.75σ',color: '#f97316', k: -0.75 },
+        { key: 'm100', label: '-1σ',   color: '#ef4444', k: -1.0  },
       ];
-      const PRICE_COLOR = '#111827';
+      const PRICE_COLOR = '#f8fafc'; // bright white — visible on dark theme
+
+      // Log-space band derivation from mean (μ) and +1σ price (p100).
+      // Returns null if inputs are missing or non-positive so the chart
+      // gracefully gaps instead of plotting bogus values.
+      function bandLogSpace(mean, p100, k) {
+        const m = Number(mean), p = Number(p100);
+        if (!isFinite(m) || !isFinite(p) || m <= 0 || p <= 0) return null;
+        if (k === 0) return m;
+        return m * Math.pow(p / m, k);
+      }
 
       function ensureZoomPlugin() {
         if (zoomRegistered) return;
@@ -2671,7 +2687,7 @@
         const labels = series.map(r => r.d);
         const ds = BANDS.map(b => ({
           label: b.label,
-          data: series.map(r => Number(r[b.key])),
+          data: series.map(r => bandLogSpace(r.mean, r.p100, b.k)),
           borderColor: b.color,
           backgroundColor: b.color,
           borderWidth: b.width || 1,
@@ -2684,10 +2700,11 @@
           data: series.map(r => Number(r.p)),
           borderColor: PRICE_COLOR,
           backgroundColor: PRICE_COLOR,
-          borderWidth: 1.6,
+          borderWidth: 2,
           pointRadius: 0,
           tension: 0,
           spanGaps: true,
+          order: -1,
         });
         return { labels, datasets: ds };
       }
