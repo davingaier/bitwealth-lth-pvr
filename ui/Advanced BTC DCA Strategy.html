@@ -2391,7 +2391,71 @@
           .lp-hist-type--conversion{background:rgba(56,189,248,.18);color:var(--accent)}
           .lp-hist-type--fee,.lp-hist-type--platform_fee{background:rgba(245,158,11,.20);color:var(--warn)}
           .lp-hist-type--default{background:var(--bg-soft);color:var(--ink-soft)}
+
+          /* Bands chart card */
+          #bandsChartCard{margin-top:1rem}
+          #bandsChartCard .bc-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem}
+          #bandsChartCard .bc-title{font-size:1.05rem;font-weight:600;margin:0;color:var(--ink)}
+          #bandsChartCard .bc-meta{font-size:.75rem;color:var(--muted);margin-top:.2rem}
+          #bandsChartCard .bc-controls{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+          #bandsChartCard .bc-toggle{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+          #bandsChartCard .bc-toggle button{padding:.35rem .75rem;border:0;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.85rem;font-weight:500}
+          #bandsChartCard .bc-toggle button.active{background:var(--accent);color:#fff}
+          #bandsChartCard .bc-presets{display:inline-flex;gap:.25rem}
+          #bandsChartCard .bc-presets button{padding:.3rem .55rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.75rem}
+          #bandsChartCard .bc-presets button.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+          #bandsChartCard .bc-canvas-wrap{position:relative;height:520px;width:100%}
+          #bandsChartCard .bc-status{font-size:.72rem;color:var(--muted);margin-top:.4rem}
+          #bandsChartCard .bc-hint{font-size:.72rem;color:var(--muted);font-style:italic}
+
+          /* Pipeline status grid (merged into Live Customer Transactions card) */
+          .lp-pipestatus{background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem;margin-bottom:.75rem;color:var(--ink)}
+          .lp-pipestatus .lp-ps-head{display:flex;justify-content:space-between;align-items:start;margin-bottom:.6rem;gap:.5rem;flex-wrap:wrap}
+          .lp-pipestatus .lp-ps-title{font-weight:600;font-size:.9rem;margin-bottom:.15rem}
+          .lp-pipestatus .lp-ps-subtitle{color:var(--muted);font-size:.78rem}
+          .lp-pipestatus .lp-ps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;margin-bottom:.6rem}
+          .lp-pipestatus .lp-ps-cell{padding:.3rem 0}
+          .lp-pipestatus .lp-ps-cell .lbl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:.15rem}
+          .lp-pipestatus .lp-ps-cell .val{font-size:.85rem;font-weight:500}
+          .lp-pipestatus .lp-ps-steps{display:flex;flex-wrap:wrap;gap:.85rem;border-top:1px solid var(--border);padding-top:.6rem;margin-bottom:.6rem}
+          .lp-pipestatus .lp-ps-step{display:flex;align-items:center;gap:.35rem;font-size:.8rem}
+          .lp-pipestatus .lp-ps-step .stepicon{font-size:1.1rem;line-height:1}
+          .lp-pipestatus .lp-ps-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+          .lp-pipestatus .lp-ps-resume-msg{font-size:.78rem;color:var(--muted)}
+          .lp-pipestatus .lp-ps-log{margin-top:.6rem;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;display:none}
+          .lp-pipestatus .lp-ps-log strong{display:block;margin-bottom:.3rem;font-size:.78rem}
+          .lp-pipestatus .lp-ps-log .logbody{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;white-space:pre-wrap;color:var(--ink-soft);max-height:240px;overflow-y:auto}
         </style>
+
+        <!-- =============== Bands Chart (CI / RB) =============== -->
+        <div class="card" id="bandsChartCard">
+          <div class="bc-header">
+            <div>
+              <h3 class="bc-title">LTH PVR Bands — Cross-check Chart</h3>
+              <div class="bc-meta" id="bcMeta">Loading bands…</div>
+            </div>
+            <div class="bc-controls">
+              <div class="bc-toggle" role="tablist" aria-label="Bands source">
+                <button type="button" id="bcSrcCi" class="active" aria-pressed="true">CI Bands</button>
+                <button type="button" id="bcSrcRb" aria-pressed="false">RB Bands</button>
+              </div>
+              <div class="bc-presets" id="bcPresets">
+                <button type="button" data-range="1M">1M</button>
+                <button type="button" data-range="6M">6M</button>
+                <button type="button" data-range="1Y">1Y</button>
+                <button type="button" data-range="5Y">5Y</button>
+                <button type="button" data-range="ALL" class="active">All</button>
+              </div>
+              <button type="button" id="bcResetZoom" title="Reset zoom (or double-click chart)" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem">Reset Zoom</button>
+            </div>
+          </div>
+          <div class="bc-canvas-wrap">
+            <canvas id="bandsChart"></canvas>
+          </div>
+          <div class="bc-status">
+            <span class="bc-hint">Drag to zoom · double-click chart to reset · click legend items to hide/show bands. Use this view to cross-check our stored bands against ChartInspect.</span>
+          </div>
+        </div>
 
         <!-- =============== Live Pipeline Card =============== -->
         <div class="card" id="livePipelineCard">
@@ -2412,6 +2476,51 @@
               <label style="font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:.3rem">
                 <input type="checkbox" id="lpAuto" checked />Auto-refresh
               </label>
+            </div>
+          </div>
+
+          <!-- ===== Merged Pipeline Control (formerly Administration > Pipeline Control) ===== -->
+          <div class="lp-pipestatus" id="pipelineStatus">
+            <div class="lp-ps-head">
+              <div>
+                <div class="lp-ps-title">Pipeline Status</div>
+                <div class="lp-ps-subtitle" id="pipelineStatusText">Loading…</div>
+              </div>
+              <button id="pipelineRefreshBtn" type="button" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem">Refresh status</button>
+            </div>
+            <div class="lp-ps-grid">
+              <div class="lp-ps-cell">
+                <div class="lbl">Trade Date</div>
+                <div class="val" id="pipelineTradeDate">—</div>
+              </div>
+              <div class="lp-ps-cell">
+                <div class="lbl">Signal Date (CI Bands)</div>
+                <div class="val" id="pipelineSignalDate">—</div>
+              </div>
+              <div class="lp-ps-cell">
+                <div class="lbl">CI Bands Available</div>
+                <div class="val" id="pipelineCIStatus">—</div>
+              </div>
+              <div class="lp-ps-cell">
+                <div class="lbl">Trade Window</div>
+                <div class="val" id="pipelineWindowStatus">—</div>
+              </div>
+            </div>
+            <div class="lp-ps-steps">
+              <div class="lp-ps-step"><span class="stepicon" id="stepCIBands">⏸️</span><span>CI Bands</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepDecisions">⏸️</span><span>Decisions</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepIntents">⏸️</span><span>Order Intents</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepOrders">⏸️</span><span>Execute Orders</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepPollOrders">⏸️</span><span>Poll Orders</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepLedger">⏸️</span><span>Ledger Posted</span></div>
+            </div>
+            <div class="lp-ps-actions">
+              <button id="pipelineResumeBtn" type="button" class="btn" disabled>Resume Pipeline</button>
+              <span id="pipelineResumeMessage" class="lp-ps-resume-msg"></span>
+            </div>
+            <div id="pipelineExecutionLog" class="lp-ps-log">
+              <strong>Execution Log</strong>
+              <div id="pipelineLogContent" class="logbody"></div>
             </div>
           </div>
 
@@ -2514,6 +2623,241 @@
 
       </div> <!-- /LTH PVR live block -->
     </div>
+
+    <!-- ============ Bands Chart controller (CI / RB) ============ -->
+    <script>
+    (() => {
+      const root = document.querySelector('#transactions-module');
+      if (!root) return;
+      const card = root.querySelector('#bandsChartCard');
+      if (!card) return;
+      const canvas = card.querySelector('#bandsChart');
+      const metaEl = card.querySelector('#bcMeta');
+      const btnCi = card.querySelector('#bcSrcCi');
+      const btnRb = card.querySelector('#bcSrcRb');
+      const presetsEl = card.querySelector('#bcPresets');
+      const resetBtn = card.querySelector('#bcResetZoom');
+
+      let chart = null;
+      let currentSource = 'ci';
+      let zoomRegistered = false;
+      const cache = { ci: null, rb: null };
+
+      // Band styling — order matters (top to bottom)
+      const BANDS = [
+        { key: 'p250', label: '+2.5σ', color: '#7c3aed' },
+        { key: 'p200', label: '+2σ',   color: '#a78bfa' },
+        { key: 'p150', label: '+1.5σ', color: '#c084fc' },
+        { key: 'p100', label: '+1σ',   color: '#e879f9' },
+        { key: 'p050', label: '+0.5σ', color: '#f472b6' },
+        { key: 'mean', label: 'Mean',  color: '#0ea5e9', width: 2 },
+        { key: 'm025', label: '-0.25σ',color: '#fbbf24' },
+        { key: 'm050', label: '-0.5σ', color: '#f59e0b' },
+        { key: 'm075', label: '-0.75σ',color: '#f97316' },
+        { key: 'm100', label: '-1σ',   color: '#ef4444' },
+      ];
+      const PRICE_COLOR = '#111827';
+
+      function ensureZoomPlugin() {
+        if (zoomRegistered) return;
+        try {
+          const Z = window['chartjs-plugin-zoom'];
+          if (Z && window.Chart && !Chart.registry.plugins.get('zoom')) Chart.register(Z);
+          zoomRegistered = !!(window.Chart && Chart.registry.plugins.get('zoom'));
+        } catch (e) { zoomRegistered = false; }
+      }
+
+      function buildDatasets(series) {
+        const labels = series.map(r => r.d);
+        const ds = BANDS.map(b => ({
+          label: b.label,
+          data: series.map(r => Number(r[b.key])),
+          borderColor: b.color,
+          backgroundColor: b.color,
+          borderWidth: b.width || 1,
+          pointRadius: 0,
+          tension: 0,
+          spanGaps: true,
+        }));
+        ds.push({
+          label: 'BTC Price',
+          data: series.map(r => Number(r.p)),
+          borderColor: PRICE_COLOR,
+          backgroundColor: PRICE_COLOR,
+          borderWidth: 1.6,
+          pointRadius: 0,
+          tension: 0,
+          spanGaps: true,
+        });
+        return { labels, datasets: ds };
+      }
+
+      function applyPreset(range) {
+        if (!chart) return;
+        const labels = chart.data.labels;
+        if (!labels || !labels.length) return;
+        const lastIdx = labels.length - 1;
+        const last = new Date(labels[lastIdx] + 'T00:00:00Z');
+        let fromDate = null;
+        if (range === '1M') fromDate = new Date(last.getTime() - 30*86400000);
+        else if (range === '6M') fromDate = new Date(last.getTime() - 182*86400000);
+        else if (range === '1Y') fromDate = new Date(last.getTime() - 365*86400000);
+        else if (range === '5Y') fromDate = new Date(last.getTime() - 5*365*86400000);
+
+        if (chart.resetZoom) chart.resetZoom();
+        if (!fromDate) { chart.update('none'); return; }
+
+        const fromIso = fromDate.toISOString().slice(0,10);
+        let fromIdx = labels.findIndex(d => d >= fromIso);
+        if (fromIdx < 0) fromIdx = 0;
+        chart.options.scales.x.min = labels[fromIdx];
+        chart.options.scales.x.max = labels[lastIdx];
+        chart.update('none');
+      }
+
+      function renderChart(payload) {
+        ensureZoomPlugin();
+        const series = payload?.series || [];
+        const { labels, datasets } = buildDatasets(series);
+
+        const cfg = {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            parsing: false,
+            normalized: true,
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `${ctx.dataset.label}: $${Number(ctx.parsed.y).toLocaleString(undefined,{maximumFractionDigits:2})}`
+                }
+              },
+              zoom: zoomRegistered ? {
+                pan: { enabled: false },
+                zoom: {
+                  drag: { enabled: true, backgroundColor: 'rgba(14,165,233,0.15)', borderColor: '#0ea5e9', borderWidth: 1 },
+                  wheel: { enabled: false },
+                  pinch: { enabled: true },
+                  mode: 'x',
+                },
+                limits: { x: { min: 'original', max: 'original' } },
+              } : undefined,
+              decimation: { enabled: true, algorithm: 'min-max' },
+            },
+            scales: {
+              x: {
+                type: 'category',
+                ticks: { maxTicksLimit: 14, maxRotation: 0, autoSkip: true, font: { size: 10 } },
+                grid: { display: false },
+              },
+              y: {
+                type: 'logarithmic',
+                title: { display: true, text: 'Price (USD, log)' },
+                ticks: {
+                  callback: (v) => {
+                    if (v >= 1000) return '$' + (v/1000).toFixed(v>=10000?0:1) + 'k';
+                    if (v >= 1) return '$' + v.toFixed(0);
+                    if (v >= 0.01) return '$' + v.toFixed(2);
+                    return '$' + v.toExponential(0);
+                  },
+                  font: { size: 10 },
+                },
+              },
+            },
+          },
+        };
+
+        if (chart) {
+          chart.data = cfg.data;
+          chart.options = cfg.options;
+          chart.update('none');
+        } else {
+          chart = new Chart(canvas, cfg);
+          canvas.addEventListener('dblclick', () => {
+            if (chart && chart.resetZoom) chart.resetZoom();
+            delete chart.options.scales.x.min;
+            delete chart.options.scales.x.max;
+            chart.update('none');
+            presetsEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.range === 'ALL'));
+          });
+        }
+      }
+
+      function setMeta(payload, source) {
+        if (!payload) { metaEl.textContent = `No ${source.toUpperCase()} bands available.`; return; }
+        const fetched = payload.last_fetched_at ? new Date(payload.last_fetched_at).toLocaleString('en-ZA') : '—';
+        metaEl.textContent = `${source.toUpperCase()} bands · ${payload.count?.toLocaleString?.() || payload.count} days · ${payload.min_date} → ${payload.max_date} · last fetched: ${fetched}`;
+      }
+
+      async function loadSource(source) {
+        currentSource = source;
+        btnCi.classList.toggle('active', source === 'ci'); btnCi.setAttribute('aria-pressed', source === 'ci');
+        btnRb.classList.toggle('active', source === 'rb'); btnRb.setAttribute('aria-pressed', source === 'rb');
+        metaEl.textContent = `Loading ${source.toUpperCase()} bands…`;
+
+        if (cache[source]) { setMeta(cache[source], source); renderChart(cache[source]); applyActivePreset(); return; }
+        if (!window.supabaseClient) { metaEl.textContent = 'Supabase client not ready.'; return; }
+        try {
+          const { data, error } = await window.supabaseClient.rpc('get_bands_chart_series', { p_source: source });
+          if (error) { metaEl.textContent = `Error: ${error.message}`; return; }
+          cache[source] = data;
+          setMeta(data, source);
+          renderChart(data);
+          applyActivePreset();
+        } catch (e) {
+          metaEl.textContent = `Error: ${e.message || e}`;
+        }
+      }
+
+      function applyActivePreset() {
+        const active = presetsEl.querySelector('button.active');
+        const range = active?.dataset?.range || 'ALL';
+        applyPreset(range);
+      }
+
+      // Wire UI
+      btnCi.addEventListener('click', () => loadSource('ci'));
+      btnRb.addEventListener('click', () => loadSource('rb'));
+      presetsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-range]');
+        if (!btn) return;
+        presetsEl.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyPreset(btn.dataset.range);
+      });
+      if (resetBtn) resetBtn.addEventListener('click', () => {
+        if (chart && chart.resetZoom) chart.resetZoom();
+        delete chart?.options?.scales?.x?.min;
+        delete chart?.options?.scales?.x?.max;
+        chart?.update('none');
+        presetsEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.range === 'ALL'));
+      });
+
+      // Lazy-load when entering the transactions module
+      function maybeLoad() {
+        if (location.hash !== '#transactions-module') return;
+        if (cache[currentSource]) return;
+        // Wait for supabase auth before loading
+        const tryLoad = () => {
+          if (!window.supabaseClient) { setTimeout(tryLoad, 250); return; }
+          window.supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) loadSource(currentSource);
+            else metaEl.textContent = 'Sign in to view bands.';
+          });
+        };
+        tryLoad();
+      }
+      window.addEventListener('hashchange', maybeLoad);
+      document.addEventListener('DOMContentLoaded', maybeLoad);
+      // If page loaded already on transactions hash
+      if (document.readyState !== 'loading') maybeLoad();
+    })();
+    </script>
 
     <!-- ============ Live Customer Transactions controller ============ -->
     <script>
@@ -4485,80 +4829,7 @@
         </table>
       </div>
 
-      <!-- Pipeline Control Panel -->
-      <div class="card" id="pipelineControlCard">
-        <h3>Pipeline Control</h3>
-        <p class="small-muted">Resume daily pipeline after CI bands data becomes available.</p>
-        
-        <div id="pipelineStatus" style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:1rem;margin-bottom:1rem;">
-          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:.75rem;">
-            <div>
-              <strong style="display:block;margin-bottom:.25rem;">Pipeline Status</strong>
-              <span id="pipelineStatusText" style="color:#6c757d;">Loading...</span>
-            </div>
-            <button id="pipelineRefreshBtn" class="btn btn-secondary-sm" type="button">Refresh</button>
-          </div>
-          
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem;">
-            <div>
-              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Trade Date</div>
-              <div id="pipelineTradeDate" style="font-weight:500;">—</div>
-            </div>
-            <div>
-              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Signal Date (CI Bands)</div>
-              <div id="pipelineSignalDate" style="font-weight:500;">—</div>
-            </div>
-            <div>
-              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">CI Bands Available</div>
-              <div id="pipelineCIStatus" style="font-weight:500;">—</div>
-            </div>
-            <div>
-              <div style="font-size:.8rem;color:#6c757d;margin-bottom:.25rem;">Trade Window</div>
-              <div id="pipelineWindowStatus" style="font-weight:500;">—</div>
-            </div>
-          </div>
-          
-          <div style="border-top:1px solid #e9ecef;padding-top:.75rem;">
-            <div style="font-size:.8rem;color:#6c757d;margin-bottom:.5rem;">Pipeline Steps</div>
-            <div style="display:grid;gap:.35rem;">
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepCIBands" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">CI Bands</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepDecisions" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Decisions</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepIntents" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Order Intents</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepOrders" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Execute Orders</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepPollOrders" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Poll Orders</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:.5rem;">
-                <span id="stepLedger" style="font-size:1.2rem;">⏸️</span>
-                <span style="font-size:.85rem;">Ledger Posted</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div style="display:flex;gap:.75rem;align-items:center;">
-          <button id="pipelineResumeBtn" type="button" class="btn" disabled>Resume Pipeline</button>
-          <span id="pipelineResumeMessage" style="font-size:.85rem;color:#6c757d;"></span>
-        </div>
-        
-        <div id="pipelineExecutionLog" style="display:none;margin-top:1rem;background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:1rem;">
-          <strong style="display:block;margin-bottom:.5rem;">Execution Log</strong>
-          <div id="pipelineLogContent" style="font-family:monospace;font-size:.8rem;white-space:pre-wrap;color:#495057;"></div>
-        </div>
-      </div>
+      <!-- Pipeline Control Panel — MOVED to Customer Transactions tab (merged into Live Customer Transactions card) -->
 
       <!-- Pending ZAR Conversions Panel -->
       <div class="card" id="pendingZarCard">
@@ -12377,8 +12648,15 @@
         updateStepIcon('ledger', data.steps?.ledger);
 
         // Update resume button and message
-        resumeBtn.disabled = !data.can_resume;
-        resumeMessageEl.textContent = data.resume_reason || '';
+        const lpDateEl = document.getElementById('lpDate');
+        const selectedDate = lpDateEl?.value || null;
+        const todayIso = new Date().toISOString().slice(0,10);
+        const isToday = !selectedDate || selectedDate === todayIso;
+        resumeBtn.disabled = !data.can_resume || !isToday;
+        resumeBtn.style.display = isToday ? '' : 'none';
+        resumeMessageEl.textContent = isToday
+          ? (data.resume_reason || '')
+          : 'Resume disabled — viewing a historical trade date.';
         
         if (data.can_resume) {
           statusText.textContent = '⚠️ Pipeline paused - ready to resume';
@@ -12484,14 +12762,14 @@
 
     // Auto-refresh every 30 seconds
     let autoRefreshInterval = null;
+    const PIPE_HASH = '#transactions-module';
     
     function startAutoRefresh() {
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
       autoRefreshInterval = setInterval(() => {
-        // Only refresh if currently on admin module
-        if (location.hash === '#admin-module') {
+        // Only refresh if currently on transactions module
+        if (location.hash === PIPE_HASH) {
           loadPipelineStatus();
-          console.log('Pipeline status auto-refreshed');
         }
       }, 30000); // 30 seconds
     }
@@ -12503,22 +12781,25 @@
       }
     }
 
-    // Load status on authentication (only if on admin module)
+    // Load status on authentication (only if on transactions module)
     document.addEventListener('DOMContentLoaded', () => {
       if (supabaseClient) {
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user && location.hash === '#admin-module') {
+          if (session?.user && location.hash === PIPE_HASH) {
             loadPipelineStatus();
             startAutoRefresh();
           }
         });
       }
+      // Refresh status (esp. resume-button visibility) when user changes trade date
+      const lpDateEl = document.getElementById('lpDate');
+      if (lpDateEl) lpDateEl.addEventListener('change', () => loadPipelineStatus());
     });
     
-    // Stop auto-refresh when leaving admin module
+    // Stop auto-refresh when leaving transactions module
     document.querySelectorAll('nav a').forEach(link => {
       link.addEventListener('click', (e) => {
-        if (!e.target.href.includes('#admin-module')) {
+        if (!e.target.href.includes(PIPE_HASH)) {
           stopAutoRefresh();
         }
       });
@@ -12526,8 +12807,7 @@
 
     // Handle hash changes to start/stop auto-refresh
     window.addEventListener('hashchange', () => {
-      if (location.hash === '#admin-module') {
-        // Entering admin module - load status and start auto-refresh
+      if (location.hash === PIPE_HASH) {
         if (supabaseClient) {
           supabaseClient.auth.getSession().then(({ data: { session } }) => {
             if (session?.user) {
@@ -12537,7 +12817,6 @@
           });
         }
       } else {
-        // Leaving admin module - stop auto-refresh
         stopAutoRefresh();
       }
     });

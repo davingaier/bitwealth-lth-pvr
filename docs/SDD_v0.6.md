@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-18 (v0.6.108)
+**Last updated:** 2026-05-18 (v0.6.109)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.109 – Cron retimed to 00:05 UTC + Pipeline Control merged into Live Customer Transactions + CI/RB Bands cross-check chart
+**Date:** 2026-05-18
+**Status:** ✅ DEPLOYED
+
+#### Summary
+Three operator-experience changes:
+
+1. **CI bands cron shifted earlier (5 hours).** The daily fetch now runs at **00:05 UTC** (immediately after ChartInspect publishes the new daily band values), and the pipeline-resume orchestrator runs at **00:10 UTC**. Previously these ran at 05:00 / 05:05 UTC, leaving a 5-hour gap between data availability and decisions being generated.
+
+2. **Merged Pipeline Control into Live Customer Transactions.** The two cards displayed overlapping pipeline-step status. They are now a single card in the Customer Transactions tab containing: org-wide pipeline status grid (trade date, signal date, CI bands availability, trade window), 6-step icons (CI Bands → Decisions → Intents → Execute → Poll → Ledger), per-customer pipeline-lights table, Resume Pipeline button + execution log, trade-date selector with auto-refresh. **Resume button auto-hides** when the user selects a historical trade date. The Administration > Pipeline Control card has been removed.
+
+3. **New CI / RB Bands cross-check chart.** Added a logarithmic-Y chart at the top of the Customer Transactions tab that plots all 10 bands (+2.5σ … -1σ) plus BTC price, matching the ChartInspect playground visual. Includes:
+   - Toggle between **CI bands** (`lth_pvr.ci_bands_daily`) and **RB bands** (`lth_pvr.rb_bands_daily`).
+   - Date-range presets (1M / 6M / 1Y / 5Y / All) and drag-to-zoom (chartjs-plugin-zoom).
+   - Double-click chart or "Reset Zoom" button to clear.
+   - Click legend items to hide/show individual bands.
+   - Backed by `lth_pvr.get_bands_chart_series(p_source text)` RPC (returns full history as a single JSON payload, ~5.8k rows).
+
+#### Operator value
+- Detect any future CI-bands corruption visually in seconds — the curve should monotonically expand left-to-right, not be flat across history.
+- Compare our stored bands directly with ChartInspect's playground at https://chartinspect.com/charts to validate correctness.
+- Compare CI vs RB (our derived Realized Bands) on the same axes to catch divergences in our Welford updater.
+
+#### Files changed
+- **DB:** `lth_pvr.get_bands_chart_series(text)` — new SECURITY DEFINER RPC.
+- **pg_cron:** unscheduled jobids 18 & 27; created new jobs `ef_fetch_ci_bands_daily_0005_utc` (5 0 * * *, jobid 79) and `lth_pvr_resume_pipeline_morning` (10 0 * * *, jobid 80).
+- **UI:** `ui/Advanced BTC DCA Strategy.html` — added bands chart card + controller, merged Pipeline Control panel into `#livePipelineCard`, removed `#pipelineControlCard` from Administration tab, retargeted pipeline auto-refresh from `#admin-module` to `#transactions-module`.
+
+---
 
 ### v0.6.108 – 🚨 CI bands data-integrity incident: full backfill, freeze trigger, drift alert, decisions replay
 **Date:** 2026-05-18
