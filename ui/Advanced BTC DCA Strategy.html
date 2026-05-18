@@ -2643,24 +2643,25 @@
       let zoomRegistered = false;
       const cache = { ci: null, rb: null };
 
-      // Band styling — order matters (top to bottom).
+      // Band styling — colours match the ABC One-Pager bubble palette.
+      // SELL side: amber → red (the "warmer" the band, the more we sell).
+      // BUY side:  light blue → dark blue (the "cooler" the band, the more we buy).
       // `k` = sigma multiple. Bands are rendered in LOG-space (display only)
       // using the API-supplied mean and +1σ as the two anchor points:
       //   price_at_kσ = mean * (p100 / mean)^k
-      // This matches ChartInspect's website rendering, which keeps all bands
-      // positive on a log axis. The strategy itself continues to use the
-      // linear-space values stored in ci_bands_daily.
+      // The strategy itself uses the linear-space values stored in
+      // ci_bands_daily — this chart is purely a visual cross-check.
       const BANDS = [
-        { key: 'p250', label: '+2.5σ', color: '#7c3aed', k:  2.5  },
-        { key: 'p200', label: '+2σ',   color: '#a78bfa', k:  2.0  },
-        { key: 'p150', label: '+1.5σ', color: '#c084fc', k:  1.5  },
-        { key: 'p100', label: '+1σ',   color: '#e879f9', k:  1.0  },
-        { key: 'p050', label: '+0.5σ', color: '#f472b6', k:  0.5  },
-        { key: 'mean', label: 'Mean',  color: '#0ea5e9', k:  0,    width: 2 },
-        { key: 'm025', label: '-0.25σ',color: '#fbbf24', k: -0.25 },
-        { key: 'm050', label: '-0.5σ', color: '#f59e0b', k: -0.5  },
-        { key: 'm075', label: '-0.75σ',color: '#f97316', k: -0.75 },
-        { key: 'm100', label: '-1σ',   color: '#ef4444', k: -1.0  },
+        { key: 'p250', label: '+2.5σ', color: '#7c2d12', k:  2.5  }, // S10 — dark red
+        { key: 'p200', label: '+2σ',   color: '#78350f', k:  2.0  }, // S9  — dark amber
+        { key: 'p150', label: '+1.5σ', color: '#92400e', k:  1.5  }, // S8  — amber
+        { key: 'p100', label: '+1σ',   color: '#b45309', k:  1.0  }, // S7  — mid amber
+        { key: 'p050', label: '+0.5σ', color: '#d97706', k:  0.5  }, // S6  — light amber
+        { key: 'mean', label: 'Mean',  color: '#4b5563', k:  0,    width: 2 }, // mid grey
+        { key: 'm025', label: '-0.25σ',color: '#93c5fd', k: -0.25 }, // B5  — palest blue
+        { key: 'm050', label: '-0.5σ', color: '#60a5fa', k: -0.5  }, // B4
+        { key: 'm075', label: '-0.75σ',color: '#3b82f6', k: -0.75 }, // B3
+        { key: 'm100', label: '-1σ',   color: '#2563eb', k: -1.0  }, // B2  — darker blue
       ];
       const PRICE_COLOR = '#f8fafc'; // bright white — visible on dark theme
 
