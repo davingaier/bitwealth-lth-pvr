@@ -2803,7 +2803,9 @@
         if (cache[source]) { setMeta(cache[source], source); renderChart(cache[source]); applyActivePreset(); return; }
         if (!window.supabaseClient) { metaEl.textContent = 'Supabase client not ready.'; return; }
         try {
-          const { data, error } = await window.supabaseClient.rpc('get_bands_chart_series', { p_source: source });
+          const { data, error } = await window.supabaseClient
+            .schema('lth_pvr')
+            .rpc('get_bands_chart_series', { p_source: source });
           if (error) { metaEl.textContent = `Error: ${error.message}`; return; }
           cache[source] = data;
           setMeta(data, source);
