@@ -181,34 +181,66 @@
     <section class="features-section">
         <div class="container">
             <div class="feature-card" style="padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
-                <h2 style="margin-bottom: 24px;">Historical Performance (2020-2025)</h2>
-                <p class="section-subtitle" style="margin-bottom: 48px;">See how LTH PVR outperformed Standard DCA over 6 years</p>
+                <h2 style="margin-bottom: 24px;">Historical Performance (2020-2026)</h2>
+                <p class="section-subtitle" style="margin-bottom: 48px;">How LTH PVR compares to Standard DCA and HODL across 6.5 years of live Bitcoin history</p>
                 
                 <div class="assumptions-box">
                 <h4>📊 Back-Test Parameters</h4>
                 <ul>
                     <li>• <strong>Start Date:</strong> 2020-01-01</li>
-                    <li>• <strong>End Date:</strong> 2025-12-31</li>
+                    <li>• <strong>End Date:</strong> 2026-05-18</li>
                     <li>• <strong>Upfront Investment:</strong> $10,000</li>
                     <li>• <strong>Monthly Contribution:</strong> $1,000</li>
+                    <li>• <strong>Band source:</strong> RB (Research Bitcoin on-chain LTH PVR)</li>
                     <li>• <strong>Exchange:</strong> VALR (BTC/USDT)</li>
                     <li>• <strong>Performance Fee:</strong> 10% (high-water mark)</li>
                     <li>• <strong>Platform Fee:</strong> 0.75% on contributions</li>
                 </ul>
+                <p style="margin-top: 16px; color: var(--text-tertiary); font-size: 14px; line-height: 1.6;">
+                    The <strong>HODL benchmark</strong> represents an investor who commits the <em>entire</em>
+                    six-and-a-half-year stake (upfront + every scheduled monthly contribution — 
+                    a total of $76,000 in cash) on day one and never trades again. Very few real-world
+                    investors can deploy that much capital up front — it is included purely as a theoretical
+                    upper bound for a perfectly-timed buy-and-hold strategy.
+                </p>
             </div>
             
             <div class="feature-card" style="margin-bottom: 32px;">
-                <h3>ROI % Comparison: LTH PVR vs Standard DCA</h3>
+                <h3>ROI % Comparison: LTH PVR vs Standard DCA vs HODL</h3>
                 <div class="chart-container">
                     <canvas id="roiChart"></canvas>
                 </div>
             </div>
             
             <div class="feature-card" style="margin-bottom: 32px;">
-                <h3>Portfolio Value (NAV) Comparison: LTH PVR vs Standard DCA</h3>
+                <h3>Portfolio Value (NAV) Comparison: LTH PVR vs Standard DCA vs HODL</h3>
                 <div class="chart-container">
                     <canvas id="navChart"></canvas>
                 </div>
+            </div>
+            
+            <div class="feature-card" style="margin-bottom: 32px; padding: 32px;">
+                <h3 style="margin-bottom: 16px;">What the numbers say</h3>
+                <p style="line-height: 1.7; color: var(--text-secondary);">
+                    Over the full 6.5-year window, LTH PVR turned $76,000 of dollar-cost-averaged contributions
+                    into roughly <strong>$742,600</strong> — versus <strong>$316,000</strong> for vanilla
+                    monthly DCA and <strong>$896,400</strong> for the theoretical HODL benchmark (which
+                    requires committing the entire stake up front).
+                </p>
+                <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                    HODL produces the highest absolute number in this particular window, but it does so only because
+                    BTC happened to rally from sub-$10k to $100k+ over the period and the investor was lucky enough
+                    to deploy <em>$76,000 of capital they didn't have yet</em>. Along the way HODL also endured
+                    multiple drawdowns of <strong>70&ndash;83%</strong> — levels at which most investors
+                    capitulate. LTH PVR delivered the best <strong>risk-adjusted</strong> result every
+                    time: the highest Sharpe ratio and the smallest drawdowns, while still meaningfully
+                    out-performing standard DCA in every period we tested (1-year through 10-year).
+                </p>
+                <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                    In short: LTH PVR is the strategy you can actually live with — month after month, drawdown after
+                    drawdown — because it accumulates patiently when on-chain data says BTC is cheap and trims
+                    exposure when it says BTC is expensive.
+                </p>
             </div>
             
             <p style="text-align: center; color: var(--text-tertiary); margin-top: 40px;">
@@ -337,17 +369,22 @@
 
     <script src="js/main.js"></script>
     <script>
-        // Real back-test data: $10K upfront + $1K monthly, 2020-2025
-        // Source: lth_pvr_bt.bt_results_daily (LTH PVR) and bt_std_dca_balances (Standard DCA)
+        // Real back-test data: $10K upfront + $1K monthly, 2020-01-01 → 2026-05-18, RB band source.
+        // Source: bt_run afdbe312-cd29-40fd-92d2-9482571f1b90 — quarterly snapshots from
+        // lth_pvr_bt.bt_results_daily (LTH PVR), bt_std_dca_balances (Std DCA), bt_hodl_balances (HODL).
         const historicalData = {
-            labels: ['2020-01', '2020-04', '2020-07', '2020-10', '2021-01', '2021-04', '2021-07', '2021-10', '2022-01', '2022-04', '2022-07', '2022-10', '2023-01', '2023-04', '2023-07', '2023-10', '2024-01', '2024-04', '2024-07', '2024-10', '2025-01', '2025-04', '2025-07', '2025-10', '2025-12'],
+            labels: ['2020-01','2020-04','2020-07','2020-10','2021-01','2021-04','2021-07','2021-10','2022-01','2022-04','2022-07','2022-10','2023-01','2023-04','2023-07','2023-10','2024-01','2024-04','2024-07','2024-10','2025-01','2025-04','2025-07','2025-10','2026-01','2026-05'],
             lthPvr: {
-                roi: [-0.9, -16.4, 9.5, 18.3, 176.2, 332.3, 291.1, 266.4, 242.6, 222.6, 205.5, 181.8, 132.1, 268.1, 275.6, 230.8, 383.7, 586.3, 506.1, 473.2, 729.4, 678.1, 807.2, 824.4, 789.8],
-                nav: [10896, 11710, 18617, 23663, 63535, 112409, 113412, 117259, 119912, 122584, 125241, 123981, 109078, 184070, 199082, 185258, 285408, 425501, 393952, 389745, 588854, 575764, 698556, 739530, 729614]
+                roi: [-20.18, 9.13, 21.14, 194.81, 359.14, 309.90, 281.82, 256.64, 234.95, 216.48, 193.22, 138.20, 287.14, 289.07, 228.91, 383.18, 627.01, 520.47, 512.61, 745.85, 675.95, 840.59, 848.18, 804.15, 767.66, 753.63],
+                nav: [10377, 17460, 23017, 64859, 114785, 114772, 118365, 121257, 123932, 126593, 126083, 109571, 189700, 202316, 180902, 280246, 443475, 397100, 410452, 592097, 566447, 714848, 749063, 741400, 737509, 742660]
             },
             stdDca: {
-                roi: [-0.3, -12.5, 17.6, 28.9, 230.5, 500.5, 215.6, 320.2, 288.2, 255.4, 42.2, 39.2, 18.1, 97.1, 105.4, 83.5, 180.9, 327.4, 272.4, 248.8, 423.4, 356.7, 448.8, 496.7, 325.8],
-                nav: [10971, 12247, 19999, 25779, 76005, 156136, 91536, 134472, 135880, 135067, 58310, 61264, 55498, 98533, 108847, 102736, 165720, 264997, 242028, 237174, 371606, 337959, 422588, 477325, 349117]
+                roi: [-16.24, 17.64, 32.41, 236.19, 520.92, 237.60, 292.52, 284.41, 256.44, 48.17, 40.99, 17.93, 99.16, 106.75, 78.45, 171.74, 342.91, 275.64, 267.03, 423.78, 347.39, 462.41, 479.66, 331.67, 223.34, 263.17],
+                nav: [10889, 18822, 25157, 73961, 155230, 94529, 121682, 130699, 131882, 59267, 60626, 54246, 97588, 107511, 98149, 157607, 270176, 240410, 245907, 366645, 326596, 427435, 457928, 353968, 274842, 315959]
+            },
+            hodl: {
+                roi: [-13.93, 22.67, 44.56, 288.45, 689.36, 369.76, 488.31, 519.73, 510.42, 166.86, 160.37, 121.67, 281.98, 308.00, 261.74, 466.92, 856.02, 740.45, 748.93, 1152.52, 1006.66, 1336.92, 1428.94, 1073.35, 802.28, 930.34],
+                nav: [74884, 106722, 125763, 337949, 686746, 408692, 511833, 539166, 531067, 232166, 226522, 192854, 332326, 354957, 314717, 493223, 831734, 731195, 738569, 1089691, 962797, 1250121, 1330174, 1020817, 784983, 896396]
             }
         };
         
@@ -379,6 +416,18 @@
                         pointHoverRadius: 5,
                         tension: 0.4,
                         fill: true
+                    },
+                    {
+                        label: 'HODL (lump-sum day 1)',
+                        data: historicalData.hodl.roi,
+                        borderColor: '#A855F7',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        tension: 0.4,
+                        fill: false
                     }
                 ]
             },
@@ -488,6 +537,18 @@
                         pointHoverRadius: 5,
                         tension: 0.4,
                         fill: true
+                    },
+                    {
+                        label: 'HODL (lump-sum day 1)',
+                        data: historicalData.hodl.nav,
+                        borderColor: '#A855F7',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        tension: 0.4,
+                        fill: false
                     }
                 ]
             },

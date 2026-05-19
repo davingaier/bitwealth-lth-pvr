@@ -259,6 +259,27 @@ Deno.serve(async (req) => {
         metrics: summarise(baselineResult),
       },
 
+      // HODL benchmark (config-independent: same lump-sum buy on day 1 regardless of strategy config).
+      // Exposed once at top level so the Admin UI Optimizer can render it alongside every variation.
+      hodl_benchmark: {
+        final_nav_usd: (baselineResult as any).hodl_final_nav_usd,
+        final_roi_percent: (baselineResult as any).hodl_final_roi_percent,
+        final_cagr_percent: (baselineResult as any).hodl_final_cagr_percent,
+        max_drawdown_percent: (baselineResult as any).hodl_max_drawdown_percent,
+        sharpe_ratio: (baselineResult as any).hodl_sharpe_ratio,
+        total_contrib_gross_usdt: (baselineResult as any).hodl_total_contrib_gross_usdt,
+      },
+
+      // Std DCA benchmark (also config-independent), exposed for parity with HODL.
+      std_dca_benchmark: {
+        final_nav_usd: (baselineResult as any).std_dca_final_nav_usd,
+        final_roi_percent: (baselineResult as any).std_dca_final_roi_percent,
+        final_cagr_percent: (baselineResult as any).std_dca_final_cagr_percent,
+        max_drawdown_percent: (baselineResult as any).std_dca_max_drawdown_percent,
+        sharpe_ratio: (baselineResult as any).std_dca_sharpe_ratio,
+        total_contrib_gross_usdt: (baselineResult as any).std_dca_total_contrib_gross_usdt,
+      },
+
       // Best result found
       best: {
         rank: 1,

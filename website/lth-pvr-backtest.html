@@ -479,6 +479,38 @@
                                 </div>
                                 <small style="display: block; margin-top: 8px; opacity: 0.7; font-size: 11px;">Standard DCA benchmark - exchange fees only</small>
                             </div>
+
+                            <div class="summary-card">
+                                <h4>💎 HODL</h4>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Final NAV</span>
+                                    <span class="metric-value" id="hodlFinalNav">$0</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total ROI</span>
+                                    <span class="metric-value" id="hodlROI">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">CAGR</span>
+                                    <span class="metric-value" id="hodlCAGR">0%</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label">Total Contributions</span>
+                                    <span class="metric-value" id="hodlContrib">$0</span>
+                                </div>
+                                <div class="summary-metric" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                    <span class="metric-label" style="font-size: 14px;">💰 Fees Paid</span>
+                                </div>
+                                <div class="summary-metric">
+                                    <span class="metric-label" style="font-size: 12px; opacity: 0.8;">Exchange Fees</span>
+                                    <span class="metric-value" style="font-size: 14px;" id="hodlExchangeFee">$0</span>
+                                </div>
+                                <div class="summary-metric" style="opacity: 0.5;">
+                                    <span class="metric-label" style="font-size: 12px;">BitWealth Fees</span>
+                                    <span class="metric-value" style="font-size: 14px;">N/A</span>
+                                </div>
+                                <small style="display: block; margin-top: 8px; opacity: 0.7; font-size: 11px;">HODL benchmark - lump sum on day 1, exchange fees only</small>
+                            </div>
                         </div>
                         
                         <!-- Charts -->
@@ -741,10 +773,12 @@
             // Update summary metrics with null checking
             const lth = data.lth_pvr_summary || {};
             const std = data.std_dca_summary || {};
+            const hodl = data.hodl_summary || {};
             
             // Debug logging
             console.log('LTH PVR Summary:', lth);
             console.log('Standard DCA Summary:', std);
+            console.log('HODL Summary:', hodl);
             console.log('Daily Results Count:', data.daily_results?.length);
             
             document.getElementById('lthFinalNav').textContent = '$' + formatNumber(lth.final_nav || 0);
@@ -769,19 +803,30 @@
             const stdExchangeFeeUSD = (std.total_exchange_fees_usdt || 0) + ((std.total_exchange_fees_btc || 0) * (data.daily_results?.[data.daily_results.length - 1]?.std_dca_nav || 0) / (std.final_nav || 1));
             document.getElementById('stdExchangeFee').textContent = '$' + formatNumber(stdExchangeFeeUSD);
             
+            // HODL summary (lump-sum buy on day 1, exchange fees only, no BitWealth fees)
+            document.getElementById('hodlFinalNav').textContent = '$' + formatNumber(hodl.final_nav || 0);
+            const hodlRoiValue = (hodl.total_roi || 0);
+            document.getElementById('hodlROI').textContent = (hodlRoiValue >= 0 ? '+' : '') + formatPercent(hodlRoiValue) + '%';
+            document.getElementById('hodlCAGR').textContent = formatPercent(hodl.cagr || 0) + '%';
+            document.getElementById('hodlContrib').textContent = '$' + formatNumber(hodl.contrib_gross || 0);
+            const hodlExchangeFeeUSD = (hodl.total_exchange_fees_usdt || 0) + ((hodl.total_exchange_fees_btc || 0) * (data.daily_results?.[data.daily_results.length - 1]?.hodl_nav || 0) / (hodl.final_nav || 1));
+            document.getElementById('hodlExchangeFee').textContent = '$' + formatNumber(hodlExchangeFeeUSD);
+            
             // Prepare chart data with null safety
             const labels = (data.daily_results || []).map(r => r.date);
             const lthRoi = (data.daily_results || []).map(r => r.lth_pvr_roi || 0);
             const stdRoi = (data.daily_results || []).map(r => r.std_dca_roi || 0);
+            const hodlRoi = (data.daily_results || []).map(r => r.hodl_roi || 0);
             const lthNav = (data.daily_results || []).map(r => r.lth_pvr_nav || 0);
             const stdNav = (data.daily_results || []).map(r => r.std_dca_nav || 0);
+            const hodlNav = (data.daily_results || []).map(r => r.hodl_nav || 0);
             
             // Draw charts
-            drawROIChart(labels, lthRoi, stdRoi);
-            drawNAVChart(labels, lthNav, stdNav);
+            drawROIChart(labels, lthRoi, stdRoi, hodlRoi);
+            drawNAVChart(labels, lthNav, stdNav, hodlNav);
         }
         
-        function drawROIChart(labels, lthData, stdData) {
+        function drawROIChart(labels, lthData, stdData, hodlData) {
             const ctx = document.getElementById('roiChart').getContext('2d');
             
             if (roiChart) roiChart.destroy();
@@ -810,6 +855,17 @@
                             tension: 0.4,
                             fill: true,
                             pointRadius: 0
+                        },
+                        {
+                            label: 'HODL',
+                            data: hodlData || [],
+                            borderColor: '#A855F7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.08)',
+                            borderWidth: 0.5,
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0,
+                            borderDash: [4, 3]
                         }
                     ]
                 },
@@ -839,7 +895,7 @@
             });
         }
         
-        function drawNAVChart(labels, lthData, stdData) {
+        function drawNAVChart(labels, lthData, stdData, hodlData) {
             const ctx = document.getElementById('navChart').getContext('2d');
             
             if (navChart) navChart.destroy();
@@ -868,6 +924,17 @@
                             tension: 0.4,
                             fill: true,
                             pointRadius: 0
+                        },
+                        {
+                            label: 'HODL',
+                            data: hodlData || [],
+                            borderColor: '#A855F7',
+                            backgroundColor: 'rgba(168, 85, 247, 0.08)',
+                            borderWidth: 0.5,
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0,
+                            borderDash: [4, 3]
                         }
                     ]
                 },

@@ -1923,8 +1923,8 @@
             <div>
               <label for="simBandSource" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Band source:</label>
               <select id="simBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
-                <option value="ci" selected>CI – CryptoQuant (current)</option>
-                <option value="rb">RB – Research Bitcoin (parallel)</option>
+                <option value="rb" selected>RB – Research Bitcoin (live default)</option>
+                <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
               </select>
             </div>
           </div>
@@ -1984,8 +1984,8 @@
               <div style="grid-column:1/-1;">
                 <label for="optBandSource" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Band source:</label>
                 <select id="optBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
-                  <option value="ci" selected>CI – CryptoQuant (current)</option>
-                  <option value="rb">RB – Research Bitcoin (parallel)</option>
+                  <option value="rb" selected>RB – Research Bitcoin (live default)</option>
+                  <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
                 </select>
               </div>
             </div>
@@ -4486,9 +4486,9 @@
 
           <!-- Band source (CI vs RB on-chain bands) -->
           <label for="btBandSource"><strong>Band source:</strong></label>
-          <select id="btBandSource" class="band-source-select" title="On-chain band source: CI (CryptoQuant, current) or RB (Research Bitcoin, parallel)">
-            <option value="ci" selected>CI – CryptoQuant (current)</option>
-            <option value="rb">RB – Research Bitcoin (parallel)</option>
+          <select id="btBandSource" class="band-source-select" title="On-chain band source: RB (Research Bitcoin, live default) or CI (CryptoQuant, frozen historical)">
+            <option value="rb" selected>RB – Research Bitcoin (live default)</option>
+            <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
           </select>
 
           <!-- Actions / messages -->
@@ -5581,6 +5581,7 @@
     let btCurrentRunId = null;      // latest bt_run_id from ef_bt_execute
     let btAdvData = null;           // LTH PVR results: lth_pvr_bt.bt_results_daily
     let btStdData = null;           // Standard DCA results: lth_pvr_bt.bt_std_dca_balances
+    let btHodlData = null;          // HODL benchmark results: lth_pvr_bt.bt_hodl_balances
     let btCurrentReportType = 'holdings';
     let btChartInstance = null;
 
@@ -5705,11 +5706,11 @@
       } else if (btCurrentReportType === 'nav_positions'){
         renderBTNavPositionsChart(btAdvData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'comp_value'){
-        renderBTCompPortfolioValueChart(btAdvData || [], btStdData || [], btCurrentRunId);
+        renderBTCompPortfolioValueChart(btAdvData || [], btStdData || [], btHodlData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'comp_roi'){
-        renderBTCompROIChart(btAdvData || [], btStdData || [], btCurrentRunId);
+        renderBTCompROIChart(btAdvData || [], btStdData || [], btHodlData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'comp_agr'){
-        renderBTCompAGRChart(btAdvData || [], btStdData || [], btCurrentRunId);
+        renderBTCompAGRChart(btAdvData || [], btStdData || [], btHodlData || [], btCurrentRunId);
       }
     }
 
@@ -5791,11 +5792,42 @@
       return { data: all, error: null };
     }
 
+    // HODL benchmark loader — mirrors loadBtStdDcaResults but reads lth_pvr_bt.bt_hodl_balances.
+    async function loadBtHodlResults(btRunId){
+      if (!supabaseClient) return { data: [], error: { message: 'Supabase not available' } };
+      if (!btRunId)        return { data: [], error: null };
+
+      const btDb = supabaseClient.schema('lth_pvr_bt');
+      const pageSize = 1000;
+      let lastDate = null;
+      let all = [];
+
+      while (true) {
+        let q = btDb
+          .from('bt_hodl_balances')
+          .select('*')
+          .eq('bt_run_id', btRunId)
+          .order('trade_date', { ascending: true })
+          .limit(pageSize);
+        if (lastDate) q = q.gt('trade_date', lastDate);
+
+        const res = await q;
+        if (res.error) return { data: all, error: res.error };
+        if (!res.data || !res.data.length) break;
+
+        all = all.concat(res.data);
+        lastDate = res.data[res.data.length - 1].trade_date;
+        if (res.data.length < pageSize) break;
+      }
+      return { data: all, error: null };
+    }
+
     // Single entry-point: load data for bt_run_id and refresh chart + table
     async function btLoadAndRenderFromRun(btRunId){
       btCurrentRunId = btRunId;
       btAdvData = null;
       btStdData = null;
+      btHodlData = null;
 
       btDestroyChart();
       btSetCanvasVisible(false);
@@ -5812,9 +5844,10 @@
       clearInlineError(errId);
 
       try {
-        const [lthRes, stdRes] = await Promise.all([
+        const [lthRes, stdRes, hodlRes] = await Promise.all([
           loadBtLthPvrResults(btRunId),
-          loadBtStdDcaResults(btRunId)
+          loadBtStdDcaResults(btRunId),
+          loadBtHodlResults(btRunId)
         ]);
 
         if (lthRes.error) {
@@ -5823,9 +5856,14 @@
         if (stdRes.error) {
           showInlineError(errId, stdRes.error.message || 'Could not load Standard DCA back-test results.');
         }
+        if (hodlRes.error) {
+          // HODL is informational — don't block the UI if it's missing on legacy runs.
+          console.warn('Could not load HODL benchmark results:', hodlRes.error);
+        }
 
-        btAdvData = lthRes.data || [];
-        btStdData = stdRes.data || [];
+        btAdvData  = lthRes.data  || [];
+        btStdData  = stdRes.data  || [];
+        btHodlData = hodlRes.data || [];
 
       } catch (e) {
         console.error('Error loading back-test results:', e);
@@ -5839,6 +5877,7 @@
       window.btCurrentRunId = btRunId;
       window.btAdvData = btAdvData;
       window.btStdData = btStdData;
+      window.btHodlData = btHodlData;
     }
 
     async function loadBtAdvTransactions(customerId){
@@ -6076,7 +6115,7 @@
       btSetResetZoomEnabled(false); btClearChartFooter(); btShowRange(false);
       btCurrentCustomerId = e.target.value;
       if(!btCurrentCustomerId){
-        btCurrentFirst=''; btCurrentLast=''; btAdvData=null; btStdData=null; renderBtReportForCurrentState(); return;
+        btCurrentFirst=''; btCurrentLast=''; btAdvData=null; btStdData=null; btHodlData=null; renderBtReportForCurrentState(); return;
       }
       const found = customersCache.find(c=>String(c.customer_id)===String(btCurrentCustomerId));
       btCurrentFirst = found?.first_names || ''; btCurrentLast = found?.last_name || '';
@@ -6407,7 +6446,7 @@
     }
 
     /* Comparison – Portfolio Value (LTH PVR vs Standard DCA) */
-    function renderBTCompPortfolioValueChart(lthRows, stdRows, btRunId) {
+    function renderBTCompPortfolioValueChart(lthRows, stdRows, hodlRows, btRunId) {
       if (!hasChart) {
         showInlineError('btReportsError', 'Chart.js is not available.');
         return;
@@ -6418,10 +6457,11 @@
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
 
-      // Collect all trade dates from both series
+      // Collect all trade dates from all three series
       const dateSet = new Set();
-      (lthRows || []).forEach(r => dateSet.add(normalizeDate(r.trade_date)));
-      (stdRows || []).forEach(r => dateSet.add(normalizeDate(r.trade_date)));
+      (lthRows  || []).forEach(r => dateSet.add(normalizeDate(r.trade_date)));
+      (stdRows  || []).forEach(r => dateSet.add(normalizeDate(r.trade_date)));
+      (hodlRows || []).forEach(r => dateSet.add(normalizeDate(r.trade_date)));
       const labels = Array.from(dateSet).sort();
 
       if (!labels.length) {
@@ -6448,8 +6488,16 @@
         if (v != null) stdMap[d] = v;
       });
 
-      const lthSeries = labels.map(d => (d in lthMap ? lthMap[d] : null));
-      const stdSeries = labels.map(d => (d in stdMap ? stdMap[d] : null));
+      const hodlMap = Object.create(null);
+      (hodlRows || []).forEach(r => {
+        const d = normalizeDate(r.trade_date);
+        const v = numOrNull(r.nav_usd);
+        if (v != null) hodlMap[d] = v;
+      });
+
+      const lthSeries  = labels.map(d => (d in lthMap  ? lthMap[d]  : null));
+      const stdSeries  = labels.map(d => (d in stdMap  ? stdMap[d]  : null));
+      const hodlSeries = labels.map(d => (d in hodlMap ? hodlMap[d] : null));
 
       // ✅ Formatter that was missing
       const usdFmt = new Intl.NumberFormat('en-US', {
@@ -6502,6 +6550,18 @@
               pointHoverRadius: 3,
               tension: 0.22,
               borderWidth: 2
+            },
+            {
+              label: 'HODL NAV (lump-sum day 1)',
+              data: hodlSeries,
+              borderColor: '#A855F7',
+              backgroundColor: 'transparent',
+              yAxisID: 'y',
+              pointRadius: 0,
+              pointHoverRadius: 3,
+              tension: 0.22,
+              borderWidth: 1.5,
+              borderDash: [4, 3]
             }
           ]
         },
@@ -6550,7 +6610,7 @@
     }
 
     /* Comparison – ROI (BT) */
-    function renderBTCompROIChart(advRows,stdRows,btRunId){
+    function renderBTCompROIChart(advRows,stdRows,hodlRows,btRunId){
       if (!hasChart){
         showInlineError('btReportsError','Chart.js is not available.');
         return;
@@ -6561,17 +6621,21 @@
       const ctx    = canvas.getContext('2d');
 
       const setDates = new Set();
-      (advRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
-      (stdRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (advRows  || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (stdRows  || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (hodlRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
       const labels = Array.from(setDates).sort();
 
       const lthMap = new Map();
       const stdMap = new Map();
-      (advRows || []).forEach(r => lthMap.set(normalizeDate(r.trade_date), numOrNull(r.total_roi_percent)));
-      (stdRows || []).forEach(r => stdMap.set(normalizeDate(r.trade_date), numOrNull(r.total_roi_percent)));
+      const hodlMap = new Map();
+      (advRows  || []).forEach(r => lthMap.set(normalizeDate(r.trade_date),  numOrNull(r.total_roi_percent)));
+      (stdRows  || []).forEach(r => stdMap.set(normalizeDate(r.trade_date),  numOrNull(r.total_roi_percent)));
+      (hodlRows || []).forEach(r => hodlMap.set(normalizeDate(r.trade_date), numOrNull(r.total_roi_percent)));
 
-      const sLth = labels.map(d => lthMap.has(d) ? lthMap.get(d) : null);
-      const sStd = labels.map(d => stdMap.has(d) ? stdMap.get(d) : null);
+      const sLth  = labels.map(d => lthMap.has(d)  ? lthMap.get(d)  : null);
+      const sStd  = labels.map(d => stdMap.has(d)  ? stdMap.get(d)  : null);
+      const sHodl = labels.map(d => hodlMap.has(d) ? hodlMap.get(d) : null);
 
       btSetReportTitle(btRunId);
 
@@ -6584,7 +6648,8 @@
           labels,
           datasets:[
             { label:'LTH PVR DCA ROI', data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
-            { label:'Standard DCA ROI', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 }
+            { label:'Standard DCA ROI', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
+            { label:'HODL ROI (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] }
           ]
         },
         options:{
@@ -6622,7 +6687,7 @@
     }
 
     /* Comparison – CAGR (BT) */
-    function renderBTCompAGRChart(advRows,stdRows,btRunId){
+    function renderBTCompAGRChart(advRows,stdRows,hodlRows,btRunId){
       if (!hasChart){
         showInlineError('btReportsError','Chart.js is not available.');
         return;
@@ -6633,17 +6698,21 @@
       const ctx    = canvas.getContext('2d');
 
       const setDates = new Set();
-      (advRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
-      (stdRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (advRows  || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (stdRows  || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
+      (hodlRows || []).forEach(r => setDates.add(normalizeDate(r.trade_date)));
       const labels = Array.from(setDates).sort();
 
       const lthMap = new Map();
       const stdMap = new Map();
-      (advRows || []).forEach(r => lthMap.set(normalizeDate(r.trade_date), numOrNull(r.cagr_percent)));
-      (stdRows || []).forEach(r => stdMap.set(normalizeDate(r.trade_date), numOrNull(r.cagr_percent)));
+      const hodlMap = new Map();
+      (advRows  || []).forEach(r => lthMap.set(normalizeDate(r.trade_date),  numOrNull(r.cagr_percent)));
+      (stdRows  || []).forEach(r => stdMap.set(normalizeDate(r.trade_date),  numOrNull(r.cagr_percent)));
+      (hodlRows || []).forEach(r => hodlMap.set(normalizeDate(r.trade_date), numOrNull(r.cagr_percent)));
 
-      const sLth = labels.map(d => lthMap.has(d) ? lthMap.get(d) : null);
-      const sStd = labels.map(d => stdMap.has(d) ? stdMap.get(d) : null);
+      const sLth  = labels.map(d => lthMap.has(d)  ? lthMap.get(d)  : null);
+      const sStd  = labels.map(d => stdMap.has(d)  ? stdMap.get(d)  : null);
+      const sHodl = labels.map(d => hodlMap.has(d) ? hodlMap.get(d) : null);
 
       btSetReportTitle(btRunId);
 
@@ -6656,7 +6725,8 @@
           labels,
           datasets:[
             { label:'LTH PVR DCA CAGR', data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
-            { label:'Standard DCA CAGR', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 }
+            { label:'Standard DCA CAGR', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
+            { label:'HODL CAGR (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] }
           ]
         },
         options:{
@@ -7887,6 +7957,7 @@
               <th>Year</th>
               <th>LTH PVR DCA Portfolio Value</th>
               <th>Standard DCA Portfolio Value</th>
+              <th>HODL Portfolio Value</th>
             </tr>
           `;
           const body = rows.map(r => `
@@ -7894,6 +7965,7 @@
               <td>${r.trading_year}</td>
               <td>${r.nav_usd == null ? '–' : usdFmt.format(r.nav_usd)}</td>
               <td>${r.std_nav_usd == null ? '–' : usdFmt.format(r.std_nav_usd)}</td>
+              <td>${r.hodl_nav_usd == null ? '–' : usdFmt.format(r.hodl_nav_usd)}</td>
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -7905,6 +7977,7 @@
               <th>Year</th>
               <th>LTH PVR DCA Cumulative ROI %</th>
               <th>Standard DCA Cumulative ROI %</th>
+              <th>HODL Cumulative ROI %</th>
             </tr>
           `;
           const body = rows.map(r => `
@@ -7912,6 +7985,7 @@
               <td>${r.trading_year}</td>
               <td>${pct(r.roi_percent)}</td>
               <td>${pct(r.std_roi_percent)}</td>
+              <td>${pct(r.hodl_roi_percent)}</td>
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -7923,6 +7997,7 @@
               <th>Year</th>
               <th>LTH PVR DCA Annualised CAGR %</th>
               <th>Standard DCA Annualised CAGR %</th>
+              <th>HODL Annualised CAGR %</th>
             </tr>
           `;
           const body = rows.map(r => `
@@ -7930,6 +8005,7 @@
               <td>${r.trading_year}</td>
               <td>${pct(r.cagr_percent)}</td>
               <td>${pct(r.std_cagr_percent)}</td>
+              <td>${pct(r.hodl_cagr_percent)}</td>
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -13727,7 +13803,7 @@ Momentum:
 
         // Call simulator edge function
         const simBandSourceEl = document.getElementById('simBandSource');
-        const simBandSource = (simBandSourceEl?.value === 'rb') ? 'rb' : 'ci';
+        const simBandSource = (simBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
           method: 'POST',
           headers: {
@@ -13889,6 +13965,27 @@ Momentum:
             </div>
           </div>
         </div>
+        <div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 .75rem;display:flex;align-items:center;gap:.5rem;"><span>📊</span> Benchmark Comparison <span style="font-weight:400;font-size:.85rem;color:var(--muted);">(same start date / cash schedule)</span></h4>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;font-size:.9rem;">
+            <div style="background:#fff;border-radius:6px;padding:.75rem;">
+              <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;">This Variation (LTH PVR)</div>
+              <div style="font-weight:600;font-size:1.1rem;margin-top:.25rem;">$${(result.final_nav_usd||0).toLocaleString()}</div>
+              <div style="color:var(--muted);font-size:.8rem;">ROI ${(result.final_roi_percent||0).toFixed(2)}% · CAGR ${(result.final_cagr_percent||0).toFixed(2)}% · Sharpe ${(result.sharpe_ratio||0).toFixed(2)}</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:.75rem;">
+              <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;">Standard DCA</div>
+              <div style="font-weight:600;font-size:1.1rem;margin-top:.25rem;">$${(result.std_dca_final_nav_usd||0).toLocaleString()}</div>
+              <div style="color:var(--muted);font-size:.8rem;">ROI ${(result.std_dca_final_roi_percent||0).toFixed(2)}% · CAGR ${(result.std_dca_final_cagr_percent||0).toFixed(2)}% · Sharpe ${(result.std_dca_sharpe_ratio||0).toFixed(2)}</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:.75rem;">
+              <div style="font-size:.7rem;text-transform:uppercase;color:#7c3aed;letter-spacing:.05em;">HODL (lump-sum day 1)</div>
+              <div style="font-weight:600;font-size:1.1rem;margin-top:.25rem;color:#6b21a8;">$${(result.hodl_final_nav_usd||0).toLocaleString()}</div>
+              <div style="color:var(--muted);font-size:.8rem;">ROI ${(result.hodl_final_roi_percent||0).toFixed(2)}% · CAGR ${(result.hodl_final_cagr_percent||0).toFixed(2)}% · Sharpe ${(result.hodl_sharpe_ratio||0).toFixed(2)}</div>
+            </div>
+          </div>
+          <p style="margin:.75rem 0 0;font-size:.75rem;color:var(--muted);">HODL requires committing the entire scheduled stake ($${(result.hodl_total_contrib_gross_usdt||0).toLocaleString()}) on day 1 — included as a theoretical perfectly-timed upper bound.</p>
+        </div>
         <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
           <h4 style="margin:0 0 1rem;">NAV Over Time</h4>
           <canvas id="simResultsChart" style="max-height:400px;"></canvas>
@@ -13923,6 +14020,15 @@ Momentum:
       const navData = dailyResults.map(d => d.nav_usd);
       const investedData = dailyResults.map(d => d.contrib_net_usdt_cum);
 
+      // Benchmarks: align Std DCA and HODL daily series by trade_date.
+      const result = currentSimulationResult || {};
+      const stdMap = new Map();
+      (result.std_dca_daily || []).forEach(r => stdMap.set(r.trade_date, r.nav_usd));
+      const hodlMap = new Map();
+      (result.hodl_daily || []).forEach(r => hodlMap.set(r.trade_date, r.nav_usd));
+      const stdSeries  = labels.map(d => stdMap.has(d)  ? stdMap.get(d)  : null);
+      const hodlSeries = labels.map(d => hodlMap.has(d) ? hodlMap.get(d) : null);
+
       // Create chart
       window.simResultsChartInstance = new Chart(ctx, {
         type: 'line',
@@ -13930,11 +14036,30 @@ Momentum:
           labels: labels,
           datasets: [
             {
-              label: 'NAV',
+              label: 'NAV (this variation)',
               data: navData,
               borderColor: '#3b82f6',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
               borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: 'Standard DCA NAV',
+              data: stdSeries,
+              borderColor: '#10b981',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: 'HODL NAV (lump-sum day 1)',
+              data: hodlSeries,
+              borderColor: '#A855F7',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              borderDash: [4, 3],
               pointRadius: 0,
               tension: 0.1
             },
@@ -14199,7 +14324,7 @@ Momentum:
 
         // Build request body
         const optBandSourceEl = document.getElementById('optBandSource');
-        const optBandSource = (optBandSourceEl?.value === 'rb') ? 'rb' : 'ci';
+        const optBandSource = (optBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
         const requestBody = {
           variation_id: variationId,
           start_date: startDate,
@@ -14293,6 +14418,24 @@ Momentum:
             <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.25rem;">Objective</div>
             <div style="font-size:1.5rem;font-weight:600;color:#10b981;text-transform:uppercase;">${results.objective || 'N/A'}</div>
           </div>
+        </div>
+
+        <!-- Benchmarks (config-independent, derived once from baseline) -->
+        <div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:12px;padding:1rem;margin-bottom:1.5rem;">
+          <h4 style="margin:0 0 .75rem;display:flex;align-items:center;gap:.5rem;"><span>📊</span> Benchmarks <span style="font-weight:400;font-size:.85rem;color:var(--muted);">(same cash schedule, identical for every combination)</span></h4>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;font-size:.9rem;">
+            <div style="background:#fff;border-radius:6px;padding:.75rem;">
+              <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;">Standard DCA</div>
+              <div style="font-weight:600;font-size:1.1rem;margin-top:.25rem;">$${(results.std_dca_benchmark?.final_nav_usd||0).toLocaleString()}</div>
+              <div style="color:var(--muted);font-size:.8rem;">ROI ${(results.std_dca_benchmark?.final_roi_percent||0).toFixed(2)}% · CAGR ${(results.std_dca_benchmark?.final_cagr_percent||0).toFixed(2)}% · Sharpe ${(results.std_dca_benchmark?.sharpe_ratio||0).toFixed(2)} · MDD ${(results.std_dca_benchmark?.max_drawdown_percent||0).toFixed(1)}%</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:.75rem;">
+              <div style="font-size:.7rem;text-transform:uppercase;color:#7c3aed;letter-spacing:.05em;">HODL (lump-sum day 1)</div>
+              <div style="font-weight:600;font-size:1.1rem;margin-top:.25rem;color:#6b21a8;">$${(results.hodl_benchmark?.final_nav_usd||0).toLocaleString()}</div>
+              <div style="color:var(--muted);font-size:.8rem;">ROI ${(results.hodl_benchmark?.final_roi_percent||0).toFixed(2)}% · CAGR ${(results.hodl_benchmark?.final_cagr_percent||0).toFixed(2)}% · Sharpe ${(results.hodl_benchmark?.sharpe_ratio||0).toFixed(2)} · MDD ${(results.hodl_benchmark?.max_drawdown_percent||0).toFixed(1)}%</div>
+            </div>
+          </div>
+          <p style="margin:.5rem 0 0;font-size:.75rem;color:var(--muted);">Use these as reference points when judging whether the optimizer's best LTH PVR configuration is truly an improvement — not just on absolute NAV, but on risk-adjusted terms.</p>
         </div>
 
         <!-- Best Configuration -->
