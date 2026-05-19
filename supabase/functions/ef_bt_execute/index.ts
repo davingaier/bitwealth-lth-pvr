@@ -126,11 +126,14 @@ Deno.serve(async (req)=>{
       throw new Error("start_date and end_date required in bt_params");
     }
 
-    // Band source (Day 3 of CI->RB migration). Selects the underlying view:
-    //   - 'ci' (default) -> lth_pvr_bt.v_backtest_prices (sourced from lth_pvr.ci_bands_daily)
-    //   - 'rb'           -> lth_pvr_bt.v_backtest_prices_rb (sourced from lth_pvr.rb_bands_daily)
-    const rawBandSource = body?.band_source ?? params.band_source ?? run.band_source ?? "ci";
-    const bandSource: "ci" | "rb" = rawBandSource === "rb" ? "rb" : "ci";
+    // Band source. Selects the underlying view:
+    //   - 'rb' (default, post-Day 7 of CI->RB migration, 2026-05-19) -> lth_pvr_bt.v_backtest_prices_rb (sourced from lth_pvr.rb_bands_daily)
+    //   - 'ci'                                                       -> lth_pvr_bt.v_backtest_prices    (sourced from lth_pvr.ci_bands_daily, frozen historical reference)
+    // The public website back-tester (website/lth-pvr-backtest.html) does NOT
+    // send a band_source field, so it inherits this default; users see the
+    // same band source that live customers actually trade on.
+    const rawBandSource = body?.band_source ?? params.band_source ?? run.band_source ?? "rb";
+    const bandSource: "ci" | "rb" = rawBandSource === "ci" ? "ci" : "rb";
     const pricesView = bandSource === "rb" ? "v_backtest_prices_rb" : "v_backtest_prices";
     console.info(`ef_bt_execute: bt_run_id=${bt_run_id} band_source=${bandSource} prices_view=${pricesView}`);
     // Interpret fees as basis points (e.g. 8 bps = 0.08%)

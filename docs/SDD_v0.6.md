@@ -3,11 +3,38 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-18 (v0.6.109)
+**Last updated:** 2026-05-19 (v0.6.110)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.110 – CI→RB band-source migration complete (Days 4-7)
+**Date:** 2026-05-19
+**Status:** ✅ DEPLOYED
+
+#### Summary
+Completed the 7-day migration that switches live trading and all customer-facing surfaces from CryptoQuant Inflow (CI) bands to locally-computed Research Bitcoin (RB) bands.
+
+- **Day 4 — Live pipeline flipped to RB.** `ef_generate_decisions` and `ef_post_ledger_and_balances` defaults changed `"ci"` → `"rb"`. `ef_fetch_rb_bands` now fire-and-forget chains to `ef_resume_pipeline` on both the upsert and idempotent-skip paths. New `lth_pvr.rb_bands_guard_log` table + `lth_pvr.ensure_rb_bands_today()` SECURITY DEFINER function clone the CI guard pattern. Cron jobs: `lthpvr_rb_fetch` rescheduled `0 1 * * *` → `5 0 * * *` (so RB bands land before the 00:10 morning resume); new `lthpvr_rb_fetch_guard_30m` every 30 min.
+- **Day 5 — Customer-facing surfaces flipped to RB.** `ef_fee_monthly_close`, `ef_monthly_statement_generator`, `ef_generate_statement`, `ef_optimize_lth_pvr_strategy`, `ef_run_lth_pvr_simulator` all default to `"rb"` (CI override still accepted via request body). Pre-flight diff over 60 days showed max btc_price drift 4.41% / avg 0.71%, max band drift up to 5.27% at m100 — accepted by product owner before flipping.
+- **Day 6 — Verification.** bear_pause continuity over 365 days: 85.71% match. The 52 divergent days fall in one contiguous 2025-05-20 → 2025-07-10 regime where btc_price was identical but CI flagged bear_pause=true while RB didn't — a legitimate band-source difference, not a data bug. Empirical NAV diff confirmed on a 2020–2026-05-18 / $10k upfront / $1k/mo back-test: CI = $582,423 (ROI 569.45%), RB = $742,660 (ROI 753.63%).
+- **Day 7 — Cleanup.**
+  - `ef_bt_execute` default flipped `"ci"` → `"rb"` so the public website back-tester (which sends no `band_source` field) now benchmarks the same band source live customers actually trade on.
+  - CI cron jobs unscheduled (`ef_fetch_ci_bands_daily_0005_utc`, `ef_fetch_ci_bands_guard_30m`). `lth_pvr.ci_bands_daily` is now frozen as a historical reference; `lth_pvr.ensure_ci_bands_today()` retained for manual back-fills.
+  - `.github/copilot-instructions.md` rewritten to document RB-first architecture.
+
+#### Files changed
+- **EFs (deployed):** `ef_generate_decisions`, `ef_post_ledger_and_balances`, `ef_fetch_rb_bands`, `ef_fee_monthly_close`, `ef_monthly_statement_generator`, `ef_generate_statement`, `ef_optimize_lth_pvr_strategy`, `ef_run_lth_pvr_simulator`, `ef_bt_execute`.
+- **Migrations:** `add_rb_bands_guard_and_reschedule`, `decommission_ci_cron`.
+- **Docs:** `.github/copilot-instructions.md`, `docs/SDD_v0.6.md` (this entry).
+
+#### Rollback
+- Re-deploy EFs with `"ci"` defaults restored.
+- `cron.alter_job(81, schedule => '0 1 * * *');` and `cron.unschedule('lthpvr_rb_fetch_guard_30m');`
+- Restore CI cron: `cron.schedule('ef_fetch_ci_bands_daily_0005_utc', '5 0 * * *', 'select lth_pvr.ensure_ci_bands_today();');` and the 30-min guard.
+
+---
 
 ### v0.6.109 – Cron retimed to 00:05 UTC + Pipeline Control merged into Live Customer Transactions + CI/RB Bands cross-check chart
 **Date:** 2026-05-18

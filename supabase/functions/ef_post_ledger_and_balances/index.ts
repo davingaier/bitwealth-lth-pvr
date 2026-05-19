@@ -40,7 +40,10 @@ Deno.serve(async (req: Request) => {
     }
 
     // Band source selector (Day 1 of CI->RB migration). Default 'ci' for safety.
-    let bandSource: BandSource = "ci";
+    // Day 4 of CI->RB migration (2026-05-19): live pipeline now defaults to RB
+    // bands. Override is still possible by passing { band_source: 'ci' } in the
+    // request body.
+    let bandSource: BandSource = "rb";
     try {
       const url = new URL(req.url);
       const qs = url.searchParams.get("band_source");

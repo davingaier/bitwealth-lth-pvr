@@ -32,7 +32,10 @@ Deno.serve(async (req: Request)=>{
     let tradeDate = today;
     // Band source: default 'ci' on Day 1 of the CI->RB migration (2026-05-19).
     // Accept ?band_source=rb in query string OR { band_source: 'rb' } in JSON body.
-    let bandSource: BandSource = "ci";
+    // Day 4 of CI->RB migration (2026-05-19): live pipeline now defaults to RB
+    // bands. Override is still possible by passing { band_source: 'ci' } in the
+    // request body (used by historical back-fills and the CI parity tests).
+    let bandSource: BandSource = "rb";
     try {
       const url = new URL(req.url);
       const overrideSignal = url.searchParams.get("signal_date");

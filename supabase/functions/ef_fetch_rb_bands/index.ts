@@ -26,6 +26,43 @@ import { getServiceClient, sleep } from "./client.ts";
 
 const RB_BASE = "https://api.researchbitcoin.net";
 
+// ---------------------------------------------------------------------------
+// Pipeline chain helper (Day 4 of CI->RB migration, 2026-05-19)
+// ---------------------------------------------------------------------------
+// Once RB bands for the signal date are persisted, immediately kick the
+// daily LTH PVR pipeline so it doesn't have to wait for the next 30-min
+// resume cron. Fire-and-forget — pipeline failures still surface through
+// the resume_pipeline guard cron and the alert_events table.
+async function triggerResumePipeline(signalDate: string, orgId: string): Promise<void> {
+  const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!baseUrl || !key) {
+    console.warn("ef_fetch_rb_bands: skipping resume_pipeline chain — missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+    return;
+  }
+  try {
+    const resp = await fetch(`${baseUrl}/functions/v1/ef_resume_pipeline`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        trigger: "ef_fetch_rb_bands",
+        signal_date: signalDate,
+        org_id: orgId,
+      }),
+    });
+    console.info(
+      `ef_fetch_rb_bands: resume_pipeline trigger -> HTTP ${resp.status} for signal_date=${signalDate}`,
+    );
+  } catch (e) {
+    console.warn(
+      `ef_fetch_rb_bands: resume_pipeline trigger failed (non-fatal): ${String((e as Error)?.message ?? e)}`,
+    );
+  }
+}
+
 // Band sigma multipliers — must stay in sync with ci_bands_daily column suffixes
 const BAND_MULTIPLIERS: Record<string, number> = {
   m100: -1.00,
@@ -221,8 +258,11 @@ Deno.serve(async (req: Request) => {
 
     if (existing) {
       console.info("ef_fetch_rb_bands: row already exists for", signalDate, "— skipping");
+      // Still chain the pipeline so a retry / re-run after an earlier RB success
+      // doesn't leave the daily decisions unprocessed.
+      await triggerResumePipeline(signalDate, org_id);
       return new Response(
-        JSON.stringify({ skipped: true, date: signalDate, reason: "already_stored" }),
+        JSON.stringify({ skipped: true, date: signalDate, reason: "already_stored", resume_triggered: true }),
         { headers: { "content-type": "application/json" } },
       );
     }
@@ -344,12 +384,18 @@ Deno.serve(async (req: Request) => {
   }
 
   console.info("ef_fetch_rb_bands: complete for", signalDate);
+
+  // Day 4 of CI->RB migration: chain the daily LTH PVR pipeline now that
+  // today's RB bands are persisted. Fire-and-forget.
+  await triggerResumePipeline(signalDate, org_id);
+
   return new Response(
     JSON.stringify({
       ok: true,
       date: signalDate,
       cumulative_std_dev: cumStd,
       welford_n: newWelford.n,
+      resume_triggered: true,
       bands: Object.fromEntries(
         Object.keys(BAND_MULTIPLIERS).map((k) => [k, record[`price_at_${k}`]]),
       ),

@@ -61,7 +61,9 @@ serve(async (_req) => {
     console.log("[ef_monthly_statement_generator] Starting monthly statement generation");
 
     // Optional band_source override (default 'ci' during CI->RB migration).
-    let bandSource: BandSource = "ci";
+    // Day 5 of CI->RB migration (2026-05-19): default is now RB. Callers can
+    // still pass { band_source: 'ci' } to regenerate historical CI statements.
+    let bandSource: BandSource = "rb";
     try {
       if (_req.headers.get("content-type")?.includes("application/json")) {
         const reqBody = await _req.clone().json().catch(() => null);

@@ -57,7 +57,12 @@ Deno.serve(async (req) => {
     const upfront_usd = body.upfront_usd ?? 10000;
     const monthly_usd = body.monthly_usd ?? 500;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
-    const bandSource: BandSource = normaliseBandSource(body.band_source);
+    // Day 5 of CI->RB migration (2026-05-19): default simulator source is RB.
+    // normaliseBandSource defaults to 'ci' for missing/invalid input, which is
+    // wrong post-migration — explicitly fall back to 'rb' when caller omits it.
+    const bandSource: BandSource = (typeof body.band_source === "string" && body.band_source.length > 0)
+      ? normaliseBandSource(body.band_source)
+      : "rb";
     const bandsTable = bandsTableForSource(bandSource);
     console.info(`ef_run_lth_pvr_simulator: band_source=${bandSource} table=${bandsTable}`);
 

@@ -152,7 +152,8 @@ interface BuildResult {
 
 async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { supabase, orgId, customerId, year, month } = a;
-  const bandSource: BandSource = a.bandSource ?? "ci";
+  // Day 5 of CI->RB migration (2026-05-19): default is now RB.
+  const bandSource: BandSource = a.bandSource ?? "rb";
   const bandsTable = bandsTableForSource(bandSource);
 
   const monthIdx = month - 1;

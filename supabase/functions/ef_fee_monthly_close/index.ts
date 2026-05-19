@@ -37,7 +37,9 @@ Deno.serve(async (req) => {
     console.log("Starting monthly fee close and invoice generation...");
 
     // Optional band_source override (default 'ci' during CI->RB migration).
-    let bandSource: BandSource = "ci";
+    // Day 5 of CI->RB migration (2026-05-19): default is now RB. Callers can
+    // still pass { band_source: 'ci' } to recompute prior CI-based months.
+    let bandSource: BandSource = "rb";
     try {
       if (req.headers.get("content-type")?.includes("application/json")) {
         const reqBody = await req.clone().json().catch(() => null);

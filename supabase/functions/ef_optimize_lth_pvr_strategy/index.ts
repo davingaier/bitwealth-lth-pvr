@@ -45,7 +45,12 @@ Deno.serve(async (req) => {
       momo_length_range = null,
       momo_threshold_range = null,
     } = body;
-    const bandSource: BandSource = normaliseBandSource(body.band_source);
+    // Day 5 of CI->RB migration (2026-05-19): default optimizer source is RB.
+    // normaliseBandSource defaults to 'ci' for missing/invalid input, which is
+    // wrong post-migration — explicitly fall back to 'rb' when caller omits it.
+    const bandSource: BandSource = (typeof body.band_source === "string" && body.band_source.length > 0)
+      ? normaliseBandSource(body.band_source)
+      : "rb";
     const bandsTable = bandsTableForSource(bandSource);
     console.info(`ef_optimize_lth_pvr_strategy: band_source=${bandSource} table=${bandsTable}`);
 

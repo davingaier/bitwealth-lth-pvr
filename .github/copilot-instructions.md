@@ -10,25 +10,30 @@
 
 ## Critical Architectural Patterns
 
-### 1. Daily Pipeline Execution (03:00-17:00 UTC)
+### 1. Daily Pipeline Execution (00:05-17:00 UTC)
 
-The system runs a **6-step sequential pipeline** every trading day:
+The system runs a **6-step sequential pipeline** every trading day. As of
+2026-05-19 (CI→RB migration Day 7), the live pipeline reads **Research Bitcoin
+(RB)** bands by default. The legacy CryptoQuant (CI) band data is frozen and
+retained only for historical back-test reproducibility.
 
-1. **CI Bands Fetch** (`ef_fetch_ci_bands`) - 03:00 UTC
-   - Fetches on-chain LTH PVR bands from CryptoQuant API
-   - Stored in `lth_pvr.ci_bands_daily`
-   - **Guard mechanism:** `lth_pvr.ensure_ci_bands_today()` runs every 30 min to retry if missing
+1. **RB Bands Fetch** (`ef_fetch_rb_bands`) - 00:05 UTC
+   - Fetches on-chain LTH PVR inputs from Research Bitcoin API and computes bands locally (hybrid CI-seeded constants + Welford online std-dev)
+   - Stored in `lth_pvr.rb_bands_daily`
+   - Token managed in `lth_pvr.rb_api_token`, renewed daily at 00:03 UTC by `ef_renew_rb_token`
+   - **Guard mechanism:** `lth_pvr.ensure_rb_bands_today()` runs every 30 min to retry if missing
+   - **Pipeline chain:** On success, fires `ef_resume_pipeline` so steps 2-6 run immediately
 
-2. **Generate Decisions** (`ef_generate_decisions`) - 03:05 UTC
-   - Compares BTC price to CI bands to determine buy/sell/hold
+2. **Generate Decisions** (`ef_generate_decisions`) - 00:10 UTC (morning cron) or chained from step 1
+   - Compares BTC price to RB bands to determine buy/sell/hold
    - Applies momentum filters and retrace logic
-   - Creates records in `lth_pvr.decisions_daily`
+   - Creates records in `lth_pvr.decisions_daily` with `band_source='rb'`
 
-3. **Create Order Intents** (`ef_create_order_intents`) - 03:10 UTC
+3. **Create Order Intents** (`ef_create_order_intents`)
    - Sizes orders based on decisions and available capital
    - Writes to `lth_pvr.order_intents`
 
-4. **Execute Orders** (`ef_execute_orders`) - 03:15 UTC
+4. **Execute Orders** (`ef_execute_orders`)
    - Places LIMIT orders on VALR via REST API
    - Initiates WebSocket monitoring for real-time updates
    - Creates `lth_pvr.exchange_orders` records
@@ -43,11 +48,16 @@ The system runs a **6-step sequential pipeline** every trading day:
    - Calculates NAV in `lth_pvr.balances_daily`
 
 **Pipeline Resume System:**
-- If step 1 fails (CI bands unavailable), entire pipeline halts
+- If step 1 fails (RB bands unavailable), the 30-min RB guard cron retries until success and then chains the pipeline.
 - `lth_pvr.get_pipeline_status()` - Checks completion state of all 6 steps
 - `ef_resume_pipeline` - Sequential orchestrator that resumes from incomplete steps
 - UI: Administration module → Pipeline Control Panel with status checkboxes and Resume button
 - **Key Fix (2025-12-28):** Sequential execution via `await fetch()` replaced async `pg_net` queuing to prevent race conditions
+
+**Band-source parameter (CI→RB migration, complete 2026-05-19):**
+- All pipeline / statement / fee / back-tester EFs accept an optional `band_source` (`'rb'` | `'ci'`) in the request body. Default is `'rb'`.
+- Override is only useful for back-fills against historical CI data; live trading never overrides.
+- Shared helper: `supabase/functions/_shared/band_source.ts` (`BandSource`, `bandsTableForSource`, `normaliseBandSource`, `readBandSourceFromBody`).
 
 ### 2. Supabase Schema Organization
 
@@ -59,10 +69,11 @@ The system runs a **6-step sequential pipeline** every trading day:
   - `strategies` - Catalog of strategy types (LTH_PVR, ADV_DCA, etc.)
 
 - **`lth_pvr`** - Live trading operations
-  - Decision tables: `ci_bands_daily`, `decisions_daily`, `order_intents`
+  - Decision tables: `rb_bands_daily` (primary), `ci_bands_daily` (frozen historical reference, no longer fetched), `decisions_daily` (records `band_source` per row), `order_intents`
+  - RB infra: `rb_bands_state` (Welford running stats), `rb_api_token`
   - Exchange integration: `exchange_orders`, `order_fills`
   - Accounting: `ledger_lines`, `balances_daily`, `customer_state_daily`
-  - Monitoring: `ci_bands_guard_log` (note: `alert_events` lives in `public` since 2026-05-02 — strategy-agnostic)
+  - Monitoring: `rb_bands_guard_log`, `ci_bands_guard_log` (legacy, kept for audit) — note: `alert_events` lives in `public` since 2026-05-02 (strategy-agnostic)
   - Benchmark: `std_dca_balances_daily`, `std_dca_ledger`
 
 - **`lth_pvr_bt`** - Back-testing (isolated from live data)
@@ -237,7 +248,7 @@ SELECT * FROM lth_pvr.decisions_daily;
 
 **Trade date conventions:**
 - `trade_date`: Day orders are placed (CURRENT_DATE)
-- `signal_date`: Day of CI bands data used (trade_date - 1)
+- `signal_date`: Day of band data used (trade_date - 1)
 - `intent_date`: Synonym for trade_date in some tables
 
 ## Testing Strategy
@@ -325,5 +336,5 @@ const { data } = await supabase.schema('lth_pvr').from('decisions_daily').select
 
 ---
 
-**Last Updated:** 2025-12-30  
+**Last Updated:** 2026-05-19 (Day 7 of CI→RB migration complete — live trading, statements, fees, optimizer, simulator, and public back-tester all default to RB)  
 **For detailed architecture, see:** [docs/SDD_v0.6.md](docs/SDD_v0.6.md)
