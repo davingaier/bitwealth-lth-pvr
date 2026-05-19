@@ -1,13 +1,14 @@
 import { getServiceClient } from "./client.ts";
 import { bucketLabel, decideTrade, computeBearPauseAt, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { bandsTableForSource, normaliseBandSource, readBandSourceFromBody, BandSource } from "../_shared/band_source.ts";
 
 // --- Helpers -------------------------------------------------
-async function getCI(sb: any, dateStr: string) {
-  const { data, error } = await sb.from("ci_bands_daily").select("*").eq("date", dateStr).order("fetched_at", {
+async function getBands(sb: any, bandsTable: string, dateStr: string) {
+  const { data, error } = await sb.from(bandsTable).select("*").eq("date", dateStr).order("fetched_at", {
     ascending: false
   }).limit(1);
-  if (error) throw new Error(`CI query failed: ${error.message}`);
+  if (error) throw new Error(`${bandsTable} query failed: ${error.message}`);
   return data && data[0] ? data[0] : null;
 }
 // --- Handler -------------------------------------------------
@@ -29,6 +30,9 @@ Deno.serve(async (req: Request)=>{
     today.setUTCHours(0, 0, 0, 0);
     let signalDate = new Date(today.getTime() - 24 * 3600 * 1000);
     let tradeDate = today;
+    // Band source: default 'ci' on Day 1 of the CI->RB migration (2026-05-19).
+    // Accept ?band_source=rb in query string OR { band_source: 'rb' } in JSON body.
+    let bandSource: BandSource = "ci";
     try {
       const url = new URL(req.url);
       const overrideSignal = url.searchParams.get("signal_date");
@@ -37,29 +41,40 @@ Deno.serve(async (req: Request)=>{
         tradeDate = new Date(signalDate.getTime() + 24 * 3600 * 1000);
         console.info(`ef_generate_decisions: backfill mode signal=${overrideSignal}`);
       }
+      const qsSource = url.searchParams.get("band_source");
+      if (qsSource) bandSource = normaliseBandSource(qsSource);
     } catch (_e) { /* ignore url parse issues */ }
+    // Best-effort JSON body parse (may be absent for cron-triggered invocations)
+    try {
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const body = await req.clone().json().catch(() => null);
+        bandSource = readBandSourceFromBody(body, bandSource);
+      }
+    } catch (_e) { /* ignore */ }
+    const bandsTable = bandsTableForSource(bandSource);
     const signalStr = signalDate.toISOString().slice(0, 10);
     const tradeStr = tradeDate.toISOString().slice(0, 10);
-    // CI + momentum
-    const ci = await getCI(sb, signalStr);
+    console.info(`ef_generate_decisions: band_source=${bandSource} table=${bandsTable} signal=${signalStr} trade=${tradeStr}`);
+    // Bands + momentum
+    const ci = await getBands(sb, bandsTable, signalStr);
     if (!ci) {
-      console.error(`CI bands unavailable for ${signalStr}`);
+      console.error(`${bandsTable} unavailable for ${signalStr}`);
       await logAlert(
         sb,
         "ef_generate_decisions",
         "error",
-        `CI bands unavailable for ${signalStr}`,
-        { signal_date: signalStr, trade_date: tradeStr },
+        `${bandsTable} unavailable for ${signalStr}`,
+        { signal_date: signalStr, trade_date: tradeStr, band_source: bandSource },
         org_id
       );
-      return new Response(`CI bands unavailable for ${signalStr}`, {
+      return new Response(`${bandsTable} unavailable for ${signalStr}`, {
         status: 500
       });
     }
-    const { data: hist, error: hErr } = await sb.from("ci_bands_daily").select("date, btc_price").lte("date", signalStr).order("date", {
+    const { data: hist, error: hErr } = await sb.from(bandsTable).select("date, btc_price").lte("date", signalStr).order("date", {
       ascending: false
     }).limit(6);
-    if (hErr) throw new Error(`CI history query failed: ${hErr.message}`);
+    if (hErr) throw new Error(`${bandsTable} history query failed: ${hErr.message}`);
     let roc5 = 0;
     if (hist && hist.length >= 6) {
       const pxT = Number(hist[0].btc_price ?? 0);
@@ -68,8 +83,8 @@ Deno.serve(async (req: Request)=>{
     }
     const px = Number(ci.btc_price ?? 0);
     
-    // CRITICAL: Log actual CI bands data to track price source
-    console.info(`ef_generate_decisions CI BANDS: date=${signalStr} btc_price=${ci.btc_price} px=${px} ci_obj=`, JSON.stringify(ci));
+    // CRITICAL: Log actual bands data to track price source
+    console.info(`ef_generate_decisions BANDS (${bandSource}): date=${signalStr} btc_price=${ci.btc_price} px=${px} obj=`, JSON.stringify(ci));
     
     // Active customers with their strategy variations (Phase 2: Load from database)
     // Note: Must query customer_strategies and strategy_variation_templates separately
@@ -203,7 +218,7 @@ Deno.serve(async (req: Request)=>{
     };
     
     // Compute bear pause state (used for all customers since they share same variation)
-    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, defaultConfig);
+    const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, defaultConfig, bandsTable);
     
     let wrote = 0;
     for (const c of custs ?? []){
@@ -269,7 +284,8 @@ Deno.serve(async (req: Request)=>{
           amount_pct: Number.isFinite(pct) && pct >= 0 ? pct : 0,
           rule,
           note,
-          strategy_version_id: c.strategy_version_id
+          strategy_version_id: c.strategy_version_id,
+          band_source: bandSource
         }, {
           onConflict: "org_id,customer_id,trade_date"
         });

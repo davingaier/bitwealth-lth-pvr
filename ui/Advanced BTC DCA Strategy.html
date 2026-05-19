@@ -1920,6 +1920,13 @@
               <label for="simMonthly" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Monthly Contribution ($):</label>
               <input id="simMonthly" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
             </div>
+            <div>
+              <label for="simBandSource" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Band source:</label>
+              <select id="simBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
+                <option value="ci" selected>CI – CryptoQuant (current)</option>
+                <option value="rb">RB – Research Bitcoin (parallel)</option>
+              </select>
+            </div>
           </div>
           <div style="display:flex;gap:.75rem;justify-content:center;">
             <button id="runSimBtn" type="button" style="padding:.75rem 1.5rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Run Simulation</button>
@@ -1973,6 +1980,13 @@
               <div>
                 <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Monthly ($):</label>
                 <input id="optMonthly" type="number" min="0" step="100" value="500" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+              <div style="grid-column:1/-1;">
+                <label for="optBandSource" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Band source:</label>
+                <select id="optBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
+                  <option value="ci" selected>CI – CryptoQuant (current)</option>
+                  <option value="rb">RB – Research Bitcoin (parallel)</option>
+                </select>
               </div>
             </div>
 
@@ -4470,6 +4484,13 @@
             <option value="comp_agr">Comparison – Annualised Growth</option>
           </select>
 
+          <!-- Band source (CI vs RB on-chain bands) -->
+          <label for="btBandSource"><strong>Band source:</strong></label>
+          <select id="btBandSource" class="band-source-select" title="On-chain band source: CI (CryptoQuant, current) or RB (Research Bitcoin, parallel)">
+            <option value="ci" selected>CI – CryptoQuant (current)</option>
+            <option value="rb">RB – Research Bitcoin (parallel)</option>
+          </select>
+
           <!-- Actions / messages -->
           <div class="bt-form-actions">
             <button id="btRunBtn" type="button">Run back-test</button>
@@ -4894,6 +4915,59 @@
         </div>
       </div>
 
+      <!-- ===========================================================
+           Research Bitcoin (RB) API Token
+           - Shows current issue / expiry / days remaining
+           - Lets an admin paste a freshly-obtained RB token when
+             auto-renewal is failing (e.g. expired refresh chain).
+           - Status is fetched via lth_pvr.get_rb_token_status() RPC
+             which never returns the token value.
+           =========================================================== -->
+      <div class="card" id="rbTokenCard">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+          <h3 style="margin:0;">🔑 Research Bitcoin API Token</h3>
+          <div style="margin-left:auto;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+            <button id="rbTokenRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh Status</button>
+          </div>
+        </div>
+        <p class="small-muted" style="margin-bottom:.75rem;">
+          The RB API token auto-renews daily within a 14-day window. If renewal fails
+          (warn at ≤7 days, critical at ≤1 day), obtain a new token from
+          <a href="https://researchbitcoin.net" target="_blank" rel="noreferrer">researchbitcoin.net</a>
+          and paste it below. The token itself is never displayed after submission.
+        </p>
+
+        <div id="rbTokenStatusBox" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem;">
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
+            <div class="small-muted" style="font-size:.75rem;">Issued</div>
+            <div id="rbTokenIssuedAt" style="font-weight:600;">–</div>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
+            <div class="small-muted" style="font-size:.75rem;">Expires</div>
+            <div id="rbTokenExpiresAt" style="font-weight:600;">–</div>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
+            <div class="small-muted" style="font-size:.75rem;">Days Until Expiry</div>
+            <div id="rbTokenDaysLeft" style="font-weight:600;">–</div>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
+            <div class="small-muted" style="font-size:.75rem;">Last Renewed</div>
+            <div id="rbTokenLastRenewed" style="font-weight:600;">–</div>
+          </div>
+        </div>
+
+        <form id="rbTokenForm" onsubmit="return false;" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+          <label style="flex:1;min-width:260px;">
+            New RB Token
+            <input id="rbTokenInput" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="Paste the freshly-obtained RB API token here…"
+                   style="width:100%;" />
+          </label>
+          <button id="rbTokenSaveBtn" type="button">Save Token</button>
+        </form>
+        <div id="rbTokenMessage" style="display:none;margin-top:.6rem;padding:.55rem .8rem;border-radius:5px;font-size:.85rem;"></div>
+      </div>
+
       <!-- Email Templates Manager -->
       <div class="card" id="emailTemplatesCard">
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
@@ -5305,6 +5379,11 @@
             // Admin module alerts
             if (currentHash === '#admin-module' && typeof window.loadAlerts === 'function') {
               window.loadAlerts();
+            }
+
+            // Admin module RB API token status
+            if (currentHash === '#admin-module' && typeof window.loadRbTokenStatus === 'function') {
+              window.loadRbTokenStatus();
             }
             
             // Customer Maintenance module data
@@ -5907,12 +5986,17 @@
         // One helper at the top of handleBtRunClick (or outside, reused):
         const btDb = supabaseClient.schema('lth_pvr_bt');
 
+        // Band source: 'ci' (default) or 'rb'  (Day 3 of CI->RB migration)
+        const bandSourceEl = document.getElementById('btBandSource');
+        const bandSource = (bandSourceEl?.value === 'rb') ? 'rb' : 'ci';
+
         // Then use btDb for all lth_pvr_bt tables:
         const { data: runRow, error: runErr } = await btDb
           .from('bt_runs')                     // ✅ table name only
           .insert({
             org_id:        orgId,
-            status:        'running'
+            status:        'running',
+            band_source:   bandSource
           })
           .select('bt_run_id')
           .single();
@@ -5947,7 +6031,7 @@
 
         // 3) Call ef_bt_execute for this bt_run_id
         const { error: fnErr } = await supabaseClient.functions.invoke('ef_bt_execute', {
-          body: { bt_run_id }
+          body: { bt_run_id, band_source: bandSource }
         });
 
         if (fnErr) throw fnErr;
@@ -10204,6 +10288,159 @@
     });
   })();
 
+  // ===================== RB API Token (Administration Module) =====================
+  // Drives the #rbTokenCard panel.  Reads status via the SECURITY DEFINER RPC
+  // lth_pvr.get_rb_token_status() (which never returns the token value) and
+  // posts new tokens to ef_set_rb_token (JWT-verified, admin-only).
+  (function rbTokenModule(){
+    const refreshBtn = document.getElementById('rbTokenRefreshBtn');
+    const saveBtn    = document.getElementById('rbTokenSaveBtn');
+    const tokenInput = document.getElementById('rbTokenInput');
+    const msgBox     = document.getElementById('rbTokenMessage');
+    const issuedEl   = document.getElementById('rbTokenIssuedAt');
+    const expiresEl  = document.getElementById('rbTokenExpiresAt');
+    const daysEl     = document.getElementById('rbTokenDaysLeft');
+    const lastEl     = document.getElementById('rbTokenLastRenewed');
+
+    if (!refreshBtn || !saveBtn) return;
+
+    function showMsg(kind, text){
+      if (!msgBox) return;
+      const palette = {
+        ok:    { bg:'#0f3a23', fg:'#86efac', border:'#16a34a' },
+        warn:  { bg:'#3a2a0f', fg:'#fcd34d', border:'#f59e0b' },
+        error: { bg:'#3a1010', fg:'#fca5a5', border:'#ef4444' },
+        info:  { bg:'#0f2a3a', fg:'#93c5fd', border:'#3b82f6' },
+      }[kind] || { bg:'#222', fg:'#eee', border:'#444' };
+      msgBox.style.display    = 'block';
+      msgBox.style.background = palette.bg;
+      msgBox.style.color      = palette.fg;
+      msgBox.style.border     = `1px solid ${palette.border}`;
+      msgBox.textContent      = text;
+    }
+
+    function clearMsg(){
+      if (msgBox){ msgBox.style.display = 'none'; msgBox.textContent = ''; }
+    }
+
+    function fmtDate(d){
+      if (!d) return '–';
+      try { return new Date(d).toISOString().slice(0,10); } catch(_) { return String(d); }
+    }
+    function fmtTs(ts){
+      if (!ts) return '–';
+      try { return new Date(ts).toLocaleString(); } catch(_) { return String(ts); }
+    }
+
+    async function loadRbStatus(){
+      if (!window.supabaseClient){
+        showMsg('warn', 'Supabase client not ready.');
+        return;
+      }
+      try {
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .rpc('get_rb_token_status');
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row){
+          issuedEl.textContent  = '–';
+          expiresEl.textContent = '–';
+          daysEl.textContent    = 'no token stored';
+          daysEl.style.color    = '#ef4444';
+          lastEl.textContent    = '–';
+          return;
+        }
+        issuedEl.textContent  = fmtDate(row.issued_at);
+        expiresEl.textContent = fmtDate(row.expires_at);
+        lastEl.textContent    = fmtTs(row.last_renewed_at);
+        const d = Number(row.days_until_expiry);
+        daysEl.textContent    = Number.isFinite(d) ? `${d} day(s)` : '–';
+        // Colour-code: <=1 red, <=7 amber, else green
+        if (Number.isFinite(d)) {
+          if (d <= 1)      daysEl.style.color = '#ef4444';
+          else if (d <= 7) daysEl.style.color = '#f59e0b';
+          else             daysEl.style.color = '#22c55e';
+        } else {
+          daysEl.style.color = '';
+        }
+      } catch (e){
+        console.error('rb_token_status load failed', e);
+        showMsg('error', `Failed to load RB token status: ${e.message || e}`);
+      }
+    }
+
+    async function saveRbToken(){
+      clearMsg();
+      const tok = (tokenInput?.value || '').trim();
+      if (!tok || tok.length < 20){
+        showMsg('warn', 'Token must be at least 20 characters.');
+        return;
+      }
+      if (!window.supabaseClient){
+        showMsg('error', 'Supabase client not ready.');
+        return;
+      }
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.access_token){
+        showMsg('error', 'You must be signed in as an administrator.');
+        return;
+      }
+      // Resolve org_id: prefer the admin org selector, fall back to my_orgs.
+      let orgId = document.getElementById('adminOrgSelect')?.value || null;
+      if (!orgId){
+        try {
+          const { data } = await supabaseClient.rpc('my_orgs');
+          if (Array.isArray(data) && data[0]?.id) orgId = data[0].id;
+        } catch(_){}
+      }
+      if (!orgId){
+        showMsg('error', 'Unable to determine your organisation.');
+        return;
+      }
+
+      saveBtn.disabled = true;
+      const originalLabel = saveBtn.textContent;
+      saveBtn.textContent = 'Saving…';
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_set_rb_token`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({ token: tok, org_id: orgId }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok || body?.error){
+          throw new Error(body?.error || `HTTP ${resp.status}`);
+        }
+        showMsg('ok', `Token saved. New expiry: ${body.expires_at}.`);
+        tokenInput.value = '';
+        await loadRbStatus();
+      } catch (e){
+        console.error('ef_set_rb_token failed', e);
+        showMsg('error', `Save failed: ${e.message || e}`);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalLabel;
+      }
+    }
+
+    refreshBtn.addEventListener('click', loadRbStatus);
+    saveBtn.addEventListener('click', saveRbToken);
+
+    // Auto-load when admin is already signed in (DOMContentLoaded) and after sign-in.
+    window.loadRbTokenStatus = loadRbStatus;
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.supabaseClient){
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) loadRbStatus();
+        });
+      }
+    });
+  })();
+
   // ===================== Accumulated Fees (Finance Module) =====================
   // Global functions for Finance module (outside any IIFE scope)
   async function loadAccumulatedFees() {
@@ -13489,6 +13726,8 @@ Momentum:
         simulationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         // Call simulator edge function
+        const simBandSourceEl = document.getElementById('simBandSource');
+        const simBandSource = (simBandSourceEl?.value === 'rb') ? 'rb' : 'ci';
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
           method: 'POST',
           headers: {
@@ -13500,7 +13739,8 @@ Momentum:
             end_date: endDate,
             upfront_usd: upfront,
             monthly_usd: monthly,
-            variation_ids: [currentVariationId]
+            variation_ids: [currentVariationId],
+            band_source: simBandSource
           })
         });
 
@@ -13958,13 +14198,16 @@ Momentum:
         optimizationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         // Build request body
+        const optBandSourceEl = document.getElementById('optBandSource');
+        const optBandSource = (optBandSourceEl?.value === 'rb') ? 'rb' : 'ci';
         const requestBody = {
           variation_id: variationId,
           start_date: startDate,
           end_date: endDate,
           upfront_usd: upfront,
           monthly_usd: monthly,
-          objective: objective
+          objective: objective,
+          band_source: optBandSource
         };
 
         // Add ranges if specified

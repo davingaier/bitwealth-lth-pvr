@@ -99,6 +99,38 @@ Deno.serve(async (req: Request) => {
     `ef_renew_rb_token: expires_at=${tokenRow.expires_at}, days_until_expiry=${daysUntilExpiry}`,
   );
 
+  // ---- Proximity alerts -----------------------------------------------------
+  // Fire BEFORE the renewal attempt so the admin sees the impending expiry
+  // even if the RB renewal API is unreachable. Severities (per user spec):
+  //   <= 1 day  -> critical  (paste a new token via the Administration UI now)
+  //   <= 7 days -> warn      (action required this week)
+  // Above 7 days we stay silent to avoid noise.
+  if (daysUntilExpiry <= 1) {
+    await logAlert(
+      sb,
+      "critical",
+      `Research Bitcoin API token expires in ${daysUntilExpiry} day(s) (on ${tokenRow.expires_at}). Paste a new token via the Administration module immediately.`,
+      {
+        org_id,
+        expires_at: tokenRow.expires_at,
+        days_until_expiry: daysUntilExpiry,
+      },
+      org_id,
+    );
+  } else if (daysUntilExpiry <= 7) {
+    await logAlert(
+      sb,
+      "warn",
+      `Research Bitcoin API token expires in ${daysUntilExpiry} day(s) (on ${tokenRow.expires_at}). Auto-renewal will attempt within the 14-day window; capture a manual token via the Administration module if renewal continues to fail.`,
+      {
+        org_id,
+        expires_at: tokenRow.expires_at,
+        days_until_expiry: daysUntilExpiry,
+      },
+      org_id,
+    );
+  }
+
   // Allow forcing renewal via payload
   const force = body.force === true;
 

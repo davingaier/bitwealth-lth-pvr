@@ -125,6 +125,14 @@ Deno.serve(async (req)=>{
     if (!start_date || !end_date) {
       throw new Error("start_date and end_date required in bt_params");
     }
+
+    // Band source (Day 3 of CI->RB migration). Selects the underlying view:
+    //   - 'ci' (default) -> lth_pvr_bt.v_backtest_prices (sourced from lth_pvr.ci_bands_daily)
+    //   - 'rb'           -> lth_pvr_bt.v_backtest_prices_rb (sourced from lth_pvr.rb_bands_daily)
+    const rawBandSource = body?.band_source ?? params.band_source ?? run.band_source ?? "ci";
+    const bandSource: "ci" | "rb" = rawBandSource === "rb" ? "rb" : "ci";
+    const pricesView = bandSource === "rb" ? "v_backtest_prices_rb" : "v_backtest_prices";
+    console.info(`ef_bt_execute: bt_run_id=${bt_run_id} band_source=${bandSource} prices_view=${pricesView}`);
     // Interpret fees as basis points (e.g. 8 bps = 0.08%)
     const tradeFeeRate = toNum(params.maker_bps_trade, 0) / 10000;  // VALR BTC/USDT exchange fee (8 bps, charged in BTC)
     const contribFeeRate = toNum(params.maker_bps_contrib, 0) / 10000;  // VALR USDT/ZAR exchange fee (18 bps, charged in USDT)
@@ -235,14 +243,14 @@ Deno.serve(async (req)=>{
     {
       let wFrom = 0;
       while (true) {
-        const { data, error } = await sbBt.from("v_backtest_prices")
+        const { data, error } = await sbBt.from(pricesView)
           .select("*")
           .eq("org_id", org_id)
           .gte("close_date", warmupStartDate)
           .lt("close_date", start_date)
           .order("close_date", { ascending: true })
           .range(wFrom, wFrom + pageSize - 1);
-        if (error) throw new Error(`warmup v_backtest_prices query failed: ${error.message}`);
+        if (error) throw new Error(`warmup ${pricesView} query failed: ${error.message}`);
         if (!data || data.length === 0) break;
         warmupPrices = warmupPrices.concat(data);
         if (data.length < pageSize) break;
@@ -253,11 +261,11 @@ Deno.serve(async (req)=>{
     let from = 0;
     let prices = [];
     while(true){
-      const { data, error } = await sbBt.from("v_backtest_prices").select("*").eq("org_id", org_id).gte("close_date", start_date).lte("close_date", end_date).order("close_date", {
+      const { data, error } = await sbBt.from(pricesView).select("*").eq("org_id", org_id).gte("close_date", start_date).lte("close_date", end_date).order("close_date", {
         ascending: true
       }).range(from, from + pageSize - 1); // 0-based, inclusive
       if (error) {
-        throw new Error(`v_backtest_prices query failed: ${error.message}`);
+        throw new Error(`${pricesView} query failed: ${error.message}`);
       }
       if (!data || data.length === 0) {
         break; // no more pages
@@ -269,7 +277,7 @@ Deno.serve(async (req)=>{
       from += pageSize;
     }
     if (!prices.length) {
-      throw new Error("no rows in v_backtest_prices for given date range / org");
+      throw new Error(`no rows in ${pricesView} for given date range / org`);
     }
     // Pre-compute ROC series (financial rows only; warmup uses roc=0 like simulator)
     const rocSeries = computeRocSeries(prices, momoLen);
@@ -773,7 +781,8 @@ Deno.serve(async (req)=>{
     await sbBt.from("bt_runs").update({
       status: "ok",
       finished_at: new Date().toISOString(),
-      error: null
+      error: null,
+      band_source: bandSource,
     }).eq("bt_run_id", bt_run_id);
     const summary = {
       lth_pvr: lastDaily ? {

@@ -22,6 +22,7 @@
 
 import { getServiceClient } from "./client.ts";
 import { runSimulation, SimulationResult, CIBandData, StrategyConfig } from "../_shared/lth_pvr_simulator.ts";
+import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,6 +57,9 @@ Deno.serve(async (req) => {
     const upfront_usd = body.upfront_usd ?? 10000;
     const monthly_usd = body.monthly_usd ?? 500;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
+    const bandSource: BandSource = normaliseBandSource(body.band_source);
+    const bandsTable = bandsTableForSource(bandSource);
+    console.info(`ef_run_lth_pvr_simulator: band_source=${bandSource} table=${bandsTable}`);
 
     // Extend the CI bands query back 2 years before start_date so the warmup
     // pass in the simulator can correctly initialise bear_pause state.
@@ -80,7 +84,7 @@ Deno.serve(async (req) => {
       const endRow = startRow + pageSize - 1;
       
       const { data: pageData, error: ciErr } = await sb
-        .from("ci_bands_daily")
+        .from(bandsTable)
         .select("*")
         .eq("org_id", org_id)
         .gte("date", warmupStartDate)
@@ -89,7 +93,7 @@ Deno.serve(async (req) => {
         .range(startRow, endRow);
       
       if (ciErr) {
-        throw new Error(`ci_bands_daily query failed: ${ciErr.message}`);
+        throw new Error(`${bandsTable} query failed: ${ciErr.message}`);
       }
       
       if (!pageData || pageData.length === 0) {

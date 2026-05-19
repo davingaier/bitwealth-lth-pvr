@@ -97,7 +97,8 @@ export async function computeBearPauseAt(
   sb: SupabaseClient,
   orgId: string,
   upToDateStr: string,
-  config: StrategyConfig
+  config: StrategyConfig,
+  bandsTable: "ci_bands_daily" | "rb_bands_daily" = "ci_bands_daily"
 ): Promise<boolean> {
   // Map sigma values to column names
   // Enter: +2.0σ = price_at_p200
@@ -111,14 +112,14 @@ export async function computeBearPauseAt(
     : `price_at_p${Math.abs(config.bearPauseExitSigma * 100).toString().padStart(3, '0')}`;
 
   const { data, error } = await sb
-    .from("ci_bands_daily")
+    .from(bandsTable)
     .select(`date, btc_price, ${enterColumn}, ${exitColumn}`)
     .eq("org_id", orgId)
     .lte("date", upToDateStr)
     .order("date", { ascending: true });
 
   if (error) {
-    throw new Error(`computeBearPauseAt query failed: ${error.message}`);
+    throw new Error(`computeBearPauseAt query failed (${bandsTable}): ${error.message}`);
   }
 
   let paused = false;

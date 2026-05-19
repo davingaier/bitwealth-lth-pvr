@@ -23,6 +23,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
+import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 import {
   renderStatementHtml,
   StatementData,
@@ -139,6 +140,7 @@ interface BuildArgs {
   customerId: number;
   year: number;
   month: number; // 1-12
+  bandSource?: BandSource;
 }
 
 interface BuildResult {
@@ -150,6 +152,8 @@ interface BuildResult {
 
 async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { supabase, orgId, customerId, year, month } = a;
+  const bandSource: BandSource = a.bandSource ?? "ci";
+  const bandsTable = bandsTableForSource(bandSource);
 
   const monthIdx = month - 1;
   const periodStart = new Date(Date.UTC(year, monthIdx, 1));
@@ -254,7 +258,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   // ── BTC price (used for fee USD conversion when the line is BTC-denominated) ──
   const { data: ciRow } = await supabase
     .schema("lth_pvr")
-    .from("ci_bands_daily")
+    .from(bandsTable)
     .select("date, btc_price")
     .lte("date", endStr)
     .order("date", { ascending: false })
@@ -652,6 +656,7 @@ serve(async (req) => {
 
     const built = await buildStatementData({
       supabase, orgId: ORG_ID, customerId: customer_id, year, month,
+      bandSource: normaliseBandSource(body?.band_source),
     });
 
     const html = renderStatementHtml(built.data);

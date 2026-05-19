@@ -9,6 +9,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
+import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -34,6 +35,17 @@ interface FeeAggregation {
 Deno.serve(async (req) => {
   try {
     console.log("Starting monthly fee close and invoice generation...");
+
+    // Optional band_source override (default 'ci' during CI->RB migration).
+    let bandSource: BandSource = "ci";
+    try {
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const reqBody = await req.clone().json().catch(() => null);
+        bandSource = normaliseBandSource(reqBody?.band_source);
+      }
+    } catch (_e) { /* ignore */ }
+    const bandsTable = bandsTableForSource(bandSource);
+    console.log(`ef_fee_monthly_close: band_source=${bandSource} table=${bandsTable}`);
 
     // Get previous month (we run on 1st, invoice for previous month)
     const now = new Date();
@@ -150,7 +162,7 @@ Deno.serve(async (req) => {
 
     // Get BTC price for conversion (use last day of month)
     const { data: ciData, error: ciError } = await supabase
-      .from("ci_bands_daily")
+      .from(bandsTable)
       .select("btc_price")
       .lte("date", lastMonthEnd)
       .order("date", { ascending: false })

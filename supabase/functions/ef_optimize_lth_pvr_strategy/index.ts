@@ -3,6 +3,7 @@ import { optimizeParameters, generateSmartRanges, validateOptimizationConfig } f
 import { runSimulation } from "../_shared/lth_pvr_simulator.ts";
 import type { CIBandData } from "../_shared/lth_pvr_simulator.ts";
 import type { StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
+import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
 Deno.serve(async (req) => {
   // CORS for browser/Admin UI access
@@ -44,6 +45,9 @@ Deno.serve(async (req) => {
       momo_length_range = null,
       momo_threshold_range = null,
     } = body;
+    const bandSource: BandSource = normaliseBandSource(body.band_source);
+    const bandsTable = bandsTableForSource(bandSource);
+    console.info(`ef_optimize_lth_pvr_strategy: band_source=${bandSource} table=${bandsTable}`);
 
     if (!variation_id) {
       return new Response(JSON.stringify({ error: "variation_id required" }), {
@@ -107,7 +111,7 @@ Deno.serve(async (req) => {
     })();
 
     const { data: bands, error: bandsError } = await sb
-      .from("ci_bands_daily")
+      .from(bandsTable)
       .select("*")
       .eq("org_id", org_id)
       .gte("date", warmupStartDate)
@@ -116,7 +120,7 @@ Deno.serve(async (req) => {
 
     if (bandsError || !bands || bands.length === 0) {
       return new Response(
-        JSON.stringify({ error: `No CI bands data found for date range ${start_date} to ${end_date}` }),
+        JSON.stringify({ error: `No bands data found for date range ${start_date} to ${end_date} in ${bandsTable}` }),
         { status: 404, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
       );
     }

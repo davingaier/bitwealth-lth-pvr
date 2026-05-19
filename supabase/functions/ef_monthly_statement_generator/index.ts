@@ -6,6 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -58,6 +59,17 @@ function buildPlatformFeeNote(rate: number, schedule: string): string {
 serve(async (_req) => {
   try {
     console.log("[ef_monthly_statement_generator] Starting monthly statement generation");
+
+    // Optional band_source override (default 'ci' during CI->RB migration).
+    let bandSource: BandSource = "ci";
+    try {
+      if (_req.headers.get("content-type")?.includes("application/json")) {
+        const reqBody = await _req.clone().json().catch(() => null);
+        bandSource = normaliseBandSource(reqBody?.band_source);
+      }
+    } catch (_e) { /* ignore */ }
+    const bandsTable = bandsTableForSource(bandSource);
+    console.log(`[ef_monthly_statement_generator] band_source=${bandSource} table=${bandsTable}`);
 
     const supabase = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
       db: { schema: "lth_pvr" },
@@ -117,7 +129,7 @@ serve(async (_req) => {
 
     const { data: ciRow } = await supabase
       .schema("lth_pvr")
-      .from("ci_bands_daily")
+      .from(bandsTable)
       .select("date,btc_price")
       .lte("date", endDate)
       .order("date", { ascending: false })
@@ -166,6 +178,7 @@ serve(async (_req) => {
               customer_id: customerId,
               year: prevYear,
               month: prevMonth,
+              band_source: bandSource,
             }),
           },
         );

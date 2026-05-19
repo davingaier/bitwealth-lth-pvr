@@ -2,6 +2,7 @@ import { getServiceClient, yyyymmdd } from "./client.ts";
 import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { bandsTableForSource, normaliseBandSource, readBandSourceFromBody, BandSource } from "../_shared/band_source.ts";
 import Decimal from "npm:decimal.js@10.4.3";
 
 // Minimal shapes we care about from v_fills_with_customer and exchange_funding_events
@@ -37,6 +38,22 @@ Deno.serve(async (req: Request) => {
     if (!org_id) {
       return new Response("ORG_ID missing", { status: 500 });
     }
+
+    // Band source selector (Day 1 of CI->RB migration). Default 'ci' for safety.
+    let bandSource: BandSource = "ci";
+    try {
+      const url = new URL(req.url);
+      const qs = url.searchParams.get("band_source");
+      if (qs) bandSource = normaliseBandSource(qs);
+    } catch (_e) { /* ignore */ }
+    try {
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const body = await req.clone().json().catch(() => null);
+        bandSource = readBandSourceFromBody(body, bandSource);
+      }
+    } catch (_e) { /* ignore */ }
+    const bandsTable = bandsTableForSource(bandSource);
+    console.info(`ef_post_ledger_and_balances: band_source=${bandSource} table=${bandsTable}`);
 
     // ----------- 0) Fetch VALR minimum transfer thresholds -----------
     const { data: configRows, error: configErr } = await sb
@@ -1139,7 +1156,7 @@ Deno.serve(async (req: Request) => {
         let px = pxCache.get(dateStr);
         if (px === undefined) {
           const { data: ci, error: ciErr } = await sb
-            .from("ci_bands_daily")
+            .from(bandsTable)
             .select("btc_price")
             .lte("date", dateStr)
             .order("date", { ascending: false })
@@ -1234,6 +1251,7 @@ Deno.serve(async (req: Request) => {
               usdt_balance: usdt,
               zar_balance: zar,
               nav_usd: nav,
+              band_source: bandSource,
             },
             { onConflict: "org_id,customer_id,date" },
           );
