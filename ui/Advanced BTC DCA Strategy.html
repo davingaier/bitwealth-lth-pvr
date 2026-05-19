@@ -2439,6 +2439,10 @@
                 <button type="button" id="bcSrcCi" class="active" aria-pressed="true">CI Bands</button>
                 <button type="button" id="bcSrcRb" aria-pressed="false">RB Bands</button>
               </div>
+              <div class="bc-toggle" role="tablist" aria-label="σ spacing mode" title="Log = ChartInspect-style geometric spacing from mean & +1σ. Linear = stored values used by the strategy.">
+                <button type="button" id="bcModeLog" class="active" aria-pressed="true">Log σ</button>
+                <button type="button" id="bcModeLin" aria-pressed="false">Linear σ</button>
+              </div>
               <div class="bc-presets" id="bcPresets">
                 <button type="button" data-range="1M">1M</button>
                 <button type="button" data-range="6M">6M</button>
@@ -2453,7 +2457,7 @@
             <canvas id="bandsChart"></canvas>
           </div>
           <div class="bc-status">
-            <span class="bc-hint">Drag to zoom · double-click chart to reset · click legend items to hide/show bands. Bands are rendered in log-space (geometric σ spacing) from the stored mean and +1σ to match ChartInspect's display; the strategy itself uses the linear-space values stored in <code>ci_bands_daily</code>.</span>
+            <span class="bc-hint" id="bcHint">Drag to zoom · double-click chart to reset · click legend items to hide/show bands. <strong>Log σ</strong> renders bands geometrically from the stored mean and +1σ to match ChartInspect's display. <strong>Linear σ</strong> plots the exact values stored in <code>ci_bands_daily</code> (μ + k·σ) that the strategy uses for decisions.</span>
           </div>
         </div>
 
@@ -2635,11 +2639,14 @@
       const metaEl = card.querySelector('#bcMeta');
       const btnCi = card.querySelector('#bcSrcCi');
       const btnRb = card.querySelector('#bcSrcRb');
+      const btnModeLog = card.querySelector('#bcModeLog');
+      const btnModeLin = card.querySelector('#bcModeLin');
       const presetsEl = card.querySelector('#bcPresets');
       const resetBtn = card.querySelector('#bcResetZoom');
 
       let chart = null;
       let currentSource = 'ci';
+      let currentMode = 'log'; // 'log' (geometric, ChartInspect-style) | 'linear' (stored μ+kσ values)
       let zoomRegistered = false;
       const cache = { ci: null, rb: null };
 
@@ -2688,7 +2695,13 @@
         const labels = series.map(r => r.d);
         const ds = BANDS.map(b => ({
           label: b.label,
-          data: series.map(r => bandLogSpace(r.mean, r.p100, b.k)),
+          data: series.map(r => {
+            if (currentMode === 'linear') {
+              const v = Number(r[b.key]);
+              return isFinite(v) && v > 0 ? v : null;
+            }
+            return bandLogSpace(r.mean, r.p100, b.k);
+          }),
           borderColor: b.color,
           backgroundColor: b.color,
           borderWidth: b.width || 1,
@@ -2838,9 +2851,24 @@
         applyPreset(range);
       }
 
+      function setMode(mode) {
+        if (mode !== 'log' && mode !== 'linear') return;
+        if (mode === currentMode) return;
+        currentMode = mode;
+        btnModeLog.classList.toggle('active', mode === 'log');
+        btnModeLog.setAttribute('aria-pressed', mode === 'log');
+        btnModeLin.classList.toggle('active', mode === 'linear');
+        btnModeLin.setAttribute('aria-pressed', mode === 'linear');
+        // Re-render with currently cached data (no refetch needed)
+        const payload = cache[currentSource];
+        if (payload) { renderChart(payload); applyActivePreset(); }
+      }
+
       // Wire UI
       btnCi.addEventListener('click', () => loadSource('ci'));
       btnRb.addEventListener('click', () => loadSource('rb'));
+      btnModeLog.addEventListener('click', () => setMode('log'));
+      btnModeLin.addEventListener('click', () => setMode('linear'));
       presetsEl.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-range]');
         if (!btn) return;
