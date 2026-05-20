@@ -1,7 +1,13 @@
 """
-BitWealth (Pty) Ltd — 48-Month Operating Cashflow Forecast v2.0
-Output : docs/Financial/BitWealth_Cashflow_Forecast_v2.0.xlsx
+BitWealth (Pty) Ltd — 48-Month Operating Cashflow Forecast v3.0
+Output : docs/Financial/BitWealth_Cashflow_Forecast_v3.0.xlsx
 Run    : .venv\\Scripts\\python.exe scripts\\build_cashflow_forecast_v2.py
+
+Changes from v2:
+  · Added nc_per_cohort variable (clients per cohort batch, default 1)
+    → NC Active# column now shows total active clients (batches × per_cohort)
+    → Lump sums scale automatically when per_cohort > 1
+    → Monthly contributions already scale via the total-client count
 
 Changes from v1:
   · 50% p.a. return Years 1-3; 0% Year 4 (BTC bear cycle)
@@ -107,7 +113,7 @@ c.alignment = al(h="center"); ws_v.row_dimensions[1].height = 30
 
 ws_v.merge_cells("A2:C2")
 c = ws_v.cell(row=2, column=1,
-    value="48-Month Forecast  ·  Adjust YELLOW cells  ·  All formulas in 'MONTHLY FORECAST' tab update automatically")
+    value="v3.0  ·  48-Month Forecast  ·  Adjust YELLOW cells  ·  All formulas in 'MONTHLY FORECAST' tab update automatically")
 c.fill = fp(L_GOLD); c.font = fn(sz=10, ital=True); c.alignment = al(h="center")
 
 
@@ -221,11 +227,12 @@ row, d = vr(ws_v, row_after_c3, "CLIENT 4 (Founding — Simon / preferential)", 
 VARS.update(d); row_after_c4 = row
 
 row, d = vr(ws_v, row_after_c4, "NEW CLIENT ACQUISITION (rolling ramp)", [
-    ("nc_max",     "Maximum new client slots to model",                  12,     "Model will show up to this many new-client cohorts (1 per interval)", True),
-    ("nc_start",   "First new client — start month",                     4,      "Month 4 = September 2026 (first quarter after founding 3)", True),
-    ("nc_interval","Subsequent new clients — interval (months)",         3,      "1 new client every 3 months (quarterly). Change to 1 for monthly growth", True),
-    ("nc_lump",    "New client initial lump sum (R)",                     0,     "Change to e.g. 500000 if new clients bring lump sums", True),
-    ("nc_monthly", "New client monthly contribution (R)",                50000,  "Conservative R50k/month per new client", True),
+    ("nc_max",       "Maximum cohort batches to model",                   12,     "Model adds 1 batch per interval up to this cap; total clients = batches × per-cohort", True),
+    ("nc_start",     "First cohort — start month",                        4,      "Month 4 = September 2026 (first quarter after founding 3)", True),
+    ("nc_interval",  "Subsequent cohorts — interval (months)",            3,      "1 new cohort every 3 months (quarterly). Change to 1 for monthly growth", True),
+    ("nc_per_cohort","New clients per cohort batch",                       1,      "Change to 2+ to onboard multiple clients per interval. NC Active# column shows total active clients", True),
+    ("nc_lump",      "New client initial lump sum (R, per client)",        0,     "Applied per client; if 2 clients per batch and lump=500k → R1m lump per batch", True),
+    ("nc_monthly",   "New client monthly contribution (R, per client)",   50000,  "Per client per month; total = active_clients × this value", True),
     ("nc_plat",    "New client platform fee rate",                        0.0075,"Standard 0.75%", True),
     ("nc_perf",    "New client performance fee rate",                     0.10,  "Standard 10%", True),
 ], title_color=GREEN_D)
@@ -311,7 +318,7 @@ ws_f.freeze_panes = f"C{DATA_START}"
 
 ws_f.merge_cells(f"A1:{gcl(39)}1")
 c = ws_f.cell(row=1, column=1,
-    value="BitWealth (Pty) Ltd — 48-Month Operating Cashflow Forecast  ·  All formulas auto-update when VARIABLES are changed")
+    value="BitWealth (Pty) Ltd — 48-Month Operating Cashflow Forecast v3.0  ·  All formulas auto-update when VARIABLES are changed")
 c.fill = fp(GOLD); c.font = Font(bold=True, sz=13, color=WHITE, name="Calibri")
 c.alignment = al(h="center"); ws_f.row_dimensions[1].height = 22
 
@@ -406,17 +413,19 @@ def f_closing_aum(r, prev_aum_col, contrib_col, ret_col, perf_col, start_v):
 
 # ── New client formulas ────────────────────────────────────────────────────
 def f_nc_count(r):
-    """Number of active new client cohorts at month m."""
+    """Total active new clients = cohort_batches × nc_per_cohort."""
+    batches = f"MIN({V['nc_max']},INT(($A{r}-{V['nc_start']})/{V['nc_interval']})+1)"
     return (f"=IF($A{r}<{V['nc_start']},0,"
-            f"MIN({V['nc_max']},INT(($A{r}-{V['nc_start']})/{V['nc_interval']})+1))")
+            f"{batches}*{V['nc_per_cohort']})")
 
 def f_nc_contrib(r, count_col):
-    """Aggregate NC contribution = count × monthly + lump if new cohort joins."""
-    new_cohort = (f"IF(AND($A{r}>={V['nc_start']},"
-                  f"MOD($A{r}-{V['nc_start']},{V['nc_interval']})=0,"
-                  f"($A{r}-{V['nc_start']})/{V['nc_interval']}<{V['nc_max']}),"
-                  f"{V['nc_lump']},0)")
-    return f"={cl(count_col)}{r}*{V['nc_monthly']}+{new_cohort}"
+    """Aggregate NC contribution = total_active_clients × monthly
+    + nc_per_cohort × lump when a new batch joins."""
+    new_batch_lump = (f"IF(AND($A{r}>={V['nc_start']},"
+                      f"MOD($A{r}-{V['nc_start']},{V['nc_interval']})=0,"
+                      f"INT(($A{r}-{V['nc_start']})/{V['nc_interval']})<{V['nc_max']}),"
+                      f"{V['nc_per_cohort']}*{V['nc_lump']},0)")
+    return f"={cl(count_col)}{r}*{V['nc_monthly']}+{new_batch_lump}"
 
 def f_nc_platfee(r, contrib_col):
     return f"={cl(contrib_col)}{r}*{V['nc_plat']}"
@@ -639,7 +648,8 @@ c = ws_f.cell(row=note_row, column=1,
           "② Performance fee uses simplified monthly accrual (AUM × monthly_return × perf_rate) — closely approximates quarterly HWM crystallisation.  "
           "③ CAEP AUM fee (0.25%) billed annually in months 12, 24, 36, 48 on end-of-month AUM.  "
           "④ Reserve provision set aside monthly (Years 1–3) to fund Year 4 cash deficit; tracked in Reserve Fund Balance column.  "
-          "⑤ Year 4 (months 37–48) assumes 0% portfolio return — no performance fees; reserve drawdown not automated (see Reserve Fund Bal vs cumulative deficit).")
+          "⑤ Year 4 (months 37–48) assumes 0% portfolio return — no performance fees; reserve drawdown not automated (see Reserve Fund Bal vs cumulative deficit).  "
+          "⑥ NEW v3.0: nc_per_cohort variable = clients per cohort batch. NC Active# column shows total active clients. Example: nc_per_cohort=2 + nc_monthly=R50k → R100k total contribution per active batch.")
 c.fill = fp(L_GOLD); c.font = fn(sz=9, ital=True, col="555555"); c.alignment = al(h="left", wrap=True)
 ws_f.row_dimensions[note_row].height = 60
 
@@ -711,7 +721,7 @@ ws_f.sheet_properties.tabColor  = "006064"
 ws_ch.sheet_properties.tabColor = "1B5E20"
 
 # ── Save ───────────────────────────────────────────────────────────────────
-out = OUT_DIR / "BitWealth_Cashflow_Forecast_v2.0.xlsx"
+out = OUT_DIR / "BitWealth_Cashflow_Forecast_v3.0.xlsx"
 wb.save(out)
 print(f"\nSaved: {out}")
 print("\nModel summary (based on Variables defaults):")
