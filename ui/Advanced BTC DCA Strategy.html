@@ -2512,11 +2512,11 @@
                 <div class="val" id="pipelineTradeDate">—</div>
               </div>
               <div class="lp-ps-cell">
-                <div class="lbl">Signal Date (CI Bands)</div>
+                <div class="lbl">Signal Date (RB Bands)</div>
                 <div class="val" id="pipelineSignalDate">—</div>
               </div>
               <div class="lp-ps-cell">
-                <div class="lbl">CI Bands Available</div>
+                <div class="lbl">RB Bands Available</div>
                 <div class="val" id="pipelineCIStatus">—</div>
               </div>
               <div class="lp-ps-cell">
@@ -2525,7 +2525,7 @@
               </div>
             </div>
             <div class="lp-ps-steps">
-              <div class="lp-ps-step"><span class="stepicon" id="stepCIBands">⏸️</span><span>CI Bands</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="stepCIBands">⏸️</span><span>RB Bands</span></div>
               <div class="lp-ps-step"><span class="stepicon" id="stepDecisions">⏸️</span><span>Decisions</span></div>
               <div class="lp-ps-step"><span class="stepicon" id="stepIntents">⏸️</span><span>Order Intents</span></div>
               <div class="lp-ps-step"><span class="stepicon" id="stepOrders">⏸️</span><span>Execute Orders</span></div>
@@ -2546,7 +2546,7 @@
           <div class="lp-orgsteps">
             <div class="lp-orgstep">
               <span class="lp-light" id="lpOrgCi"></span>
-              <div class="lp-orgstep-text"><strong>1. CI Bands</strong><span id="lpOrgCiLbl">—</span></div>
+              <div class="lp-orgstep-text"><strong>1. RB Bands</strong><span id="lpOrgCiLbl">—</span></div>
             </div>
             <div style="color:#cbd5e1">→</div>
             <div class="lp-orgstep">
@@ -5082,7 +5082,9 @@
           </select>
           <select id="alertsComponentFilter" class="context-select" style="min-width:200px;height:36px;">
             <option value="">All Components</option>
-            <option value="ef_fetch_ci_bands">ef_fetch_ci_bands</option>
+            <option value="ef_fetch_rb_bands">ef_fetch_rb_bands</option>
+            <option value="ef_renew_rb_token">ef_renew_rb_token</option>
+            <option value="ef_fetch_ci_bands">ef_fetch_ci_bands (legacy)</option>
             <option value="ef_generate_decisions">ef_generate_decisions</option>
             <option value="ef_create_order_intents">ef_create_order_intents</option>
             <option value="ef_execute_orders">ef_execute_orders</option>
@@ -13026,7 +13028,7 @@
           statusText.style.color = '#28a745';
           resumeBtn.classList.remove('btn-primary');
         } else if (!data.ci_bands_available) {
-          statusText.textContent = '⏳ Waiting for CI bands data';
+          statusText.textContent = '⏳ Waiting for RB bands data';
           statusText.style.color = '#6c757d';
           resumeBtn.classList.remove('btn-primary');
         } else if (!data.window_valid) {

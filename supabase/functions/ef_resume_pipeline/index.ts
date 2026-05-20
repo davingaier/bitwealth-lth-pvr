@@ -158,7 +158,29 @@ Deno.serve(async (req: Request) => {
         break;
       }
     }
-    
+
+    // Post-pipeline: ensure HWM is initialised for any fresh customer_state_daily
+    // rows that ef_generate_decisions just inserted with default HWM=0. The
+    // dedicated cron lth_pvr_ensure_hwm_initialised_daily (03:30 UTC) handles
+    // the normal path, but if the pipeline ran late (e.g. RB bands delayed),
+    // that cron will have already executed against yesterday's row and skipped.
+    // Running it again here makes the daily HWM refresh self-healing.
+    try {
+      const { error: hwmErr } = await sb
+        .schema("lth_pvr")
+        .rpc("ensure_hwm_initialised_all");
+      if (hwmErr) {
+        console.warn(`ensure_hwm_initialised_all failed (non-fatal): ${hwmErr.message}`);
+        results.push({ step: "ensure_hwm_initialised_all", success: false, error: hwmErr.message });
+      } else {
+        results.push({ step: "ensure_hwm_initialised_all", success: true });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`ensure_hwm_initialised_all threw (non-fatal): ${msg}`);
+      results.push({ step: "ensure_hwm_initialised_all", success: false, error: msg });
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
