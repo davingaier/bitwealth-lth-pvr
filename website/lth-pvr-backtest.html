@@ -355,7 +355,7 @@
                         
                         <div class="form-group">
                             <label for="startDate">Start Date *</label>
-                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2010-07-18">
+                            <input type="date" id="startDate" name="startDate" required value="2020-01-01" min="2015-01-04">
                         </div>
                         
                         <div class="form-group">
@@ -631,7 +631,13 @@
                 alert('Start date must be before end date. Please adjust your date range.');
                 return;
             }
-            
+
+            const minStart = new Date('2015-01-04T00:00:00');
+            if (startDate < minStart) {
+                alert('Start date cannot be earlier than 2015-01-04. BTC price did not breach the LTH PVR -1.0σ buy band before this date, so no trades would have occurred.');
+                return;
+            }
+
             // Check if reCAPTCHA is loaded
             if (typeof grecaptcha === 'undefined') {
                 alert('Security verification not loaded. Please refresh the page and try again.');

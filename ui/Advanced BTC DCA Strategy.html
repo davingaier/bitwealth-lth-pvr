@@ -1906,7 +1906,7 @@
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1rem;">
             <div>
               <label for="simStartDate" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
-              <input id="simStartDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              <input id="simStartDate" type="date" min="2015-01-04" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
             </div>
             <div>
               <label for="simEndDate" style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
@@ -1967,7 +1967,7 @@
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;">
               <div>
                 <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
-                <input id="optStartDate" type="date" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+                <input id="optStartDate" type="date" min="2015-01-04" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
               </div>
               <div>
                 <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
@@ -4447,7 +4447,7 @@
 
           <!-- Dates -->
           <label for="btStartDate"><strong>Start Date:</strong></label>
-          <input id="btStartDate" type="date">
+          <input id="btStartDate" type="date" min="2015-01-04">
 
           <label for="btEndDate"><strong>End Date:</strong></label>
           <input id="btEndDate" type="date">
@@ -5979,6 +5979,11 @@
 
       if (new Date(endDate) <= new Date(startDate)){
         showInlineError(errId, 'End Date must be after Start Date.');
+        return;
+      }
+
+      if (new Date(startDate) < new Date('2015-01-04')){
+        showInlineError(errId, 'Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).');
         return;
       }
 
@@ -13798,6 +13803,11 @@ Momentum:
           return;
         }
 
+        if (new Date(startDate) < new Date('2015-01-04')) {
+          alert('Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).');
+          return;
+        }
+
         // Show loading
         simulationResultsPanel.style.display = 'block';
         simulationResultsPanel.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Running simulation...</div>';
@@ -14299,6 +14309,11 @@ Momentum:
 
         if (!startDate || !endDate || isNaN(upfront) || isNaN(monthly)) {
           alert('Please fill in all optimization parameters');
+          return;
+        }
+
+        if (new Date(startDate) < new Date('2015-01-04')) {
+          alert('Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).');
           return;
         }
 
@@ -15066,7 +15081,7 @@ Momentum:
         </div>
         <div>
           <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">Start Date:</label>
-          <input id="optStartDate2" type="date" value="2020-01-01" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+          <input id="optStartDate2" type="date" value="2020-01-01" min="2015-01-04" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
         </div>
         <div>
           <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">End Date:</label>
@@ -15495,6 +15510,7 @@ self.onmessage = function(e) {
       const enableRetrace = document.getElementById('optEnableRetrace')?.checked !== false;
 
       if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
+      if (new Date(startDate) < new Date('2015-01-04')) { alert('Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).'); return; }
 
       // Compute exact valid combination count (accounts for monotone filtering)
       EST_COMBINATIONS = computeEstCombinations();
@@ -15933,6 +15949,7 @@ self.onmessage = function(e) {
       const objective = document.getElementById('optObjective2')?.value || 'cagr';
       const enableRetrace = document.getElementById('optEnableRetrace')?.checked !== false;
       if (!startDate || !endDate) { alert('Please enter start and end dates.'); return; }
+      if (new Date(startDate) < new Date('2015-01-04')) { alert('Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).'); return; }
 
       const bpExitSigma = varCfg.bearPauseExitSigma ?? 0.0;
       let exitColName;
