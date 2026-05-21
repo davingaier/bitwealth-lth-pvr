@@ -3,11 +3,44 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-19 (v0.6.110)
+**Last updated:** 2026-05-21 (v0.6.111)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.111 – Walk-Forward Validation (WFT)
+**Date:** 2026-05-21
+**Status:** ✅ DEPLOYED
+
+Added out-of-sample walk-forward validation framework to complement the existing back-tester.
+
+**New files:**
+- `docs/wft/run_walk_forward.py` — Python orchestrator; thin HTTP client only; calls existing EFs
+- `docs/wft/README.md` — Setup and usage instructions
+- `supabase/migrations/20260521_create_wft_tables.sql` — DB migration (applied)
+
+**DB changes (lth_pvr_bt schema):**
+- New table: `wft_runs` — one row per WFT execution
+- New table: `wft_folds` — one row per fold (9 per run); stores Track A + Track B results
+- New table: `wft_fold_daily` — daily OOS NAV series per fold/track (for equity chart)
+- New view: `v_wft_summary` — joins wft_runs + wft_folds for Admin UI read
+
+**Admin UI:**
+- New card added to the Strategy Back-Testing module: "Walk-Forward Validation"
+- Components: run selector, fold grid table, efficiency ratio badges, OOS equity chart
+- JS module: `wftModule` IIFE added before the RB Token module
+
+**Architecture:**
+- 9 anchored/expanding folds; each OOS period = 1 year (2017–2025)
+- Track A = frozen production params, Track B = 3-phase grid search (momo → buy → sell) + OOS simulation
+- All simulation via `ef_bt_execute`, all optimisation via `ef_optimize_lth_pvr_strategy`
+- Pass criterion: LTH PVR OOS final NAV > Std DCA OOS final NAV
+
+**SDD:**
+- Added section `## 5a. Walk-Forward Validation` between sections 5 and 6
+
+---
 
 ### v0.6.110 – CI→RB band-source migration complete (Days 4-7)
 **Date:** 2026-05-19
@@ -10809,6 +10842,195 @@ const defaultBands = {
 - **UI Visualization:** Strategy Back-Testing module
   - Charts: Holdings, Portfolio Value, ROI, Annualised Growth
   - Tables: Yearly comparison with PDF export
+
+---
+
+## 5a. Walk-Forward Validation
+
+Complements the fixed back-test by testing strategy generalisability across multiple
+**out-of-sample (OOS) periods** using an anchored/expanding training window.
+
+### 5a.1 Purpose
+
+Standard back-testing optimises parameters on the full historical dataset, which
+risks over-fitting.  Walk-forward testing (WFT) answers two questions:
+
+1. **Track A — Validation:** Do the **current production parameters** (frozen) generate
+   positive alpha (LTH PVR NAV > Std DCA NAV) across each unseen annual OOS period?
+2. **Track B — Optimisation:** Do **per-window optimised parameters** also produce
+   positive alpha when applied to the OOS period?  A strategy where Track B
+   consistently beats Track A suggests there is still exploitable optimisation
+   alpha.  If both tracks agree, the strategy is robust.
+
+### 5a.2 Fold Structure
+
+9 folds with **anchored** (expanding) training windows and **annual** OOS periods.
+
+| Fold | Training Window | OOS Period | Market Context |
+|------|-----------------|------------|---------------|
+| 1 | 2015-01-04 → 2016-12-31 | 2017 | First major BTC bull run |
+| 2 | 2015-01-04 → 2017-12-31 | 2018 | Crypto winter |
+| 3 | 2015-01-04 → 2018-12-31 | 2019 | Recovery |
+| 4 | 2015-01-04 → 2019-12-31 | 2020 | COVID crash + bull |
+| 5 | 2015-01-04 → 2020-12-31 | 2021 | Parabolic bull run |
+| 6 | 2015-01-04 → 2021-12-31 | 2022 | Bear + LUNA/FTX |
+| 7 | 2015-01-04 → 2022-12-31 | 2023 | Recovery |
+| 8 | 2015-01-04 → 2023-12-31 | 2024 | Halving + ETF bull |
+| 9 | 2015-01-04 → 2024-12-31 | 2025 | Most recent year |
+
+**Pass criterion per fold:** `LTH PVR OOS final NAV > Std DCA OOS final NAV`
+
+**Efficiency ratio:** `passes / 9 folds`
+
+- ≥ 7/9 (78%): Strategy is robust; production parameters generalise well
+- 5-6/9 (56-67%): Mixed; further investigation recommended
+- ≤ 4/9 (≤ 44%): Strategy may be over-fit to historical data
+
+### 5a.3 Architecture
+
+```
+Python Orchestrator (docs/wft/run_walk_forward.py)
+│
+├── lth_pvr.strategy_variation_templates  ← Read production params
+│
+├── For each of 9 folds:
+│   ├── [Track A] Create bt_runs + bt_params (prod params, OOS window)
+│   │   └── POST ef_bt_execute → Poll bt_runs.status
+│   │
+│   └── [Track B] 3-phase optimisation over training window:
+│       ├── Phase 1: POST ef_optimize_lth_pvr_strategy (momo sweep, ~72 combos)
+│       ├── Phase 2: POST ef_optimize_lth_pvr_strategy (buy B1-B5, ~243 combos)
+│       ├── Phase 3: POST ef_optimize_lth_pvr_strategy (sell B6-B11, ~729 combos)
+│       └── POST ef_bt_execute with best config → Poll bt_runs.status
+│
+└── Write results to lth_pvr_bt.wft_runs / wft_folds / wft_fold_daily
+```
+
+The Python script is a **thin HTTP orchestrator** only — all simulation and
+optimisation logic lives in the existing TypeScript shared modules
+(`_shared/lth_pvr_strategy_logic.ts`, `_shared/lth_pvr_optimizer.ts`).
+
+### 5a.4 3-Phase Optimisation
+
+The full 11-parameter grid search (3^11 ≈ 177,000 combinations) exceeds the
+Supabase edge function 60-second timeout.  The 3-phase approach splits the search:
+
+| Phase | Parameters | Combos | Locked |
+|-------|-----------|--------|--------|
+| 1 | Momentum (momo_len 3-14, momo_thr 0.00-0.05) | ~72 | B1-B11 at current |
+| 2 | Buy-side B1-B5 (grid_size=3, ±20%) | ~243 | B6-B11 locked; momo from Phase 1 |
+| 3 | Sell-side B6-B11 (grid_size=3, ±20%) | ~729 | B1-B5 locked; momo from Phase 1 |
+
+Each phase completes well within the 60 s timeout.  The final `StrategyConfig` is
+assembled from the best result of each phase.
+
+### 5a.5 Database Tables
+
+All tables live in `lth_pvr_bt` schema (isolated from live trading data):
+
+**`wft_runs`**
+| Column | Type | Description |
+|--------|------|-------------|
+| `wft_run_id` | UUID PK | Auto-generated |
+| `org_id` | UUID | Multi-tenant isolation |
+| `variation_id` | UUID | Variation tested |
+| `band_source` | text | `rb` or `ci` |
+| `description` | text | Free-text label |
+| `upfront_usdt` | numeric | Simulation contribution |
+| `monthly_usdt` | numeric | Simulation contribution |
+| `folds_total` | int | Always 9 |
+| `folds_completed` | int | Progress counter |
+| `status` | text | `running` / `completed` / `failed` |
+| `started_at` | timestamptz | |
+| `completed_at` | timestamptz | |
+
+**`wft_folds`**
+| Column | Type | Description |
+|--------|------|-------------|
+| `wft_fold_id` | UUID PK | |
+| `wft_run_id` | UUID FK | |
+| `fold_number` | int | 1-9 |
+| `train_start/end` | date | Training window |
+| `oos_start/end` | date | Out-of-sample window |
+| `track_a_bt_run_id` | UUID | FK to `bt_runs` |
+| `track_a_oos_final_nav` | numeric | |
+| `track_a_std_dca_final_nav` | numeric | |
+| `track_a_oos_cagr_pct` | numeric | |
+| `track_a_passed` | boolean | |
+| `track_b_best_config` | JSONB | Best StrategyConfig from optimiser |
+| `track_b_bt_run_id` | UUID | FK to `bt_runs` |
+| `track_b_oos_final_nav` | numeric | |
+| `track_b_std_dca_final_nav` | numeric | |
+| `track_b_oos_cagr_pct` | numeric | |
+| `track_b_passed` | boolean | |
+| `status` | text | `pending` / `optimising` / `simulating` / `completed` / `failed` |
+
+**`wft_fold_daily`**  — daily OOS NAV per track/fold for chart rendering
+| Column | Type | Description |
+|--------|------|-------------|
+| `wft_fold_daily_id` | bigserial PK | |
+| `wft_fold_id` | UUID FK | |
+| `result_date` | date | |
+| `track` | text | `a` / `b` / `std_dca` |
+| `nav_usd` | numeric | |
+| `btc_balance` | numeric | |
+| `usdt_balance` | numeric | |
+
+**`v_wft_summary`** — read-only view joining `wft_runs + wft_folds`
+
+### 5a.6 Python Script
+
+```
+docs/wft/
+  run_walk_forward.py   — main orchestrator
+  README.md             — setup + usage instructions
+```
+
+**Key environment variables:**
+```powershell
+$env:SUPABASE_URL              = "https://wqnmxpooabmedvtackji.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "<service-role-key>"
+$env:ORG_ID                    = "b0a77009-03b9-44a1-ae1d-34f157d44a8b"
+```
+
+**Optional overrides:**
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `WFT_VARIATION_ID` | production variation | Override variation to test |
+| `WFT_UPFRONT_USDT` | 10000 | Simulation upfront contribution |
+| `WFT_MONTHLY_USDT` | 500 | Simulation monthly contribution |
+| `WFT_BAND_SOURCE` | `rb` | `rb` or `ci` |
+| `WFT_SKIP_TRACK_B` | `0` | `1` = Track A only (3× faster) |
+| `WFT_START_FOLD` | `1` | Resume from this fold |
+| `WFT_RUN_ID` | *(new run)* | Resume existing run |
+
+**Estimated runtime:**
+- Track A only: ~30-60 minutes
+- Both tracks: ~3-6 hours (optimisation dominates)
+
+### 5a.7 Admin UI Panel
+
+Located in the **Strategy Back-Testing** module, after the existing back-test
+chart card.  It is **read-only** — it displays results from the Python script.
+
+**Components:**
+- Run selector dropdown (loads `lth_pvr_bt.wft_runs`)
+- Fold grid table (9 rows × Track A + Track B columns)
+- Efficiency ratio badges (A passes/9, B passes/9)
+- Assessment banner (robust / mixed / over-fit verdict)
+- OOS equity chart — all 9 OOS periods stitched into a continuous series,
+  showing Track A (gold), Track B (blue), and Std DCA (grey dashed)
+
+**Viewing results directly via SQL:**
+```sql
+SELECT fold_number, oos_start, oos_end,
+       track_a_oos_final_nav, track_a_passed,
+       track_b_oos_final_nav, track_b_passed
+FROM lth_pvr_bt.v_wft_summary
+WHERE wft_run_id = '<your-run-id>'
+ORDER BY fold_number;
+```
 
 ---
 

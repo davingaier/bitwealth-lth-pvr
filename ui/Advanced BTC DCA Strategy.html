@@ -4547,6 +4547,93 @@
           <button id="btExportPdfBtn" type="button">Export Customer Charts to PDF</button>
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Walk-Forward Validation Panel
+           Displays results from docs/wft/run_walk_forward.py.
+           Results are stored in lth_pvr_bt.wft_runs / wft_folds / wft_fold_daily.
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="card" id="wftPanel" style="margin-top:1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+          <div>
+            <h3 style="margin:0 0 0.25rem 0;">Walk-Forward Validation</h3>
+            <p class="small muted" style="margin:0;">
+              Out-of-sample validation of the LTH PVR strategy across 9 annual OOS folds.
+              <strong>Track A</strong> = frozen production params.
+              <strong>Track B</strong> = grid-search optimised params per training window.
+              Pass criterion: LTH PVR OOS final NAV &gt; Std DCA OOS final NAV.
+            </p>
+          </div>
+          <button type="button" id="wftRefreshBtn" onclick="loadWftRuns()" style="white-space:nowrap;">↻ Refresh</button>
+        </div>
+
+        <!-- How to run banner -->
+        <div style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:13px;color:#555;">
+          <strong>To run a new walk-forward test:</strong>
+          <code style="display:block;margin-top:0.25rem;background:#e9ecef;padding:0.4rem 0.6rem;border-radius:4px;">
+            python docs/wft/run_walk_forward.py
+          </code>
+          See <code>docs/wft/README.md</code> for environment variables and options.
+        </div>
+
+        <!-- Run selector -->
+        <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+          <label for="wftRunSelect" style="font-weight:600;white-space:nowrap;">WFT Run:</label>
+          <select id="wftRunSelect" onchange="onWftRunChange()" style="flex:1;min-width:260px;">
+            <option value="">— select a completed run —</option>
+          </select>
+          <span id="wftRunStatus" style="font-size:13px;color:#6b7280;"></span>
+        </div>
+
+        <!-- Efficiency ratio badges -->
+        <div id="wftEfficiencyRow" style="display:none;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;" class="flex">
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#166534;letter-spacing:.5px;">Track A — Validation</div>
+            <div id="wftEffA" style="font-size:22px;font-weight:700;color:#15803d;">—</div>
+            <div style="font-size:11px;color:#4ade80;">folds passed</div>
+          </div>
+          <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#1e40af;letter-spacing:.5px;">Track B — Optimised</div>
+            <div id="wftEffB" style="font-size:22px;font-weight:700;color:#2563eb;">—</div>
+            <div style="font-size:11px;color:#60a5fa;">folds passed</div>
+          </div>
+          <div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;flex:1;min-width:200px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#713f12;letter-spacing:.5px;">Assessment</div>
+            <div id="wftAssessment" style="font-size:14px;font-weight:600;color:#854d0e;margin-top:0.2rem;">—</div>
+          </div>
+        </div>
+
+        <!-- Fold grid table -->
+        <div id="wftFoldGridWrap" style="display:none;overflow-x:auto;margin-bottom:1.25rem;">
+          <table class="report-table" style="min-width:860px;">
+            <thead>
+              <tr>
+                <th>Fold</th>
+                <th>OOS Period</th>
+                <th>Track A NAV</th>
+                <th>Std DCA NAV</th>
+                <th>A CAGR</th>
+                <th>A Result</th>
+                <th>Track B NAV</th>
+                <th>B CAGR</th>
+                <th>B Result</th>
+              </tr>
+            </thead>
+            <tbody id="wftFoldTableBody">
+              <tr><td colspan="9" style="text-align:center;color:#9ca3af;">No data</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- OOS equity chart -->
+        <div id="wftChartWrap" style="display:none;">
+          <h4 style="margin:0 0 0.5rem 0;font-size:14px;font-weight:600;">OOS Equity Curves — All Folds</h4>
+          <p class="small muted" style="margin:0 0 0.5rem 0;">Each fold's OOS period stitched together. Gold = Track A (validation), Blue = Track B (optimised), Grey = Std DCA.</p>
+          <canvas id="wftEquityChart" height="90"></canvas>
+        </div>
+
+        <div id="wftError" class="inline-error" style="display:none;margin-top:0.5rem;"></div>
+      </div>
     </div>
 
     <div id="finance-module" class="module">
@@ -10369,6 +10456,288 @@
         });
       }
     });
+  })();
+
+  // ===================== Walk-Forward Validation (Back-Testing Module) =====================
+  (function wftModule(){
+
+    let wftChartInstance = null;
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    function wftShowError(msg){
+      const el = document.getElementById('wftError');
+      if(el){ el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
+    }
+
+    function wftFmt(v){ return v == null ? '—' : '$' + Number(v).toLocaleString('en-US',{maximumFractionDigits:0}); }
+    function wftPct(v){ return v == null ? '—' : Number(v).toFixed(1) + '%'; }
+
+    function wftPassBadge(passed){
+      if(passed === true)  return '<span style="color:#16a34a;font-weight:700;">✅ PASS</span>';
+      if(passed === false) return '<span style="color:#dc2626;font-weight:700;">❌ FAIL</span>';
+      return '<span style="color:#9ca3af;">—</span>';
+    }
+
+    function wftFormatPeriod(start, end){
+      if(!start || !end) return '—';
+      return start.substring(0,4) + ' – ' + end.substring(0,4);
+    }
+
+    function destroyWftChart(){
+      if(wftChartInstance){ wftChartInstance.destroy(); wftChartInstance = null; }
+    }
+
+    // ── Load run list ──────────────────────────────────────────────────────────
+
+    async function loadWftRuns(){
+      wftShowError('');
+      if(!supabaseClient) return;
+      const sel = document.getElementById('wftRunSelect');
+      if(!sel) return;
+
+      const orgId = (window.globalOrgId || '').trim();
+
+      try {
+        let q = supabaseClient.schema('lth_pvr_bt').from('wft_runs')
+          .select('wft_run_id,description,band_source,status,started_at,folds_total,folds_completed,upfront_usdt,monthly_usdt')
+          .order('started_at', {ascending: false})
+          .limit(20);
+        if(orgId) q = q.eq('org_id', orgId);
+
+        const { data, error } = await q;
+        if(error) throw error;
+
+        sel.innerHTML = '<option value="">— select a completed run —</option>';
+        (data || []).forEach(r => {
+          const date  = r.started_at ? r.started_at.substring(0,10) : '?';
+          const label = `${date}  |  ${r.description || r.wft_run_id.substring(0,8)}…  [${r.status}  ${r.folds_completed || 0}/${r.folds_total || 9} folds]`;
+          const opt   = document.createElement('option');
+          opt.value       = r.wft_run_id;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+      } catch(e){
+        wftShowError('Could not load WFT runs: ' + (e.message || e));
+      }
+    }
+
+    // ── On run selected ────────────────────────────────────────────────────────
+
+    async function onWftRunChange(){
+      const sel    = document.getElementById('wftRunSelect');
+      const runId  = sel ? sel.value : '';
+      const statusEl = document.getElementById('wftRunStatus');
+
+      document.getElementById('wftEfficiencyRow').style.display  = 'none';
+      document.getElementById('wftFoldGridWrap').style.display   = 'none';
+      document.getElementById('wftChartWrap').style.display      = 'none';
+      destroyWftChart();
+      wftShowError('');
+
+      if(!runId){ if(statusEl) statusEl.textContent = ''; return; }
+      if(statusEl) statusEl.textContent = 'Loading…';
+
+      try {
+        // Load folds via the summary view
+        const { data: folds, error: fe } = await supabaseClient.schema('lth_pvr_bt')
+          .from('v_wft_summary')
+          .select('*')
+          .eq('wft_run_id', runId)
+          .order('fold_number', {ascending: true});
+        if(fe) throw fe;
+
+        renderWftFoldGrid(folds || []);
+        if(statusEl) statusEl.textContent = '';
+
+        // Load daily data for the chart
+        if((folds || []).length > 0){
+          const foldIds = folds.map(f => f.wft_fold_id);
+          const { data: daily, error: de } = await supabaseClient.schema('lth_pvr_bt')
+            .from('wft_fold_daily')
+            .select('wft_fold_id,result_date,track,nav_usd')
+            .in('wft_fold_id', foldIds)
+            .order('result_date', {ascending: true});
+          if(de) throw de;
+          renderWftChart(folds, daily || []);
+        }
+      } catch(e){
+        if(statusEl) statusEl.textContent = '';
+        wftShowError('Could not load WFT fold data: ' + (e.message || e));
+      }
+    }
+
+    // ── Fold grid ──────────────────────────────────────────────────────────────
+
+    function renderWftFoldGrid(folds){
+      const tbody = document.getElementById('wftFoldTableBody');
+      if(!tbody) return;
+
+      if(!folds.length){
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9ca3af;">No fold data yet</td></tr>';
+        return;
+      }
+
+      const rows = folds.map(f => `
+        <tr>
+          <td style="text-align:center;font-weight:600;">Fold ${f.fold_number}</td>
+          <td>${wftFormatPeriod(f.oos_start, f.oos_end)}</td>
+          <td style="text-align:right;">${wftFmt(f.track_a_oos_final_nav)}</td>
+          <td style="text-align:right;">${wftFmt(f.track_a_std_dca_final_nav)}</td>
+          <td style="text-align:right;">${wftPct(f.track_a_oos_cagr_pct)}</td>
+          <td style="text-align:center;">${wftPassBadge(f.track_a_passed)}</td>
+          <td style="text-align:right;">${wftFmt(f.track_b_oos_final_nav)}</td>
+          <td style="text-align:right;">${wftPct(f.track_b_oos_cagr_pct)}</td>
+          <td style="text-align:center;">${wftPassBadge(f.track_b_passed)}</td>
+        </tr>`).join('');
+      tbody.innerHTML = rows;
+
+      // Efficiency badges
+      const aTotal = folds.filter(f => f.track_a_passed != null).length;
+      const bTotal = folds.filter(f => f.track_b_passed != null).length;
+      const aPasses = folds.filter(f => f.track_a_passed === true).length;
+      const bPasses = folds.filter(f => f.track_b_passed === true).length;
+
+      const effA = document.getElementById('wftEffA');
+      const effB = document.getElementById('wftEffB');
+      const assess = document.getElementById('wftAssessment');
+
+      if(effA) effA.textContent = aTotal ? `${aPasses}/${aTotal}` : '—';
+      if(effB) effB.textContent = bTotal ? `${bPasses}/${bTotal}` : '—';
+
+      if(assess && aTotal){
+        const ratio = aPasses / aTotal;
+        if(ratio >= 0.78)      assess.textContent = '✅ Strategy is robust — passes ≥ 7/9 OOS folds';
+        else if(ratio >= 0.56) assess.textContent = '⚠️ Mixed results — further analysis recommended';
+        else                   assess.textContent = '❌ Strategy may be over-fit — fails majority of OOS folds';
+        assess.style.color = ratio >= 0.78 ? '#854d0e' : ratio >= 0.56 ? '#92400e' : '#7f1d1d';
+      }
+
+      document.getElementById('wftEfficiencyRow').style.display = 'flex';
+      document.getElementById('wftFoldGridWrap').style.display  = 'block';
+    }
+
+    // ── Equity chart ───────────────────────────────────────────────────────────
+
+    function renderWftChart(folds, dailyRows){
+      destroyWftChart();
+      const canvas = document.getElementById('wftEquityChart');
+      if(!canvas || !window.Chart) return;
+
+      // Build a sorted, deduplicated list of all dates
+      const allDates = Array.from(new Set(dailyRows.map(r => r.result_date))).sort();
+
+      // Map fold_id → fold_number
+      const foldNumMap = {};
+      folds.forEach(f => { foldNumMap[f.wft_fold_id] = f.fold_number; });
+
+      // Group by track
+      const trackA   = {}; // date → nav
+      const trackB   = {};
+      const trackStd = {};
+
+      dailyRows.forEach(r => {
+        if(r.track === 'a')       trackA[r.result_date]   = r.nav_usd;
+        else if(r.track === 'b')  trackB[r.result_date]   = r.nav_usd;
+        else if(r.track === 'std_dca') trackStd[r.result_date] = r.nav_usd;
+      });
+
+      const serA   = allDates.map(d => trackA[d]   ?? null);
+      const serB   = allDates.map(d => trackB[d]   ?? null);
+      const serStd = allDates.map(d => trackStd[d] ?? null);
+
+      const tickColor = (typeof cssVar === 'function' && cssVar('--ink-soft')) || '#6B7280';
+      const gridColor = (typeof cssVar === 'function' && cssVar('--border-subtle')) || '#E5E7EB';
+      const usdFmtWft = new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0});
+
+      document.getElementById('wftChartWrap').style.display = 'block';
+
+      wftChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: allDates,
+          datasets: [
+            {
+              label: 'Track A — Validation',
+              data: serA,
+              borderColor: '#d97706',
+              backgroundColor: 'transparent',
+              pointRadius: 0, pointHoverRadius: 3,
+              tension: 0.22, borderWidth: 2,
+              spanGaps: false,
+            },
+            {
+              label: 'Track B — Optimised',
+              data: serB,
+              borderColor: '#3b82f6',
+              backgroundColor: 'transparent',
+              pointRadius: 0, pointHoverRadius: 3,
+              tension: 0.22, borderWidth: 2,
+              spanGaps: false,
+            },
+            {
+              label: 'Std DCA',
+              data: serStd,
+              borderColor: '#9ca3af',
+              backgroundColor: 'transparent',
+              pointRadius: 0, pointHoverRadius: 3,
+              tension: 0.22, borderWidth: 1.5,
+              borderDash: [4, 4],
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          interaction: {mode: 'index', intersect: false},
+          layout: {padding: {top: 8, right: 14, bottom: 8, left: 12}},
+          scales: {
+            x: {
+              title: {display: true, text: 'Date'},
+              ticks: {color: tickColor, maxRotation: 0, autoSkipPadding: 30},
+              grid: {color: gridColor},
+            },
+            y: {
+              title: {display: true, text: 'OOS NAV (USD)'},
+              position: 'left',
+              ticks: {color: tickColor, callback: v => usdFmtWft.format(v)},
+              grid: {color: gridColor},
+            },
+          },
+          plugins: {
+            legend: {position: 'top'},
+            title: {display: false},
+            tooltip: {
+              callbacks: {
+                label: ctx => ' ' + ctx.dataset.label + ': ' + usdFmtWft.format(ctx.parsed.y),
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // ── Expose globally ────────────────────────────────────────────────────────
+    window.loadWftRuns    = loadWftRuns;
+    window.onWftRunChange = onWftRunChange;
+
+    // Auto-load when the back-testing module becomes visible
+    document.addEventListener('DOMContentLoaded', () => {
+      const panel = document.getElementById('wftPanel');
+      if(!panel) return;
+      // Watch for the backtest module being activated
+      const observer = new MutationObserver(() => {
+        const btMod = document.getElementById('backtest-module');
+        if(btMod && btMod.classList.contains('active') && !panel.dataset.loaded){
+          panel.dataset.loaded = '1';
+          loadWftRuns();
+        }
+      });
+      const btMod = document.getElementById('backtest-module');
+      if(btMod) observer.observe(btMod, {attributes: true, attributeFilter: ['class']});
+    });
+
   })();
 
   // ===================== RB API Token (Administration Module) =====================
