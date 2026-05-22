@@ -10882,18 +10882,14 @@
         const runId = crypto.randomUUID();
 
         const { error } = await supabaseClient
-          .schema('lth_pvr_bt')
-          .from('wft_runs')
-          .insert({
-            wft_run_id:    runId,
-            org_id:        orgId,
-            variation_id:  variationId,
-            band_source:   bandSource,
-            description:   `Queued from Admin UI ${new Date().toISOString().substring(0,10)}`,
-            upfront_usdt:  upfront,
-            monthly_usdt:  monthly,
-            folds_total:   9,
-            status:        'queued',
+          .rpc('wft_queue_run', {
+            p_wft_run_id:   runId,
+            p_org_id:       orgId,
+            p_variation_id: variationId,
+            p_band_source:  bandSource,
+            p_description:  `Queued from Admin UI ${new Date().toISOString().substring(0,10)}`,
+            p_upfront_usdt: upfront,
+            p_monthly_usdt: monthly,
           });
         if(error) throw error;
 
