@@ -10544,13 +10544,26 @@
 
     // ── Load run list ──────────────────────────────────────────────────────────
 
+    async function resolveOrgId(){
+      // Mirror the back-testing module: try window globals first, then RPC.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      for(const cand of [window.currentOrgId, window.appState && window.appState.org_id]){
+        if(typeof cand === 'string' && UUID_RE.test(cand.trim())) return cand.trim();
+      }
+      try {
+        const { data } = await supabaseClient.rpc('my_orgs');
+        if(Array.isArray(data) && data.length > 0 && data[0].id) return data[0].id;
+      } catch(_){}
+      return null;
+    }
+
     async function loadWftRuns(){
       wftShowError('');
       if(!supabaseClient) return;
       const sel = document.getElementById('wftRunSelect');
       if(!sel) return;
 
-      const orgId = (window.globalOrgId || '').trim();
+      const orgId = await resolveOrgId();
 
       try {
         let q = supabaseClient.schema('lth_pvr_bt').from('wft_runs')
@@ -10860,12 +10873,18 @@
         return;
       }
 
-      const orgId      = (window.globalOrgId || '').trim();
+      const orgId      = await resolveOrgId();
       const variationId = document.getElementById('wftLaunchVariation').value;
       const upfront    = parseFloat(document.getElementById('wftLaunchUpfront').value) || 10000;
       const monthly    = parseFloat(document.getElementById('wftLaunchMonthly').value) || 500;
       const bandSource = document.getElementById('wftLaunchBandSource').value || 'rb';
       const skipB      = document.getElementById('wftLaunchSkipB').checked;
+
+      if(!orgId){
+        errEl.textContent = 'Unable to determine your organisation. Please select an org in the context bar first.';
+        errEl.style.display = 'block';
+        return;
+      }
 
       if(!variationId){
         errEl.textContent = 'Please select a variation.';
