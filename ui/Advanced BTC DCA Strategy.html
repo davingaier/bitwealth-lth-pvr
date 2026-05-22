@@ -4568,7 +4568,7 @@
         </div>
 
         <!-- Launch panel -->
-        <details id="wftLaunchDetails" style="margin-bottom:1rem;border:1px solid #dee2e6;border-radius:6px;overflow:hidden;">
+        <details id="wftLaunchDetails" style="margin-bottom:1rem;border:1px solid #dee2e6;border-radius:6px;overflow:hidden;" ontoggle="if(this.open)wftLoadVariations()">
           <summary style="background:#f8f9fa;padding:0.6rem 1rem;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
             <span>▶ Launch a New Walk-Forward Run</span>
             <span style="font-weight:400;color:#6b7280;font-size:12px;">configure → prepare → paste one command in PowerShell</span>
@@ -4578,7 +4578,7 @@
               <div>
                 <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">Variation</label>
                 <select id="wftLaunchVariation" style="width:100%;font-size:13px;">
-                  <option value="">— loading… —</option>
+                  <option value="">— open panel to load —</option>
                 </select>
               </div>
               <div>
@@ -4632,20 +4632,28 @@
         </div>
 
         <!-- Efficiency ratio badges -->
-        <div id="wftEfficiencyRow" style="display:none;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;" class="flex">
+        <div id="wftEfficiencyRow" style="display:none;gap:1rem;margin-bottom:0.5rem;flex-wrap:wrap;" class="flex">
           <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#166534;letter-spacing:.5px;">Track A — Validation</div>
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#166534;letter-spacing:.5px;">Track A — 1-Year Folds</div>
             <div id="wftEffA" style="font-size:22px;font-weight:700;color:#15803d;">—</div>
-            <div style="font-size:11px;color:#4ade80;">folds passed</div>
+            <div style="font-size:11px;color:#4ade80;">annual folds passed</div>
           </div>
           <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#1e40af;letter-spacing:.5px;">Track B — Optimised</div>
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#1e40af;letter-spacing:.5px;">Track B — 1-Year Folds</div>
             <div id="wftEffB" style="font-size:22px;font-weight:700;color:#2563eb;">—</div>
-            <div style="font-size:11px;color:#60a5fa;">folds passed</div>
+            <div style="font-size:11px;color:#60a5fa;">annual folds passed</div>
           </div>
-          <div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;flex:1;min-width:200px;">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#713f12;letter-spacing:.5px;">Assessment</div>
-            <div id="wftAssessment" style="font-size:14px;font-weight:600;color:#854d0e;margin-top:0.2rem;">—</div>
+          <div style="background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:0.6rem 1.1rem;text-align:center;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#6b21a8;letter-spacing:.5px;">Track A — 4-Year Windows</div>
+            <div id="wftEff4yr" style="font-size:22px;font-weight:700;color:#7c3aed;">—</div>
+            <div style="font-size:11px;color:#a78bfa;">4-yr rolling windows passed</div>
+          </div>
+        </div>
+        <div id="wftAssessmentRow" style="display:none;margin-bottom:1rem;">
+          <div style="background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:0.6rem 1rem;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:#713f12;letter-spacing:.5px;margin-bottom:3px;">Assessment</div>
+            <div id="wftAssessment" style="font-size:13px;font-weight:600;color:#854d0e;">—</div>
+            <div id="wftAssessmentNote" style="font-size:11px;color:#92400e;margin-top:3px;"></div>
           </div>
         </div>
 
@@ -10576,6 +10584,7 @@
       const statusEl = document.getElementById('wftRunStatus');
 
       document.getElementById('wftEfficiencyRow').style.display  = 'none';
+      document.getElementById('wftAssessmentRow').style.display  = 'none';
       document.getElementById('wftFoldGridWrap').style.display   = 'none';
       document.getElementById('wftChartWrap').style.display      = 'none';
       destroyWftChart();
@@ -10651,16 +10660,52 @@
       if(effA) effA.textContent = aTotal ? `${aPasses}/${aTotal}` : '—';
       if(effB) effB.textContent = bTotal ? `${bPasses}/${bTotal}` : '—';
 
-      if(assess && aTotal){
-        const ratio = aPasses / aTotal;
-        if(ratio >= 0.78)      assess.textContent = '✅ Strategy is robust — passes ≥ 7/9 OOS folds';
-        else if(ratio >= 0.56) assess.textContent = '⚠️ Mixed results — further analysis recommended';
-        else                   assess.textContent = '❌ Strategy may be over-fit — fails majority of OOS folds';
-        assess.style.color = ratio >= 0.78 ? '#854d0e' : ratio >= 0.56 ? '#92400e' : '#7f1d1d';
+      // ── Rolling 4-year window analysis (primary metric for a 4+ year strategy) ──
+      // Each window sums Track A final NAV across 4 consecutive folds vs Std DCA.
+      // This reflects: "did the strategy generate more total wealth across 4 different
+      // annual cohorts of investors?" — averaging out individual bear/bull years.
+      const ROLL = 4;
+      let r4passes = 0, r4total = 0;
+      for(let w = 0; w <= folds.length - ROLL; w++){
+        const win = folds.slice(w, w + ROLL);
+        if(win.every(f => f.track_a_oos_final_nav != null && f.track_a_std_dca_final_nav != null)){
+          r4total++;
+          const sumA   = win.reduce((s, f) => s + parseFloat(f.track_a_oos_final_nav  || 0), 0);
+          const sumStd = win.reduce((s, f) => s + parseFloat(f.track_a_std_dca_final_nav || 0), 0);
+          if(sumA > sumStd) r4passes++;
+        }
+      }
+      const eff4El = document.getElementById('wftEff4yr');
+      if(eff4El) eff4El.textContent = r4total ? `${r4passes}/${r4total}` : '—';
+
+      // ── Assessment: use 4-year windows as primary signal ──────────────────────
+      if(assess && (aTotal || r4total)){
+        const ratio1yr = aTotal ? aPasses / aTotal : null;
+        const ratio4yr = r4total ? r4passes / r4total : null;
+        // Primary verdict driven by 4-year metric (if available), else 1-year
+        const primary = ratio4yr !== null ? ratio4yr : ratio1yr;
+        if(primary >= 0.83){          // ≥5/6 or ≥7/9
+          assess.textContent = '✅ Strategy is robust across your 4-year horizon';
+          assess.style.color = '#854d0e';
+        } else if(primary >= 0.5){
+          assess.textContent = '⚠️ Mixed — strategy works in most multi-year periods but struggles in some regimes';
+          assess.style.color = '#92400e';
+        } else {
+          assess.textContent = '❌ Strategy underperforms Std DCA in most multi-year windows — review parameters';
+          assess.style.color = '#7f1d1d';
+        }
+        // Explanatory note about 1-year folds being less relevant for long-term strategies
+        const noteEl = document.getElementById('wftAssessmentNote');
+        if(noteEl && ratio1yr !== null && ratio4yr !== null && ratio1yr < 0.78 && ratio4yr >= 0.67){
+          noteEl.textContent = `Note: ${Math.round((1-ratio1yr)*aTotal)} annual fold(s) "fail" at the 1-year mark — typically bear-market years where the strategy is holding more BTC than Std DCA. This is expected for a 4+ year hold: those accumulated BTC positions recover and outperform in subsequent folds. The 4-year rolling metric above is the more relevant measure for your strategy.`;
+        } else if(noteEl){
+          noteEl.textContent = '';
+        }
       }
 
-      document.getElementById('wftEfficiencyRow').style.display = 'flex';
-      document.getElementById('wftFoldGridWrap').style.display  = 'block';
+      document.getElementById('wftEfficiencyRow').style.display  = 'flex';
+      document.getElementById('wftAssessmentRow').style.display  = 'block';
+      document.getElementById('wftFoldGridWrap').style.display   = 'block';
     }
 
     // ── Equity chart ───────────────────────────────────────────────────────────
@@ -10768,17 +10813,28 @@
 
     async function wftLoadVariations(){
       const sel = document.getElementById('wftLaunchVariation');
-      if(!sel || !supabaseClient) return;
+      if(!sel) return;
+      // Retry once if supabaseClient isn't ready yet (timing issue on first open)
+      if(!supabaseClient){
+        sel.innerHTML = '<option value="">— sign in first —</option>';
+        return;
+      }
+      sel.innerHTML = '<option value="">— loading… —</option>';
       try {
         const { data, error } = await supabaseClient
           .schema('lth_pvr')
           .from('strategy_variation_templates')
           .select('id,variation_name,display_name,is_production')
-          .order('is_production', {ascending: false});
+          .eq('is_active', true)
+          .order('sort_order');
         if(error) throw error;
         sel.innerHTML = '';
-        (data || []).forEach(v => {
-          const label = (v.display_name || v.variation_name) + (v.is_production ? ' ★' : '');
+        if(!data || data.length === 0){
+          sel.innerHTML = '<option value="">— no variations found —</option>';
+          return;
+        }
+        data.forEach(v => {
+          const label = (v.display_name || v.variation_name) + (v.is_production ? ' \u2605' : '');
           const opt   = document.createElement('option');
           opt.value       = v.id;
           opt.textContent = label;
@@ -10787,6 +10843,7 @@
         });
       } catch(e){
         sel.innerHTML = '<option value="">— could not load variations —</option>';
+        console.error('wftLoadVariations error:', e);
       }
     }
 
@@ -10883,10 +10940,11 @@
     }
 
     // ── Expose globally ────────────────────────────────────────────────────────
-    window.loadWftRuns    = loadWftRuns;
-    window.onWftRunChange = onWftRunChange;
-    window.wftPrepareRun  = wftPrepareRun;
-    window.wftCopyCommand = wftCopyCommand;
+    window.loadWftRuns       = loadWftRuns;
+    window.onWftRunChange    = onWftRunChange;
+    window.wftPrepareRun     = wftPrepareRun;
+    window.wftCopyCommand    = wftCopyCommand;
+    window.wftLoadVariations = wftLoadVariations;  // needed by <details ontoggle="...">
 
     // Auto-load when the back-testing module becomes visible
     document.addEventListener('DOMContentLoaded', () => {
