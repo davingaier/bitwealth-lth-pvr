@@ -558,20 +558,59 @@ def main() -> None:
 
     with httpx.Client(timeout=30.0) as client:
 
+        # ── Resolve or resume WFT run ─────────────────────────────────────────
+        # When launched from the Admin UI, WFT_RUN_ID is set and the run row
+        # already exists in the DB with status='queued'.  Read its parameters
+        # from the DB so the user doesn't need to set every env var manually.
+        upfront_usdt = UPFRONT_USDT
+        monthly_usdt = MONTHLY_USDT
+        band_source  = BAND_SOURCE
+        skip_b       = SKIP_TRACK_B
+        variation_id_override = VARIATION_ID
+
+        if RESUME_RUN_ID:
+            wft_run_id = RESUME_RUN_ID
+            print(f"Resuming WFT run: {wft_run_id} …", end="", flush=True)
+            # Read run row to pick up UI-configured parameters
+            rows = rest_get(client, "wft_runs",
+                            params={"wft_run_id": f"eq.{wft_run_id}", "select": "*"},
+                            schema=BT_SCHEMA)
+            if not rows:
+                print(f"\nERROR: wft_run_id {wft_run_id} not found in wft_runs.")
+                sys.exit(1)
+            run_row = rows[0]
+            upfront_usdt          = float(run_row.get("upfront_usdt") or upfront_usdt)
+            monthly_usdt          = float(run_row.get("monthly_usdt") or monthly_usdt)
+            band_source           = run_row.get("band_source") or band_source
+            variation_id_override = run_row.get("variation_id") or variation_id_override
+            print(" loaded.")
+
+            # Transition queued → running
+            if run_row.get("status") == "queued":
+                update_wft_run(client, wft_run_id, {
+                    "status":     "running",
+                    "started_at": _utcnow(),
+                })
+            print()
+        else:
+            wft_run_id = None
+
+        # Override module-level globals so all helpers pick up the resolved values
+        globals()["UPFRONT_USDT"] = upfront_usdt
+        globals()["MONTHLY_USDT"] = monthly_usdt
+        globals()["BAND_SOURCE"]  = band_source
+
         # ── Resolve variation ─────────────────────────────────────────────────
         print("Fetching variation …", end="", flush=True)
-        variation = fetch_variation(client, VARIATION_ID)
+        variation = fetch_variation(client, variation_id_override)
         variation_id   = variation["id"]
         variation_name = variation.get("display_name") or variation["variation_name"]
         prod_params    = variation_to_bt_params(variation)
         print(f" {variation_name} ({variation_id})")
         print()
 
-        # ── Create (or resume) WFT run record ────────────────────────────────
-        if RESUME_RUN_ID:
-            wft_run_id = RESUME_RUN_ID
-            print(f"Resuming WFT run: {wft_run_id}")
-        else:
+        # ── Create new WFT run record (if not resuming) ───────────────────────
+        if not wft_run_id:
             wft_run_id = create_wft_run(client, variation_id)
             print(f"Created WFT run: {wft_run_id}")
         print()

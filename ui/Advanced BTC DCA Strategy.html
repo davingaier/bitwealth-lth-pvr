@@ -4567,14 +4567,60 @@
           <button type="button" id="wftRefreshBtn" onclick="loadWftRuns()" style="white-space:nowrap;">↻ Refresh</button>
         </div>
 
-        <!-- How to run banner -->
-        <div style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:13px;color:#555;">
-          <strong>To run a new walk-forward test:</strong>
-          <code style="display:block;margin-top:0.25rem;background:#e9ecef;padding:0.4rem 0.6rem;border-radius:4px;">
-            python docs/wft/run_walk_forward.py
-          </code>
-          See <code>docs/wft/README.md</code> for environment variables and options.
-        </div>
+        <!-- Launch panel -->
+        <details id="wftLaunchDetails" style="margin-bottom:1rem;border:1px solid #dee2e6;border-radius:6px;overflow:hidden;">
+          <summary style="background:#f8f9fa;padding:0.6rem 1rem;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+            <span>▶ Launch a New Walk-Forward Run</span>
+            <span style="font-weight:400;color:#6b7280;font-size:12px;">configure → prepare → paste one command in PowerShell</span>
+          </summary>
+          <div style="padding:1rem;background:#fff;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin-bottom:0.75rem;">
+              <div>
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">Variation</label>
+                <select id="wftLaunchVariation" style="width:100%;font-size:13px;">
+                  <option value="">— loading… —</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">Upfront USDT</label>
+                <input id="wftLaunchUpfront" type="number" value="10000" min="0" style="width:100%;font-size:13px;">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">Monthly USDT</label>
+                <input id="wftLaunchMonthly" type="number" value="500" min="0" style="width:100%;font-size:13px;">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:3px;">Band Source</label>
+                <select id="wftLaunchBandSource" style="width:100%;font-size:13px;">
+                  <option value="rb" selected>rb — Research Bitcoin (default)</option>
+                  <option value="ci">ci — CryptoQuant (legacy)</option>
+                </select>
+              </div>
+              <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="checkbox" id="wftLaunchSkipB"> Skip Track B (faster)
+                </label>
+                <p style="font-size:11px;color:#9ca3af;margin:2px 0 0 0;">Track A only ≈ 30–60 min. Both tracks ≈ 3–6 hrs.</p>
+              </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <button type="button" id="wftPrepareBtn" onclick="wftPrepareRun()" style="background:#2563eb;color:#fff;border:none;padding:0.45rem 1rem;border-radius:5px;font-size:13px;font-weight:600;cursor:pointer;">
+                Prepare Run
+              </button>
+              <span style="font-size:12px;color:#6b7280;">Creates a run record in the DB and copies the launch command to your clipboard.</span>
+            </div>
+            <!-- Command output box (hidden until Prepare clicked) -->
+            <div id="wftLaunchCommandBox" style="display:none;margin-top:0.75rem;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span style="font-size:12px;font-weight:600;color:#166534;">✅ Run queued — paste this into PowerShell:</span>
+                <button type="button" onclick="wftCopyCommand()" style="font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer;">📋 Copy</button>
+              </div>
+              <code id="wftLaunchCommand" style="display:block;background:#f0fdf4;border:1px solid #86efac;border-radius:4px;padding:0.5rem 0.75rem;font-size:12px;word-break:break-all;white-space:pre-wrap;color:#14532d;"></code>
+              <p style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">After pasting, results will appear here automatically as each fold completes. Use ↻ Refresh.</p>
+            </div>
+            <div id="wftLaunchError" style="color:#dc2626;font-size:12px;margin-top:0.4rem;display:none;"></div>
+          </div>
+        </details>
 
         <!-- Run selector -->
         <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
@@ -10718,9 +10764,129 @@
       });
     }
 
+    // ── Launch panel ───────────────────────────────────────────────────────────
+
+    async function wftLoadVariations(){
+      const sel = document.getElementById('wftLaunchVariation');
+      if(!sel || !supabaseClient) return;
+      try {
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('strategy_variation_templates')
+          .select('id,variation_name,display_name,is_production')
+          .order('is_production', {ascending: false});
+        if(error) throw error;
+        sel.innerHTML = '';
+        (data || []).forEach(v => {
+          const label = (v.display_name || v.variation_name) + (v.is_production ? ' ★' : '');
+          const opt   = document.createElement('option');
+          opt.value       = v.id;
+          opt.textContent = label;
+          if(v.is_production) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      } catch(e){
+        sel.innerHTML = '<option value="">— could not load variations —</option>';
+      }
+    }
+
+    async function wftPrepareRun(){
+      const errEl  = document.getElementById('wftLaunchError');
+      const cmdBox = document.getElementById('wftLaunchCommandBox');
+      const cmdEl  = document.getElementById('wftLaunchCommand');
+      errEl.style.display = 'none';
+      cmdBox.style.display = 'none';
+
+      if(!supabaseClient){
+        errEl.textContent = 'Supabase client not available.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const orgId      = (window.globalOrgId || '').trim();
+      const variationId = document.getElementById('wftLaunchVariation').value;
+      const upfront    = parseFloat(document.getElementById('wftLaunchUpfront').value) || 10000;
+      const monthly    = parseFloat(document.getElementById('wftLaunchMonthly').value) || 500;
+      const bandSource = document.getElementById('wftLaunchBandSource').value || 'rb';
+      const skipB      = document.getElementById('wftLaunchSkipB').checked;
+
+      if(!variationId){
+        errEl.textContent = 'Please select a variation.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('wftPrepareBtn');
+      btn.disabled = true;
+      btn.textContent = 'Preparing…';
+
+      try {
+        // Generate a run ID client-side so we can embed it in the command
+        const runId = crypto.randomUUID();
+
+        const { error } = await supabaseClient
+          .schema('lth_pvr_bt')
+          .from('wft_runs')
+          .insert({
+            wft_run_id:    runId,
+            org_id:        orgId,
+            variation_id:  variationId,
+            band_source:   bandSource,
+            description:   `Queued from Admin UI ${new Date().toISOString().substring(0,10)}`,
+            upfront_usdt:  upfront,
+            monthly_usdt:  monthly,
+            folds_total:   9,
+            status:        'queued',
+          });
+        if(error) throw error;
+
+        // Build the minimal PowerShell launch command
+        const lines = [
+          `$env:WFT_RUN_ID     = '${runId}'`,
+          `$env:WFT_UPFRONT_USDT  = '${upfront}'`,
+          `$env:WFT_MONTHLY_USDT  = '${monthly}'`,
+          `$env:WFT_BAND_SOURCE   = '${bandSource}'`,
+        ];
+        if(skipB) lines.push(`$env:WFT_SKIP_TRACK_B = '1'`);
+        lines.push(`python docs/wft/run_walk_forward.py`);
+        const cmd = lines.join('\n');
+
+        cmdEl.textContent = cmd;
+        cmdBox.style.display = 'block';
+
+        // Auto-copy to clipboard
+        try {
+          await navigator.clipboard.writeText(cmd);
+        } catch(e){/* clipboard API may be blocked, user can copy manually */}
+
+        // Refresh run list
+        await loadWftRuns();
+
+      } catch(e){
+        errEl.textContent = 'Could not create run record: ' + (e.message || e);
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Prepare Run';
+      }
+    }
+
+    function wftCopyCommand(){
+      const cmdEl = document.getElementById('wftLaunchCommand');
+      if(!cmdEl) return;
+      navigator.clipboard.writeText(cmdEl.textContent).catch(() => {
+        /* silent — user can select-all manually */
+      });
+      const btn = event.target;
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+    }
+
     // ── Expose globally ────────────────────────────────────────────────────────
     window.loadWftRuns    = loadWftRuns;
     window.onWftRunChange = onWftRunChange;
+    window.wftPrepareRun  = wftPrepareRun;
+    window.wftCopyCommand = wftCopyCommand;
 
     // Auto-load when the back-testing module becomes visible
     document.addEventListener('DOMContentLoaded', () => {
@@ -10732,6 +10898,7 @@
         if(btMod && btMod.classList.contains('active') && !panel.dataset.loaded){
           panel.dataset.loaded = '1';
           loadWftRuns();
+          wftLoadVariations();
         }
       });
       const btMod = document.getElementById('backtest-module');
