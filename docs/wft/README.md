@@ -28,6 +28,11 @@ $env:ORG_ID                    = "b0a77009-03b9-44a1-ae1d-34f157d44a8b"
 
 ## Running
 
+> **Important:** Run all commands from the **project root** — the folder containing `docs\wft\`.
+> ```powershell
+> Set-Location "C:\Users\davin\Dropbox\BitWealth\bitwealth-lth-pvr\bitwealth-lth-pvr"
+> ```
+
 ```powershell
 # Full run (both tracks, all 9 folds) — estimated 3-6 hours
 python docs/wft/run_walk_forward.py

@@ -4616,7 +4616,7 @@
                 <button type="button" onclick="wftCopyCommand()" style="font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer;">📋 Copy</button>
               </div>
               <code id="wftLaunchCommand" style="display:block;background:#f0fdf4;border:1px solid #86efac;border-radius:4px;padding:0.5rem 0.75rem;font-size:12px;word-break:break-all;white-space:pre-wrap;color:#14532d;"></code>
-              <p style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">After pasting, results will appear here automatically as each fold completes. Use ↻ Refresh.</p>
+              <p style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">&#9888; Run from the <strong>project root</strong> (the folder containing <code>docs\wft\</code>). Make sure <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code> and <code>ORG_ID</code> are set in your terminal session. Results appear here as each fold completes — use &#8635; Refresh.</p>
             </div>
             <div id="wftLaunchError" style="color:#dc2626;font-size:12px;margin-top:0.4rem;display:none;"></div>
           </div>
@@ -10914,10 +10914,17 @@
 
         // Build the minimal PowerShell launch command
         const lines = [
-          `$env:WFT_RUN_ID     = '${runId}'`,
-          `$env:WFT_UPFRONT_USDT  = '${upfront}'`,
-          `$env:WFT_MONTHLY_USDT  = '${monthly}'`,
-          `$env:WFT_BAND_SOURCE   = '${bandSource}'`,
+          `# 1. cd to your project root first (if not already there):`,
+          `#    Set-Location "C:\\path\\to\\bitwealth-lth-pvr"`,
+          ``,
+          `# 2. Set env vars and run:`,
+          `$env:SUPABASE_URL           = $env:SUPABASE_URL   # already set if using VS Code terminal`,
+          `$env:SUPABASE_SERVICE_ROLE_KEY = $env:SUPABASE_SERVICE_ROLE_KEY`,
+          `$env:ORG_ID                 = $env:ORG_ID`,
+          `$env:WFT_RUN_ID             = '${runId}'`,
+          `$env:WFT_UPFRONT_USDT       = '${upfront}'`,
+          `$env:WFT_MONTHLY_USDT       = '${monthly}'`,
+          `$env:WFT_BAND_SOURCE        = '${bandSource}'`,
         ];
         if(skipB) lines.push(`$env:WFT_SKIP_TRACK_B = '1'`);
         lines.push(`python docs/wft/run_walk_forward.py`);
