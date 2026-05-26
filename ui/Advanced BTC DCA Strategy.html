@@ -12900,7 +12900,7 @@
         if (statusError) throw statusError;
 
         // Send deposit instructions email with all three options
-        const websiteUrl = SUPABASE_URL.replace('supabase.co', 'supabase.co');
+        const websiteUrl = 'https://bitwealth.co.za';
         const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
           method: 'POST',
           headers: {
@@ -12946,7 +12946,7 @@
       }
 
       try {
-        const websiteUrl = SUPABASE_URL.replace('supabase.co', 'supabase.co');
+        const websiteUrl = 'https://bitwealth.co.za';
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
           method: 'POST',
           headers: {
