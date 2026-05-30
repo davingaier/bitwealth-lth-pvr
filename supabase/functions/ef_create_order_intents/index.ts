@@ -1,5 +1,6 @@
 import { getServiceClient } from "./client.ts";
 import { logAlert } from "./alerting.ts";
+import { loadUsdpcConfig, sizeUsdpcToUsdt, USDPC_PAIR } from "../_shared/usdpc.ts";
 
 Deno.serve(async ()=>{
   const sb = getServiceClient();
@@ -9,6 +10,32 @@ Deno.serve(async ()=>{
   });
   const todayStr = new Date().toISOString().slice(0, 10);
   const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "1.00"); // VALR minimum order size
+
+  // --- USDPC support: config, latest price, and per-customer enabled flag ---
+  const usdpcCfg = await loadUsdpcConfig(sb);
+  let usdpcPrice = 1;
+  try {
+    const { data: pxRow } = await sb
+      .from("usdpc_prices_daily")
+      .select("price_usd")
+      .order("date", { ascending: false })
+      .limit(1);
+    usdpcPrice = Number(pxRow?.[0]?.price_usd ?? 1) || 1;
+  } catch (_e) {
+    usdpcPrice = 1;
+  }
+  // Set of customer_ids with USDPC sweeping enabled on their LTH_PVR strategy.
+  const usdpcEnabled = new Set<number>();
+  try {
+    const { data: csRows } = await sb
+      .schema("public")
+      .from("customer_strategies")
+      .select("customer_id, usdpc_enabled")
+      .eq("org_id", org_id)
+      .eq("strategy_code", "LTH_PVR")
+      .eq("usdpc_enabled", true);
+    for (const r of csRows ?? []) usdpcEnabled.add(Number(r.customer_id));
+  } catch (_e) { /* feature simply stays off if lookup fails */ }
   
   // Wait for decisions to exist (retry up to 4 times with 1-second delays = 4 seconds max)
   let decs = null;
@@ -239,9 +266,74 @@ Deno.serve(async ()=>{
         );
       } else {
         intentCount++;
+
+        // --- USDPC pre-buy conversion intent ---
+        // For USDPC-enabled customers a BUY is sized against total buying power
+        // (idle USDT + USDPC value). Any USDT shortfall must be raised by
+        // converting USDPC -> USDT (market SELL on USDPC/USDT) BEFORE the BTC
+        // buy executes. We size the conversion deterministically from the known
+        // DB balance and over-convert by a small buffer so fee/slippage never
+        // leaves the BTC buy under-funded (leftover USDT is swept back later).
+        if (side === "BUY" && usdpcEnabled.has(Number(d.customer_id))) {
+          try {
+            const idleUsdt = Number(bal.usdt_balance ?? 0);
+            const shortfall = +(notional - idleUsdt).toFixed(2);
+            if (shortfall >= usdpcCfg.minOrderUsdt) {
+              // Over-convert by 0.5% to absorb fee + price drift on the BTC buy.
+              const usdtTarget = +(shortfall * 1.005).toFixed(2);
+              const sizing = sizeUsdpcToUsdt(
+                usdtTarget,
+                Number.MAX_SAFE_INTEGER, // executor re-caps against live balance
+                usdpcPrice,
+                usdpcCfg.takerFeeRate,
+              );
+              const usdpcToSell = +sizing.usdpcToSell.toFixed(8);
+              if (usdpcToSell > 0) {
+                const convKeyParts = [org_id, d.customer_id.toString(), d.trade_date, "USDPC_PREBUY"].join("|");
+                const convHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(convKeyParts));
+                const convKey = Array.from(new Uint8Array(convHash)).map(b => b.toString(16).padStart(2, "0")).join("");
+                const convIns = await sb.from("order_intents").upsert({
+                  org_id,
+                  customer_id: d.customer_id,
+                  trade_date: d.trade_date,
+                  pair: USDPC_PAIR,
+                  side: "SELL", // sell USDPC, receive USDT
+                  amount: usdpcToSell,
+                  limit_price: null, // market order
+                  base_asset: "USDPC",
+                  quote_asset: "USDT",
+                  exchange_account_id: exchAcct.exchange_account_id,
+                  idempotency_key: convKey,
+                  reason: "usdpc_prebuy_convert",
+                  note: `Fund BTC buy: need ${shortfall.toFixed(2)} USDT (idle ${idleUsdt.toFixed(2)})`,
+                }, { onConflict: "idempotency_key" });
+                if (convIns.error) {
+                  console.error("usdpc conversion intent error", convIns.error);
+                  await logAlert(
+                    sb,
+                    "ef_create_order_intents",
+                    "error",
+                    `USDPC conversion intent upsert failed: ${convIns.error.message}`,
+                    { customer_id: d.customer_id, trade_date: d.trade_date, shortfall, error: convIns.error.message },
+                    org_id,
+                    d.customer_id,
+                  );
+                }
+              }
+            }
+          } catch (convErr) {
+            await logAlert(
+              sb,
+              "ef_create_order_intents",
+              "error",
+              `USDPC conversion sizing failed for customer ${d.customer_id}`,
+              { customer_id: d.customer_id, trade_date: d.trade_date, error: convErr instanceof Error ? convErr.message : String(convErr) },
+              org_id,
+              d.customer_id,
+            );
+          }
+        }
       }
-    } catch (err) {
-      console.error(`Intent creation failed for customer ${d.customer_id}:`, err);
       await logAlert(
         sb,
         "ef_create_order_intents",

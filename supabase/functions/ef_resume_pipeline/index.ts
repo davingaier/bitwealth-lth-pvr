@@ -116,7 +116,21 @@ Deno.serve(async (req: Request) => {
       { name: "ef_poll_orders", status: steps.poll_orders },
       { name: "ef_post_ledger_and_balances", status: steps.ledger },
     ];
-    
+
+    let mainPipelineFailed = false;
+    const callEf = async (name: string) => {
+      const response = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    };
+
     for (const step of stepOrder) {
       if (step.status === true) {
         results.push({ step: step.name, skipped: true, reason: "already complete" });
@@ -146,6 +160,7 @@ Deno.serve(async (req: Request) => {
         
         if (!response.ok) {
           console.error(`${step.name} failed: ${text}`);
+          mainPipelineFailed = true;
           break;
         }
       } catch (err) {
@@ -155,7 +170,47 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: err instanceof Error ? err.message : String(err),
         });
+        mainPipelineFailed = true;
         break;
+      }
+    }
+
+    // ── USDPC sweep pass ──────────────────────────────────────────────
+    // Once the main pipeline (through ledger) has completed, sweep any idle
+    // USDT belonging to USDPC-enabled customers into USDPC. The sweep creates
+    // BUY conversion intents which are then executed, polled and booked by a
+    // second execute -> poll -> post_ledger pass. All four functions are
+    // idempotent (one sweep intent per customer/day; fill -> ledger keyed on
+    // ref_fill_id), so this is safe to re-run on repeated resume calls.
+    if (!mainPipelineFailed) {
+      const sweepSequence = [
+        "ef_sweep_usdt_to_usdpc",
+        "ef_execute_orders",
+        "ef_poll_orders",
+        "ef_post_ledger_and_balances",
+      ];
+      for (const name of sweepSequence) {
+        try {
+          const r = await callEf(name);
+          results.push({
+            step: `usdpc_sweep:${name}`,
+            status: r.status,
+            success: r.ok,
+            response: r.text.substring(0, 200),
+          });
+          if (!r.ok) {
+            console.error(`usdpc sweep step ${name} failed: ${r.text}`);
+            break;
+          }
+        } catch (err) {
+          console.error(`usdpc sweep step ${name} error:`, err);
+          results.push({
+            step: `usdpc_sweep:${name}`,
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          break;
+        }
       }
     }
 

@@ -1,7 +1,8 @@
 import { getServiceClient } from "./client.ts";
-import { placeLimitOrder, placeMarketOrder, getOrderBook } from "./valrClient.ts";
+import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { USDPC_PAIR } from "../_shared/usdpc.ts";
 
 Deno.serve(async ()=>{
   const sb = getServiceClient();
@@ -26,7 +27,14 @@ Deno.serve(async ()=>{
       status: 200
     });
   }
-  
+
+  // USDPC conversion intents must execute BEFORE the BTC buys they fund, so
+  // order the queue conversions-first.
+  const isUsdpcConversion = (row: any) =>
+    String(row.pair ?? "").replace("/", "").toUpperCase() === USDPC_PAIR.replace("/", "").toUpperCase();
+  intents.sort((a, b) => (isUsdpcConversion(b) ? 1 : 0) - (isUsdpcConversion(a) ? 1 : 0));
+  let convertedThisRun = false;
+
   let successCount = 0;
   let errorCount = 0;
   
@@ -71,6 +79,76 @@ Deno.serve(async ()=>{
           org_id, i.customer_id);
         errorCount++;
         continue;
+      }
+      // --- USDPC CONVERSION PATH (market order on USDPC/USDT) ---
+      // Conversion intents fund (or invest) around the BTC trades. They are
+      // always MARKET orders and are ordered first in the queue so the USDT
+      // they raise is settled before the dependent BTC buy is placed.
+      if (isUsdpcConversion(i)) {
+        try {
+          const convSide = i.side.toUpperCase() === "BUY" ? "BUY" : "SELL";
+          let amountStr = String(i.amount);
+          let useQuote = false;
+          if (convSide === "SELL") {
+            // Selling USDPC -> cap baseAmount at the live settled USDPC balance.
+            try {
+              const bals = await getBalances(subaccountId, credentials);
+              const liveUsdpc = Number(bals["USDPC"] ?? 0);
+              if (liveUsdpc > 0 && Number(i.amount) > liveUsdpc) {
+                amountStr = String(+liveUsdpc.toFixed(8));
+              }
+            } catch (_balErr) { /* fall back to sized amount */ }
+          } else {
+            // Buying USDPC with an exact USDT (quote) amount.
+            useQuote = true;
+          }
+          const convResp = await placeMarketOrder(
+            USDPC_PAIR,
+            convSide,
+            amountStr,
+            i.intent_id,
+            subaccountId,
+            credentials,
+            useQuote,
+          );
+          const convExtId = convResp?.orderId ?? convResp?.id;
+          await sb.from("exchange_orders").insert({
+            org_id,
+            exchange_account_id,
+            intent_id: i.intent_id,
+            ext_order_id: convExtId,
+            pair: USDPC_PAIR,
+            side: convSide,
+            price: 0,
+            qty: amountStr,
+            status: "submitted",
+            raw: { valr: convResp, subaccountId, order_type: "MARKET", usdpc_conversion: true, reason: i.reason },
+          });
+          await sb.from("order_intents").update({ status: "executed" }).eq("intent_id", i.intent_id);
+          convertedThisRun = true;
+          successCount++;
+        } catch (convErr) {
+          const cm = convErr instanceof Error ? convErr.message : String(convErr);
+          console.error("USDPC conversion failed", convErr);
+          await logAlert(
+            sb,
+            "ef_execute_orders",
+            "error",
+            `USDPC conversion order failed: ${cm}`,
+            { customer_id: i.customer_id, intent_id: i.intent_id, side: i.side, pair: USDPC_PAIR, amount: i.amount, error: cm },
+            org_id,
+            i.customer_id,
+          );
+          await sb.from("order_intents").update({ status: "error", reason: `USDPC conversion failed: ${cm}` }).eq("intent_id", i.intent_id);
+          errorCount++;
+        }
+        continue;
+      }
+      // Give a just-placed conversion a moment to settle into available USDT
+      // before the first BTC buy is sized/placed in this run.
+      if (convertedThisRun) {
+        await new Promise((r) => setTimeout(r, 2500));
+        convertedThisRun = false;
       }
       // --- DETERMINE ORDER TYPE & EXECUTE ---
       const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";

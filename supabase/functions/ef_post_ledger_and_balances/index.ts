@@ -184,6 +184,35 @@ Deno.serve(async (req: Request) => {
         const feeAsset = raw.fee_asset ?? null;
         const feeQty = Number(raw.fee_qty ?? 0);
 
+        // --- USDPC conversion fills (pair USDPC/USDT) ---
+        // These move value between USDT and the yield-bearing USDPC stablecoin
+        // and must NEVER touch the BTC balance. SELL = USDPC->USDT (raise USDT);
+        // BUY = USDT->USDPC (sweep idle cash). Recorded as kind='convert'.
+        const isUsdpc = (raw.base_asset ?? "").toUpperCase() === "USDPC";
+        if (isUsdpc) {
+          const isBuyUsdpc = side === "BUY"; // buying USDPC with USDT
+          const amountUsdpc = isBuyUsdpc ? qty : -qty;     // USDPC delta
+          const amountUsdtConv = isBuyUsdpc ? -notional : notional; // USDT delta
+          const feeUsdpcC = feeAsset === "USDPC" ? feeQty : 0;
+          const feeUsdtC = feeAsset === "USDT" ? feeQty : 0;
+          toInsert.push({
+            org_id,
+            customer_id: raw.customer_id,
+            trade_date: raw.trade_date,
+            kind: "convert",
+            amount_btc: 0,
+            amount_usdt: amountUsdtConv,
+            amount_usdpc: amountUsdpc,
+            fee_btc: 0,
+            fee_usdt: feeUsdtC,
+            fee_usdpc: feeUsdpcC,
+            ref_intent_id: raw.intent_id ?? null,
+            ref_order_id: raw.exchange_order_id,
+            ref_fill_id: raw.fill_id,
+          });
+          continue;
+        }
+
         // Ensure fees are properly extracted (fix for fee recording bug)
         const feeBtc = feeAsset === "BTC" ? feeQty : 0;
         const feeUsdt = feeAsset === "USDT" ? feeQty : 0;
@@ -1152,6 +1181,7 @@ Deno.serve(async (req: Request) => {
 
       const sortedDates = Array.from(datesSet).sort();
       const pxCache = new Map<string, number>();
+      const usdpcPxCache = new Map<string, number>();
       let lastPx = 0;
 
       for (const dateStr of sortedDates) {
@@ -1175,6 +1205,20 @@ Deno.serve(async (req: Request) => {
           lastPx = px;
         }
 
+        // USDPC price for this date (USDT per USDPC); last known <= dateStr,
+        // default 1.0 if no feed yet.
+        let usdpcPx = usdpcPxCache.get(dateStr);
+        if (usdpcPx === undefined) {
+          const { data: upx } = await sb
+            .from("usdpc_prices_daily")
+            .select("price_usd")
+            .lte("date", dateStr)
+            .order("date", { ascending: false })
+            .limit(1);
+          usdpcPx = Number((upx as any)?.[0]?.price_usd ?? 1) || 1;
+          usdpcPxCache.set(dateStr, usdpcPx);
+        }
+
         const custSet = dateToCustomers.get(dateStr);
         if (!custSet) continue;
 
@@ -1182,7 +1226,7 @@ Deno.serve(async (req: Request) => {
           // previous balance
           const { data: prevRows, error: prevErr } = await sb
             .from("balances_daily")
-            .select("btc_balance, usdt_balance, zar_balance")
+            .select("btc_balance, usdt_balance, zar_balance, usdpc_balance")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .lt("date", dateStr)
@@ -1202,12 +1246,12 @@ Deno.serve(async (req: Request) => {
           }
 
           const prev =
-            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number, zar_balance: 0 as number };
+            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number, zar_balance: 0 as number, usdpc_balance: 0 as number };
 
           // today deltas (including fees)
           const { data: sums, error: sumsErr } = await sb
             .from("ledger_lines")
-            .select("amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt")
+            .select("amount_btc, amount_usdt, amount_zar, amount_usdpc, fee_btc, fee_usdt, fee_usdpc")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .eq("trade_date", dateStr);
@@ -1227,23 +1271,28 @@ Deno.serve(async (req: Request) => {
           let dBtc = 0,
             dUsdt = 0,
             dZar = 0,
+            dUsdpc = 0,
             fBtc = 0,
-            fUsdt = 0;
+            fUsdt = 0,
+            fUsdpc = 0;
 
           for (const s of (sums ?? []) as any[]) {
             dBtc += Number(s.amount_btc ?? 0);
             dUsdt += Number(s.amount_usdt ?? 0);
             dZar += Number(s.amount_zar ?? 0);
+            dUsdpc += Number(s.amount_usdpc ?? 0);
             fBtc += Number(s.fee_btc ?? 0);
             fUsdt += Number(s.fee_usdt ?? 0);
+            fUsdpc += Number(s.fee_usdpc ?? 0);
           }
 
           const btc = Number(prev.btc_balance ?? 0) + dBtc - fBtc;
           const usdt = Number(prev.usdt_balance ?? 0) + dUsdt - fUsdt;
+          const usdpc = Number(prev.usdpc_balance ?? 0) + dUsdpc - fUsdpc;
           const zar = Number(prev.zar_balance ?? 0) + dZar;
           // ZAR is tracked separately from nav_usd to avoid needing a daily USDT/ZAR rate.
           // Reporting layers can convert ZAR → USD on demand if a unified NAV is required.
-          const nav = btc * px + usdt;
+          const nav = btc * px + usdt + usdpc * usdpcPx;
 
           const { error: upErr } = await sb.from("balances_daily").upsert(
             {
@@ -1252,6 +1301,8 @@ Deno.serve(async (req: Request) => {
               date: dateStr,
               btc_balance: btc,
               usdt_balance: usdt,
+              usdpc_balance: usdpc,
+              usdpc_price_usd: usdpcPx,
               zar_balance: zar,
               nav_usd: nav,
               band_source: bandSource,

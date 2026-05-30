@@ -174,6 +174,8 @@ export async function cancelOrderById(
 
 // 4) Place MARKET order for fallback logic in ef_poll_orders
 // For BUY we treat amount as quote (USDT); for SELL we treat it as base (BTC).
+// When `useQuote` is true the amount is sent as quoteAmount instead of
+// baseAmount — used for USDPC sweeps that must spend an exact USDT amount.
 export async function placeMarketOrder(
   pair: string,
   side: string,
@@ -181,6 +183,7 @@ export async function placeMarketOrder(
   customerOrderId: string,
   subaccountId?: string | null,
   credentials?: ValrRequestCredentials | null,
+  useQuote = false,
 ) {
   const p = normalisePair(pair);
   const sideLower = side.toLowerCase();
@@ -188,10 +191,14 @@ export async function placeMarketOrder(
     pair: p,
     side: sideLower,
     customerOrderId,
-    // For MARKET orders, always use baseAmount (BTC quantity)
-    // VALR will use market price to determine quote amount
-    baseAmount: amount,
   };
+  if (useQuote) {
+    // Spend an exact quote (e.g. USDT) amount; VALR returns the base received.
+    body.quoteAmount = amount;
+  } else {
+    // Default: baseAmount (e.g. BTC quantity); VALR uses market price for quote.
+    body.baseAmount = amount;
+  }
 
   return await valrPrivateRequest("POST", "/v1/orders/market", body, subaccountId, credentials);
 }
@@ -216,4 +223,25 @@ export async function getMarketPrice(pair: string) {
     );
   }
   return price;
+}
+
+// 6) Account balances — returns a map of currency -> available balance.
+// Used to cap USDPC conversions against the live (settled) balance so an
+// over-sized conversion order is never rejected for insufficient funds.
+export async function getBalances(
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<Record<string, number>> {
+  const rows = await valrPrivateRequest(
+    "GET",
+    "/v1/account/balances",
+    undefined,
+    subaccountId,
+    credentials,
+  );
+  const out: Record<string, number> = {};
+  for (const r of (rows ?? []) as Array<{ currency: string; available: string }>) {
+    out[String(r.currency).toUpperCase()] = Number(r.available ?? 0);
+  }
+  return out;
 }
