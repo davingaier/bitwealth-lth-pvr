@@ -280,16 +280,29 @@ Deno.serve(async (req) => {
         const mktOrderId = `zar-conv-mkt-${conversion_id}`;
         await placeMarketOrderByQuote(pair, "BUY", zarAmount.toFixed(2), mktOrderId, subaccountId, creds);
 
-        // Wait briefly then poll once for market fill
-        await sleep(3_000);
-        const mktSummary: any = await getOrderSummaryByCustomerOrderId(mktOrderId, pair, subaccountId, creds).catch(() => null);
-        if (mktSummary?.orderStatusType === "Filled") {
-          fillResult = {
-            filled: true,
-            fillPrice: Number(mktSummary.averagePrice ?? mktSummary.price),
-            fillQty: Number(mktSummary.originalQuantity ?? mktSummary.quantity),
-            valrOrderId: mktSummary.orderId ?? mktSummary.id,
-          };
+        // Poll for the market fill. VALR market orders are filled near-instantly
+        // on the exchange but the order-summary endpoint can lag several seconds
+        // before it reports "Filled". A single 3 s check was racing that lag and
+        // returning a false 500 even though the order had filled — so poll a few
+        // rounds before giving up.
+        const MKT_POLL_ROUNDS = 12; // 12 × 5 s = 60 s
+        for (let r = 0; r < MKT_POLL_ROUNDS; r++) {
+          await sleep(r === 0 ? 3_000 : POLL_INTERVAL_MS);
+          const mktSummary: any = await getOrderSummaryByCustomerOrderId(mktOrderId, pair, subaccountId, creds).catch(() => null);
+          const mktStatus = mktSummary?.orderStatusType;
+          console.log(`Market poll ${r + 1}/${MKT_POLL_ROUNDS}: ${mktOrderId} → ${mktStatus}`);
+          if (mktStatus === "Filled") {
+            fillResult = {
+              filled: true,
+              fillPrice: Number(mktSummary.averagePrice ?? mktSummary.price),
+              fillQty: Number(mktSummary.originalQuantity ?? mktSummary.quantity),
+              valrOrderId: mktSummary.orderId ?? mktSummary.id,
+            };
+            break;
+          }
+          if (mktStatus === "Failed" || mktStatus === "Cancelled") {
+            break;
+          }
         }
       } catch (e) {
         await logAlert(sb, "ef_convert_zar_to_usdt", "error", `MARKET fallback failed: ${e.message}`, { conversion_id }, ORG_ID, customerId);

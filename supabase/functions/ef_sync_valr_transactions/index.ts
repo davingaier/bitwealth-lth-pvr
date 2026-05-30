@@ -502,15 +502,31 @@ Deno.serve(async (req) => {
                   throw pendingErr;
                 }
                 
-                // Check if transaction already processed (idempotency)
+                // Check if transaction already processed (idempotency).
+                //
+                // BUG FIX (double-count): the credit leg of a conversion is stored
+                // with idempotency_key = `VALR_TX_<txid>` when it maps to a single
+                // pending deposit, but `VALR_TX_<txid>_PART_N` when the conversion is
+                // SPLIT across multiple pending deposits. The original guard only
+                // matched the bare key, so a re-sync of a *split* conversion was not
+                // detected and created a duplicate aggregate deposit — double-counting
+                // the USDT credited. Detect any prior deposit leg for this VALR
+                // transaction (split or single) via ext_ref + kind instead.
                 const idempotencyKey = `VALR_TX_${transactionId}`;
-                const { data: existingTx } = await supabase
+                const { data: existingDeposits, error: existingDepErr } = await supabase
                   .from("exchange_funding_events")
                   .select("funding_id")
-                  .eq("idempotency_key", idempotencyKey)
-                  .maybeSingle();
-                
-                if (existingTx) {
+                  .eq("org_id", orgId)
+                  .eq("ext_ref", transactionId)
+                  .eq("kind", "deposit")
+                  .limit(1);
+
+                if (existingDepErr) {
+                  console.error(`  Error checking idempotency for conversion credit leg:`, existingDepErr);
+                  throw existingDepErr;
+                }
+
+                if (existingDeposits && existingDeposits.length > 0) {
                   console.log(`  ⏭️  Skipping already processed conversion: ${transactionId}`);
                   continue;
                 }

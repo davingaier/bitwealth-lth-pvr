@@ -334,6 +334,8 @@ Deno.serve(async ()=>{
           }
         }
       }
+    } catch (err) {
+      console.error(`Intent creation failed for customer ${d.customer_id}:`, err);
       await logAlert(
         sb,
         "ef_create_order_intents",
