@@ -3,11 +3,128 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-21 (v0.6.111)
+**Last updated:** 2026-05-31 (v0.6.112)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.112 – ZAR→USDT conversion: premature-fallback bug fix + async cron poller refactor
+**Date:** 2026-05-31  
+**Status:** ✅ DEPLOYED
+
+#### Background
+
+Customer 54 triggered a R50 ZAR→USDT conversion. The limit order was placed and cancelled within ~25 seconds, and a market order was immediately placed. The intended behaviour is: keep the limit resting for up to **5 minutes**; only fall back to a market order if (a) the limit is still unfilled after 5 minutes, or (b) the best bid moves more than 0.25% above the limit price. Two bugs were found and fixed, and the architecture was refactored to an async cron poller.
+
+#### Bug 1 — Broken VALR cancel endpoint
+
+`cancelOrderById` in `supabase/functions/_shared/valrClient.ts` used `DELETE /v1/orders/orderid/{id}`. That path is a **GET-status** endpoint only; a DELETE on it returns 404 and silently leaves the limit resting. The post-only LIMIT locked the customer's R50 ZAR; the subsequent market fallback received "Insufficient Balance" because the ZAR was still locked.
+
+**Fix:** `cancelOrderById` now calls `DELETE /v1/orders/order` with JSON body `{ orderId, pair }`. New helpers added to `valrClient.ts`:
+- `cancelOrderByCustomerOrderId(customerOrderId, pair, ...)` — same endpoint with `{ customerOrderId, pair }`.
+- `getOpenOrders(subaccountId?, credentials?)` — `GET /v1/orders/open`.
+
+Three EFs were redeployed with this fix: `ef_convert_zar_to_usdt`, `ef_revert_withdrawal`, `ef_process_withdrawal_queue`.
+
+#### Bug 2 — Premature adverse-move fallback (spread ≠ price movement)
+
+The original `pollUntilFilled()` in `ef_convert_zar_to_usdt` compared the current **best ask** to the limit price (which equalled the best **bid** at placement time). `(ask − bid) / bid` is the bid-ask **spread**, not price movement. For a normally-traded stablecoin pair the spread can exceed 0.25% at any moment; the check tripped at poll round 4 (~25 s) and cancelled the limit.
+
+**Fix (carried into the new poller):** the adverse-move check now compares the current best **bid** to `limit_price` (same-side). A genuine adverse move means the buy side of the book has risen above the limit price — a real signal, not a spread artifact.
+
+#### Architectural constraint: synchronous 5-minute poll impossible
+
+Supabase edge functions have a 150-second request-idle timeout. A synchronous poll loop for 300 seconds would 504 before the 5-minute window expired. The entire `pollUntilFilled` approach was architecturally unfit.
+
+**Decision:** Refactor to an **async cron poller**. `ef_convert_zar_to_usdt` places the limit and returns immediately; `ef_poll_zar_conversions` runs every minute and manages the lifecycle.
+
+#### ef_convert_zar_to_usdt — refactored to place-and-return
+
+Sections §1–§5 (load guard; resolve credentials; get best bid; compute `limitPrice`, `qtyUsdt`; place post-only LIMIT BUY GTC with `customerOrderId = zar-conv-${conversion_id}`) are unchanged.
+
+**New §6:** On successful limit placement, update the row to `status = 'limit_placed'`, write `order_id`, `pair`, `order_side`, `limit_price`, `order_type = 'limit'`, `limit_placed_at = now()`, clear `error_message`. Return immediately.
+
+On limit placement failure: set `status = 'market_pending'` and return (poller handles market placement on the next tick).
+
+**Removed:** `pollUntilFilled` function, `POLL_*` constants, `sleep` helper, synchronous §7/§8/§9.
+
+#### ef_poll_zar_conversions — new async cron poller
+
+Runs every 1 minute via pg_cron job `lth_poll_zar_conversions_1min` (jobid 85, `*/1 * * * *`).
+
+Selects `pending_zar_conversions` rows with `status IN ('limit_placed', 'market_pending', 'market_placed')` for the org. Per-row try/catch + `logAlert` — one row's failure does not abort the batch.
+
+Constants: `STALE_LIMIT_MS = 5 min`, `PRICE_MOVE_LIMIT = 0.0025`.
+
+**`handleLimitPlaced`:** calls `getOpenOrders`. If not resting → check summary → `recordFill` or `market_pending`. If still resting → check stale (≥ 5 min since `limit_placed_at`) OR adverse (best bid > `limit_price × 1.0025`) → cancel + confirm via open-orders loop (6 retries) → `market_pending`.
+
+**`handleMarketPending`:** places market order via `placeMarketOrderByQuote` → `status = 'market_placed'` → `confirmMarketFill(rounds=3)`.
+
+**`handleMarketPlaced`:** `confirmMarketFill(rounds=1)`.
+
+**`confirmMarketFill`:** polls `getOrderSummaryByCustomerOrderId('zar-conv-mkt-${id}')`. Filled → `recordFill`; Failed/Cancelled → `status = 'failed'` + `logAlert`; else leave.
+
+**`recordFill`:** updates row to `status = 'filled'`, `converted_amount`, `remaining_amount = 0`, `converted_at`, `order_id`, `order_type`, clears `error_message`. Best-effort insert into `lth_pvr.exchange_orders`.
+
+#### Status flow
+
+```
+pending
+  └─► limit_placed  (ef_convert places LIMIT + returns immediately)
+        ├─► filled          (poller: limit filled within 5 min)
+        └─► market_pending  (poller: 5-min stale | adverse bid | limit placement failed)
+              └─► market_placed  (poller: market order submitted)
+                    ├─► filled  (poller: market confirmed)
+                    └─► failed  (poller: market failed/cancelled)
+```
+
+#### DB changes
+
+**Migration `zar_conversion_add_limit_placed_at`:**
+```sql
+ALTER TABLE lth_pvr.pending_zar_conversions
+  ADD COLUMN IF NOT EXISTS limit_placed_at timestamptz;
+```
+
+**Migration `zar_conversion_add_market_pending_status`:** dropped and recreated `pending_zar_conversions_status_check` to add `'market_pending'`. Full allowed set: `pending | limit_placed | market_pending | market_placed | filled | cancelled | failed`.
+
+#### Customer 54 reconciliation
+
+Orphaned limit `019e7add-a46b-7f75-9e0d-fc110d7a9f95` cancelled (0% filled, R50 freed). Retry conversion succeeded: `status = 'filled'`, `converted_amount = 3.06 USDT`, `order_id = '019e7af1...'` (market), `converted_at = 2026-05-30 22:11:56`.
+
+#### Customer 31 data reconciliation
+
+Pre-existing stuck row `889a95d7` (`status = 'market_placed'`, corrupt `converted_amount = 170.94`) was investigated. `exchange_funding_events` confirmed the actual conversion succeeded on 2026-05-30 (VALR txn `019e7abf`): R100 → 6.104 USDT total, split across 3 FIFO `pending_zar_conversions` rows. All three rows reconciled to `status = 'filled'` with correct USDT amounts (`5.2174`, `0.1557`, `0.7313`), `order_id` repointed to `019e7abf`, bogus error messages and corrupt amounts cleared.
+
+#### Files touched
+
+| File | Change |
+|---|---|
+| `supabase/functions/_shared/valrClient.ts` | Fixed `cancelOrderById` endpoint; added `cancelOrderByCustomerOrderId`, `getOpenOrders` |
+| `supabase/functions/ef_convert_zar_to_usdt/index.ts` | Full refactor: place-and-return; removed sync poller |
+| `supabase/functions/ef_poll_zar_conversions/index.ts` | NEW — async cron poller |
+| `supabase/functions/ef_revert_withdrawal/index.ts` | Redeployed (cancel-endpoint fix) |
+| `supabase/functions/ef_process_withdrawal_queue/index.ts` | Redeployed (cancel-endpoint fix) |
+| `supabase/migrations/zar_conversion_add_limit_placed_at` | NEW — `limit_placed_at` column |
+| `supabase/migrations/zar_conversion_add_market_pending_status` | NEW — `market_pending` status value |
+| `pg_cron` | New job `lth_poll_zar_conversions_1min` (jobid 85, `*/1 * * * *`) |
+| `docs/SDD_v0.6.md` | This entry |
+
+#### New gotchas (also added to §11)
+
+> **VALR `/v1/orders/orderid/{id}` is GET-only.** DELETE on that path returns 404 and silently leaves the order resting. The cancel endpoint is `DELETE /v1/orders/order` with `{ orderId, pair }` in the JSON body.
+>
+> **VALR order-summary returns 400 for working orders.** `/v1/orders/history/summary/customerorderid/{id}` only covers final states. Use `GET /v1/orders/open` to check whether an order is still resting.
+>
+> **Adverse-move must compare same-side prices.** For a BUY limit placed at `bestBid`, compare the current best **bid** to the limit price — not the ask. `(ask − bid)/bid` is the spread, not price movement, and will false-trigger whenever the spread widens.
+>
+> **150s edge timeout makes synchronous 5-minute polls impossible.** Any workflow requiring a multi-minute wait must use an async cron poller (place-and-return + external scheduler).
+
+#### Follow-up (not done)
+- Add a daily reconciliation alert if any `pending_zar_conversions` row has been in `limit_placed` or `market_pending` for > 30 minutes without progressing.
+
+---
 
 ### v0.6.111 – Walk-Forward Validation (WFT)
 **Date:** 2026-05-21
@@ -12026,6 +12143,57 @@ Manual recovery:
   UI "Resume Pipeline" button → POST ef_resume_pipeline
   ef_resume_pipeline checks get_pipeline_status() and runs only incomplete steps
 ```
+
+### 11.5 Common Gotchas
+
+A running list of non-obvious pitfalls encountered in production. Each entry cites the version where the lesson was learned.
+
+#### VALR API
+
+> **`/v1/orders/orderid/{id}` is GET-only.** (v0.6.112)  
+> DELETE on that path returns 404 and silently leaves the order resting. The cancel endpoint is `DELETE /v1/orders/order` with `{ orderId, pair }` in the JSON body. Alternatively use `{ customerOrderId, pair }` to cancel by your own reference.
+
+> **Order-summary returns 400 for working orders.** (v0.6.112)  
+> `/v1/orders/history/summary/customerorderid/{id}` only covers **final** states (Filled / Cancelled / Failed). Calling it on a Placed/resting order returns 400 "Invalid Order". Use `GET /v1/orders/open` to check whether a limit order is still resting before querying the summary.
+
+> **A LIMIT order priced at the opposite top-of-book is still a taker.** (v0.6.102)  
+> VALR classifies maker/taker by whether the order *rests* in the book before matching, not by the order endpoint. To guarantee maker treatment: price at or beyond your **own** side of the book (bid for BUY, ask for SELL) **and** set `postOnly: true`. Pair with a market-fallback path so an unfilled maker order doesn't strand the workflow.
+
+#### Strategy / Signal Logic
+
+> **Adverse-move must compare same-side prices.** (v0.6.112)  
+> For a BUY limit placed at `bestBid`, the adverse-move check must compare the current best **bid** to `limit_price` — not the ask. `(ask − bid) / bid` is the spread, not price movement, and will false-trigger whenever the spread widens.
+
+> **Bear pause is buy-side only.** (v0.6.108)  
+> Latched `bear_pause = true` blocks buys but does **not** stop the strategy from selling. "The system was inactive" during the CI-bands corruption was incorrect — it was actively generating wrong HOLD decisions.
+
+#### Edge Function Architecture
+
+> **150s idle timeout makes synchronous multi-minute polls impossible.** (v0.6.112)  
+> Supabase edge functions return 504 if no response is sent within ~150 seconds. Any workflow requiring a wait longer than ~2 minutes must be refactored to an **async cron poller**: the initiating function places the order and returns immediately; an external scheduler (pg_cron + `net.http_post`) drives follow-up.
+
+> **A throw in the setup phase aborts the entire batch.** (v0.6.100)  
+> Any exception thrown *before* the per-record loop takes down every record. For batch processors, always derive shared state defensively (e.g. `array.find(x => x.valid)` not `array[0]`), and prefer per-record try/catch + `logAlert` over hard throws.
+
+> **Unordered PostgREST `.select()` is heap-ordered.** (v0.6.100)  
+> Results from `.select(...)` have no guaranteed ordering — heap order shifts as rows are inserted/vacuumed. Any code that reads `result[0]` to derive shared state will eventually break. Add an explicit `.order(...)` or pick with `.find(x => condition)`.
+
+#### Database
+
+> **`GET DIAGNOSTICS rc = ROW_COUNT` returns an integer, not a boolean.** (v0.6.x)  
+> Declare the variable as `int`, not `boolean`. Use `IF rc > 0 THEN …` for "was a row actually inserted?". `IF FOUND` is unreliable after `INSERT … ON CONFLICT DO NOTHING`.
+
+> **`registration_status` is not the right gate for transaction ingestion.** (v0.6.102)  
+> A customer can be `cancelled` or `suspended` and still have funds landing in their VALR wallet. The authoritative "operational" flag is `exchange_accounts.status = 'active'`.
+
+> **Auto-sweep blocks must check fee-cadence schedules.** (v0.6.102)  
+> Code that reads `accumulated_btc / accumulated_usdt` and tries to settle them must skip customers whose fees are `monthly`/`annual` — those are owned exclusively by the dedicated settlement EFs.
+
+> **Ledger fee-extraction code must accept multiple metadata key sets.** (v0.6.102)  
+> Funding events have used at least three key conventions: `exchange_fee_asset`/`exchange_fee`, `conversion_fee_asset`/`conversion_fee_amount`, and `conversion_fee_zar` (mis-named; actually USDT-denominated on USDT-credit legs). Always check all three.
+
+> **Historical immutability belongs in the DB, not the application.** (v0.6.108)  
+> A `frozen_at` column + BEFORE-UPDATE trigger protects historical rows even if a future bug bypasses application-level guards. Applied to `lth_pvr.ci_bands_daily`; consider the same for any table where historical values must never change.
 
 ---
 
