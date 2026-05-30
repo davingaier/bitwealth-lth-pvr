@@ -14,11 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import {
   getOrderBook,
-  getOrderSummaryByCustomerOrderId,
   placeLimitOrder,
-  placeMarketOrderByQuote,
-  cancelOrderById,
-  getOpenOrders,
 } from "../_shared/valrClient.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
@@ -42,69 +38,6 @@ const CORS = {
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: CORS });
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// ── VALR order polling constants ─────────────────────────────────────────────
-const POLL_INTERVAL_MS    = 5_000;  // 5 seconds between status checks
-const POLL_MAX_ROUNDS     = 24;     // 24 × 5 s = 120 s max before market fallback
-const PRICE_MOVE_LIMIT    = 0.0025; // 0.25% adverse price move triggers early cancel
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-type OrderStatus = "Placed" | "Failed" | "Cancelled" | "Filled" | "PartiallFilled" | string;
-
-async function pollUntilFilled(
-  customerOrderId: string,
-  pair: string,
-  limitPrice: number,
-  subaccountId: string | null,
-  creds: { apiKey: string; apiSecret: string } | null,
-): Promise<{ filled: boolean; fillPrice?: number; fillQty?: number; valrOrderId?: string }> {
-  for (let round = 0; round < POLL_MAX_ROUNDS; round++) {
-    await sleep(POLL_INTERVAL_MS);
-
-    let summary: any;
-    try {
-      summary = await getOrderSummaryByCustomerOrderId(customerOrderId, pair, subaccountId, creds);
-    } catch (e) {
-      console.warn(`Poll round ${round + 1}: summary fetch failed — ${e.message}`);
-      continue;
-    }
-
-    const status: OrderStatus = summary?.orderStatusType;
-    console.log(`Poll ${round + 1}/${POLL_MAX_ROUNDS}: ${customerOrderId} → ${status}`);
-
-    if (status === "Filled") {
-      return {
-        filled: true,
-        fillPrice: Number(summary.averagePrice ?? summary.price),
-        fillQty: Number(summary.originalQuantity ?? summary.quantity),
-        valrOrderId: summary.orderId ?? summary.id,
-      };
-    }
-
-    if (status === "Cancelled" || status === "Failed") {
-      return { filled: false };
-    }
-
-    // Check for adverse price move
-    if (round % 4 === 0 && round > 0) {
-      try {
-        const book = await getOrderBook(pair);
-        const currentAsk = Number(book.Asks[0]?.price);
-        if (currentAsk > 0 && (currentAsk - limitPrice) / limitPrice > PRICE_MOVE_LIMIT) {
-          console.log(`Price moved ${((currentAsk - limitPrice) / limitPrice * 100).toFixed(2)}% — cancelling LIMIT`);
-          return { filled: false };
-        }
-      } catch (_) { /* non-fatal */ }
-    }
-  }
-
-  // Timeout — caller should cancel + market
-  return { filled: false };
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -231,7 +164,38 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── 6. Update pending_zar_conversions → limit_placed ──────────────────────
+  // ── 6. Persist state and return immediately ───────────────────────────────
+  // This function no longer blocks waiting for the fill. A single HTTP-invoked
+  // edge function must respond within Supabase's 150 s request-idle timeout, so
+  // a 5-minute maker-order window is impossible synchronously. Instead we record
+  // the placed LIMIT (or flag for an immediate MARKET if placement failed) and
+  // return; the cron-driven poller `ef_poll_zar_conversions` then:
+  //   • watches the resting LIMIT for a fill,
+  //   • after 5 minutes stale OR a 0.25% adverse upward move, cancels it
+  //     (confirming the cancel) and places a MARKET order,
+  //   • records the fill into pending_zar_conversions + exchange_orders.
+  const nowIso = new Date().toISOString();
+
+  if (TEST_MODE) {
+    // Simulate instant fill so admin tests don't depend on the poller.
+    await sb
+      .from("pending_zar_conversions")
+      .update({
+        status: "filled",
+        order_id: customerOrderId,
+        pair,
+        order_side: "BUY",
+        limit_price: limitPrice,
+        order_type: "limit",
+        converted_amount: qtyUsdt,
+        remaining_amount: 0,
+        converted_at: nowIso,
+        limit_placed_at: nowIso,
+      })
+      .eq("id", conversion_id);
+    return json({ success: true, conversion_id, status: "filled", converted_usdt: qtyUsdt, fill_price: limitPrice });
+  }
+
   if (limitPlaced) {
     await sb
       .from("pending_zar_conversions")
@@ -242,177 +206,42 @@ Deno.serve(async (req) => {
         order_side: "BUY",
         limit_price: limitPrice,
         order_type: "limit",
+        limit_placed_at: nowIso,
+        error_message: null,
       })
       .eq("id", conversion_id);
-  }
-
-  // ── 7. Poll for fill ───────────────────────────────────────────────────────
-  let fillResult: { filled: boolean; fillPrice?: number; fillQty?: number; valrOrderId?: string };
-
-  if (TEST_MODE) {
-    // Simulate instant fill in test mode
-    fillResult = { filled: true, fillPrice: limitPrice, fillQty: qtyUsdt };
-  } else if (!limitPlaced) {
-    // postOnly placement was rejected — go straight to MARKET fallback
-    fillResult = { filled: false };
-  } else {
-    fillResult = await pollUntilFilled(customerOrderId, pair, limitPrice, subaccountId, creds);
-  }
-
-  // ── 8. Market fallback if not filled ──────────────────────────────────────
-  if (!fillResult.filled) {
-    // Cancel the resting LIMIT and CONFIRM it is gone before placing the MARKET
-    // order. VALR locks the ZAR while the post-only LIMIT rests, so placing a
-    // MARKET BUY before the cancel settles fails with "Insufficient Balance".
-    // Cancellation is asynchronous (DELETE returns 202), so we poll the open
-    // orders until the limit disappears.
-    if (limitOrderId && !TEST_MODE) {
-      let cancelConfirmed = false;
-      try {
-        await cancelOrderById(limitOrderId, pair, subaccountId, creds);
-      } catch (e) {
-        console.warn(`Cancel LIMIT request failed: ${e.message}`);
-      }
-      // Confirm the order is no longer resting (up to ~15 s).
-      for (let r = 0; r < 8; r++) {
-        await sleep(r === 0 ? 1_500 : 2_000);
-        try {
-          const open: any = await getOpenOrders(subaccountId, creds);
-          const stillOpen = Array.isArray(open) &&
-            open.some((o: any) => o.orderId === limitOrderId || o.customerOrderId === customerOrderId);
-          if (!stillOpen) { cancelConfirmed = true; break; }
-        } catch (e) {
-          console.warn(`Open-orders check failed: ${e.message}`);
-        }
-      }
-      if (!cancelConfirmed) {
-        // The LIMIT is still resting and holding the ZAR — a MARKET order would
-        // fail with "Insufficient Balance". Abort with an actionable error rather
-        // than orphaning a resting order.
-        await logAlert(
-          sb,
-          "ef_convert_zar_to_usdt",
-          "error",
-          "Could not cancel resting LIMIT order; aborting MARKET fallback to avoid Insufficient Balance",
-          { conversion_id, customerId, limitOrderId, customerOrderId },
-          ORG_ID,
-          customerId,
-        );
-        return json({
-          error: "Could not cancel the resting limit order on VALR — conversion left as limit_placed. Please retry or cancel manually.",
-        }, 502);
-      }
-    }
-
-    await sb
-      .from("pending_zar_conversions")
-      .update({ status: "market_placed", order_type: "market" })
-      .eq("id", conversion_id);
-
-    // Place MARKET BUY (quoteAmount = ZAR spend)
-    if (!TEST_MODE) {
-      try {
-        const mktOrderId = `zar-conv-mkt-${conversion_id}`;
-        await placeMarketOrderByQuote(pair, "BUY", zarAmount.toFixed(2), mktOrderId, subaccountId, creds);
-
-        // Poll for the market fill. VALR market orders are filled near-instantly
-        // on the exchange but the order-summary endpoint can lag several seconds
-        // before it reports "Filled". A single 3 s check was racing that lag and
-        // returning a false 500 even though the order had filled — so poll a few
-        // rounds before giving up.
-        const MKT_POLL_ROUNDS = 12; // 12 × 5 s = 60 s
-        for (let r = 0; r < MKT_POLL_ROUNDS; r++) {
-          await sleep(r === 0 ? 3_000 : POLL_INTERVAL_MS);
-          const mktSummary: any = await getOrderSummaryByCustomerOrderId(mktOrderId, pair, subaccountId, creds).catch(() => null);
-          const mktStatus = mktSummary?.orderStatusType;
-          console.log(`Market poll ${r + 1}/${MKT_POLL_ROUNDS}: ${mktOrderId} → ${mktStatus}`);
-          if (mktStatus === "Filled") {
-            fillResult = {
-              filled: true,
-              fillPrice: Number(mktSummary.averagePrice ?? mktSummary.price),
-              fillQty: Number(mktSummary.originalQuantity ?? mktSummary.quantity),
-              valrOrderId: mktSummary.orderId ?? mktSummary.id,
-            };
-            break;
-          }
-          if (mktStatus === "Failed" || mktStatus === "Cancelled") {
-            break;
-          }
-        }
-      } catch (e) {
-        await logAlert(sb, "ef_convert_zar_to_usdt", "error", `MARKET fallback failed: ${e.message}`, { conversion_id }, ORG_ID, customerId);
-        return json({ error: `MARKET order failed: ${e.message}` }, 502);
-      }
-    } else {
-      fillResult = { filled: true, fillPrice: limitPrice, fillQty: qtyUsdt };
-    }
-  }
-
-  // ── 9. Record fill ─────────────────────────────────────────────────────────
-  if (fillResult.filled) {
-    const convertedUsdt = fillResult.fillPrice != null && fillResult.fillQty != null
-      ? fillResult.fillQty
-      : qtyUsdt;
-
-    await sb
-      .from("pending_zar_conversions")
-      .update({
-        status: "filled",
-        converted_amount: convertedUsdt,
-        remaining_amount: 0,
-        converted_at: new Date().toISOString(),
-        order_id: fillResult.valrOrderId ?? limitOrderId ?? customerOrderId,
-      })
-      .eq("id", conversion_id);
-
-    // Log to exchange_orders. Schema columns: org_id, exchange_account_id (NOT NULL),
-    // pair, side, qty, status, submitted_at (all NOT NULL), price, ext_order_id, raw.
-    // Look up the customer's exchange_account_id (best-effort — the funding event will
-    // also be re-created by ef_sync_valr_transactions when it polls VALR history).
-    try {
-      const { data: ea } = await sb
-        .schema("public")
-        .from("customer_strategies")
-        .select("exchange_account_id")
-        .eq("customer_id", customerId)
-        .order("effective_from", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const exchangeAccountId = ea?.exchange_account_id;
-      if (exchangeAccountId) {
-        await sb.from("exchange_orders").insert({
-          org_id: ORG_ID,
-          exchange_account_id: exchangeAccountId,
-          ext_order_id: fillResult.valrOrderId ?? limitOrderId ?? customerOrderId,
-          pair,
-          side: "BUY",
-          price: limitPrice,
-          qty: convertedUsdt,
-          status: "filled",
-          submitted_at: new Date().toISOString(),
-          raw: {
-            source: "ef_convert_zar_to_usdt",
-            customer_order_id: customerOrderId,
-            customer_id: customerId,
-            order_type: "limit",
-            fill_price: fillResult.fillPrice,
-            zar_amount: zarAmount,
-            conversion_id,
-          },
-        });
-      }
-    } catch (e) {
-      console.warn("exchange_orders insert failed:", (e as Error).message);
-    }
 
     return json({
       success: true,
       conversion_id,
-      converted_usdt: convertedUsdt,
-      fill_price: fillResult.fillPrice,
+      status: "limit_placed",
+      limit_order_id: limitOrderId ?? customerOrderId,
+      limit_price: limitPrice,
+      qty_usdt: qtyUsdt,
+      message: "Limit order placed. The poller will fill it or fall back to MARKET after 5 minutes / on a 0.25% adverse move.",
     });
   }
 
-  // If still not filled after market attempt
-  return json({ error: "Order not filled — manual intervention required" }, 500);
+  // postOnly placement was rejected (e.g. bid == ask). Flag for an immediate
+  // MARKET order — the poller picks up 'market_pending' rows on its next run.
+  await sb
+    .from("pending_zar_conversions")
+    .update({
+      status: "market_pending",
+      pair,
+      order_side: "BUY",
+      limit_price: limitPrice,
+      order_type: "market",
+      limit_placed_at: null,
+      error_message: null,
+    })
+    .eq("id", conversion_id);
+
+  return json({
+    success: true,
+    conversion_id,
+    status: "market_pending",
+    message: "Limit placement rejected; queued for MARKET order on the next poller run.",
+  });
 });
+
