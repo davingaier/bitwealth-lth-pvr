@@ -18,6 +18,7 @@ import {
   placeLimitOrder,
   placeMarketOrderByQuote,
   cancelOrderById,
+  getOpenOrders,
 } from "../_shared/valrClient.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
@@ -260,12 +261,46 @@ Deno.serve(async (req) => {
 
   // ── 8. Market fallback if not filled ──────────────────────────────────────
   if (!fillResult.filled) {
-    // Cancel LIMIT
+    // Cancel the resting LIMIT and CONFIRM it is gone before placing the MARKET
+    // order. VALR locks the ZAR while the post-only LIMIT rests, so placing a
+    // MARKET BUY before the cancel settles fails with "Insufficient Balance".
+    // Cancellation is asynchronous (DELETE returns 202), so we poll the open
+    // orders until the limit disappears.
     if (limitOrderId && !TEST_MODE) {
+      let cancelConfirmed = false;
       try {
         await cancelOrderById(limitOrderId, pair, subaccountId, creds);
       } catch (e) {
-        console.warn(`Cancel LIMIT failed: ${e.message}`);
+        console.warn(`Cancel LIMIT request failed: ${e.message}`);
+      }
+      // Confirm the order is no longer resting (up to ~15 s).
+      for (let r = 0; r < 8; r++) {
+        await sleep(r === 0 ? 1_500 : 2_000);
+        try {
+          const open: any = await getOpenOrders(subaccountId, creds);
+          const stillOpen = Array.isArray(open) &&
+            open.some((o: any) => o.orderId === limitOrderId || o.customerOrderId === customerOrderId);
+          if (!stillOpen) { cancelConfirmed = true; break; }
+        } catch (e) {
+          console.warn(`Open-orders check failed: ${e.message}`);
+        }
+      }
+      if (!cancelConfirmed) {
+        // The LIMIT is still resting and holding the ZAR — a MARKET order would
+        // fail with "Insufficient Balance". Abort with an actionable error rather
+        // than orphaning a resting order.
+        await logAlert(
+          sb,
+          "ef_convert_zar_to_usdt",
+          "error",
+          "Could not cancel resting LIMIT order; aborting MARKET fallback to avoid Insufficient Balance",
+          { conversion_id, customerId, limitOrderId, customerOrderId },
+          ORG_ID,
+          customerId,
+        );
+        return json({
+          error: "Could not cancel the resting limit order on VALR — conversion left as limit_placed. Please retry or cancel manually.",
+        }, 502);
       }
     }
 

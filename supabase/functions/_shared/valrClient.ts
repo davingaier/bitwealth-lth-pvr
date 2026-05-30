@@ -182,6 +182,10 @@ export async function placeMarketOrderByQuote(
 }
 
 // ── Cancel order ──────────────────────────────────────────────────────────────
+// VALR cancel endpoint is DELETE /v1/orders/order with a JSON body identifying
+// the order ({ orderId | customerOrderId, pair }). The path-style
+// /v1/orders/orderid/{id} is the GET status route, NOT a cancel route — using it
+// for DELETE returns 404 and silently leaves the order resting on the book.
 export async function cancelOrderById(
   orderId: string,
   pair: string,
@@ -189,7 +193,18 @@ export async function cancelOrderById(
   credentials?: ValrRequestCredentials | null,
 ): Promise<unknown> {
   const p = normalisePair(pair);
-  return await valrPrivateRequest("DELETE", `/v1/orders/orderid/${orderId}?currencyPair=${p}`, undefined, subaccountId, credentials);
+  return await valrPrivateRequest("DELETE", "/v1/orders/order", { orderId, pair: p }, subaccountId, credentials);
+}
+
+// Cancel by the customerOrderId we supplied at placement time.
+export async function cancelOrderByCustomerOrderId(
+  customerOrderId: string,
+  pair: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<unknown> {
+  const p = normalisePair(pair);
+  return await valrPrivateRequest("DELETE", "/v1/orders/order", { customerOrderId, pair: p }, subaccountId, credentials);
 }
 
 // ── Order summary by customerOrderId ─────────────────────────────────────────
@@ -207,6 +222,14 @@ export async function getOrderSummaryByCustomerOrderId(
     subaccountId,
     credentials,
   );
+}
+
+// ── Open (working) orders ────────────────────────────────────────────────────
+export async function getOpenOrders(
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<unknown> {
+  return await valrPrivateRequest("GET", "/v1/orders/open", undefined, subaccountId, credentials);
 }
 
 // ── Order summary by VALR orderId ────────────────────────────────────────────
