@@ -297,20 +297,20 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     console.warn("[ef_generate_statement] VALR USDT/ZAR fetch failed:", (e as Error).message);
   }
 
-  // ── Aggregates from ledger_lines ──────────────────────────────────
+  // ── Aggregates from ledger_lines (raw legs) ───────────────────────
+  // Summary figures are computed from the raw ledger_lines legs (not the merged
+  // conversion view) because they need performance_fee_usdt and the per-leg
+  // deposit/withdrawal classification. Conversion legs net out correctly here:
+  // the ZAR in/out legs carry 0 USDT, so contributions reflect the USDT result.
   let contributionsUsd = 0;
   let withdrawalsUsd = 0;
   let exchangeFeesUsd = 0;
   let platformFeeUsdtSum = 0;
   let platformFeeBtcSum = 0;
   let performanceFeeUsdtSum = 0;
-  let txCount = 0;
   let totalBtc = 0;
   let totalUsdt = 0;
   let totalZar = 0;
-  let runningBtc = Number(openingBal?.btc_balance ?? 0);
-  let runningUsdt = Number(openingBal?.usdt_balance ?? 0);
-  const rows: StatementTransactionRow[] = [];
 
   for (const t of txRows ?? []) {
     const amtBtc = Number(t.amount_btc ?? 0);
@@ -322,8 +322,6 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     const platFeeBtc = Number(t.platform_fee_btc ?? 0);
     const perfFeeUsdt = Number(t.performance_fee_usdt ?? 0);
 
-    runningBtc += amtBtc;
-    runningUsdt += amtUsdt;
     totalBtc += amtBtc;
     totalUsdt += amtUsdt;
     totalZar += amtZar;
@@ -335,21 +333,75 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     const kind = String(t.kind ?? "").toLowerCase();
     if (kind === "deposit" || kind === "topup") contributionsUsd += amtUsdt;
     if (kind === "withdrawal" || kind === "withdraw") withdrawalsUsd += Math.abs(amtUsdt);
+  }
 
-    txCount++;
+  const platformFeeUsdSum = platformFeeUsdtSum + (platformFeeBtcSum * btcPrice);
+
+  // ── Transaction-history display rows (merged conversions) ─────────
+  // Reuse public.list_customer_transactions — the same RPC the customer portal
+  // uses — so multi-leg ZAR<->USDT conversions collapse into a single
+  // "conversion" row (grouped on conversion_metadata.original_transaction_id /
+  // conversion_approval_id) instead of separate ZAR-withdrawal + USDT-topup legs.
+  // The RPC returns all four fee columns, letting the Fees cell show exchange
+  // and platform fees in both BTC and USDT, matching the portal exactly.
+  const { data: mergedTx, error: mergedTxErr } = await supabase
+    .schema("public")
+    .rpc("list_customer_transactions", { p_customer_id: customerId, p_limit: 1000 });
+  if (mergedTxErr) {
+    console.error("[ef_generate_statement] list_customer_transactions RPC failed:", mergedTxErr);
+  }
+
+  // Keep only this statement month, ascending for running-balance accumulation.
+  const monthTx = ((mergedTx ?? []) as Array<Record<string, unknown>>)
+    .filter((t) => {
+      const d = String(t.trade_date ?? "");
+      return d >= startStr && d <= endStr;
+    })
+    .sort((a, b) => {
+      const ad = String(a.trade_date ?? ""), bd = String(b.trade_date ?? "");
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      const ac = String(a.created_at ?? ""), bc = String(b.created_at ?? "");
+      return ac < bc ? -1 : (ac > bc ? 1 : 0);
+    });
+
+  let runningBtc = Number(openingBal?.btc_balance ?? 0);
+  let runningUsdt = Number(openingBal?.usdt_balance ?? 0);
+  const rows: StatementTransactionRow[] = [];
+  for (const t of monthTx) {
+    const amtBtc = Number(t.amount_btc ?? 0);
+    const amtUsdt = Number(t.amount_usdt ?? 0);
+    const amtZar = Number(t.amount_zar ?? 0);
+    const feeBtc = Number(t.fee_btc ?? 0);
+    const feeUsdt = Number(t.fee_usdt ?? 0);
+    const platFeeBtc = Number(t.platform_fee_btc ?? 0);
+    const platFeeUsdt = Number(t.platform_fee_usdt ?? 0);
+
+    runningBtc += amtBtc;
+    runningUsdt += amtUsdt;
+
+    const kind = String(t.kind ?? "").toLowerCase();
+    const typeLabel = kind === "topup" ? "deposit" : kind;
+
+    // Stack every non-zero fee on its own line so all four fee types from the
+    // portal (exchange BTC/USDT, platform BTC/USDT) are visible in one row.
+    const fees: string[] = [];
+    if (feeBtc > 0)      fees.push(`Exch ${feeBtc.toFixed(8)} BTC`);
+    if (feeUsdt > 0)     fees.push(`Exch $${feeUsdt.toFixed(2)}`);
+    if (platFeeBtc > 0)  fees.push(`Plat ${platFeeBtc.toFixed(8)} BTC`);
+    if (platFeeUsdt > 0) fees.push(`Plat $${platFeeUsdt.toFixed(2)}`);
+
     rows.push({
-      date: fmtDateLong(t.trade_date),
-      type: kind === "topup" ? "deposit" : kind,
+      date: fmtDateLong(t.trade_date as string),
+      type: typeLabel,
       btc: amtBtc !== 0 ? (amtBtc > 0 ? "+ " : "– ") + Math.abs(amtBtc).toFixed(8) : "—",
       usdt: amtUsdt !== 0 ? (amtUsdt > 0 ? "+ " : "– ") + Math.abs(amtUsdt).toFixed(2) : "—",
       zar: amtZar !== 0 ? (amtZar > 0 ? "+ " : "– ") + Math.abs(amtZar).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—",
-      fee_usd: (feeUsdt + (feeBtc * btcPrice)) > 0 ? (feeUsdt + (feeBtc * btcPrice)).toFixed(2) : "—",
+      fees,
       btc_balance: runningBtc.toFixed(8),
       usdt_balance: runningUsdt.toFixed(2),
     });
   }
-
-  const platformFeeUsdSum = platformFeeUsdtSum + (platformFeeBtcSum * btcPrice);
+  const txCount = rows.length;
 
   // ── Standard DCA benchmark ────────────────────────────────────────
   const { data: stdClosing } = await supabase
@@ -604,7 +656,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     tx_total_btc: totalBtc.toFixed(8),
     tx_total_usdt: totalUsdt.toFixed(2),
     tx_total_zar: totalZar.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    tx_total_fees_usd: exchangeFeesUsd.toFixed(2),
+    tx_total_fees_usd: (exchangeFeesUsd + platformFeeUsdSum).toFixed(2),
 
     strategy_name: strategy.strategy_code === "STD_DCA" ? "Standard Bitcoin DCA" : "LTH PVR Bitcoin DCA",
     strategy_status: String(strategy.status ?? (strategy.live_enabled ? "active" : "paused")).replace(/^\w/, (c: string) => c.toUpperCase()),

@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-05-31 (v0.6.112)
+**Last updated:** 2026-06-01 (v0.6.113)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.113 – Monthly statement transaction history: merged conversions + all-fee-types display
+**Date:** 2026-06-01
+**Status:** ✅ DEPLOYED
+
+#### Background
+
+Two display issues were reported against customer 49's monthly statement transaction-history table. Both stemmed from the statement generator reading raw `lth_pvr.ledger_lines` legs directly, whereas the customer portal reads the merged `public.list_customer_transactions` RPC.
+
+#### Issue 1 — Only the VALR exchange fee was shown in the Fee column
+
+The statement's `Fee (USD)` column reflected only `fee_usdt` (the VALR exchange fee). The portal shows four fee types — Exchange Fee (BTC), Exchange Fee (USDT), Platform Fee (BTC), Platform Fee (USDT). Clients could not see their full fee picture in one place.
+
+**Fix.** The transaction-history rows are now built from `public.list_customer_transactions(p_customer_id, 1000)` (the same RPC the portal uses), filtered to the statement month. Each row carries a `fees: string[]` array; every non-zero fee is pushed with an asset-aware, prefixed label (`Exch 0.00000000 BTC`, `Exch $41.91`, `Plat 0.00000000 BTC`, `Plat $89.49`). The template renders them stacked (`<br>`-joined) in a single right-aligned `Fees` cell. The `Fee (USD)` header was renamed `Fees`. The totals footer's `tx_total_fees_usd` now sums exchange fees **plus** platform fees converted to USD (`platformFeeUsdtSum + platformFeeBtcSum * btcPrice`).
+
+#### Issue 2 — Conversion shown as 3 separate legs instead of 1 merged transaction
+
+On 3 May, customer 49's R200k ZAR→USDT conversion rendered as three rows (ZAR deposit, ZAR withdrawal, USDT deposit) because the generator read the raw ledger legs. The portal collapses these into a single `conversion` row.
+
+**Fix.** Reusing `list_customer_transactions` (which already groups multi-leg conversions on `original_transaction_id`/`conversion_approval_id`) yields the merged row directly. A `conversion` tag/`tagClass` and `.tag.conversion` CSS style were added; the `topup` kind maps to a `deposit` display label. Running BTC/USDT balances are seeded from the opening-balance row and accumulated over the merged rows.
+
+**Verification (customer 49, May 2026 preview).** 3 May now shows exactly 2 rows — Deposit ZAR +200,000.00 and Conversion USDT +11,931.56 / ZAR −200,000.00 with stacked fees `Exch $41.91` + `Plat $89.49`; running USDT balance progresses 17,950.20 → 29,881.76; totals footer reads "Totals (2 transactions)".
+
+**Note.** Statement **aggregates** (contributions, withdrawals, fee totals, NAV) still read raw `ledger_lines` because they need per-leg `performance_fee_usdt` and conversion legs net out identically whether merged or raw.
+
+**Files touched (v0.6.113):**
+- `supabase/functions/ef_generate_statement/index.ts` — transaction-history rows now sourced from `list_customer_transactions` RPC with per-row `fees[]`; `tx_total_fees_usd` includes platform fees (deployed `--no-verify-jwt`)
+- `supabase/functions/_shared/statement_template.ts` — `StatementTransactionRow.fee_usd` → `fees: string[]`; stacked fee cell; `conversion` tag + CSS; header `Fee (USD)` → `Fees`
+
+---
 
 ### v0.6.112 – ZAR→USDT conversion: premature-fallback bug fix + async cron poller refactor
 **Date:** 2026-05-31  

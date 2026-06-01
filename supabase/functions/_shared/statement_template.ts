@@ -15,13 +15,16 @@ export interface StatementFeeRow {
 export interface StatementTransactionRow {
   /** ISO date — already formatted for display, e.g. "26 Mar 2026". */
   date: string;
-  /** "deposit" | "buy" | "sell" | "platform fee" | "performance fee" | "exchange fee" | "withdraw" */
+  /** "deposit" | "buy" | "sell" | "conversion" | "platform fee" | "performance fee" | "exchange fee" | "withdraw" */
   type: string;
   /** Pre-formatted strings — pass "—" or "" for empty cells. */
   btc: string;
   usdt: string;
   zar: string;
-  fee_usd: string;
+  /** One pre-formatted line per non-zero fee, e.g. ["Exch $41.91", "Plat $89.49"].
+      Empty array renders "—". Lets all four fee types (exchange + platform, in
+      BTC and USDT) show in a single row. */
+  fees: string[];
   btc_balance: string;
   usdt_balance: string;
 }
@@ -162,12 +165,15 @@ function renderTxRows(rows: StatementTransactionRow[]): string {
   }
   const tagClass = (kind: string) => {
     const k = kind.toLowerCase();
+    if (k.includes("conversion")) return "conversion";
     if (k.includes("deposit")) return "deposit";
     if (k.includes("buy")) return "buy";
     if (k.includes("fee")) return "fee";
     if (k.includes("withdraw") || k.includes("sell")) return "withdraw";
     return "buy";
   };
+  const feeCell = (fees: string[]) =>
+    fees && fees.length ? fees.map((f) => escapeHtml(f)).join("<br>") : "—";
   return rows
     .map(
       (r) => `
@@ -177,7 +183,7 @@ function renderTxRows(rows: StatementTransactionRow[]): string {
         <td class="num">${escapeHtml(r.btc) || "—"}</td>
         <td class="num">${escapeHtml(r.usdt) || "—"}</td>
         <td class="num">${escapeHtml(r.zar) || "—"}</td>
-        <td class="num">${escapeHtml(r.fee_usd) || "—"}</td>
+        <td class="num fees">${feeCell(r.fees)}</td>
         <td class="num">${escapeHtml(r.btc_balance) || "—"}</td>
         <td class="num">${escapeHtml(r.usdt_balance) || "—"}</td>
       </tr>`,
@@ -264,10 +270,12 @@ export function renderStatementHtml(d: StatementData): string {
   table.tx th, table.tx td { padding: 6px 6px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
   table.tx th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
   table.tx td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.tx td.fees { text-align: right; font-size: 8pt; white-space: nowrap; line-height: 1.35; color: #92400e; }
   table.tx tfoot td { font-weight: 700; border-top: 2px solid var(--navy); border-bottom: none; padding-top: 8px; }
   .tag { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8.5pt; font-weight: 600; }
   .tag.deposit  { background: #dcfce7; color: #166534; }
   .tag.buy      { background: #dbeafe; color: #1e40af; }
+  .tag.conversion { background: #e0e7ff; color: #3730a3; }
   .tag.fee      { background: #fef3c7; color: #92400e; }
   .tag.withdraw { background: #fee2e2; color: #991b1b; }
 
@@ -418,7 +426,7 @@ export function renderStatementHtml(d: StatementData): string {
       <tr>
         <th>Date</th><th>Type</th>
         <th class="num">BTC</th><th class="num">USDT</th><th class="num">ZAR</th>
-        <th class="num">Fee (USD)</th><th class="num">BTC bal.</th><th class="num">USDT bal.</th>
+        <th class="num">Fees</th><th class="num">BTC bal.</th><th class="num">USDT bal.</th>
       </tr>
     </thead>
     <tbody>
