@@ -271,11 +271,159 @@ export async function retryTransfer(
 
 import { resolveCustomerCredentials } from "./valrCredentials.ts";
 import { logAlert } from "./alerting.ts";
+import {
+  getAccountBalances,
+  pickAvailable,
+  getMarketPrice,
+  placeMarketOrder,
+  getOrderSummaryByCustomerOrderId,
+} from "./valrClient.ts";
+import { loadUsdpcConfig, sizeUsdpcToUsdt } from "./usdpc.ts";
 
 const VALR_API_URL_TRANSFER =
   Deno.env.get("VALR_API_URL") ??
   Deno.env.get("VALR_API_BASE") ??
   "https://api.valr.com";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ensureUsdtForFee
+//
+// USDPC-enabled customers keep idle cash in the USDPC yield stablecoin, so their
+// idle USDT is continuously swept away. A USDT fee transfer would then fail with
+// VALR "Insufficient Balance" even though the customer holds ample value.
+//
+// Before such a transfer we unwind JUST ENOUGH USDPC → USDT (a market SELL on
+// USDPC/USDT) to cover `requiredUsdt`, poll the fill, then ledger the conversion
+// (kind='convert', USDPC down / USDT up) so computed balances stay in sync with
+// VALR. Added 2026-06-01.
+//
+// No-op (returns { ok:true, converted:false }) when the customer is not
+// usdpc_enabled, when idle USDT already covers the fee, or in test mode.
+// ─────────────────────────────────────────────────────────────────────────────
+async function ensureUsdtForFee(
+  sb: SupabaseClient,
+  customerId: number,
+  requiredUsdt: number,
+  creds: { apiKey: string; apiSecret: string; subaccountId: string | null; accountModel: "subaccount" | "api" },
+): Promise<{ ok: boolean; converted: boolean; usdtReceived?: number; error?: string }> {
+  const orgId = Deno.env.get("ORG_ID");
+  const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
+
+  // Only relevant for USDPC-enabled customers.
+  const { data: stratRow } = await sb
+    .schema("public")
+    .from("customer_strategies")
+    .select("usdpc_enabled")
+    .eq("customer_id", customerId)
+    .eq("strategy_code", "LTH_PVR")
+    .eq("status", "active")
+    .maybeSingle();
+  if (!stratRow?.usdpc_enabled) return { ok: true, converted: false };
+  if (testMode) return { ok: true, converted: false };
+
+  const requestCreds = { apiKey: creds.apiKey, apiSecret: creds.apiSecret };
+  const subId = creds.subaccountId;
+
+  // Current idle balances.
+  let balances: Array<{ currency: string; available: string }>;
+  try {
+    balances = await getAccountBalances(subId, requestCreds);
+  } catch (e) {
+    return { ok: false, converted: false, error: `balance fetch failed: ${(e as Error).message}` };
+  }
+  const idleUsdt = pickAvailable(balances, "USDT");
+  if (idleUsdt >= requiredUsdt) return { ok: true, converted: false };
+
+  const usdpcAvail = pickAvailable(balances, "USDPC");
+  if (usdpcAvail <= 0) {
+    return {
+      ok: false,
+      converted: false,
+      error: `USDT short by ${(requiredUsdt - idleUsdt).toFixed(8)} and no USDPC available to convert`,
+    };
+  }
+
+  const cfg = await loadUsdpcConfig(sb);
+  let price: number;
+  try {
+    price = await getMarketPrice(cfg.pair);
+  } catch (e) {
+    return { ok: false, converted: false, error: `USDPC price fetch failed: ${(e as Error).message}` };
+  }
+
+  // Convert enough to net the shortfall + 0.5% buffer (fee/slippage), but never
+  // below VALR's minimum order size. Cap at the available USDPC holding. Any
+  // leftover USDT is swept back into USDPC by the next BTC-sell cycle.
+  const shortfall = +(requiredUsdt - idleUsdt).toFixed(8);
+  const targetUsdt = Math.max(shortfall * 1.005, cfg.minOrderUsdt);
+  const sizing = sizeUsdpcToUsdt(targetUsdt, usdpcAvail, price, cfg.takerFeeRate);
+  const usdpcToSell = +sizing.usdpcToSell.toFixed(8);
+  if (usdpcToSell <= 0) {
+    return { ok: false, converted: false, error: `unable to size USDPC conversion (avail=${usdpcAvail}, need=${shortfall})` };
+  }
+
+  // Place the market SELL (USDPC → USDT).
+  const coid = crypto.randomUUID();
+  try {
+    await placeMarketOrder(cfg.pair, "SELL", usdpcToSell.toFixed(8), coid, subId, requestCreds);
+  } catch (e) {
+    return { ok: false, converted: false, error: `USDPC SELL placement failed: ${(e as Error).message}` };
+  }
+
+  // Poll until filled (market IOC fills within seconds).
+  let summary: Record<string, unknown> | null = null;
+  let filled = false;
+  for (let i = 0; i < 10; i++) {
+    try {
+      summary = await getOrderSummaryByCustomerOrderId(coid, cfg.pair, subId, requestCreds) as Record<string, unknown>;
+      const st = String(summary?.orderStatusType ?? "").toLowerCase();
+      if (st === "filled") { filled = true; break; }
+      if (st === "failed" || st === "cancelled" || st === "expired") {
+        return { ok: false, converted: false, error: `USDPC SELL ${st}: ${summary?.failedReason ?? ""}` };
+      }
+    } catch (_e) { /* summary 400s while the order is still working — keep polling */ }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (!filled) {
+    return { ok: false, converted: false, error: `USDPC SELL not confirmed filled in time (coid=${coid})` };
+  }
+
+  // Derive actuals from the fill; fall back to the sizing estimate.
+  const soldUsdpc = Number(summary?.totalExecutedQuantity ?? usdpcToSell) || usdpcToSell;
+  const avgPrice = Number(summary?.averagePrice ?? price) || price;
+  const grossUsdt = soldUsdpc * avgPrice;
+  const feeUsdt = Number(summary?.totalFee ?? (grossUsdt * cfg.takerFeeRate)) || (grossUsdt * cfg.takerFeeRate);
+  const usdtReceived = +(grossUsdt - feeUsdt).toFixed(8);
+
+  // Ledger the conversion so computed balances track VALR (USDPC down, USDT up).
+  try {
+    await sb.from("ledger_lines").insert({
+      org_id: orgId,
+      customer_id: customerId,
+      trade_date: new Date().toISOString().split("T")[0],
+      kind: "convert",
+      amount_btc: 0,
+      amount_usdt: usdtReceived,
+      amount_usdpc: -soldUsdpc,
+      fee_usdt: feeUsdt,
+      note: `USDPC→USDT fee pre-conversion (coid=${coid}, sold ${soldUsdpc} USDPC @ ${avgPrice})`,
+    });
+  } catch (e) {
+    // Non-fatal: the VALR conversion succeeded; a missing ledger row is a
+    // reconciliation concern, not a reason to block the fee transfer.
+    await logAlert(
+      sb,
+      "valrTransfer.ensureUsdtForFee",
+      "warn",
+      `USDPC→USDT conversion succeeded but ledger insert failed for customer ${customerId}`,
+      { customerId, coid, soldUsdpc, usdtReceived, error: (e as Error).message },
+      orgId,
+      customerId,
+    );
+  }
+
+  return { ok: true, converted: true, usdtReceived };
+}
 
 export async function withdrawFeeFromCustomerAccount(
   sb: SupabaseClient,
@@ -312,7 +460,44 @@ export async function withdrawFeeFromCustomerAccount(
     return { success: false, errorMessage: e.message };
   }
 
-  // ── 3. Create pending transfer log entry ──────────────────────────────────
+  // ── 2b. USDPC unwind (USDT fees only) ─────────────────────────────────────
+  // USDPC-enabled customers hold idle cash in the USDPC yield stablecoin, so a
+  // USDT fee transfer can fail with "Insufficient Balance". Convert just enough
+  // USDPC → USDT first (no-op for non-USDPC customers / sufficient balances).
+  if (currency === "USDT") {
+    const unwind = await ensureUsdtForFee(sb, customerId, amount, creds);
+    if (!unwind.ok) {
+      return { success: false, errorMessage: `USDPC pre-conversion failed: ${unwind.error}` };
+    }
+  }
+
+  // ── 3. Subaccount model: internal VALR transfer ───────────────────────────
+  // transferToMainAccount writes its own valr_transfer_log row (with the same
+  // ledger_id + transfer_type). We must NOT pre-insert a pending row here or it
+  // collides with the unique index idx_valr_transfer_ledger_type. Delegate
+  // directly and let the inner call own the logging.
+  if (creds.accountModel === "subaccount") {
+    if (!creds.subaccountId) {
+      return { success: false, errorMessage: "subaccount_id missing for subaccount model customer" };
+    }
+    return await transferToMainAccount(
+      sb,
+      {
+        fromSubaccountId: creds.subaccountId,
+        toAccount: "main",
+        currency,
+        amount,
+        transferType,
+      },
+      customerId,
+      ledgerId,
+    );
+  }
+
+  // ── 4. API model: VALR crypto withdrawal to BitWealth wallet ──────────────
+  // Pre-insert the pending log row here (subaccount path above does its own
+  // logging via transferToMainAccount). from_subaccount_id is null for API
+  // model customers (column is nullable).
   const { data: transferLog, error: logError } = await sb
     .from("valr_transfer_log")
     .insert({
@@ -321,7 +506,7 @@ export async function withdrawFeeFromCustomerAccount(
       transfer_type: transferType,
       currency,
       amount,
-      from_subaccount_id: creds.accountModel === "subaccount" ? creds.subaccountId : null,
+      from_subaccount_id: null,
       to_account: destinationAddress,
       ledger_id: ledgerId,
       status: "pending",
@@ -334,31 +519,6 @@ export async function withdrawFeeFromCustomerAccount(
   }
   const transferId: string = transferLog.transfer_id;
 
-  // ── 4a. Subaccount model: internal VALR transfer ──────────────────────────
-  if (creds.accountModel === "subaccount") {
-    if (!creds.subaccountId) {
-      await sb.from("valr_transfer_log").update({ status: "failed", error_message: "subaccount_id missing" }).eq("transfer_id", transferId);
-      return { success: false, transferId, errorMessage: "subaccount_id missing for subaccount model customer" };
-    }
-    // Delegate to existing transferToMainAccount logic — re-use the proven subaccount path
-    const result = await transferToMainAccount(
-      sb,
-      {
-        fromSubaccountId: creds.subaccountId,
-        toAccount: "main",
-        currency,
-        amount,
-        transferType,
-      },
-      customerId,
-      ledgerId,
-    );
-    // The inner call wrote its own log row; clean up the extra pending row created above
-    await sb.from("valr_transfer_log").delete().eq("transfer_id", transferId);
-    return result;
-  }
-
-  // ── 4b. API model: VALR crypto withdrawal to BitWealth wallet ─────────────
   const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
   if (testMode) {

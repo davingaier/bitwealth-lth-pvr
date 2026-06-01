@@ -109,6 +109,53 @@ Deno.serve(async () => {
 
     console.log(`[ef_transfer_accumulated_fees] Found ${rows.length} customers with accumulated fees`);
 
+    // ----------- 2b) Schedule guard: drain ONLY 'immediate'-schedule customers -----------
+    // customer_accumulated_fees holds sub-threshold leftovers for IMMEDIATE-schedule
+    // customers (fees too small to transfer per-fill, batched here monthly).
+    // Customers on the 'annual' schedule track their fees in lth_pvr.annual_fee_accrual
+    // and are settled at their anniversary by ef_collect_annual_fees. Draining them
+    // here too would DOUBLE-COLLECT the same fee. Skip any non-immediate customer.
+    // (Fixed 2026-06-01 — customer 49 (annual) was wrongly picked up by this batch.)
+    const drainCustomerIds = rows.map((r) => r.customer_id);
+    const { data: scheduleRows, error: scheduleErr } = await sb
+      .schema("public")
+      .from("customer_strategies")
+      .select("customer_id, platform_fee_schedule")
+      .eq("strategy_code", "LTH_PVR")
+      .in("customer_id", drainCustomerIds);
+
+    if (scheduleErr) {
+      console.error("Error fetching fee schedules", scheduleErr);
+      return new Response(`Error fetching fee schedules: ${scheduleErr.message}`, { status: 500 });
+    }
+
+    const immediateCustomers = new Set<number>(
+      (scheduleRows ?? [])
+        .filter((s: any) => (s.platform_fee_schedule ?? "immediate") === "immediate")
+        .map((s: any) => Number(s.customer_id)),
+    );
+
+    const skippedNonImmediate = rows.filter((r) => !immediateCustomers.has(r.customer_id));
+    if (skippedNonImmediate.length > 0) {
+      console.log(
+        `[ef_transfer_accumulated_fees] Skipping ${skippedNonImmediate.length} non-immediate customer(s) (settled via ef_collect_annual_fees): ${skippedNonImmediate.map((r) => r.customer_id).join(", ")}`,
+      );
+    }
+
+    const drainRows = rows.filter((r) => immediateCustomers.has(r.customer_id));
+    if (drainRows.length === 0) {
+      console.log(`[ef_transfer_accumulated_fees] No immediate-schedule customers to drain`);
+      return new Response(JSON.stringify({
+        success: true,
+        transferred_count: 0,
+        failed_count: 0,
+        total_btc: 0,
+        total_usdt: 0,
+      }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // ----------- 3) (Removed 2026-05-02) Per-customer subaccount lookup -----------
     // No longer needed: withdrawFeeFromCustomerAccount() resolves credentials
     // (subaccount_id or api key) internally via resolveCustomerCredentials().
@@ -119,7 +166,7 @@ Deno.serve(async () => {
     let totalBtcTransferred = 0;
     let totalUsdtTransferred = 0;
 
-    for (const row of rows) {
+    for (const row of drainRows) {
       const customerId = row.customer_id;
       const accumBtc = Number(row.accumulated_btc || 0);
       const accumUsdt = Number(row.accumulated_usdt || 0);

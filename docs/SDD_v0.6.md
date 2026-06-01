@@ -3,11 +3,66 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-01 (v0.6.113)
+**Last updated:** 2026-06-01 (v0.6.114)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.114 – Fee-collection correctness: annual double-count fix + USDPC→USDT pre-conversion for fee transfers
+**Date:** 2026-06-01
+**Status:** ✅ DEPLOYED
+
+#### Background
+
+Two fee-accounting defects surfaced while investigating why customer 49 (annual
+schedule) had a fee-collection attempt, and why customer 31's platform-fee
+transfer failed.
+
+#### Issue 1 — Annual customers double-counted (recorded in two tables)
+
+Annual-schedule customers accrue platform fees into `lth_pvr.annual_fee_accrual`
+(the sole system of record, settled at the anniversary by
+`ef_collect_annual_fees`). But `ef_post_ledger_and_balances`'s schedule gate
+**also** wrote the same fee into `lth_pvr.customer_accumulated_fees`, which the
+**monthly** drainer `ef_transfer_accumulated_fees` collects — so the fee would be
+billed twice. Customer 49 had **224.11 USDT** correctly in `annual_fee_accrual`
+**and** a stray **89.49 USDT** in `customer_accumulated_fees`.
+
+**Fix (both layers).**
+1. `ef_post_ledger_and_balances` schedule gate: non-immediate customers now just
+   `continue` (logged) without writing to `customer_accumulated_fees` — the fee
+   is already on the ledger row and accrued to `annual_fee_accrual`.
+2. `ef_transfer_accumulated_fees`: after fetching accumulated-fee rows, query
+   `public.customer_strategies` and **drain only `platform_fee_schedule='immediate'`**
+   customers; non-immediate rows are skipped (settled by `ef_collect_annual_fees`).
+3. Cleanup: zeroed customer 49's stray `customer_accumulated_fees` row
+   (`accumulated_usdt=0, accumulated_btc=0`). `annual_fee_accrual` (224.11 USDT)
+   remains the record.
+
+#### Issue 2 — USDPC-tied-up USDT caused fee-transfer "Insufficient Balance"
+
+USDPC-enabled customers keep idle USDT swept into the USDPC yield stablecoin, so
+a USDT fee transfer can fail with VALR "Insufficient Balance" even though the
+customer holds ample value.
+
+**Fix.** New `ensureUsdtForFee()` helper in `_shared/valrTransfer.ts`, called
+inside `withdrawFeeFromCustomerAccount()` before both account-model branches when
+`currency === "USDT"`. For usdpc_enabled customers it checks idle USDT, and if
+short, places a **synchronous market SELL USDPC/USDT** for the shortfall (+0.5%
+buffer, floored at the USDPC min order size, capped at the USDPC holding), polls
+the fill (~15 s), then ledgers the conversion (`kind='convert'`, USDPC down /
+USDT up) so computed balances track VALR. No-op for non-USDPC customers, ample
+balances, or test mode.
+
+**Files touched (v0.6.114):**
+- `supabase/functions/_shared/valrTransfer.ts` — new `ensureUsdtForFee()` helper + call in `withdrawFeeFromCustomerAccount` (USDT path); imports from `valrClient.ts` / `usdpc.ts`
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` — schedule gate no longer writes annual fees to `customer_accumulated_fees`
+- `supabase/functions/ef_transfer_accumulated_fees/index.ts` — monthly drainer guarded to `immediate`-schedule customers only
+- DB: zeroed customer 49 stray `customer_accumulated_fees` row
+- Deployed (all `--no-verify-jwt`): `ef_post_ledger_and_balances`, `ef_transfer_accumulated_fees`, `ef_calculate_performance_fees`, `ef_collect_annual_fees` (last two re-deployed for the shared-module change)
+
+---
 
 ### v0.6.113 – Monthly statement transaction history: merged conversions + all-fee-types display
 **Date:** 2026-06-01

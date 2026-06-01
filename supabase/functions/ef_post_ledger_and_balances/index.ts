@@ -518,47 +518,18 @@ Deno.serve(async (req: Request) => {
           // and the prior bug (null from_subaccount_id) would still trigger.
           const customerSchedule = feeScheduleMap.get(customerId) ?? "immediate";
           if (customerSchedule !== "immediate") {
-            // Accumulate without transferring
-            if (feeBtc > 0 || feeUsdt > 0) {
-              try {
-                const { data: existingAccum } = await sb
-                  .from("customer_accumulated_fees")
-                  .select("accumulated_btc, accumulated_usdt")
-                  .eq("customer_id", customerId)
-                  .eq("org_id", org_id)
-                  .maybeSingle();
-
-                const newBtc  = Number(existingAccum?.accumulated_btc  ?? 0) + feeBtc;
-                const newUsdt = Number(existingAccum?.accumulated_usdt ?? 0) + feeUsdt;
-
-                if (existingAccum) {
-                  await sb
-                    .from("customer_accumulated_fees")
-                    .update({
-                      accumulated_btc: newBtc,
-                      accumulated_usdt: newUsdt,
-                      updated_at: new Date().toISOString(),
-                    })
-                    .eq("customer_id", customerId)
-                    .eq("org_id", org_id);
-                } else {
-                  await sb.from("customer_accumulated_fees").insert({
-                    org_id,
-                    customer_id: customerId,
-                    accumulated_btc: newBtc,
-                    accumulated_usdt: newUsdt,
-                    transfer_count: 0,
-                  });
-                }
-                console.log(
-                  `[ef_post_ledger_and_balances] Customer ${customerId} (schedule=${customerSchedule}) — accumulated +${feeBtc} BTC / +${feeUsdt} USDT`,
-                );
-              } catch (e) {
-                console.error(
-                  `Accumulation failed for customer ${customerId}: ${(e as Error).message}`,
-                );
-              }
-            }
+            // Non-immediate (annual) customers: the platform fee is already
+            // recorded on the ledger row AND accrued into
+            // lth_pvr.annual_fee_accrual (via accumulate_annual_platform_fee in
+            // the funding loop above), which is the SOLE system of record for
+            // annual billing — settled at the anniversary by ef_collect_annual_fees.
+            //
+            // We must NOT also write to customer_accumulated_fees: that table is
+            // drained MONTHLY by ef_transfer_accumulated_fees and would collect
+            // the same fee a second time (double-billing). Fixed 2026-06-01.
+            console.log(
+              `[ef_post_ledger_and_balances] Customer ${customerId} (schedule=${customerSchedule}) — fee accrued to annual_fee_accrual; skipping customer_accumulated_fees (no double-count).`,
+            );
             continue;  // skip immediate-transfer path
           }
 
