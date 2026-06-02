@@ -232,7 +232,7 @@
                                 </span>
                                 <span class="stat-icon">🪙</span>
                             </div>
-                            <div class="stat-value" id="usdpcValue">$0.00</div>
+                            <div class="stat-value" id="usdpcValue">0.00000000</div>
                             <div class="stat-change neutral" id="usdpcChange">Yield-earning cash</div>
                         </div>
 
@@ -434,9 +434,11 @@
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Type</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">BTC</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">USDT</th>
+                                        <th id="txUsdpcHead" style="display: none; padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="USDPC is a yield-bearing stablecoin. Idle USDT is converted to USDPC to earn yield while waiting to buy BTC.">USDPC</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">ZAR</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Exchange Fee (BTC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees">Exchange Fee (USDT)</th>
+                                        <th id="txFeeUsdpcHead" style="display: none; padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees on USDPC conversions">Exchange Fee (USDPC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (BTC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (USDT)</th>
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Note</th>
@@ -1218,18 +1220,31 @@
                     document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
                     // USDPC (yield) tile — only shown when the portfolio holds yield-bearing
-                    // USDPC. Value is in USD (includes accrued yield) from the strategy balances.
+                    // USDPC. The headline shows the USDPC quantity held; today's unit
+                    // valuation and total USD holding sit below in smaller text.
                     const usdpcValueUsd = parseFloat(portfolio.usdpc_value_usd || 0);
+                    const usdpcQty = parseFloat(portfolio.usdpc_balance || 0);
+                    const usdpcPrice = parseFloat(portfolio.usdpc_price_usd || 0);
                     const usdpcTile = document.getElementById('usdpcTile');
                     const showUsdpc = usdpcValueUsd > 0.005;
                     if (usdpcTile) {
                         if (showUsdpc) {
-                            document.getElementById('usdpcValue').textContent = `$${usdpcValueUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                            document.getElementById('usdpcValue').textContent = `${usdpcQty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 8})} USDPC`;
+                            const priceStr = usdpcPrice > 0 ? `@ $${usdpcPrice.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}` : '';
+                            const holdingStr = `≈ $${usdpcValueUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                            document.getElementById('usdpcChange').textContent = priceStr ? `${priceStr} · ${holdingStr}` : holdingStr;
                             usdpcTile.style.display = '';
                         } else {
                             usdpcTile.style.display = 'none';
                         }
                     }
+                    // Surface the USDPC transaction columns whenever the customer holds USDPC.
+                    __showUsdpcCols = showUsdpc;
+                    const txUsdpcHead = document.getElementById('txUsdpcHead');
+                    const txFeeUsdpcHead = document.getElementById('txFeeUsdpcHead');
+                    if (txUsdpcHead) txUsdpcHead.style.display = showUsdpc ? '' : 'none';
+                    if (txFeeUsdpcHead) txFeeUsdpcHead.style.display = showUsdpc ? '' : 'none';
+                    if (__txRowsCache.length) renderTransactionRows();
                     // Keep all stat tiles on a single row: 6-up when the USDPC tile is
                     // visible, 5-up otherwise (so there is never a trailing gap).
                     const dashStats = document.getElementById('dashboardStats');
@@ -1624,6 +1639,9 @@
         // Populated by loadTransactionHistory and re-sliced by renderTransactionRows when
         // the user changes the rows-per-page dropdown.
         let __txRowsCache = [];
+        // Whether the USDPC transaction columns should be rendered (set from the
+        // portfolio load when the customer holds yield-bearing USDPC).
+        let __showUsdpcCols = false;
 
         async function loadTransactionHistory(customerId) {
             try {
@@ -1784,6 +1802,19 @@
                     const zarColor = zarAmountRaw > 0 ? '#10b981' : (zarAmountRaw < 0 ? '#ef4444' : '#64748b');
                     const feeBtc = parseFloat(tx.fee_btc || 0).toFixed(8);
                     const feeUsdt = parseFloat(tx.fee_usdt || 0).toFixed(2);
+
+                    // USDPC amount + exchange fee (only rendered when the customer holds USDPC).
+                    const usdpcAmountRaw = parseFloat(tx.amount_usdpc || 0);
+                    const usdpcAmount = usdpcAmountRaw.toFixed(8);
+                    const usdpcColor = usdpcAmountRaw > 0 ? '#10b981' : (usdpcAmountRaw < 0 ? '#ef4444' : '#64748b');
+                    const feeUsdpc = parseFloat(tx.fee_usdpc || 0).toFixed(8);
+                    const feeUsdpcColor = parseFloat(tx.fee_usdpc || 0) > 0 ? '#f59e0b' : '#64748b';
+                    const usdpcCell = __showUsdpcCols
+                        ? `<td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${usdpcColor}; font-weight: 500;">${usdpcAmount}</td>`
+                        : '';
+                    const feeUsdpcCell = __showUsdpcCols
+                        ? `<td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${feeUsdpcColor};">${feeUsdpc}</td>`
+                        : '';
                     
                     // Format platform fees
                     const platformFeeBtc = parseFloat(tx.platform_fee_btc || 0).toFixed(8);
@@ -1809,9 +1840,11 @@
                             </td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${btcColor}; font-weight: 500;">${btcAmount}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${usdtColor}; font-weight: 500;">${usdtAmount}</td>
+                            ${usdpcCell}
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${zarColor}; font-weight: 500;">${zarAmount}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${feeBtcColor};">${feeBtc}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${feeUsdtColor};">${feeUsdt}</td>
+                            ${feeUsdpcCell}
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeBtcColor};">${platformFeeBtc}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeUsdtColor};">${platformFeeUsdt}</td>
                             <td style="padding: 12px; font-size: 13px; color: #64748b;" title="${note}">${noteDisplay}</td>
