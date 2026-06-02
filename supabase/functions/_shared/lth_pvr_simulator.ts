@@ -23,6 +23,7 @@
  */
 
 import { decideTrade, bucketLabel, StrategyConfig } from "./lth_pvr_strategy_logic.ts";
+import { syntheticUsdpcPrice, sizeUsdpcToUsdt, sizeUsdtToUsdpc } from "./usdpc.ts";
 
 // =============================================================================
 // Type Definitions
@@ -61,6 +62,13 @@ export interface SimulationParams {
    * mid-cycle (e.g. starting in 2022 when bear_pause was entered in late 2021).
    */
   sim_start_date?: string;
+
+  /** Enable USDPC yield-stablecoin modelling (idle USDT swept to USDPC). */
+  usdpc_enabled?: boolean;
+  /** USDPC annual percentage yield (0.10 = 10%), compounded daily. */
+  usdpc_apy?: number;
+  /** USDPC conversion taker fee rate (0.001 = 0.1%). */
+  usdpc_conversion_fee_rate?: number;
 }
 
 /**
@@ -93,11 +101,13 @@ export interface CIBandData {
 export interface LedgerEntry {
   trade_date: string;
   close_date: string;
-  kind: "contrib" | "buy" | "sell" | "fee";
+  kind: "contrib" | "buy" | "sell" | "fee" | "convert";
   amount_btc: number;
   amount_usdt: number;
   fee_btc: number;
   fee_usdt: number;
+  amount_usdpc?: number;
+  fee_usdpc?: number;
   note: string;
 }
 
@@ -125,6 +135,10 @@ export interface DailyResult {
   exchange_fees_paid_btc: number;
   exchange_fees_paid_usdt: number;
   high_water_mark_usdt: number;
+  usdpc_balance?: number;
+  usdpc_price_usd?: number | null;
+  usdpc_yield_usdt?: number;
+  usdpc_conversion_fee_usdt?: number;
 }
 
 /**
@@ -161,6 +175,8 @@ export interface SimulationResult {
   // Final balances
   final_btc_balance: number;
   final_usdt_balance: number;
+  final_usdpc_balance?: number;
+  total_usdpc_conversion_fees_usdt?: number;
   
   // Date range
   start_date: string;
@@ -309,6 +325,12 @@ export function runSimulation(
   const tradeFeeRate = params.trade_fee_rate ?? 0.0008; // 8 bps
   const performanceFeeRate = params.performance_fee_rate ?? 0.10; // 10%
   const contribFeeRate = params.contrib_fee_rate ?? 0.0018; // 18 bps
+
+  // USDPC yield-stablecoin modelling (LTH PVR only; benchmarks stay plain cash).
+  const usdpcEnabled = !!params.usdpc_enabled;
+  const usdpcApy = params.usdpc_apy ?? 0.10;                       // 10% p.a.
+  const usdpcConvFee = params.usdpc_conversion_fee_rate ?? 0.001;  // 0.1% taker
+  const usdpcMinOrderUsdt = 5; // dust threshold
   
   // Resolve the first date for financial activity (contributions + trades).
   // If sim_start_date is provided, rows before it are warmup-only.
@@ -359,6 +381,10 @@ export function runSimulation(
   let exchangeFeesUsdtCum = 0;
   let firstContribDate: string | null = null;
   let lastMonthForPerfFee: string | null = null;
+  // USDPC yield-stablecoin state (LTH PVR only)
+  let usdpcBal = 0;
+  let prevUsdpcPrice = 1;
+  let usdpcConvFeeCum = 0;
   
   // Standard DCA benchmark state (same contribution schedule, exchange fees only, immediate buy, never sell)
   let stdBtcBal = 0;
@@ -413,6 +439,51 @@ export function runSimulation(
     let performanceFeeToday = 0;
     let exchangeFeeBtcToday = 0;
     let exchangeFeeUsdtToday = 0;
+
+    // USDPC: synthetic price + yield accrued on the holding carried into today.
+    let usdpcConvFeeToday = 0;
+    let usdpcPriceToday = 1;
+    let usdpcYieldToday = 0;
+    if (usdpcEnabled) {
+      const daysFromStart = Math.max(0, Math.round(
+        (new Date(tradeDate).getTime() - new Date(financialRows[0].close_date).getTime()) / 86400000));
+      usdpcPriceToday = syntheticUsdpcPrice(daysFromStart, usdpcApy, 1);
+      usdpcYieldToday = usdpcBal * (usdpcPriceToday - prevUsdpcPrice);
+    }
+    // Convert just-enough USDPC -> USDT so idle USDT covers `needed`.
+    const ensureUsdtSim = (needed: number) => {
+      if (!usdpcEnabled || usdpcBal <= 0 || usdtBal >= needed) return;
+      const r = sizeUsdpcToUsdt(needed - usdtBal, usdpcBal, usdpcPriceToday, usdpcConvFee);
+      if (r.usdpcToSell <= 0) return;
+      usdpcBal -= r.usdpcToSell;
+      usdtBal += r.usdtReceived;
+      usdpcConvFeeCum += r.feeUsdt;
+      usdpcConvFeeToday += r.feeUsdt;
+      ledger.push({
+        trade_date: tradeDate, close_date: closeDate, kind: "convert",
+        amount_btc: 0, amount_usdt: r.usdtReceived, fee_btc: 0, fee_usdt: r.feeUsdt,
+        amount_usdpc: -r.usdpcToSell, fee_usdpc: 0,
+        note: "USDPC->USDT conversion (fund buy/fee)"
+      });
+    };
+    // Sweep all idle USDT (above dust) into USDPC at end of day.
+    const sweepUsdtSim = () => {
+      if (!usdpcEnabled || usdtBal < usdpcMinOrderUsdt) return;
+      const r = sizeUsdtToUsdpc(usdtBal, usdpcPriceToday, usdpcConvFee);
+      if (r.usdpcReceived <= 0) return;
+      const sweptUsdt = usdtBal;
+      const feeUsdtEquiv = r.feeUsdpc * usdpcPriceToday;
+      usdpcBal += r.usdpcReceived;
+      usdtBal = 0;
+      usdpcConvFeeCum += feeUsdtEquiv;
+      usdpcConvFeeToday += feeUsdtEquiv;
+      ledger.push({
+        trade_date: tradeDate, close_date: closeDate, kind: "convert",
+        amount_btc: 0, amount_usdt: -sweptUsdt, fee_btc: 0, fee_usdt: 0,
+        amount_usdpc: r.usdpcReceived, fee_usdpc: r.feeUsdpc,
+        note: "USDT->USDPC sweep (idle cash to yield)"
+      });
+    };
     
     // Contributions: upfront on first day, monthly on first day of month
     let grossContribToday = 0;
@@ -522,9 +593,15 @@ export function runSimulation(
     
     // Execute BUY order
     if (decision.action === "BUY" && decision.pct > 0 && px > 0) {
-      const baseUsdt = usdtBal;
-      const tradeUsdt = baseUsdt * decision.pct;
-      
+      // Buying power includes USDPC value for usdpc_enabled portfolios; convert
+      // just-enough USDPC->USDT to fund the buy before placing it.
+      const baseUsdt = usdpcEnabled ? (usdtBal + usdpcBal * usdpcPriceToday) : usdtBal;
+      let tradeUsdt = baseUsdt * decision.pct;
+      if (usdpcEnabled && tradeUsdt > usdtBal) {
+        ensureUsdtSim(tradeUsdt);
+        if (tradeUsdt > usdtBal) tradeUsdt = usdtBal; // cap if USDPC couldn't fully cover
+      }
+
       if (tradeUsdt > 0) {
         const tradeBtcGross = tradeUsdt / px;
         const feeBtc = tradeBtcGross * tradeFeeRate; // VALR BTC/USDT exchange fee in BTC
@@ -606,7 +683,7 @@ export function runSimulation(
     const isNotFirstMonth = (lastMonthForPerfFee !== null);
     
     if (isNewMonth && isNotFirstMonth) {
-      const currentNav = usdtBal + btcBal * px;
+      const currentNav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
       const contribSinceHWM = contribNetCum - hwmContribNetCum;
       const navForPerfFee = currentNav - contribSinceHWM;
       
@@ -619,7 +696,8 @@ export function runSimulation(
           console.log(`📈 Performance Fee ${tradeDate}: $${performanceFeeToday.toFixed(2)} | HWM: $${highWaterMark.toFixed(2)} → $${navForPerfFee.toFixed(2)} | Profit: $${profitAboveHWM.toFixed(2)}`);
         }
         
-        // Deduct performance fee from USDT balance
+        // Ensure USDT covers the fee (convert USDPC if needed), then deduct.
+        ensureUsdtSim(performanceFeeToday);
         usdtBal -= performanceFeeToday;
         performanceFeesCum += performanceFeeToday;
         
@@ -659,7 +737,7 @@ export function runSimulation(
         }
 
         // Update high-water mark
-        const navAfterFee = usdtBal + btcBal * px;
+        const navAfterFee = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
         highWaterMark = navAfterFee - contribSinceHWM;
         hwmContribNetCum = contribNetCum;
       } else if (navForPerfFee > highWaterMark) {
@@ -671,13 +749,17 @@ export function runSimulation(
     
     // Initialize high-water mark on first day
     if (i === 0) {
-      const initialNav = usdtBal + btcBal * px;
+      const initialNav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
       highWaterMark = initialNav;
       hwmContribNetCum = contribNetCum;
     }
     
+    // End-of-day: sweep idle USDT into USDPC, then roll the synthetic price forward.
+    sweepUsdtSim();
+    prevUsdpcPrice = usdpcPriceToday;
+
     // Calculate daily NAV and performance
-    const nav = usdtBal + btcBal * px;
+    const nav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
     const totalRoi = computeRoi(nav, contribGrossCum);
     const cagr = computeCagr(nav, contribGrossCum, firstContribDate, tradeDate);
     const band_bucket = bucketLabel(px, row);
@@ -702,7 +784,11 @@ export function runSimulation(
       performance_fees_paid_usdt: performanceFeeToday,
       exchange_fees_paid_btc: exchangeFeeBtcToday,
       exchange_fees_paid_usdt: exchangeFeeUsdtToday,
-      high_water_mark_usdt: highWaterMark
+      high_water_mark_usdt: highWaterMark,
+      usdpc_balance: usdpcBal,
+      usdpc_price_usd: usdpcEnabled ? usdpcPriceToday : null,
+      usdpc_yield_usdt: usdpcYieldToday,
+      usdpc_conversion_fee_usdt: usdpcConvFeeToday
     });
 
     // Standard DCA daily NAV
@@ -798,6 +884,8 @@ export function runSimulation(
     // Final balances
     final_btc_balance: btcBal,
     final_usdt_balance: usdtBal,
+    final_usdpc_balance: usdpcBal,
+    total_usdpc_conversion_fees_usdt: usdpcConvFeeCum,
     
     // Date range
     start_date: ciData[0]?.close_date ?? "",

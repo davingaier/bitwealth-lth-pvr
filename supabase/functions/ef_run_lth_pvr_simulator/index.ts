@@ -56,6 +56,10 @@ Deno.serve(async (req) => {
     const end_date = body.end_date ?? today;
     const upfront_usd = body.upfront_usd ?? 10000;
     const monthly_usd = body.monthly_usd ?? 500;
+    // USDPC yield-stablecoin modelling (idle USDT swept to USDPC). Off by default.
+    const usdpc_enabled = !!body.usdpc_enabled;
+    const usdpc_apy = body.usdpc_apy_percent != null ? Number(body.usdpc_apy_percent) / 100 : 0.10;
+    const usdpc_conversion_fee_rate = body.usdpc_conversion_fee_percent != null ? Number(body.usdpc_conversion_fee_percent) / 100 : 0.001;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
     // Day 5 of CI->RB migration (2026-05-19): default simulator source is RB.
     // normaliseBandSource defaults to 'ci' for missing/invalid input, which is
@@ -209,7 +213,10 @@ Deno.serve(async (req) => {
         upfront_usd,
         monthly_usd,
         org_id,
-        sim_start_date: start_date  // financial sim begins here; rows before are warmup-only
+        sim_start_date: start_date,  // financial sim begins here; rows before are warmup-only
+        usdpc_enabled,
+        usdpc_apy,
+        usdpc_conversion_fee_rate
       });
       
       // Add variation metadata

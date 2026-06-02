@@ -1,5 +1,6 @@
 import { getServiceClient } from "./client.ts";
 import { bucketLabel, decideTrade, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
+import { syntheticUsdpcPrice, sizeUsdpcToUsdt, sizeUsdtToUsdpc } from "../_shared/usdpc.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -144,6 +145,18 @@ Deno.serve(async (req)=>{
     const upfront = toNum(params.upfront_contrib_usdt, 0);
     const monthly = toNum(params.monthly_contrib_usdt, 0);
     const momoLen = Math.max(1, Math.trunc(toNum(params.momo_len, 5)));
+
+    // ── USDPC yield-stablecoin modelling ──────────────────────────────────────
+    // When usdpc_enabled, idle USDT is swept into USDPC (a yield stablecoin that
+    // appreciates at a fixed APY, modelled via a synthetic price growing daily
+    // from 1.0). Before BTC buys / fees we convert just-enough USDPC->USDT; after
+    // any idle cash remains it is swept back to USDPC at end of day. Conversions
+    // pay a taker fee. Std DCA / HODL benchmarks NEVER use USDPC (plain cash) so
+    // the comparison isolates the LTH-PVR idle-cash advantage.
+    const usdpcEnabled = !!params.usdpc_enabled;
+    const usdpcApy = toNum(params.usdpc_apy_percent, 10) / 100;            // 10% -> 0.10
+    const usdpcConvFee = toNum(params.usdpc_conversion_fee_percent, 0.1) / 100; // 0.1% -> 0.001
+    const usdpcMinOrderUsdt = 5; // dust threshold: idle USDT below this stays as USDT
 
     // Default LTH PVR band percentages (fraction of balance used per trade).
     // 🔁 Adjust these to your canonical B1–B11 values.
@@ -298,6 +311,10 @@ Deno.serve(async (req)=>{
     let exchangeFeesUsdtCum = 0;  // VALR USDT/ZAR fees in USDT
     let firstContribDate = null;
     let lastMonthForPerfFee = null;  // Track monthly performance fee calculation
+    // USDPC yield-stablecoin state (LTH PVR only)
+    let usdpcBal = 0;                  // USDPC units held
+    let prevUsdpcPrice = 1;            // synthetic price on the previous day (for daily yield)
+    let usdpcConvFeeCum = 0;           // cumulative conversion fees (USDT-equivalent)
     // Std DCA state
     let stdBtcBal = 0;
     let stdUsdtBal = 0;
@@ -356,6 +373,52 @@ Deno.serve(async (req)=>{
     let exchangeFeeUsdtToday = 0;  // Track daily USDT exchange fees
     let stdExchangeFeeBtcToday = 0;  // Track daily Standard DCA BTC exchange fees
     let stdExchangeFeeUsdtToday = 0;  // Track daily Standard DCA USDT exchange fees
+    // USDPC daily trackers
+    let usdpcPriceToday = 1;       // synthetic USDPC price for the current day
+    let usdpcYieldToday = 0;       // USD value gained today from USDPC appreciation
+    let usdpcConvFeeToday = 0;     // USD-equivalent conversion fees today
+
+    // Convert just-enough USDPC -> USDT so idle USDT covers `needed`. No-op when
+    // USDPC is disabled or USDT already suffices. Caps at the USDPC holding.
+    const ensureUsdtBT = (needed, tradeDate, closeDate) => {
+      if (!usdpcEnabled || usdpcBal <= 0) return;
+      if (usdtBal >= needed) return;
+      const shortfall = needed - usdtBal;
+      const r = sizeUsdpcToUsdt(shortfall, usdpcBal, usdpcPriceToday, usdpcConvFee);
+      if (r.usdpcToSell <= 0) return;
+      usdpcBal -= r.usdpcToSell;
+      usdtBal += r.usdtReceived;
+      usdpcConvFeeCum += r.feeUsdt;
+      usdpcConvFeeToday += r.feeUsdt;
+      ledgerRows.push({
+        bt_run_id, org_id, trade_date: tradeDate, close_date: closeDate,
+        kind: "convert", amount_btc: 0, amount_usdt: r.usdtReceived,
+        fee_btc: 0, fee_usdt: r.feeUsdt,
+        amount_usdpc: -r.usdpcToSell, fee_usdpc: 0,
+        note: "USDPC->USDT conversion (fund buy/fee)"
+      });
+    };
+
+    // Sweep all idle USDT (above the dust threshold) into USDPC at end of day.
+    const sweepUsdtBT = (tradeDate, closeDate) => {
+      if (!usdpcEnabled) return;
+      if (usdtBal < usdpcMinOrderUsdt) return; // dust stays as USDT
+      const r = sizeUsdtToUsdpc(usdtBal, usdpcPriceToday, usdpcConvFee);
+      if (r.usdpcReceived <= 0) return;
+      const sweptUsdt = usdtBal;
+      const feeUsdtEquiv = r.feeUsdpc * usdpcPriceToday;
+      usdpcBal += r.usdpcReceived;
+      usdtBal = 0;
+      usdpcConvFeeCum += feeUsdtEquiv;
+      usdpcConvFeeToday += feeUsdtEquiv;
+      ledgerRows.push({
+        bt_run_id, org_id, trade_date: tradeDate, close_date: closeDate,
+        kind: "convert", amount_btc: 0, amount_usdt: -sweptUsdt,
+        fee_btc: 0, fee_usdt: 0,
+        amount_usdpc: r.usdpcReceived, fee_usdpc: r.feeUsdpc,
+        note: "USDT->USDPC sweep (idle cash to yield)"
+      });
+    };
     const applyContribLth = (row, gross)=>{
       if (gross <= 0) return 0;
       // Step 1: Deduct VALR USDT/ZAR exchange fee (18 bps) - conversion happens first
@@ -456,6 +519,18 @@ Deno.serve(async (req)=>{
       exchangeFeeUsdtToday = 0;
       stdExchangeFeeBtcToday = 0;
       stdExchangeFeeUsdtToday = 0;
+      // USDPC: synthetic price for today + yield accrued on the holding carried
+      // into today (price appreciation since yesterday). Reset daily conv-fee.
+      usdpcConvFeeToday = 0;
+      if (usdpcEnabled) {
+        const daysFromStart = Math.max(0, Math.round(
+          (new Date(tradeDate).getTime() - new Date(start_date).getTime()) / 86400000));
+        usdpcPriceToday = syntheticUsdpcPrice(daysFromStart, usdpcApy, 1);
+        usdpcYieldToday = usdpcBal * (usdpcPriceToday - prevUsdpcPrice);
+      } else {
+        usdpcPriceToday = 1;
+        usdpcYieldToday = 0;
+      }
       // Contributions: upfront on first day, monthly on first day of month
       let grossContribToday = 0;
       if (i === 0 && upfront > 0) grossContribToday += upfront;
@@ -522,8 +597,15 @@ Deno.serve(async (req)=>{
       const decision = decideTrade(px, row, roc5, lthState, config);
       lthState = decision.state || lthState;
       if (decision.action === "BUY" && decision.pct > 0 && px > 0) {
-        const baseUsdt = usdtBal;
-        const tradeUsdt = baseUsdt * decision.pct;
+        // Buying power includes USDPC value for usdpc_enabled portfolios (idle
+        // cash is parked in USDPC). Size the buy off buying power, then convert
+        // just-enough USDPC->USDT to fund it before placing the BTC buy.
+        const baseUsdt = usdpcEnabled ? (usdtBal + usdpcBal * usdpcPriceToday) : usdtBal;
+        let tradeUsdt = baseUsdt * decision.pct;
+        if (usdpcEnabled && tradeUsdt > usdtBal) {
+          ensureUsdtBT(tradeUsdt, tradeDate, closeDate);
+          if (tradeUsdt > usdtBal) tradeUsdt = usdtBal; // cap if USDPC couldn't fully cover
+        }
         if (tradeUsdt > 0) {
           const tradeBtcGross = tradeUsdt / px;
           const feeBtc = tradeBtcGross * tradeFeeRate;  // VALR BTC/USDT exchange fee in BTC
@@ -627,14 +709,16 @@ Deno.serve(async (req)=>{
       
       if (isNewMonth && isNotFirstMonth) {
         // Month boundary: calculate performance fee on NAV gains above high-water mark
-        const currentNav = usdtBal + btcBal * px;
+        const currentNav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
         const contribSinceHWM = contribNetCum - hwmContribNetCum;
         const navForPerfFee = currentNav - contribSinceHWM;
         
         if (navForPerfFee > highWaterMark && performanceFeeRate > 0) {
           const profitAboveHWM = navForPerfFee - highWaterMark;
           performanceFeeThisMonth = profitAboveHWM * performanceFeeRate;
-          // Deduct performance fee from USDT balance
+          // Convert just-enough USDPC->USDT first (idle cash parked in USDPC),
+          // then deduct performance fee from USDT balance.
+          ensureUsdtBT(performanceFeeThisMonth, tradeDate, closeDate);
           usdtBal -= performanceFeeThisMonth;
           performanceFeesCum += performanceFeeThisMonth;
           // Record performance fee in ledger
@@ -678,7 +762,7 @@ Deno.serve(async (req)=>{
           }
 
           // Update high-water mark after charging fee (to NAV after fee)
-          const navAfterFee = usdtBal + btcBal * px;
+          const navAfterFee = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
           highWaterMark = navAfterFee - contribSinceHWM;
           hwmContribNetCum = contribNetCum;
         } else if (navForPerfFee > highWaterMark) {
@@ -692,13 +776,18 @@ Deno.serve(async (req)=>{
       
       // Initialize high-water mark on first day ONLY (after all trading activity)
       if (i === 0) {
-        const initialNav = usdtBal + btcBal * px;
+        const initialNav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
         highWaterMark = initialNav;
         hwmContribNetCum = contribNetCum;
       }
-      
-      // LTH daily NAV + performance (AFTER performance fee deduction)
-      const nav = usdtBal + btcBal * px;
+
+      // End-of-day USDPC sweep: park any idle USDT (above dust) into USDPC so it
+      // keeps earning yield. Runs after trades + fees. No-op when disabled.
+      sweepUsdtBT(tradeDate, closeDate);
+      prevUsdpcPrice = usdpcPriceToday;
+
+      // LTH daily NAV + performance (AFTER performance fee deduction + USDPC sweep)
+      const nav = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
       const totalRoi = computeRoi(nav, contribGrossCum);
       const cagr = computeCagr(nav, contribGrossCum, firstContribDate, tradeDate);
       const band_bucket = bucketLabel(px, row);
@@ -726,7 +815,11 @@ Deno.serve(async (req)=>{
         performance_fees_paid_usdt: performanceFeeThisMonth,
         exchange_fees_paid_btc: exchangeFeeBtcToday,
         exchange_fees_paid_usdt: exchangeFeeUsdtToday,
-        high_water_mark_usdt: highWaterMark
+        high_water_mark_usdt: highWaterMark,
+        usdpc_balance: usdpcBal,
+        usdpc_price_usd: usdpcEnabled ? usdpcPriceToday : null,
+        usdpc_yield_usdt: usdpcYieldToday,
+        usdpc_conversion_fee_usdt: usdpcConvFeeToday
       });
       // Std DCA daily NAV + performance
       const stdNav = stdUsdtBal + stdBtcBal * px;

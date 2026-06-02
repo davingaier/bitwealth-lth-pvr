@@ -3,11 +3,66 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-02 (v0.6.115)
+**Last updated:** 2026-06-02 (v0.6.116)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.116 – USDPC Phase 6/7/8: RPC + UI surfacing, on-demand backfill, verification
+**Date:** 2026-06-02
+**Status:** ✅ DEPLOYED
+
+#### 1 — RPC surfacing (Phase 6)
+
+USDPC holdings are now exposed to the customer portal and reporting layer:
+- `public.get_customer_dashboard(UUID)` returns `usdpc_balance`,
+  `usdpc_price_usd`, and `usdpc_value_usd` (= `usdpc_balance * COALESCE(usdpc_price_usd,1)`).
+- `public.list_customer_transactions(BIGINT, INTEGER)` returns `amount_usdpc`
+  and `fee_usdpc`; USDPC `convert` ledger rows pass through single-leg.
+- `lth_pvr.v_customer_portfolio_daily` view gains
+  `usdpc_balance`/`usdpc_price_usd`/`usdpc_value_usd`.
+- `public.list_customer_portfolios(BIGINT)` (the canonical overload used by the
+  portal — carries `btc_price`/`total_contributions`/`has_trading_history`) gains
+  the three USDPC columns. A stale `(INTEGER)` overload was **dropped** to remove
+  PostgREST candidate ambiguity; the `.fn.sql` source was synced to the `bigint`
+  definition. **Do not** recreate an `(integer)` overload.
+
+#### 2 — UI surfacing (Phase 6)
+
+- `website/customer-portal.html`: new USDPC / yield stat tile (shown only when
+  `usdpc_value_usd > 0`) and a purple **Yield Conversion** transaction type for
+  `kind='convert'` rows.
+- `website/lth-pvr-backtest.html`: optional "Earn yield on idle cash (USDPC)"
+  toggle + APY input (default 10%, conversion fee 0.1%), forwarded as
+  `p_usdpc_enabled`/`p_usdpc_apy_percent`/`p_usdpc_conversion_fee_percent`.
+- `ui/Advanced BTC DCA Strategy.html`: optimizer **and** simulator panels gain
+  USDPC enable + APY + fee inputs, wired into the existing
+  `ef_optimize_lth_pvr_strategy` / `ef_run_lth_pvr_simulator` request bodies.
+- Statements: `_shared/statement_template.ts` + `ef_generate_statement` add a
+  conditional **USDPC (yield)** KPI tile (shown when value > 0).
+
+#### 3 — On-demand backfill EF (Phase 7)
+
+`ef_backfill_usdpc` (new, deployed) is a lean orchestrator that runs the sweep
+sequence on demand — `ef_sweep_usdt_to_usdpc → ef_execute_orders →
+ef_poll_orders → ef_post_ledger_and_balances` — for newly enabled portfolios.
+It does **not** reimplement sweep logic; the daily `ef_sweep_usdt_to_usdpc`
+(wired into `ef_resume_pipeline`) remains the steady-state mechanism.
+
+#### 4 — Verification (Phase 8)
+
+Simulator OFF-vs-ON comparison confirms the model:
+- **Bear window** (2021-11 → 2022-12): USDPC ON delivered **+$611.74** NAV uplift
+  net of $32.66 conversion fees — yield accrues while cash sits idle.
+- **Bull window** (2023): small fee drag (cash is deployed quickly, minimal idle
+  time) — expected behaviour.
+- **Std DCA + HODL benchmarks** are byte-identical OFF vs ON (they always stay
+  plain cash — never USDPC).
+
+Deployed: `ef_backfill_usdpc`, `ef_run_lth_pvr_simulator`,
+`ef_optimize_lth_pvr_strategy`, `ef_submit_public_backtest`,
+`ef_generate_statement`, `ef_bt_execute`.
 
 ### v0.6.115 – USDPC Phase 3d/4: withdrawal JIT unwind, USDPC-aware withdrawable balance & VALR sync; alert-email recipient
 **Date:** 2026-06-02

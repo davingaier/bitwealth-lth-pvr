@@ -54,6 +54,10 @@ export interface StatementData {
   btc_balance_sub: string;       // small caption, e.g. "Awaiting next buy signal"
   usdt_balance_usd: string;
   usdt_balance_sub: string;
+  // USDPC yield-stablecoin holdings (optional — only rendered when usdpc_show is true)
+  usdpc_show?: boolean;
+  usdpc_balance_usd?: string;
+  usdpc_balance_sub?: string;
 
   // ── Performance summary ──────────────────────────────────────────────
   opening_date: string;          // "28 Feb 2026"
@@ -338,6 +342,11 @@ export function renderStatementHtml(d: StatementData): string {
       <div class="value">${e(d.usdt_balance_usd)}</div>
       <div class="sub">${e(d.usdt_balance_sub)}</div>
     </div>
+    ${d.usdpc_show ? `<div class="kpi">
+      <div class="label">USDPC (yield)</div>
+      <div class="value">${e(d.usdpc_balance_usd ?? "")}</div>
+      <div class="sub">${e(d.usdpc_balance_sub ?? "")}</div>
+    </div>` : ""}
   </section>
 
   <h2 class="section">Performance summary</h2>

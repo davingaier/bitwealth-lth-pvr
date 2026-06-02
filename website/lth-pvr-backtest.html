@@ -375,6 +375,20 @@
                             <small>Recurring monthly deposit</small>
                         </div>
                         
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="usdpcEnabled" name="usdpcEnabled" style="width: auto;">
+                                Earn yield on idle cash (USDPC)
+                            </label>
+                            <small>Idle USDT waiting to buy BTC earns a stablecoin yield, then converts back just-in-time on buys.</small>
+                        </div>
+                        
+                        <div class="form-group" id="usdpcParams" style="display: none;">
+                            <label for="usdpcApy">Yield APY (%)</label>
+                            <input type="number" id="usdpcApy" name="usdpcApy" min="0" max="100" step="0.1" value="10" placeholder="10">
+                            <small>Annual yield on idle USDPC (default 10%). Conversion fee 0.1% applies on each conversion.</small>
+                        </div>
+                        
                         <!-- Google reCAPTCHA Widget -->
                         <div class="form-group">
                             <div class="g-recaptcha" data-sitekey="6LdIS0gsAAAAAJdcnk9-PE7MEHF8nrWMGprLQr31" data-theme="dark"></div>
@@ -665,7 +679,10 @@
                 p_start_date: document.getElementById('startDate').value,
                 p_end_date: document.getElementById('endDate').value,
                 p_upfront_usdt: parseFloat(document.getElementById('upfront').value) || 0,
-                p_monthly_usdt: parseFloat(document.getElementById('monthly').value) || 0
+                p_monthly_usdt: parseFloat(document.getElementById('monthly').value) || 0,
+                p_usdpc_enabled: document.getElementById('usdpcEnabled').checked,
+                p_usdpc_apy_percent: parseFloat(document.getElementById('usdpcApy').value) || 10,
+                p_usdpc_conversion_fee_percent: 0.1
             };
             
             // Disable submit button
@@ -1087,6 +1104,15 @@
             
             const startDateInput = document.getElementById('startDate');
             const endDateInput = document.getElementById('endDate');
+            
+            // Toggle USDPC yield params visibility
+            const usdpcToggle = document.getElementById('usdpcEnabled');
+            const usdpcParams = document.getElementById('usdpcParams');
+            if (usdpcToggle && usdpcParams) {
+                usdpcToggle.addEventListener('change', () => {
+                    usdpcParams.style.display = usdpcToggle.checked ? '' : 'none';
+                });
+            }
             
             if (startDateInput) {
                 startDateInput.setAttribute('max', yesterdayString);

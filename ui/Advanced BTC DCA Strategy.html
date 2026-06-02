@@ -1927,6 +1927,18 @@
                 <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
               </select>
             </div>
+            <div style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem;">
+              <input id="simUsdpcEnabled" type="checkbox" style="width:auto;" />
+              <label for="simUsdpcEnabled" style="font-size:.9rem;margin:0;cursor:pointer;">Model USDPC yield on idle cash</label>
+            </div>
+            <div>
+              <label for="simUsdpcApy" style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC APY (%):</label>
+              <input id="simUsdpcApy" type="number" min="0" max="100" step="0.1" value="10" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
+            <div>
+              <label for="simUsdpcFee" style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC conv. fee (%):</label>
+              <input id="simUsdpcFee" type="number" min="0" max="5" step="0.01" value="0.1" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
           </div>
           <div style="display:flex;gap:.75rem;justify-content:center;">
             <button id="runSimBtn" type="button" style="padding:.75rem 1.5rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Run Simulation</button>
@@ -1987,6 +1999,18 @@
                   <option value="rb" selected>RB – Research Bitcoin (live default)</option>
                   <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
                 </select>
+              </div>
+              <div style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem;">
+                <input id="optUsdpcEnabled" type="checkbox" style="width:auto;" />
+                <label for="optUsdpcEnabled" style="font-size:.9rem;margin:0;cursor:pointer;">Model USDPC yield on idle cash</label>
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC APY (%):</label>
+                <input id="optUsdpcApy" type="number" min="0" max="100" step="0.1" value="10" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC conv. fee (%):</label>
+                <input id="optUsdpcFee" type="number" min="0" max="5" step="0.01" value="0.1" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
               </div>
             </div>
 
@@ -14432,6 +14456,9 @@ Momentum:
         // Call simulator edge function
         const simBandSourceEl = document.getElementById('simBandSource');
         const simBandSource = (simBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const simUsdpcEnabled = document.getElementById('simUsdpcEnabled')?.checked || false;
+        const simUsdpcApy = parseFloat(document.getElementById('simUsdpcApy')?.value);
+        const simUsdpcFee = parseFloat(document.getElementById('simUsdpcFee')?.value);
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
           method: 'POST',
           headers: {
@@ -14444,7 +14471,10 @@ Momentum:
             upfront_usd: upfront,
             monthly_usd: monthly,
             variation_ids: [currentVariationId],
-            band_source: simBandSource
+            band_source: simBandSource,
+            usdpc_enabled: simUsdpcEnabled,
+            usdpc_apy_percent: isFinite(simUsdpcApy) ? simUsdpcApy : 10,
+            usdpc_conversion_fee_percent: isFinite(simUsdpcFee) ? simUsdpcFee : 0.1
           })
         });
 
@@ -14958,6 +14988,9 @@ Momentum:
         // Build request body
         const optBandSourceEl = document.getElementById('optBandSource');
         const optBandSource = (optBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const optUsdpcEnabled = document.getElementById('optUsdpcEnabled')?.checked || false;
+        const optUsdpcApyVal = parseFloat(document.getElementById('optUsdpcApy')?.value);
+        const optUsdpcFeeVal = parseFloat(document.getElementById('optUsdpcFee')?.value);
         const requestBody = {
           variation_id: variationId,
           start_date: startDate,
@@ -14965,7 +14998,10 @@ Momentum:
           upfront_usd: upfront,
           monthly_usd: monthly,
           objective: objective,
-          band_source: optBandSource
+          band_source: optBandSource,
+          usdpc_enabled: optUsdpcEnabled,
+          usdpc_apy_percent: isFinite(optUsdpcApyVal) ? optUsdpcApyVal : 10,
+          usdpc_conversion_fee_percent: isFinite(optUsdpcFeeVal) ? optUsdpcFeeVal : 0.1
         };
 
         // Add ranges if specified
@@ -15812,7 +15848,8 @@ function runSim(
   B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11,
   momoThr, roc,
   upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
-  enableRetrace
+  enableRetrace,
+  usdpcEnabled, usdpcApy, usdpcConvFee
 ) {
   /* ---- warmup pass: initialise bear-pause + retrace state ---- */
   let bp = false, wp1 = false, wp15 = false, r1 = false, r15 = false;
@@ -15838,11 +15875,20 @@ function runSim(
   let btc=0, usdt=0, gCum=0, nCum=0, hwm=0, hwmN=0;
   let pfCum=0, xBtcCum=0, lastYM=-1, lastPerfYM=-1;
   let peakNav=0, maxDD=0, usdtNavSum=0, navCount=0, firstRow=true;
+  /* USDPC yield-stablecoin state (idle USDT swept to USDPC). Guarded by usdpcEnabled. */
+  let usdpcBal=0, prevUsdpcP=1;
 
   for (let i = warmupLen; i < N; i++) {
     const p = px[i]; if (p <= 0) continue;
     const ymv = ym[i];
     const newMonth = (ymv !== lastYM);
+
+    /* USDPC synthetic price + yield on holding carried into today */
+    let usdpcP = 1;
+    if (usdpcEnabled) {
+      const days = i - warmupLen;
+      usdpcP = (usdpcApy > 0 && days > 0) ? Math.pow(1 + usdpcApy, days / 365) : 1;
+    }
 
     /* contributions */
     if (firstRow) {
@@ -15906,9 +15952,21 @@ function runSim(
     }
 
     /* execute */
-    if (act===1 && pct>0 && usdt>0) {
-      const tu=usdt*pct, bg=tu/p, fee=bg*tradeRate;
-      usdt-=tu; btc+=bg-fee; xBtcCum+=fee;
+    if (act===1 && pct>0) {
+      /* Buying power includes USDPC value; convert just-enough USDPC->USDT first. */
+      const buyPower = usdpcEnabled ? (usdt + usdpcBal*usdpcP) : usdt;
+      let tu = buyPower*pct;
+      if (usdpcEnabled && tu > usdt && usdpcBal > 0) {
+        const needUsdt = tu - usdt;
+        const usdpcSell = Math.min(usdpcBal, needUsdt/(usdpcP*(1-usdpcConvFee)));
+        const got = usdpcSell*usdpcP*(1-usdpcConvFee);
+        usdpcBal -= usdpcSell; usdt += got;
+        if (tu > usdt) tu = usdt;
+      }
+      if (tu > 0 && usdt > 0) {
+        const bg=tu/p, fee=bg*tradeRate;
+        usdt-=tu; btc+=bg-fee; xBtcCum+=fee;
+      }
     } else if (act===-1 && pct>0 && btc>0) {
       const bg=btc*pct, fee=bg*tradeRate;
       btc-=bg+fee; usdt+=bg*p; xBtcCum+=fee;
@@ -15916,27 +15974,45 @@ function runSim(
 
     /* monthly performance fee */
     if (ymv!==lastPerfYM && lastPerfYM!==-1) {
-      const nav=usdt+btc*p, cs=nCum-hwmN, navAdj=nav-cs;
+      const nav=usdt+btc*p+usdpcBal*usdpcP, cs=nCum-hwmN, navAdj=nav-cs;
       if (navAdj>hwm && perfRate>0) {
         const fee=(navAdj-hwm)*perfRate;
+        /* ensure USDT covers the fee (convert USDPC if needed) */
+        if (usdpcEnabled && usdt < fee && usdpcBal > 0) {
+          const needUsdt = fee - usdt;
+          const usdpcSell = Math.min(usdpcBal, needUsdt/(usdpcP*(1-usdpcConvFee)));
+          usdpcBal -= usdpcSell; usdt += usdpcSell*usdpcP*(1-usdpcConvFee);
+        }
         usdt-=fee; pfCum+=fee;
         if (usdt<0 && btc>0) {
           const bSell=Math.min(btc,(-usdt)/(p*(1-tradeRate))), bFee=bSell*tradeRate;
           btc-=bSell; usdt+=(bSell-bFee)*p; xBtcCum+=bFee;
         }
-        const navA=usdt+btc*p; hwm=navA-cs; hwmN=nCum;
+        const navA=usdt+btc*p+usdpcBal*usdpcP; hwm=navA-cs; hwmN=nCum;
       } else if (navAdj>hwm) { hwm=navAdj; hwmN=nCum; }
     }
     if (ymv!==lastPerfYM) lastPerfYM=ymv;
 
+    /* end-of-day: sweep idle USDT into USDPC (above $5 dust), then roll price */
+    if (usdpcEnabled) {
+      if (usdt >= 5) {
+        usdpcBal += (usdt/usdpcP)*(1-usdpcConvFee);
+        usdt = 0;
+      }
+      prevUsdpcP = usdpcP;
+    }
+
     /* metrics */
-    const nav=usdt+btc*p;
+    const nav=usdt+btc*p+usdpcBal*usdpcP;
     if (nav>peakNav) peakNav=nav;
     if (peakNav>0) { const dd=(peakNav-nav)/peakNav*100; if(dd>maxDD) maxDD=dd; }
-    if (nav>0) { usdtNavSum+=usdt/nav*100; navCount++; }
+    if (nav>0) { usdtNavSum+=(usdt+usdpcBal*usdpcP)/nav*100; navCount++; }
   }
 
-  const finalNav = usdt + (N > warmupLen ? btc * px[N-1] : 0);
+  const finalUsdpcP = usdpcEnabled
+    ? ((usdpcApy > 0 && (N-1-warmupLen) > 0) ? Math.pow(1 + usdpcApy, (N-1-warmupLen)/365) : 1)
+    : 1;
+  const finalNav = usdt + (N > warmupLen ? btc * px[N-1] : 0) + usdpcBal*finalUsdpcP;
   let cagr = 0;
   if (simYears > 0 && gCum > 0 && finalNav > 0)
     cagr = (Math.pow(finalNav / gCum, 1 / simYears) - 1) * 100;
@@ -15956,6 +16032,9 @@ self.onmessage = function(e) {
 
   const { px,mean,m025,m050,m075,m100,p050,p100,p150,p200,p250,bearP,ym,bpExit } = ci;
   const { upfront, monthly, platRate, tradeRate, perfRate, contribRate } = simParams;
+  const usdpcEnabled = !!simParams.usdpcEnabled;
+  const usdpcApy = simParams.usdpcApy != null ? simParams.usdpcApy : 0;
+  const usdpcConvFee = simParams.usdpcConvFee != null ? simParams.usdpcConvFee : 0.001;
   const { b1v,b2v,b3v,b4v,b5v,b6v,b7v,b8v,b9v,b10v,b11v } = bVals;
 
   /* Pre-compute ROC for each momoLen (avoids recomputing per sim) */
@@ -16009,7 +16088,8 @@ self.onmessage = function(e) {
                               B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,
                               momoThr, roc,
                               upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
-                              enableRetrace
+                              enableRetrace,
+                              usdpcEnabled, usdpcApy, usdpcConvFee
                             );
                             const score = objective==='nav' ? r.nav
                                         : objective==='sharpe' ? r.sharpe
@@ -16042,6 +16122,17 @@ self.onmessage = function(e) {
 
     // ── Utilities ────────────────────────────────────────────────────────────
     function fmt(n) { return n > 1e6 ? (n/1e6).toFixed(2)+'M' : n > 1e3 ? (n/1e3).toFixed(1)+'K' : Math.round(n).toString(); }
+    // Read optional USDPC yield-stablecoin inputs for the optimizer (defaults: OFF).
+    function readUsdpcOptParams() {
+      const en = document.getElementById('optUsdpcEnabled')?.checked || false;
+      const apy = parseFloat(document.getElementById('optUsdpcApy')?.value);
+      const fee = parseFloat(document.getElementById('optUsdpcFee')?.value);
+      return {
+        usdpcEnabled: en,
+        usdpcApy: isFinite(apy) ? apy / 100 : 0.10,
+        usdpcConvFee: isFinite(fee) ? fee / 100 : 0.001,
+      };
+    }
     function fmtETA(s) {
       if (!isFinite(s) || s > 86400) return '> 1 day';
       if (s > 3600) return (s/3600).toFixed(1)+'h';
@@ -16255,7 +16346,7 @@ self.onmessage = function(e) {
                      b6v:B_VALS.b6, b7v:B_VALS.b7, b8v:B_VALS.b8, b9v:B_VALS.b9, b10v:B_VALS.b10, b11v:B_VALS.b11 },
             momoLens: MOMO_LENS, momoThrs: MOMO_THRS,
             workerId: wid, numWorkers, simYears, objective,
-            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, ...readUsdpcOptParams() },
             enableRetrace
           });
         }
@@ -16678,7 +16769,7 @@ self.onmessage = function(e) {
             N, warmupLen, ci, bVals,
             momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
             workerId: wid, numWorkers, simYears, objective,
-            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, ...readUsdpcOptParams() },
             enableRetrace
           });
         }
@@ -16769,7 +16860,7 @@ self.onmessage = function(e) {
           N, warmupLen, ci, bVals,
           momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
           workerId: wid, numWorkers, simYears, objective,
-          simParams: { upfront, monthly, platRate, tradeRate, perfRate, contribRate },
+          simParams: { upfront, monthly, platRate, tradeRate, perfRate, contribRate, ...readUsdpcOptParams() },
           enableRetrace
         });
       }

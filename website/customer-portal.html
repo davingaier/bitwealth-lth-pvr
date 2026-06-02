@@ -224,6 +224,17 @@
                             </div>
                         </div>
 
+                        <div class="stat-box" id="usdpcTile" style="display: none;">
+                            <div class="stat-header">
+                                <span>USDPC (Yield)
+                                    <span title="USDPC is a yield-bearing stablecoin. Idle USDT in your strategy is automatically converted to USDPC to earn yield while waiting to buy BTC, then converted back to USDT just-in-time when the strategy buys. The USD value shown includes accrued yield." style="cursor: help; color: var(--text-secondary); margin-left: 4px; font-size: 12px;">ⓘ</span>
+                                </span>
+                                <span class="stat-icon">🪙</span>
+                            </div>
+                            <div class="stat-value" id="usdpcValue">$0.00</div>
+                            <div class="stat-change neutral" id="usdpcChange">Yield-earning cash</div>
+                        </div>
+
                         <div class="stat-box" id="zarTile">
                             <div class="stat-header">
                                 <span>Cash (ZAR)
@@ -1205,6 +1216,19 @@
                     document.getElementById('btcUsd').textContent = btcPrice > 0 ? `@ $${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}` : '--';
                     document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
+                    // USDPC (yield) tile — only shown when the portfolio holds yield-bearing
+                    // USDPC. Value is in USD (includes accrued yield) from the strategy balances.
+                    const usdpcValueUsd = parseFloat(portfolio.usdpc_value_usd || 0);
+                    const usdpcTile = document.getElementById('usdpcTile');
+                    if (usdpcTile) {
+                        if (usdpcValueUsd > 0.005) {
+                            document.getElementById('usdpcValue').textContent = `$${usdpcValueUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                            usdpcTile.style.display = '';
+                        } else {
+                            usdpcTile.style.display = 'none';
+                        }
+                    }
+
                     // ZAR tile — always shown so the 5-up grid stays consistent;
                     // displays R0,00 when the customer has no ZAR balance.
                     const zarTile = document.getElementById('zarTile');
@@ -1647,6 +1671,13 @@
                     // Map "topup" to "Deposit" for display
                     if (tx.kind === 'topup') {
                         typeDisplay = 'Deposit';
+                    }
+                    // USDPC yield conversions (idle USDT <-> yield-bearing USDPC). These are
+                    // internal strategy mechanics; label them clearly and tint purple.
+                    const isUsdpcConvert = tx.kind === 'convert';
+                    if (isUsdpcConvert) {
+                        typeDisplay = 'Yield Conversion';
+                        typeColor = '#8b5cf6'; // purple
                     }
                     if (isConversion) {
                         typeDisplay = 'Conversion';

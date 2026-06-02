@@ -52,6 +52,10 @@ Deno.serve(async (req) => {
       ? normaliseBandSource(body.band_source)
       : "rb";
     const bandsTable = bandsTableForSource(bandSource);
+    // USDPC yield-stablecoin modelling (idle USDT swept to USDPC). Off by default.
+    const usdpc_enabled = !!body.usdpc_enabled;
+    const usdpc_apy = body.usdpc_apy_percent != null ? Number(body.usdpc_apy_percent) / 100 : 0.10;
+    const usdpc_conversion_fee_rate = body.usdpc_conversion_fee_percent != null ? Number(body.usdpc_conversion_fee_percent) / 100 : 0.001;
     console.info(`ef_optimize_lth_pvr_strategy: band_source=${bandSource} table=${bandsTable}`);
 
     if (!variation_id) {
@@ -190,6 +194,9 @@ Deno.serve(async (req) => {
       monthly_usd: monthly_usd,
       org_id: org_id,
       sim_start_date: start_date,  // warmup rows before this date not counted as financial
+      usdpc_enabled,
+      usdpc_apy,
+      usdpc_conversion_fee_rate,
     };
 
     console.log(`Starting optimization for variation ${variations.variation_name}...`);
@@ -203,6 +210,9 @@ Deno.serve(async (req) => {
       monthly_usd,
       org_id,
       sim_start_date: start_date,
+      usdpc_enabled,
+      usdpc_apy,
+      usdpc_conversion_fee_rate,
     });
 
     const optResults = optimizeParameters(optConfig, ciData, simParams);

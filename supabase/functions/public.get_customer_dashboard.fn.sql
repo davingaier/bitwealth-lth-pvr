@@ -27,6 +27,8 @@ BEGIN
   SELECT 
     btc_balance,
     usdt_balance,
+    usdpc_balance,
+    usdpc_price_usd,
     nav_usd,
     roi_pct,
     cagr_pct,
@@ -49,6 +51,9 @@ BEGIN
     'customer_id', v_customer_id,
     'btc_balance', COALESCE(v_latest_balance.btc_balance, 0),
     'usdt_balance', COALESCE(v_latest_balance.usdt_balance, 0),
+    'usdpc_balance', COALESCE(v_latest_balance.usdpc_balance, 0),
+    'usdpc_price_usd', v_latest_balance.usdpc_price_usd,
+    'usdpc_value_usd', COALESCE(v_latest_balance.usdpc_balance, 0) * COALESCE(v_latest_balance.usdpc_price_usd, 1),
     'nav_usd', COALESCE(v_latest_balance.nav_usd, 0),
     'roi_pct', COALESCE(v_latest_balance.roi_pct, 0),
     'cagr_pct', COALESCE(v_latest_balance.cagr_pct, 0),
@@ -63,4 +68,4 @@ $$;
 -- Grant execute to authenticated users
 GRANT EXECUTE ON FUNCTION public.get_customer_dashboard(UUID) TO authenticated;
 
-COMMENT ON FUNCTION public.get_customer_dashboard IS 'Returns customer dashboard summary including NAV, balances, ROI, CAGR for a given portfolio';
+COMMENT ON FUNCTION public.get_customer_dashboard IS 'Returns customer dashboard summary including NAV, balances (BTC/USDT/USDPC), ROI, CAGR for a given portfolio';

@@ -210,7 +210,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: closingBal } = await supabase
     .schema("lth_pvr")
     .from("balances_daily")
-    .select("date, btc_balance, usdt_balance, nav_usd")
+    .select("date, btc_balance, usdt_balance, usdpc_balance, usdpc_price_usd, nav_usd")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .lte("date", endStr)
@@ -222,6 +222,9 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const closingNav = Number(closingBal?.nav_usd ?? 0);
   const btcBalance = Number(closingBal?.btc_balance ?? 0);
   const usdtBalance = Number(closingBal?.usdt_balance ?? 0);
+  const usdpcBalance = Number(closingBal?.usdpc_balance ?? 0);
+  const usdpcPriceUsd = Number(closingBal?.usdpc_price_usd ?? 1);
+  const usdpcValueUsd = usdpcBalance * (usdpcPriceUsd > 0 ? usdpcPriceUsd : 1);
 
   // ── Inception NAV (for honest CAGR — not the broken month-open one) ──
   const inceptionStr = inceptionDate.toISOString().split("T")[0];
@@ -612,6 +615,9 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     btc_balance_sub: btcBalance > 0 ? `≈ ${fmtUsd(btcBalance * btcPrice)}` : "Awaiting next buy signal",
     usdt_balance_usd: fmtUsd(usdtBalance),
     usdt_balance_sub: usdtBalance > 0 ? "Available for trading" : "—",
+    usdpc_show: usdpcValueUsd > 0.005,
+    usdpc_balance_usd: fmtUsd(usdpcValueUsd),
+    usdpc_balance_sub: "Yield-earning idle cash",
 
     opening_date: fmtDateLong(prevEndStr),
     closing_date: fmtDateLong(endStr),

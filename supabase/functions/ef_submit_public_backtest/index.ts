@@ -53,6 +53,9 @@ Deno.serve(async (req) => {
       p_end_date,
       p_upfront_usdt,
       p_monthly_usdt,
+      p_usdpc_enabled,
+      p_usdpc_apy_percent,
+      p_usdpc_conversion_fee_percent,
     } = body;
 
     // ── 1. Validate required fields ─────────────────────────────────────────
@@ -95,6 +98,9 @@ Deno.serve(async (req) => {
         p_end_date,
         p_upfront_usdt:  Number(p_upfront_usdt) || 0,
         p_monthly_usdt:  Number(p_monthly_usdt) || 0,
+        p_usdpc_enabled: !!p_usdpc_enabled,
+        p_usdpc_apy_percent: p_usdpc_apy_percent != null ? Number(p_usdpc_apy_percent) : 10,
+        p_usdpc_conversion_fee_percent: p_usdpc_conversion_fee_percent != null ? Number(p_usdpc_conversion_fee_percent) : 0.1,
       }
     );
 
