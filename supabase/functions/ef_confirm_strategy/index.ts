@@ -30,6 +30,7 @@ interface ConfirmStrategyRequest {
   platform_fee_schedule?: string;
   performance_fee_rate?: number;
   performance_fee_schedule?: string;
+  usdpc_enabled?: boolean;
   admin_email?: string;
 }
 
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
     const body: ConfirmStrategyRequest = await req.json();
     const { customer_id, strategy_code, strategy_variation_id, admin_email,
             platform_fee_rate, platform_fee_schedule,
-            performance_fee_rate, performance_fee_schedule } = body;
+            performance_fee_rate, performance_fee_schedule, usdpc_enabled } = body;
 
     // Validate inputs
     if (!customer_id || !strategy_code) {
@@ -153,6 +154,16 @@ Deno.serve(async (req) => {
       // Strategy exists, just use it
       customer_strategy_id = existingStrategy.customer_strategy_id;
       console.log(`Using existing customer_strategy ${customer_strategy_id} for customer ${customer_id}`);
+      // Apply the USDPC yield toggle on re-confirm (other fee fields are managed
+      // via the Customer Maintenance editor, but the onboarding wizard is the
+      // canonical place to set USDPC at strategy setup time).
+      if (usdpc_enabled != null) {
+        await supabase
+          .schema("public")
+          .from("customer_strategies")
+          .update({ usdpc_enabled })
+          .eq("customer_strategy_id", customer_strategy_id);
+      }
     } else {
       // Get strategy version ID
       const { data: strategyVersion, error: versionError } = await supabase
@@ -187,6 +198,7 @@ Deno.serve(async (req) => {
       if (platform_fee_schedule) insertPayload.platform_fee_schedule = platform_fee_schedule;
       if (performance_fee_rate != null) insertPayload.performance_fee_rate = performance_fee_rate;
       if (performance_fee_schedule) insertPayload.performance_fee_schedule = performance_fee_schedule;
+      if (usdpc_enabled != null) insertPayload.usdpc_enabled = usdpc_enabled;
 
       const { data: newStrategy, error: strategyError } = await supabase
         .schema("public")

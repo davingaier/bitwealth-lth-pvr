@@ -1565,6 +1565,11 @@
                     <option value="false">No</option><option value="true">Yes</option>
                   </select>
                 </label>
+                <label><span class="label-line">USDPC yield enabled</span>
+                  <select name="usdpc_enabled">
+                    <option value="false">No</option><option value="true">Yes</option>
+                  </select>
+                </label>
                 <label><span class="label-line">Account model</span>
                   <select name="account_model">
                     <option value="omnibus">Omnibus</option><option value="subaccount">Subaccount</option>
@@ -1747,6 +1752,15 @@
                 </select>
               </div>
             </div>
+          </fieldset>
+
+          <!-- Yield Options -->
+          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+            <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Yield Options</legend>
+            <label style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;cursor:pointer;">
+              <input id="strategyModalUsdpcEnabled" type="checkbox" style="margin-top:.2rem;">
+              <span><strong>Enable USDPC yield</strong><br><span style="color:#6c757d;font-size:.82rem;">Idle USDT is automatically converted to the yield-bearing USDPC stablecoin while waiting to buy BTC, then converted back just-in-time. (LTH PVR only.)</span></span>
+            </label>
           </fieldset>
 
           <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.25rem;">
@@ -8618,7 +8632,7 @@
     // VALR via ef_link_bank_account and rendered as data-readonly displays.
     const CM_BANK_FIELDS = ['bank_account_type'];
     const CM_EX_FIELDS   = ['exchange','subaccount_ref','subaccount_id','deposit_ref','btc_wallet_address','usdt_wallet_address','usdt_deposit_network','api_key_label'];
-    const CM_STRAT_FIELDS= ['strategy_label','live_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
+    const CM_STRAT_FIELDS= ['strategy_label','live_enabled','usdpc_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
     const CM_RO_FIELDS   = ['kyc_id_verified_at','kyc_verified_by','bank_linked_at','bank_link_method','bank_valr_id','api_key_created_at','api_key_expires_at','api_key_verified_at','api_key_has_view','api_key_has_trade','api_key_has_withdraw','api_key_has_link_bank','strategy_code','portal_access_granted_at','terms_accepted_at','privacy_accepted_at','disclaimer_signed_at','fic_kyc_reviewed_at','fic_kyc_reviewed_by','compliance_frozen_at'];
     const CM_REG_NEXT = { prospect:'kyc', kyc:'setup', setup:'deposit', deposit:'active', active:'active', inactive:'inactive' };
 
@@ -8780,6 +8794,7 @@
       // Strategy (from customer_strategies)
       cmSetField('strategy_label', strat.label);
       cmSetField('live_enabled', strat.live_enabled);
+      cmSetField('usdpc_enabled', strat.usdpc_enabled);
       cmSetField('platform_fee_rate', strat.platform_fee_rate);
       cmSetField('platform_fee_schedule', strat.platform_fee_schedule);
       cmSetField('performance_fee_rate', strat.performance_fee_rate);
@@ -8836,7 +8851,7 @@
       const obj = {};
       for(const [k,v] of fd.entries()){ obj[k] = v; }
       // Coerce booleans
-      ['live_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
+      ['live_enabled','usdpc_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
         if(k in obj) obj[k] = obj[k] === 'true';
       });
       // Numbers (keep '' as null)
@@ -9033,6 +9048,7 @@
         const stratPatch = {
           label: payload.strategy_label || strat.label,
           live_enabled: !!payload.live_enabled,
+          usdpc_enabled: !!payload.usdpc_enabled,
           platform_fee_rate: payload.platform_fee_rate,
           platform_fee_schedule: payload.platform_fee_schedule || strat.platform_fee_schedule,
           performance_fee_rate: payload.performance_fee_rate,
@@ -11871,7 +11887,7 @@
       try{
         const { data } = await supabaseClient
           .from('customer_strategies')
-          .select('strategy_code, strategy_variation_id, platform_fee_rate, platform_fee_schedule, performance_fee_rate, performance_fee_schedule, status, live_enabled')
+          .select('strategy_code, strategy_variation_id, platform_fee_rate, platform_fee_schedule, performance_fee_rate, performance_fee_schedule, status, live_enabled, usdpc_enabled')
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -11919,6 +11935,9 @@
         if (fr && existing.performance_fee_rate != null) fr.value = existing.performance_fee_rate;
         if (fs && existing.performance_fee_schedule) fs.value = existing.performance_fee_schedule;
       }
+      // USDPC yield toggle (reset, then reflect existing config)
+      const usdpcCb = document.getElementById('strategyModalUsdpcEnabled');
+      if (usdpcCb) usdpcCb.checked = !!(existing && existing.usdpc_enabled);
 
       // Initial variation panel visibility
       const initialCode = preselectStrategyCode || allStrategies[0]?.strategy_code;
@@ -11964,6 +11983,7 @@
       const platformFeeSchedule = document.getElementById('strategyModalPlatformSchedule').value;
       const performanceFeeRate = parseFloat(document.getElementById('strategyModalPerfRate').value);
       const performanceFeeSchedule = document.getElementById('strategyModalPerfSchedule').value;
+      const usdpcEnabled = !!document.getElementById('strategyModalUsdpcEnabled')?.checked;
 
       const strategyName = allStrategies.find(s => s.strategy_code === strategyCode)?.name || strategyCode;
       const variationName = allVariations.find(v => v.id === variationId)?.display_name;
@@ -11972,7 +11992,8 @@
         `Strategy: ${strategyName}\n` +
         (variationName ? `Variation: ${variationName}\n` : '') +
         `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n` +
-        `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
+        `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n` +
+        `USDPC yield: ${usdpcEnabled ? 'Enabled' : 'Disabled'}\n\n` +
         `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
 
       if (!confirm(confirmMsg)) return;
@@ -11998,6 +12019,7 @@
             platform_fee_schedule: platformFeeSchedule,
             performance_fee_rate: performanceFeeRate,
             performance_fee_schedule: performanceFeeSchedule,
+            usdpc_enabled: usdpcEnabled,
             admin_email: adminEmail
           })
         });
