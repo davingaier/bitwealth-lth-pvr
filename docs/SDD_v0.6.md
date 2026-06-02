@@ -3,11 +3,74 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-01 (v0.6.114)
+**Last updated:** 2026-06-02 (v0.6.115)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.115 – USDPC Phase 3d/4: withdrawal JIT unwind, USDPC-aware withdrawable balance & VALR sync; alert-email recipient
+**Date:** 2026-06-02
+**Status:** ✅ DEPLOYED
+
+#### 1 — Alert digest recipient
+
+`ef_alert_digest` now defaults its `To` address to **support@bitwealth.co.za**
+(was admin@bitwealth.co.za); still overridable via `ALERT_EMAIL_TO`.
+
+#### 2 — Withdrawals: just-in-time USDPC→USDT unwind (Phase 3d)
+
+USDPC-enabled customers keep idle USDT swept into the USDPC yield stablecoin, so
+a USDT (crypto or ZAR-funding) withdrawal could fail with "Insufficient Balance"
+despite ample value. The `ensureUsdtForFee()` helper was **generalised and
+renamed to `ensureIdleUsdt()`** (now exported, `creds` broadened, `accountModel`
+dropped) and is now invoked before:
+- `withdrawFeeFromCustomerAccount()` (fee transfers — pre-existing).
+- `ef_process_withdrawal_queue` → `processCryptoPending()` for `currency==='USDT'`
+  before the crypto withdraw.
+- `ef_process_withdrawal_queue` → `processZarPending()` before the USDT→ZAR limit
+  sell (sizes the unwind to `usdtToSell`).
+On a conversion failure the withdrawal is `markFailed`/returns a clear
+`USDPC→USDT pre-conversion failed` error rather than hitting VALR short.
+
+#### 3 — `get_withdrawable_balance` RPC is USDPC-aware (Phase 3d)
+
+`lth_pvr.get_withdrawable_balance(BIGINT)` now returns `usdpc_balance`,
+`usdpc_price_usd`, `usdpc_value_usd`, and folds the **fee-haircut** USDPC value
+(`usdpc_bal * px * (1 - taker_fee)`) into `withdrawable_usdt` and `total_usd`.
+BTC price sourced from `rb_bands_daily.btc_price` (live default) → `ci_bands_daily`
+→ 100000 fallback; USDPC price from `balances_daily.usdpc_price_usd` → latest
+`usdpc_prices_daily` → 1. Both existing callers (`ef_process_withdrawal_queue`,
+`ef_request_withdrawal`) read named JSON fields, so column additions are safe.
+Migration: `supabase/migrations/20260602_usdpc_withdrawable_balance.sql`.
+
+#### 4 — VALR sync ignores internal USDPC conversions (Phase 4)
+
+`ef_sync_valr_transactions` now **explicitly skips** any trade-type transaction
+(LIMIT/MARKET/SIMPLE BUY/SELL) whose credit or debit leg is **USDPC**. The only
+USDPC activity is our own automated USDPC/USDT sweep & pre-buy-unwind orders,
+already booked as `kind='convert'` ledger lines by `ef_post_ledger_and_balances`
+from `exchange_orders`/`order_fills`. Re-deriving them from VALR trade history
+would double-count; there is no external USDPC deposit/withdrawal flow, so a
+USDPC leg on a trade is unambiguously internal. (Previously these fell through to
+"Skipping unexpected BUY/SELL" warnings — now skipped cleanly and intentionally.)
+
+**Note:** `ef_balance_reconciliation` (the other Phase-4 candidate) was
+decommissioned 2026-01-25 (folder removed, no cron); its drift-based deposit
+detection is superseded by `ef_sync_valr_transactions`. No change required.
+
+**Files touched (v0.6.115):**
+- `supabase/functions/ef_alert_digest/index.ts` — default `To` → support@bitwealth.co.za
+- `supabase/functions/_shared/valrTransfer.ts` — `ensureUsdtForFee` → exported `ensureIdleUsdt`
+- `supabase/functions/ef_process_withdrawal_queue/index.ts` — JIT USDPC unwind on USDT crypto + ZAR-sell paths
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — skip internal USDPC conversion legs
+- `supabase/migrations/20260602_usdpc_withdrawable_balance.sql` — USDPC-aware withdrawable-balance RPC
+
+**Re-deployed (shared `valrTransfer.ts` rename):** `ef_post_ledger_and_balances`,
+`ef_transfer_accumulated_fees`, `ef_calculate_performance_fees`,
+`ef_collect_annual_fees`, `ef_process_withdrawal_queue`.
+
+---
 
 ### v0.6.114 – Fee-collection correctness: annual double-count fix + USDPC→USDT pre-conversion for fee transfers
 **Date:** 2026-06-01

@@ -34,6 +34,7 @@ import {
 import { sendEmail } from "../_shared/smtp.ts";
 import { getWithdrawalOutcomeEmail } from "../_shared/email-templates.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { ensureIdleUsdt } from "../_shared/valrTransfer.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -225,6 +226,18 @@ async function processCryptoPending(row: Row, ctx: CustomerCtx) {
     return await markFailed(row, ctx, "Missing withdrawal_address or amount");
   }
   try {
+    // USDPC-enabled customers hold idle cash in USDPC; convert just enough back
+    // to USDT before the on-chain withdrawal or VALR rejects "Insufficient Balance".
+    if (!TEST_MODE && row.currency === "USDT") {
+      const unwind = await ensureIdleUsdt(sbLthPvr, row.customer_id, amount, {
+        apiKey: ctx.creds.apiKey,
+        apiSecret: ctx.creds.apiSecret,
+        subaccountId: ctx.subaccountId,
+      });
+      if (!unwind.ok) {
+        return await markFailed(row, ctx, `USDPC→USDT pre-conversion failed: ${unwind.error}`);
+      }
+    }
     const wdRes: any = TEST_MODE
       ? { id: `test-crypto-${row.request_id}` }
       : await cryptoWithdraw(
@@ -351,6 +364,22 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
     .eq("request_id", row.request_id);
 
   if (usdtToSell > 0) {
+    // USDPC-enabled customers' idle USDT is swept into USDPC; the get_withdrawable_balance
+    // RPC counts that USDPC value as withdrawable USDT, but the spot wallet may hold ~0
+    // USDT. Convert just enough USDPC→USDT before resting the USDTZAR sell, or the leg
+    // fails with "Insufficient Balance". No-op for non-USDPC customers / sufficient USDT.
+    if (!TEST_MODE) {
+      const unwind = await ensureIdleUsdt(sbLthPvr, row.customer_id, usdtToSell, {
+        apiKey: ctx.creds.apiKey,
+        apiSecret: ctx.creds.apiSecret,
+        subaccountId: ctx.subaccountId,
+      });
+      if (!unwind.ok) {
+        trace.push(`zar_pending:usdpc_unwind_failed ${unwind.error}`);
+        return await markFailed(row, ctx, `USDPC→USDT pre-conversion failed: ${unwind.error}`);
+      }
+      if (unwind.converted) trace.push(`zar_pending:usdpc_unwound usdt=${unwind.usdtReceived}`);
+    }
     const customerOrderId = `wd-usdt-${row.request_id}`;
     let orderId: string | null = row.conversion_order_id_usdt ?? null;
     if (!orderId) {

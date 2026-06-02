@@ -367,6 +367,25 @@ Deno.serve(async (req) => {
             const debitValue = parseFloat(tx.debitValue || 0);
             const debitCurrency = tx.debitCurrency;
 
+            // ================================================================
+            // USDPC INTERNAL YIELD CONVERSION — skip (already booked)
+            // The only transactions that touch USDPC are our own automated
+            // USDPC/USDT market orders (idle-cash sweep USDT→USDPC and pre-buy
+            // unwind USDPC→USDT). These are recorded directly from our
+            // exchange_orders/order_fills by ef_post_ledger_and_balances as
+            // kind='convert' ledger lines. Re-deriving them here from VALR's
+            // trade history would double-count the conversion. There is no
+            // external USDPC deposit/withdrawal flow, so any USDPC leg on a
+            // trade type is unambiguously internal — skip it. (Phase 4, 2026-06-02)
+            const isTradeType = [
+              "LIMIT_BUY", "MARKET_BUY", "SIMPLE_BUY",
+              "LIMIT_SELL", "MARKET_SELL", "SIMPLE_SELL",
+            ].includes(txType);
+            if (isTradeType && (creditCurrency === "USDPC" || debitCurrency === "USDPC")) {
+              console.log(`  ⏭️  Skipping internal USDPC conversion (${txType} ${debitCurrency}→${creditCurrency}): ${transactionId}`);
+              continue;
+            }
+
             // Classify transaction and determine currency/amount
             let currency, amount, isDeposit, fundingKind, metadata = {};
             

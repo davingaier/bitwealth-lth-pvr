@@ -286,25 +286,30 @@ const VALR_API_URL_TRANSFER =
   "https://api.valr.com";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ensureUsdtForFee
+// ensureIdleUsdt
 //
 // USDPC-enabled customers keep idle cash in the USDPC yield stablecoin, so their
-// idle USDT is continuously swept away. A USDT fee transfer would then fail with
-// VALR "Insufficient Balance" even though the customer holds ample value.
+// idle USDT is continuously swept away. Any USDT outflow (a fee transfer, a USDT
+// withdrawal, or a USDT→ZAR conversion sell) would then fail with VALR
+// "Insufficient Balance" even though the customer holds ample value.
 //
-// Before such a transfer we unwind JUST ENOUGH USDPC → USDT (a market SELL on
+// Before such an outflow we unwind JUST ENOUGH USDPC → USDT (a market SELL on
 // USDPC/USDT) to cover `requiredUsdt`, poll the fill, then ledger the conversion
 // (kind='convert', USDPC down / USDT up) so computed balances stay in sync with
-// VALR. Added 2026-06-01.
+// VALR. Added 2026-06-01; generalised for withdrawals 2026-06-02.
+//
+// `creds` accepts `{ apiKey, apiSecret, subaccountId }` (extra fields ignored).
+// For the subaccount model pass the master key + the customer's subaccountId;
+// for the api model pass the customer's own key + subaccountId=null.
 //
 // No-op (returns { ok:true, converted:false }) when the customer is not
-// usdpc_enabled, when idle USDT already covers the fee, or in test mode.
+// usdpc_enabled, when idle USDT already covers the requirement, or in test mode.
 // ─────────────────────────────────────────────────────────────────────────────
-async function ensureUsdtForFee(
+export async function ensureIdleUsdt(
   sb: SupabaseClient,
   customerId: number,
   requiredUsdt: number,
-  creds: { apiKey: string; apiSecret: string; subaccountId: string | null; accountModel: "subaccount" | "api" },
+  creds: { apiKey: string; apiSecret: string; subaccountId: string | null },
 ): Promise<{ ok: boolean; converted: boolean; usdtReceived?: number; error?: string }> {
   const orgId = Deno.env.get("ORG_ID");
   const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
@@ -413,7 +418,7 @@ async function ensureUsdtForFee(
     // reconciliation concern, not a reason to block the fee transfer.
     await logAlert(
       sb,
-      "valrTransfer.ensureUsdtForFee",
+      "valrTransfer.ensureIdleUsdt",
       "warn",
       `USDPC→USDT conversion succeeded but ledger insert failed for customer ${customerId}`,
       { customerId, coid, soldUsdpc, usdtReceived, error: (e as Error).message },
@@ -465,7 +470,7 @@ export async function withdrawFeeFromCustomerAccount(
   // USDT fee transfer can fail with "Insufficient Balance". Convert just enough
   // USDPC → USDT first (no-op for non-USDPC customers / sufficient balances).
   if (currency === "USDT") {
-    const unwind = await ensureUsdtForFee(sb, customerId, amount, creds);
+    const unwind = await ensureIdleUsdt(sb, customerId, amount, creds);
     if (!unwind.ok) {
       return { success: false, errorMessage: `USDPC pre-conversion failed: ${unwind.error}` };
     }

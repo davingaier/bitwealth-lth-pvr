@@ -18,7 +18,7 @@ type AlertRow = {
 
 async function sendEmail(subject: string, text: string) {
   const from = Deno.env.get("ALERT_EMAIL_FROM") || "admin@bitwealth.co.za";
-  const to = Deno.env.get("ALERT_EMAIL_TO") || "admin@bitwealth.co.za";
+  const to = Deno.env.get("ALERT_EMAIL_TO") || "support@bitwealth.co.za";
 
   const result = await sendTextEmail(to, from, subject, text);
 
