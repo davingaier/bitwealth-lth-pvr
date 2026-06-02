@@ -1390,6 +1390,10 @@
                     } else if (action === 'sell') {
                         icon = '📉';
                         description = `Sold ${fmtBtc(btcAmount)}`;
+                    } else if (action === 'convert') {
+                        // USDPC yield conversion (idle USDT <-> yield-bearing USDPC).
+                        icon = '🪙';
+                        description = `Yield Conversion ${fmtUsd(usdtAmount)}`;
                     } else {
                         if (btcAmount !== 0)       description = `${action} ${fmtBtc(btcAmount)}`;
                         else if (usdtAmount !== 0) description = `${action} ${fmtUsd(usdtAmount)}`;
