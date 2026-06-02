@@ -863,7 +863,15 @@ Deno.serve(async (req)=>{
         total_exchange_fees_usdt: hodlExchangeFeesUsdtCum
       });
     }
-    // Persist all results
+    // Persist all results.
+    // bt_ledger.amount_usdpc / fee_usdpc are NOT NULL DEFAULT 0. Only the USDPC
+    // 'convert' rows set these keys, so in a batch insert PostgREST would send an
+    // explicit NULL for every non-convert row (overriding the column default) and
+    // trip the NOT NULL constraint. Normalise every row to carry 0 defaults.
+    for (const row of ledgerRows) {
+      if (row.amount_usdpc == null) row.amount_usdpc = 0;
+      if (row.fee_usdpc == null) row.fee_usdpc = 0;
+    }
     await bulkInsert(sbBt, "bt_ledger", ledgerRows);
     await bulkInsert(sbBt, "bt_orders", orderRows);
     await bulkInsert(sbBt, "bt_results_daily", resultsDaily);
