@@ -2579,7 +2579,7 @@
             </div>
             <div style="color:#cbd5e1">→</div>
             <div class="lp-orgstep-text" style="font-size:.72rem;color:var(--muted)">
-              Per-customer steps: <strong style="color:var(--ink)">Decision · Intent · Execute · Settle</strong>
+              Per-customer steps: <strong style="color:var(--ink)">Decision · Intent · Execute · Settle</strong> <span style="color:var(--muted)">(+ Convert when a USDPC yield conversion runs)</span>
             </div>
           </div>
 
@@ -3049,6 +3049,12 @@
             { name: 'Execute',  s: r.execute  },
             { name: 'Settle',   s: r.settle   },
           ];
+          // USDPC yield conversion (sweep / pre-buy). Only show the light when a
+          // conversion actually happened for this customer/day so non-USDPC rows
+          // stay uncluttered; flashes amber while in progress, green/red on result.
+          if (r.convert && r.convert.status && r.convert.status !== 'na') {
+            steps.push({ name: 'Convert', s: r.convert });
+          }
           const lights = steps.map(st => `
             <div class="lp-step-grp" title="${escapeHtml(st.name + ': ' + (st.s?.label || ''))}">
               <span class="lp-step-name">${st.name}</span>

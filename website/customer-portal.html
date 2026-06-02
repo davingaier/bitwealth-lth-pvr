@@ -165,7 +165,8 @@
                         </div>
                     </div>
 
-                    <!-- Stats Grid (5-up: NAV, BTC, USDT, ZAR, TWR) -->
+                    <!-- Stats Grid (single row: NAV, BTC, USDT, [USDPC], ZAR, TWR).
+                         6-up when the USDPC tile is shown, otherwise 5-up — set in JS. -->
                     <div class="dashboard-stats" id="dashboardStats" style="display: none; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
                         <style>
                             #dashboardStats .stat-box  { padding: 16px; }
@@ -1220,16 +1221,23 @@
                     // USDPC. Value is in USD (includes accrued yield) from the strategy balances.
                     const usdpcValueUsd = parseFloat(portfolio.usdpc_value_usd || 0);
                     const usdpcTile = document.getElementById('usdpcTile');
+                    const showUsdpc = usdpcValueUsd > 0.005;
                     if (usdpcTile) {
-                        if (usdpcValueUsd > 0.005) {
+                        if (showUsdpc) {
                             document.getElementById('usdpcValue').textContent = `$${usdpcValueUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                             usdpcTile.style.display = '';
                         } else {
                             usdpcTile.style.display = 'none';
                         }
                     }
+                    // Keep all stat tiles on a single row: 6-up when the USDPC tile is
+                    // visible, 5-up otherwise (so there is never a trailing gap).
+                    const dashStats = document.getElementById('dashboardStats');
+                    if (dashStats) {
+                        dashStats.style.gridTemplateColumns = `repeat(${showUsdpc ? 6 : 5}, minmax(0, 1fr))`;
+                    }
 
-                    // ZAR tile — always shown so the 5-up grid stays consistent;
+                    // ZAR tile — always shown so the stat row stays consistent;
                     // displays R0,00 when the customer has no ZAR balance.
                     const zarTile = document.getElementById('zarTile');
                     if (zarTile) {
@@ -1513,10 +1521,14 @@
                 } catch (e) { /* fallback */ }
                 const usdtZar = (typeof livePrices !== 'undefined' && livePrices.usdtZar > 0) ? livePrices.usdtZar : 18.5;
                 const zarValueUsd = zarBalance > 0 && usdtZar > 0 ? zarBalance / usdtZar : 0;
-                const totalValue = btcValueUsd + usdtBalance + zarValueUsd;
-                const btcPct  = totalValue > 0 ? (btcValueUsd / totalValue) * 100 : 0;
-                const usdtPct = totalValue > 0 ? (usdtBalance / totalValue) * 100 : 0;
-                const zarPct  = totalValue > 0 ? (zarValueUsd / totalValue) * 100 : 0;
+                // USDPC slice — only for USDPC-enabled portfolios holding yield cash
+                // (usdpc_value_usd is non-zero only when the strategy has USDPC enabled).
+                const usdpcValueUsd = parseFloat(portfolio.usdpc_value_usd || 0);
+                const totalValue = btcValueUsd + usdtBalance + usdpcValueUsd + zarValueUsd;
+                const btcPct   = totalValue > 0 ? (btcValueUsd / totalValue) * 100 : 0;
+                const usdtPct  = totalValue > 0 ? (usdtBalance / totalValue) * 100 : 0;
+                const usdpcPct = totalValue > 0 ? (usdpcValueUsd / totalValue) * 100 : 0;
+                const zarPct   = totalValue > 0 ? (zarValueUsd / totalValue) * 100 : 0;
 
                 const chartWrapper = document.getElementById('allocationChartWrapper');
                 if (totalValue > 0) {
@@ -1530,6 +1542,12 @@
                     const dataArr  = [btcPct, usdtPct];
                     const bgColors = ['#FFB400', '#1E3A5F'];
                     const bdColors = ['#FFB400', '#2A4A6F'];
+                    if (usdpcValueUsd > 0.005) {
+                        labels.push('USDPC');
+                        dataArr.push(usdpcPct);
+                        bgColors.push('#a855f7');
+                        bdColors.push('#a855f7');
+                    }
                     if (zarPct > 0) {
                         labels.push('ZAR');
                         dataArr.push(zarPct);
@@ -1579,6 +1597,13 @@
                             <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1E3A5F;"></span>
                             USDT ${usdtPct.toFixed(1)}%
                         </div>`;
+                    if (usdpcValueUsd > 0.005) {
+                        legendHTML += `
+                        <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">
+                            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a855f7;"></span>
+                            USDPC ${usdpcPct.toFixed(1)}%
+                        </div>`;
+                    }
                     if (zarPct > 0) {
                         legendHTML += `
                         <div style="display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text-secondary);">

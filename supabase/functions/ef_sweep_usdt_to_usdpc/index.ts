@@ -16,7 +16,7 @@
 
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { logAlert } from "../_shared/alerting.ts";
-import { loadUsdpcConfig, USDPC_PAIR } from "../_shared/usdpc.ts";
+import { loadUsdpcConfig, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
 
 Deno.serve(async () => {
   const sb = getServiceClient();
@@ -84,32 +84,43 @@ Deno.serve(async () => {
       }
 
       const sweepUsdt = +idleUsdt.toFixed(2);
-      const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP"].join("|");
-      const keyHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyParts));
-      const idKey = Array.from(new Uint8Array(keyHash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      // VALR caps a single USDPC BUY at ~10 000 USDT (quote). Split larger
+      // sweeps into multiple intents, each its own market order.
+      const chunks = splitConversionAmount(sweepUsdt, cfg.maxQuoteUsdt, 2);
+      let chunkErr = false;
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunkUsdt = chunks[ci];
+        if (!(chunkUsdt > 0)) continue;
+        const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP", String(ci)].join("|");
+        const keyHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyParts));
+        const idKey = Array.from(new Uint8Array(keyHash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const ins = await sb.from("order_intents").upsert({
-        org_id,
-        customer_id,
-        trade_date: todayStr,
-        pair: USDPC_PAIR,
-        side: "BUY", // buy USDPC, spend USDT (quote)
-        amount: sweepUsdt, // QUOTE amount (USDT) — executor uses quoteAmount for USDPC BUY
-        limit_price: null, // market order
-        base_asset: "USDPC",
-        quote_asset: "USDT",
-        exchange_account_id: exchAcct.exchange_account_id,
-        idempotency_key: idKey,
-        reason: "usdpc_sweep",
-        note: `Sweep ${sweepUsdt.toFixed(2)} idle USDT into USDPC`,
-      }, { onConflict: "idempotency_key" });
+        const ins = await sb.from("order_intents").upsert({
+          org_id,
+          customer_id,
+          trade_date: todayStr,
+          pair: USDPC_PAIR,
+          side: "BUY", // buy USDPC, spend USDT (quote)
+          amount: chunkUsdt, // QUOTE amount (USDT) — executor uses quoteAmount for USDPC BUY
+          limit_price: null, // market order
+          base_asset: "USDPC",
+          quote_asset: "USDT",
+          exchange_account_id: exchAcct.exchange_account_id,
+          idempotency_key: idKey,
+          reason: "usdpc_sweep",
+          note: chunks.length > 1
+            ? `Sweep idle USDT into USDPC (chunk ${ci + 1}/${chunks.length}: ${chunkUsdt.toFixed(2)} of ${sweepUsdt.toFixed(2)})`
+            : `Sweep ${sweepUsdt.toFixed(2)} idle USDT into USDPC`,
+        }, { onConflict: "idempotency_key" });
 
-      if (ins.error) {
-        await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",
-          `Sweep intent upsert failed for customer ${customer_id}: ${ins.error.message}`,
-          { customer_id, sweepUsdt, error: ins.error.message }, org_id, customer_id);
-        continue;
+        if (ins.error) {
+          chunkErr = true;
+          await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",
+            `Sweep intent upsert failed for customer ${customer_id}: ${ins.error.message}`,
+            { customer_id, sweepUsdt, chunk: ci + 1, chunks: chunks.length, error: ins.error.message }, org_id, customer_id);
+        }
       }
+      if (chunkErr) continue;
       created++;
     } catch (err) {
       await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",

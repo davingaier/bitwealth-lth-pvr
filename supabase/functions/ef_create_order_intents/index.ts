@@ -1,6 +1,6 @@
 import { getServiceClient } from "./client.ts";
 import { logAlert } from "./alerting.ts";
-import { loadUsdpcConfig, sizeUsdpcToUsdt, USDPC_PAIR } from "../_shared/usdpc.ts";
+import { loadUsdpcConfig, sizeUsdpcToUsdt, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
 
 Deno.serve(async ()=>{
   const sb = getServiceClient();
@@ -289,35 +289,45 @@ Deno.serve(async ()=>{
               );
               const usdpcToSell = +sizing.usdpcToSell.toFixed(8);
               if (usdpcToSell > 0) {
-                const convKeyParts = [org_id, d.customer_id.toString(), d.trade_date, "USDPC_PREBUY"].join("|");
-                const convHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(convKeyParts));
-                const convKey = Array.from(new Uint8Array(convHash)).map(b => b.toString(16).padStart(2, "0")).join("");
-                const convIns = await sb.from("order_intents").upsert({
-                  org_id,
-                  customer_id: d.customer_id,
-                  trade_date: d.trade_date,
-                  pair: USDPC_PAIR,
-                  side: "SELL", // sell USDPC, receive USDT
-                  amount: usdpcToSell,
-                  limit_price: null, // market order
-                  base_asset: "USDPC",
-                  quote_asset: "USDT",
-                  exchange_account_id: exchAcct.exchange_account_id,
-                  idempotency_key: convKey,
-                  reason: "usdpc_prebuy_convert",
-                  note: `Fund BTC buy: need ${shortfall.toFixed(2)} USDT (idle ${idleUsdt.toFixed(2)})`,
-                }, { onConflict: "idempotency_key" });
-                if (convIns.error) {
-                  console.error("usdpc conversion intent error", convIns.error);
-                  await logAlert(
-                    sb,
-                    "ef_create_order_intents",
-                    "error",
-                    `USDPC conversion intent upsert failed: ${convIns.error.message}`,
-                    { customer_id: d.customer_id, trade_date: d.trade_date, shortfall, error: convIns.error.message },
+                // VALR caps a single USDPC SELL at ~46 000 USDPC (base). Split a
+                // larger conversion into multiple intents, each its own market
+                // order, so all chunks settle before the dependent BTC buy.
+                const chunks = splitConversionAmount(usdpcToSell, usdpcCfg.maxBaseUsdpc);
+                for (let ci = 0; ci < chunks.length; ci++) {
+                  const chunkAmt = chunks[ci];
+                  if (!(chunkAmt > 0)) continue;
+                  const convKeyParts = [org_id, d.customer_id.toString(), d.trade_date, "USDPC_PREBUY", String(ci)].join("|");
+                  const convHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(convKeyParts));
+                  const convKey = Array.from(new Uint8Array(convHash)).map(b => b.toString(16).padStart(2, "0")).join("");
+                  const convIns = await sb.from("order_intents").upsert({
                     org_id,
-                    d.customer_id,
-                  );
+                    customer_id: d.customer_id,
+                    trade_date: d.trade_date,
+                    pair: USDPC_PAIR,
+                    side: "SELL", // sell USDPC, receive USDT
+                    amount: chunkAmt,
+                    limit_price: null, // market order
+                    base_asset: "USDPC",
+                    quote_asset: "USDT",
+                    exchange_account_id: exchAcct.exchange_account_id,
+                    idempotency_key: convKey,
+                    reason: "usdpc_prebuy_convert",
+                    note: chunks.length > 1
+                      ? `Fund BTC buy (chunk ${ci + 1}/${chunks.length}): need ${shortfall.toFixed(2)} USDT (idle ${idleUsdt.toFixed(2)})`
+                      : `Fund BTC buy: need ${shortfall.toFixed(2)} USDT (idle ${idleUsdt.toFixed(2)})`,
+                  }, { onConflict: "idempotency_key" });
+                  if (convIns.error) {
+                    console.error("usdpc conversion intent error", convIns.error);
+                    await logAlert(
+                      sb,
+                      "ef_create_order_intents",
+                      "error",
+                      `USDPC conversion intent upsert failed: ${convIns.error.message}`,
+                      { customer_id: d.customer_id, trade_date: d.trade_date, shortfall, chunk: ci + 1, chunks: chunks.length, error: convIns.error.message },
+                      org_id,
+                      d.customer_id,
+                    );
+                  }
                 }
               }
             }

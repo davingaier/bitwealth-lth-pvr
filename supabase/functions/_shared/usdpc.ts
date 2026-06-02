@@ -27,11 +27,22 @@ export const USDPC_DEFAULT_TAKER_FEE_RATE = 0.001; // 0.10%
 export const USDPC_DEFAULT_APY = 0.10;             // 10% p.a. (simulators)
 export const USDPC_DEFAULT_MIN_ORDER_USDT = 5;     // dust threshold; below this we stay in USDT
 
+// VALR per-order size caps for the USDPC/USDT market. A single market order may
+// not spend more than ~10 000 USDT (quote) nor sell more than ~46 000 USDPC
+// (base). Conversions above these caps must be split into multiple orders.
+// Slightly conservative defaults leave headroom for price drift / rounding.
+export const USDPC_DEFAULT_MAX_QUOTE_USDT = 10000;  // max USDT spend per BUY order
+export const USDPC_DEFAULT_MAX_BASE_USDPC = 46000;  // max USDPC sold per SELL order
+
 export interface UsdpcConfig {
   pair: string;
   takerFeeRate: number;
   minOrderUsdt: number;
   defaultApy: number;
+  /** Max USDT (quote) spendable in a single USDPC BUY order on VALR. */
+  maxQuoteUsdt: number;
+  /** Max USDPC (base) sellable in a single USDPC SELL order on VALR. */
+  maxBaseUsdpc: number;
 }
 
 export const USDPC_DEFAULT_CONFIG: UsdpcConfig = {
@@ -39,7 +50,41 @@ export const USDPC_DEFAULT_CONFIG: UsdpcConfig = {
   takerFeeRate: USDPC_DEFAULT_TAKER_FEE_RATE,
   minOrderUsdt: USDPC_DEFAULT_MIN_ORDER_USDT,
   defaultApy: USDPC_DEFAULT_APY,
+  maxQuoteUsdt: USDPC_DEFAULT_MAX_QUOTE_USDT,
+  maxBaseUsdpc: USDPC_DEFAULT_MAX_BASE_USDPC,
 };
+
+/**
+ * Split a conversion `total` into per-order chunks each ≤ `maxPerChunk`, so a
+ * large USDPC conversion respects VALR's per-order size cap. Returns chunk sizes
+ * (summing to `total`) rounded to `decimals`. The final chunk absorbs rounding
+ * remainder so the chunks always sum back to `total`.
+ *
+ *   splitConversionAmount(25000, 10000)         -> [10000, 10000, 5000]
+ *   splitConversionAmount(8000, 10000)          -> [8000]
+ */
+export function splitConversionAmount(
+  total: number,
+  maxPerChunk: number,
+  decimals = 8,
+): number[] {
+  if (!(total > 0)) return [];
+  if (!(maxPerChunk > 0) || total <= maxPerChunk) return [round(total, decimals)];
+  const chunks: number[] = [];
+  let remaining = total;
+  while (remaining > maxPerChunk + 1e-9) {
+    chunks.push(round(maxPerChunk, decimals));
+    remaining -= maxPerChunk;
+  }
+  chunks.push(round(remaining, decimals));
+  return chunks;
+}
+
+function round(v: number, decimals: number): number {
+  const f = Math.pow(10, decimals);
+  return Math.round(v * f) / f;
+}
+
 
 // ── Pure conversion math ─────────────────────────────────────────────────────
 
@@ -146,6 +191,8 @@ const SETTINGS_KEYS = {
   takerFeeRate: "usdpc_taker_fee_rate",
   minOrderUsdt: "usdpc_min_order_usdt",
   defaultApy: "usdpc_default_apy",
+  maxQuoteUsdt: "usdpc_max_quote_usdt",
+  maxBaseUsdpc: "usdpc_max_base_usdpc",
 } as const;
 
 export async function loadUsdpcConfig(sb: SettingsReader): Promise<UsdpcConfig> {
@@ -165,6 +212,10 @@ export async function loadUsdpcConfig(sb: SettingsReader): Promise<UsdpcConfig> 
     if (Number.isFinite(minU) && minU >= 0) cfg.minOrderUsdt = minU;
     const apy = Number(map.get(SETTINGS_KEYS.defaultApy));
     if (Number.isFinite(apy) && apy >= 0) cfg.defaultApy = apy;
+    const maxQ = Number(map.get(SETTINGS_KEYS.maxQuoteUsdt));
+    if (Number.isFinite(maxQ) && maxQ > 0) cfg.maxQuoteUsdt = maxQ;
+    const maxB = Number(map.get(SETTINGS_KEYS.maxBaseUsdpc));
+    if (Number.isFinite(maxB) && maxB > 0) cfg.maxBaseUsdpc = maxB;
   } catch (_e) {
     // fall back to defaults
   }
