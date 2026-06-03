@@ -310,9 +310,32 @@
                                 <!-- NAV sub-options (visible only when NAV chart selected) -->
                                 <select id="perfNavSubOption" onchange="updatePerfChart()" style="padding: 8px 12px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
                                     <option value="benchmarks">LTH PVR vs Benchmarks (Cost Basis)</option>
+                                    <option value="hwm">NAV vs High-Water Mark</option>
+                                    <option value="profit">Profit vs High-Water Mark</option>
+                                    <option value="headroom">Headroom to High-Water Mark</option>
                                     <option value="signals">NAV with Buy/Sell/Hold</option>
                                     <option value="sizes">NAV with Position Sizes</option>
                                 </select>
+                                <!-- HWM line style toggle (options A & B) -->
+                                <div id="perfHwmStyle" style="display: none; gap: 8px; align-items: center;">
+                                    <span style="font-size: 12px; color: var(--text-secondary);">HWM line:</span>
+                                    <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="radio" name="hwmStyle" value="flat" checked onchange="updatePerfChart()" style="accent-color: var(--gold);"> Current (flat)
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="radio" name="hwmStyle" value="step" onchange="updatePerfChart()" style="accent-color: var(--gold);"> Step (historical)
+                                    </label>
+                                </div>
+                                <!-- Profit units toggle (option C) -->
+                                <div id="perfProfitMode" style="display: none; gap: 8px; align-items: center;">
+                                    <span style="font-size: 12px; color: var(--text-secondary);">Units:</span>
+                                    <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="radio" name="profitMode" value="abs" checked onchange="updatePerfChart()" style="accent-color: var(--gold);"> $
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
+                                        <input type="radio" name="profitMode" value="pct" onchange="updatePerfChart()" style="accent-color: var(--gold);"> %
+                                    </label>
+                                </div>
                                 <!-- ROI benchmark toggles (visible only when ROI chart selected) -->
                                 <div id="perfRoiBenchmarks" style="display: none; gap: 10px; align-items: center;">
                                     <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
@@ -334,6 +357,20 @@
                             <div id="perfChartEmpty" style="display: none; text-align: center; padding: 60px 0; color: var(--text-secondary);">
                                 <div style="font-size: 40px; margin-bottom: 12px;">📊</div>
                                 <p>No performance data available yet. Charts will appear once trading begins.</p>
+                            </div>
+                            <!-- Option E: at-a-glance HWM gauge (NAV between Cost Basis floor and Fee Threshold) -->
+                            <div id="perfHwmGauge" style="display: none; margin: 0 0 18px; padding: 14px 16px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
+                                    <span id="hwmGaugeFloorLabel">Cost Basis</span>
+                                    <span id="hwmGaugeStatus" style="font-weight: 600;">—</span>
+                                    <span id="hwmGaugeTopLabel">Fee Threshold (HWM)</span>
+                                </div>
+                                <div style="position: relative; height: 24px; border-radius: 999px; background: linear-gradient(90deg, rgba(20,184,166,0.25), rgba(255,180,0,0.25)); border: 1px solid rgba(255,255,255,0.08);">
+                                    <div id="hwmGaugeThr" style="position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--gold);"></div>
+                                    <div id="hwmGaugeMarker" style="position: absolute; top: -5px; width: 3px; height: 34px; background: #fff; border-radius: 2px; box-shadow: 0 0 8px rgba(255,255,255,0.6);">
+                                        <div id="hwmGaugeBub" style="position: absolute; top: -24px; left: 50%; transform: translateX(-50%); background: #fff; color: #0b1220; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; white-space: nowrap;">NAV</div>
+                                    </div>
+                                </div>
                             </div>
                             <canvas id="perfChart" style="max-height: 500px;"></canvas>
                         </div>
@@ -3069,8 +3106,24 @@
             const type = document.getElementById('perfChartType').value;
             document.getElementById('perfNavSubOption').style.display = type === 'nav' ? '' : 'none';
             document.getElementById('perfRoiBenchmarks').style.display = type === 'roi' ? 'flex' : 'none';
+            syncNavSubControls();
             updatePerfChart();
         }
+
+        // Show/hide the sub-view-specific toggles (HWM line style for the
+        // benchmarks + HWM views, profit units for the profit view).
+        function syncNavSubControls() {
+            const type = document.getElementById('perfChartType').value;
+            const sub  = document.getElementById('perfNavSubOption').value;
+            const isNav = type === 'nav';
+            const hwmStyle = document.getElementById('perfHwmStyle');
+            const profitMode = document.getElementById('perfProfitMode');
+            if (hwmStyle)   hwmStyle.style.display   = (isNav && (sub === 'benchmarks' || sub === 'hwm')) ? 'flex' : 'none';
+            if (profitMode) profitMode.style.display = (isNav && sub === 'profit') ? 'flex' : 'none';
+        }
+
+        function getHwmStyle()   { const el = document.querySelector('input[name="hwmStyle"]:checked');   return el ? el.value : 'flat'; }
+        function getProfitMode() { const el = document.querySelector('input[name="profitMode"]:checked'); return el ? el.value : 'abs'; }
 
         function getCommonChartOptions(yLabel) {
             const isLog = document.getElementById('perfLogScale')?.checked;
@@ -3121,6 +3174,7 @@
         function updatePerfChart() {
             if (!perfData?.daily?.length) return;
             const type = document.getElementById('perfChartType').value;
+            syncNavSubControls();
             if (perfChart) { perfChart.destroy(); perfChart = null; }
 
             const labels = perfData.daily.map(d => d.date);
@@ -3135,6 +3189,125 @@
                 buildHoldingsChart(ctx, labels);
             }
             updatePerfMetricsTable();
+            updateHwmGauge();
+        }
+
+        // ─── High-Water Mark helpers ─────────────────────────────────────────
+        // The performance-fee threshold a customer must exceed before any new
+        // performance fee accrues is:
+        //     threshold[d] = high_water_mark_usd[d] (profit-only floor, ratchets
+        //                    only when a fee is actually charged)
+        //                  + cumulative net contributions to date[d]
+        // high_water_mark_usd is the *profit-only* baseline (max(0, NAV − net
+        // contributions)), so for a never-profited customer it is $0 and the
+        // threshold collapses to their contributed capital. We forward-fill the
+        // HWM (customer_state_daily rows can be sparse) and accumulate
+        // contributions in the browser so the line is exact.
+        function computeHwmThreshold(daily, contributions) {
+            const flows = [];
+            for (const c of (contributions || [])) {
+                const v = parseFloat(c.amount_usdt || 0);
+                if (!v) continue;
+                if (c.kind === 'topup')           flows.push({ date: c.date, v });
+                else if (c.kind === 'withdrawal') flows.push({ date: c.date, v: -Math.abs(v) });
+            }
+            flows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+            const cumContrib = [];
+            let fi = 0, run = 0;
+            for (const d of daily) {
+                while (fi < flows.length && flows[fi].date <= d.date) { run += flows[fi].v; fi++; }
+                cumContrib.push(Math.max(0, run));
+            }
+
+            const hwmProfit = [];
+            let lastHwm = 0;
+            for (const d of daily) {
+                const v = parseFloat(d.high_water_mark_usd ?? NaN);
+                if (!isNaN(v) && v > 0) lastHwm = v;
+                hwmProfit.push(lastHwm);
+            }
+
+            const thresholdStep = daily.map((_, i) => +(hwmProfit[i] + cumContrib[i]).toFixed(2));
+            const currentThreshold = thresholdStep.length ? thresholdStep[thresholdStep.length - 1] : 0;
+            const thresholdFlat = daily.map(() => currentThreshold);
+            const currentNav = daily.length ? parseFloat(daily[daily.length - 1].nav_usd || 0) : 0;
+            return {
+                cumContrib, hwmProfit, thresholdStep, thresholdFlat, currentThreshold,
+                currentNav,
+                currentHwmProfit: hwmProfit.length ? hwmProfit[hwmProfit.length - 1] : 0,
+                currentContrib:  cumContrib.length ? cumContrib[cumContrib.length - 1] : 0
+            };
+        }
+
+        // Deposit / withdrawal scatter markers, pinned to the NAV line.
+        function flowMarkerDatasets(daily) {
+            const navByDate = new Map(daily.map(d => [d.date, parseFloat(d.nav_usd || 0)]));
+            const depositMarkers = [], withdrawalMarkers = [];
+            for (const c of (perfData.contributions || [])) {
+                const v = parseFloat(c.amount_usdt || 0);
+                if (!v) continue;
+                const navY = navByDate.get(c.date) ?? 0;
+                if (c.kind === 'topup')           depositMarkers.push({ x: c.date, y: navY, amount: v });
+                else if (c.kind === 'withdrawal') withdrawalMarkers.push({ x: c.date, y: navY, amount: Math.abs(v) });
+            }
+            const sizeFor = amt => Math.max(4, Math.min(14, Math.sqrt(amt) / 3));
+            return [
+                {
+                    label: 'Deposit', type: 'scatter',
+                    data: depositMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
+                    backgroundColor: 'rgba(16,185,129,0.85)', borderColor: PERF_COLORS.buy, borderWidth: 1,
+                    pointStyle: 'triangle', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
+                    showLine: false
+                },
+                {
+                    label: 'Withdrawal', type: 'scatter',
+                    data: withdrawalMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
+                    backgroundColor: 'rgba(239,68,68,0.85)', borderColor: PERF_COLORS.sell, borderWidth: 1,
+                    pointStyle: 'rectRot', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
+                    showLine: false
+                }
+            ];
+        }
+
+        // Option E — position the current NAV between the Cost Basis floor and
+        // the Fee Threshold on a horizontal gauge.
+        function updateHwmGauge() {
+            const box = document.getElementById('perfHwmGauge');
+            if (!box) return;
+            const type = document.getElementById('perfChartType').value;
+            const sub  = document.getElementById('perfNavSubOption').value;
+            const showFor = ['benchmarks', 'hwm', 'profit', 'headroom'];
+            if (!perfData?.daily?.length || type !== 'nav' || !showFor.includes(sub)) {
+                box.style.display = 'none';
+                return;
+            }
+            const t = computeHwmThreshold(perfData.daily, perfData.contributions);
+            const nav = t.currentNav, thr = t.currentThreshold, floor = t.currentContrib;
+            box.style.display = 'block';
+
+            const lo = Math.min(floor, nav, thr), hi = Math.max(floor, nav, thr);
+            const span = (hi - lo) || Math.max(1, hi || 1);
+            const pad = span * 0.08;
+            const min = lo - pad, max = hi + pad, rng = (max - min) || 1;
+            const pctOf = x => Math.max(0, Math.min(100, ((x - min) / rng) * 100));
+            const usd = n => '$' + Math.round(n).toLocaleString('en-US');
+
+            document.getElementById('hwmGaugeThr').style.left = pctOf(thr) + '%';
+            document.getElementById('hwmGaugeMarker').style.left = pctOf(nav) + '%';
+            document.getElementById('hwmGaugeBub').textContent = 'NAV ' + usd(nav);
+            document.getElementById('hwmGaugeFloorLabel').textContent = 'Cost Basis ' + usd(floor);
+            document.getElementById('hwmGaugeTopLabel').textContent = 'Fee Threshold ' + usd(thr);
+
+            const dist = nav - thr;
+            const st = document.getElementById('hwmGaugeStatus');
+            if (dist >= 0) {
+                st.textContent = 'Above HWM — fees accrue (+' + usd(dist) + ')';
+                st.style.color = '#10b981';
+            } else {
+                st.textContent = usd(-dist) + ' below HWM — no fee owed';
+                st.style.color = '#f59e0b';
+            }
         }
 
         function buildNavChart(ctx, labels) {
@@ -3143,50 +3316,29 @@
             let datasets = [];
 
             if (sub === 'benchmarks') {
-                // ─── Cost Basis view ───
+                // ─── Cost Basis view (Option A) ───
                 // All three benchmark series and the Cost Basis line are computed
                 // server-side now (lth_pvr.recompute_std_dca_balances /
                 // recompute_hodl_balances / carry_forward_daily_balances) and
-                // exposed by lth_pvr.get_customer_performance_data:
-                //   * cost_basis_usd → lth_pvr.balances_daily.cost_basis_usd
-                //   * std_dca_nav    → withdrawal-aware (USDT drained first, then BTC sold)
-                //   * hodl_nav       → cost_basis[d] × (btc_price[d] / btc_price[day_0])
-                // The browser only collects deposit/withdrawal markers for the
-                // scatter overlay so they pin to the LTH PVR NAV line.
-                const depositMarkers = [];
-                const withdrawalMarkers = [];
-                const navByDate = new Map(daily.map(d => [d.date, parseFloat(d.nav_usd || 0)]));
-                for (const c of (perfData.contributions || [])) {
-                    const v = parseFloat(c.amount_usdt || 0);
-                    if (!v) continue;
-                    const navY = navByDate.get(c.date) ?? 0;
-                    if (c.kind === 'topup') {
-                        depositMarkers.push({ x: c.date, y: navY, amount: v });
-                    } else if (c.kind === 'withdrawal') {
-                        withdrawalMarkers.push({ x: c.date, y: navY, amount: Math.abs(v) });
-                    }
-                }
-                const sizeFor = amt => Math.max(4, Math.min(14, Math.sqrt(amt) / 3));
-
-                // Current HWM = most recent non-null high_water_mark_usd. Plot
-                // as a flat horizontal gold dashed line across the full chart
-                // range so the customer can see how today's NAV compares to
-                // the level above which performance fees would accrue.
-                let currentHwm = null;
-                for (let i = daily.length - 1; i >= 0; i--) {
-                    const v = parseFloat(daily[i].high_water_mark_usd ?? 0);
-                    if (v > 0) { currentHwm = v; break; }
-                }
-                const hwmSeries = currentHwm !== null ? daily.map(() => currentHwm) : null;
+                // exposed by lth_pvr.get_customer_performance_data.
+                // The dashed gold line is the *fee threshold* (profit-only HWM +
+                // contributed capital), which the customer's NAV must exceed
+                // before any new performance fee accrues. The HWM-line style
+                // toggle switches between today's flat level and the historical
+                // step trajectory.
+                const t = computeHwmThreshold(daily, perfData.contributions);
+                const style = getHwmStyle();
+                const thrData = style === 'step' ? t.thresholdStep : t.thresholdFlat;
+                const thrLabel = `Fee Threshold (HWM $${t.currentThreshold.toLocaleString('en-US', { maximumFractionDigits: 0 })})`;
 
                 datasets = [
                     { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
                     { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
                     { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
                     { label: 'Cost Basis', data: daily.map(d => d.cost_basis_usd ?? 0), borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
-                    ...(hwmSeries ? [{
-                        label: `High-Water Mark ($${currentHwm.toLocaleString('en-US',{maximumFractionDigits:0})})`,
-                        data: hwmSeries,
+                    ...(t.currentThreshold > 0 ? [{
+                        label: thrLabel,
+                        data: thrData,
                         borderColor: PERF_COLORS.lthPvr,
                         backgroundColor: 'transparent',
                         borderWidth: 1.5,
@@ -3195,21 +3347,98 @@
                         pointHoverRadius: 0,
                         fill: false,
                         tension: 0,
+                        stepped: style === 'step' ? 'after' : false,
                         spanGaps: true
                     }] : []),
+                    ...flowMarkerDatasets(daily)
+                ];
+            } else if (sub === 'hwm') {
+                // ─── NAV vs High-Water Mark (Option B) ───
+                // Benchmarks stripped away; just NAV vs the fee threshold. NAV is
+                // segment-coloured green when at/above the threshold and amber
+                // below, with a shaded gap between the two. The HWM-line style
+                // toggle switches between today's flat level and the step history.
+                const t = computeHwmThreshold(daily, perfData.contributions);
+                const style = getHwmStyle();
+                const thrData = style === 'step' ? t.thresholdStep : t.thresholdFlat;
+                const navData = daily.map(d => parseFloat(d.nav_usd || 0));
+                const thrLabel = `Fee Threshold (HWM $${t.currentThreshold.toLocaleString('en-US', { maximumFractionDigits: 0 })})`;
+
+                datasets = [
                     {
-                        label: 'Deposit', type: 'scatter',
-                        data: depositMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
-                        backgroundColor: 'rgba(16,185,129,0.85)', borderColor: PERF_COLORS.buy, borderWidth: 1,
-                        pointStyle: 'triangle', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
-                        showLine: false
+                        label: thrLabel,
+                        data: thrData,
+                        borderColor: PERF_COLORS.lthPvr,
+                        borderWidth: 2,
+                        borderDash: [8,4],
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        stepped: style === 'step' ? 'after' : false,
+                        spanGaps: true
                     },
                     {
-                        label: 'Withdrawal', type: 'scatter',
-                        data: withdrawalMarkers.map(m => ({ x: m.x, y: m.y, r: sizeFor(m.amount), _amt: m.amount })),
-                        backgroundColor: 'rgba(239,68,68,0.85)', borderColor: PERF_COLORS.sell, borderWidth: 1,
-                        pointStyle: 'rectRot', pointRadius: ctx2 => ctx2.raw?.r ?? 6, pointHoverRadius: ctx2 => (ctx2.raw?.r ?? 6) + 2,
-                        showLine: false
+                        label: 'NAV',
+                        data: navData,
+                        borderColor: '#94a3b8',
+                        borderWidth: 2.5,
+                        pointRadius: daily.length <= 5 ? 4 : 0,
+                        tension: 0.3,
+                        segment: { borderColor: ctx2 => (navData[ctx2.p0DataIndex] >= thrData[ctx2.p0DataIndex] ? PERF_COLORS.navGreen : '#f59e0b') },
+                        fill: { target: 0 },
+                        backgroundColor: ctx2 => {
+                            const i = ctx2.p0DataIndex ?? ctx2.dataIndex ?? 0;
+                            return navData[i] >= thrData[i] ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.10)';
+                        }
+                    },
+                    ...flowMarkerDatasets(daily)
+                ];
+            } else if (sub === 'profit') {
+                // ─── Profit vs High-Water Mark (Option C) ───
+                // Normalise away contributed capital: plot profit (NAV − cost
+                // basis) against the profit-only HWM and a breakeven baseline.
+                // The units toggle switches between dollars and percent.
+                const t = computeHwmThreshold(daily, perfData.contributions);
+                const mode = getProfitMode();
+                const navData = daily.map(d => parseFloat(d.nav_usd || 0));
+                if (mode === 'pct') {
+                    const profitPct = daily.map((_, i) => t.cumContrib[i] > 0 ? +(((navData[i] - t.cumContrib[i]) / t.cumContrib[i]) * 100).toFixed(2) : 0);
+                    const hwmPct    = daily.map((_, i) => t.cumContrib[i] > 0 ? +((t.hwmProfit[i] / t.cumContrib[i]) * 100).toFixed(2) : 0);
+                    datasets = [
+                        { label: 'Profit %', data: profitPct, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.10)', fill: true, borderWidth: 2.2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 },
+                        { label: 'High-Water Mark', data: hwmPct, borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: 'Breakeven', data: daily.map(() => 0), borderColor: '#64748b', borderWidth: 1, borderDash: [2,4], pointRadius: 0 }
+                    ];
+                } else {
+                    const profitAbs = daily.map((_, i) => +(navData[i] - t.cumContrib[i]).toFixed(2));
+                    datasets = [
+                        { label: 'Profit', data: profitAbs, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.10)', fill: true, borderWidth: 2.2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 },
+                        { label: 'High-Water Mark', data: t.hwmProfit.slice(), borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: 'Breakeven', data: daily.map(() => 0), borderColor: '#64748b', borderWidth: 1, borderDash: [2,4], pointRadius: 0 }
+                    ];
+                }
+            } else if (sub === 'headroom') {
+                // ─── Headroom to High-Water Mark (Option D) ───
+                // A single oscillator of NAV − fee threshold around a zero line:
+                // green and shaded above zero (in fee territory), grey below.
+                const t = computeHwmThreshold(daily, perfData.contributions);
+                const navData = daily.map(d => parseFloat(d.nav_usd || 0));
+                const headroom = daily.map((_, i) => +(navData[i] - t.thresholdStep[i]).toFixed(2));
+                datasets = [
+                    {
+                        label: 'NAV − Fee Threshold',
+                        data: headroom,
+                        borderColor: '#94a3b8',
+                        borderWidth: 2,
+                        pointRadius: daily.length <= 5 ? 4 : 0,
+                        tension: 0.3,
+                        segment: { borderColor: ctx2 => (headroom[ctx2.p0DataIndex] >= 0 ? PERF_COLORS.navGreen : '#94a3b8') },
+                        fill: { target: { value: 0 } },
+                        backgroundColor: ctx2 => {
+                            const i = ctx2.p0DataIndex ?? ctx2.dataIndex ?? 0;
+                            return headroom[i] >= 0 ? 'rgba(16,185,129,0.18)' : 'rgba(148,163,184,0.16)';
+                        }
                     }
                 ];
             } else if (sub === 'signals') {
@@ -3244,8 +3473,14 @@
                 ];
             }
 
-            const opts = getCommonChartOptions('NAV (USD)');
-            opts.scales.y.ticks.callback = v => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+            const profitPctMode = (sub === 'profit' && getProfitMode() === 'pct');
+            const yLabel = sub === 'headroom' ? 'NAV − Threshold (USD)'
+                : sub === 'profit' ? (profitPctMode ? 'Profit (%)' : 'Profit (USD)')
+                : 'NAV (USD)';
+            const opts = getCommonChartOptions(yLabel);
+            opts.scales.y.ticks.callback = profitPctMode
+                ? (v => Number(v).toFixed(1) + '%')
+                : (v => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }));
             perfChart = new Chart(ctx, { type: 'line', data: { labels, datasets }, options: opts });
         }
 
