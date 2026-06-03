@@ -368,17 +368,12 @@ Deno.serve(async (req: Request) => {
               const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
               const feeDecimal = amountDecimal.times(platformFeeRate);
               platformFeeBtc = feeDecimal.toFixed(8); // Record fee on ledger entry
-              const accrualBtc = parseFloat(feeDecimal.toFixed(8));
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualBtc} BTC (recorded on ledger, not deducted)`);
-              // Record accrual (non-blocking; best-effort)
-              sb.rpc("accumulate_annual_platform_fee", {
-                p_org_id: org_id,
-                p_customer_id: f.customer_id,
-                p_fee_btc: accrualBtc,
-                p_fee_usdt: 0,
-              }).then(({ error: accrErr }) => {
-                if (accrErr) console.error(`  ⚠️  Failed to accrue annual BTC fee for customer ${f.customer_id}:`, accrErr.message);
-              });
+              // NOTE: the annual accrual (accumulate_annual_platform_fee) is
+              // deliberately DEFERRED to after the ledger insert succeeds — see the
+              // post-insert loop below. Accruing here (before insert) double-counted:
+              // if the bulk insert failed the function returned 500 but the accrual
+              // had already fired, and every retry re-accrued because the ledger row
+              // never persisted. (Fixed 2026-06-03.)
             }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
@@ -400,17 +395,8 @@ Deno.serve(async (req: Request) => {
               const platformFeeRate = feeRateMap.get(f.customer_id) ?? 0.0075;
               const feeDecimal = amountDecimal.times(platformFeeRate);
               platformFeeUsdt = feeDecimal.toFixed(8); // Record fee on ledger entry
-              const accrualUsdt = parseFloat(feeDecimal.toFixed(8));
-              console.log(`  ℹ️  Customer ${f.customer_id} has annual platform fee schedule - accruing ${accrualUsdt} USDT (recorded on ledger, not deducted)`);
-              // Record accrual (non-blocking; best-effort)
-              sb.rpc("accumulate_annual_platform_fee", {
-                p_org_id: org_id,
-                p_customer_id: f.customer_id,
-                p_fee_btc: 0,
-                p_fee_usdt: accrualUsdt,
-              }).then(({ error: accrErr }) => {
-                if (accrErr) console.error(`  ⚠️  Failed to accrue annual USDT fee for customer ${f.customer_id}:`, accrErr.message);
-              });
+              // NOTE: annual accrual deferred to the post-insert loop below to avoid
+              // double-counting on failed-insert retries. (Fixed 2026-06-03.)
             }
           } else {
             // Withdrawal: amount from funding event is NEGATIVE (after v0.6.31 fix), preserve it
@@ -451,6 +437,13 @@ Deno.serve(async (req: Request) => {
           kind: isDeposit ? "topup" : "withdrawal",
           amount_btc: amountBtc,
           amount_usdt: amountUsdt,
+          // Explicit 0 (not omitted): PostgREST bulk-insert unions the key sets
+          // of all rows and writes NULL — NOT the column DEFAULT — for any row
+          // missing a key. When this batch also contains ZAR funding rows (which
+          // set amount_zar), omitting it here makes the USDT/BTC rows insert NULL
+          // and violates the amount_zar NOT NULL constraint, failing the whole
+          // batch. Keep this in sync with the ZAR branch's key set.
+          amount_zar: 0,
           // VALR exchange fees from conversion metadata (API-model customers).
           // Accept legacy keys (exchange_fee_asset/exchange_fee from ef_deposit_scan)
           // AND newer keys (conversion_fee_asset/conversion_fee_amount from
@@ -518,18 +511,33 @@ Deno.serve(async (req: Request) => {
           // and the prior bug (null from_subaccount_id) would still trigger.
           const customerSchedule = feeScheduleMap.get(customerId) ?? "immediate";
           if (customerSchedule !== "immediate") {
-            // Non-immediate (annual) customers: the platform fee is already
-            // recorded on the ledger row AND accrued into
-            // lth_pvr.annual_fee_accrual (via accumulate_annual_platform_fee in
-            // the funding loop above), which is the SOLE system of record for
-            // annual billing — settled at the anniversary by ef_collect_annual_fees.
+            // Non-immediate (annual) customers: the platform fee is recorded on the
+            // ledger row AND accrued into lth_pvr.annual_fee_accrual, the SOLE system
+            // of record for annual billing — settled at the anniversary by
+            // ef_collect_annual_fees.
+            //
+            // CRITICAL: accrue HERE (after the insert succeeded), keyed on the
+            // actually-persisted ledger row, and ONLY when the fee is non-zero.
+            // Accruing in the funding loop BEFORE the insert double-counted on every
+            // failed-insert retry (e.g. the 2026-06-03 amount_zar NOT NULL failure
+            // inflated customer 49 from $315.54 to $1,504.08). Fixed 2026-06-03.
             //
             // We must NOT also write to customer_accumulated_fees: that table is
-            // drained MONTHLY by ef_transfer_accumulated_fees and would collect
-            // the same fee a second time (double-billing). Fixed 2026-06-01.
-            console.log(
-              `[ef_post_ledger_and_balances] Customer ${customerId} (schedule=${customerSchedule}) — fee accrued to annual_fee_accrual; skipping customer_accumulated_fees (no double-count).`,
-            );
+            // drained MONTHLY by ef_transfer_accumulated_fees and would collect the
+            // same fee a second time (double-billing). Fixed 2026-06-01.
+            if (feeBtc > 0 || feeUsdt > 0) {
+              const { error: accrErr } = await sb.rpc("accumulate_annual_platform_fee", {
+                p_org_id: org_id,
+                p_customer_id: customerId,
+                p_fee_btc: feeBtc,
+                p_fee_usdt: feeUsdt,
+              });
+              if (accrErr) {
+                console.error(`  ⚠️  Failed to accrue annual fee for customer ${customerId}:`, accrErr.message);
+              } else {
+                console.log(`[ef_post_ledger_and_balances] Customer ${customerId} (schedule=${customerSchedule}) — accrued platform fee btc=${feeBtc} usdt=${feeUsdt} to annual_fee_accrual (post-insert).`);
+              }
+            }
             continue;  // skip immediate-transfer path
           }
 
