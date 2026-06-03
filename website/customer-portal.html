@@ -3531,7 +3531,7 @@
                 { label: 'NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.navGreen, borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
                 { label: 'Contributions', data: daily.map(d => d.contrib_cum_usd), borderColor: PERF_COLORS.contributions, borderWidth: 2, pointRadius: 0, tension: 0.3 },
                 { label: 'BTC Balance', data: daily.map(d => d.btc_balance || 0), borderColor: PERF_COLORS.btcHolding, backgroundColor: 'transparent', yAxisID: 'yBtc', borderWidth: 2, pointRadius: 0, tension: 0.3 },
-                { label: 'USDT Balance', data: daily.map(d => d.usdt_balance || 0), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
+                { label: 'USDT + USDPC (USD)', data: daily.map(d => (parseFloat(d.usdt_balance || 0)) + (parseFloat(d.usdpc_balance || 0) * parseFloat(d.usdpc_price_usd || 0))), borderColor: PERF_COLORS.usdtHolding, backgroundColor: 'rgba(59,130,246,0.06)', fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
             ];
 
             const btcFmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 8, maximumFractionDigits: 8 });
@@ -3604,10 +3604,11 @@
                     return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${fmtPct(lthRoi)}</td><td style="${valStyle}">${fmtPct(stdRoi)}</td><td style="${valStyle}">${fmtPct(hodlRoi)}</td><td style="${valStyle}color:${alphaColor};">${fmtPct(alpha)}</td></tr>`;
                 }).join('');
             } else if (chartType === 'holdings') {
-                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">BTC Held</th><th style="${headStyle}text-align:right;">USDT Held</th><th style="${headStyle}text-align:right;">BTC Price</th><th style="${headStyle}text-align:right;">NAV</th><th style="${headStyle}text-align:right;">Contributions</th></tr>`;
+                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">BTC Held</th><th style="${headStyle}text-align:right;">USDT + USDPC (USD)</th><th style="${headStyle}text-align:right;">BTC Price</th><th style="${headStyle}text-align:right;">NAV</th><th style="${headStyle}text-align:right;">Contributions</th></tr>`;
                 tbody.innerHTML = groups.map(g => {
                     const last = g.rows[g.rows.length-1];
-                    return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${Number(last?.btc_balance||0).toFixed(8)}</td><td style="${valStyle}">$${fmtNum(last?.usdt_balance||0)}</td><td style="${valStyle}">$${fmtNum(last?.btc_price||0)}</td><td style="${valStyle}">$${fmtNum(last?.nav_usd||0)}</td><td style="${valStyle}">$${fmtNum(last?.contrib_cum_usd||0)}</td></tr>`;
+                    const cashUsd = parseFloat(last?.usdt_balance || 0) + parseFloat(last?.usdpc_balance || 0) * parseFloat(last?.usdpc_price_usd || 0);
+                    return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">${Number(last?.btc_balance||0).toFixed(8)}</td><td style="${valStyle}">$${fmtNum(cashUsd)}</td><td style="${valStyle}">$${fmtNum(last?.btc_price||0)}</td><td style="${valStyle}">$${fmtNum(last?.nav_usd||0)}</td><td style="${valStyle}">$${fmtNum(last?.contrib_cum_usd||0)}</td></tr>`;
                 }).join('');
             }
         }
