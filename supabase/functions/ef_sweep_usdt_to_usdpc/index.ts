@@ -18,10 +18,19 @@ import { getServiceClient, yyyymmdd } from "./client.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { loadUsdpcConfig, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req: Request) => {
+  // Allow the Admin UI to invoke the forced single-customer sweep from the browser.
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
-  if (!org_id) return new Response("ORG_ID missing", { status: 500 });
+  if (!org_id) return new Response("ORG_ID missing", { status: 500, headers: CORS });
 
   // Optional request body:
   //   { customer_id?: number, force?: boolean }
@@ -67,11 +76,13 @@ Deno.serve(async (req: Request) => {
 
   if (csErr) {
     console.error("customer_strategies query failed", csErr);
-    return new Response(csErr.message, { status: 500 });
+    return new Response(csErr.message, { status: 500, headers: CORS });
   }
   const enabledIds = Array.from(new Set((csRows ?? []).map((r: any) => Number(r.customer_id))));
   if (enabledIds.length === 0) {
-    return new Response("ok - no usdpc-enabled customers");
+    return new Response(JSON.stringify({ success: true, created: 0, skipped: 0, target_customer_id: targetCustomerId, force }), {
+      headers: { "Content-Type": "application/json", ...CORS },
+    });
   }
 
   // Single org-level exchange account (mirrors ef_create_order_intents).
@@ -83,7 +94,7 @@ Deno.serve(async (req: Request) => {
     .single();
   if (exchErr || !exchAcct) {
     console.error("No exchange account for org", exchErr);
-    return new Response("no exchange account", { status: 500 });
+    return new Response("no exchange account", { status: 500, headers: CORS });
   }
 
   let created = 0;
@@ -165,6 +176,6 @@ Deno.serve(async (req: Request) => {
 
   console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}`);
   return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force }), {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 });
