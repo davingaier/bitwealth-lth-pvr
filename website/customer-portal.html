@@ -320,10 +320,10 @@
                                 <div id="perfHwmStyle" style="display: none; gap: 8px; align-items: center;">
                                     <span style="font-size: 12px; color: var(--text-secondary);">HWM line:</span>
                                     <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
-                                        <input type="radio" name="hwmStyle" value="flat" checked onchange="updatePerfChart()" style="accent-color: var(--gold);"> Current (flat)
+                                        <input type="radio" name="hwmStyle" value="flat" onchange="updatePerfChart()" style="accent-color: var(--gold);"> Current (flat)
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); cursor: pointer;">
-                                        <input type="radio" name="hwmStyle" value="step" onchange="updatePerfChart()" style="accent-color: var(--gold);"> Step (historical)
+                                        <input type="radio" name="hwmStyle" value="step" checked onchange="updatePerfChart()" style="accent-color: var(--gold);"> Step (historical)
                                     </label>
                                 </div>
                                 <!-- Profit units toggle (option C) -->
@@ -3122,7 +3122,7 @@
             if (profitMode) profitMode.style.display = (isNav && sub === 'profit') ? 'flex' : 'none';
         }
 
-        function getHwmStyle()   { const el = document.querySelector('input[name="hwmStyle"]:checked');   return el ? el.value : 'flat'; }
+        function getHwmStyle()   { const el = document.querySelector('input[name="hwmStyle"]:checked');   return el ? el.value : 'step'; }
         function getProfitMode() { const el = document.querySelector('input[name="profitMode"]:checked'); return el ? el.value : 'abs'; }
 
         function getCommonChartOptions(yLabel) {
@@ -3179,7 +3179,14 @@
 
             const labels = perfData.daily.map(d => d.date);
             const ctx = document.getElementById('perfChart').getContext('2d');
-            document.getElementById('perfChart').parentElement.style.height = '500px';
+
+            // Show/position the at-a-glance gauge first so we can reserve room
+            // for it; otherwise the fixed-height canvas overflows into the
+            // metrics table below.
+            updateHwmGauge();
+            const gauge = document.getElementById('perfHwmGauge');
+            const gaugeExtra = (gauge && gauge.style.display !== 'none') ? gauge.offsetHeight + 18 : 0;
+            document.getElementById('perfChart').parentElement.style.height = (500 + gaugeExtra) + 'px';
 
             if (type === 'nav') {
                 buildNavChart(ctx, labels);
@@ -3189,7 +3196,6 @@
                 buildHoldingsChart(ctx, labels);
             }
             updatePerfMetricsTable();
-            updateHwmGauge();
         }
 
         // ─── High-Water Mark helpers ─────────────────────────────────────────

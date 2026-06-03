@@ -1341,6 +1341,26 @@ Deno.serve(async (req: Request) => {
           } catch (hodlErr) {
             console.error("Error recomputing hodl_balances_daily", { dateStr, customer_id, hodlErr });
           }
+
+          // ── Std DCA benchmark: keep in lock-step with HODL ──
+          // recompute_std_dca_balances() ingests the latest topups/withdrawals
+          // from ledger_lines and rebuilds the full series (DELETE + re-INSERT,
+          // idempotent). Without this, an intraday deposit refreshes
+          // balances_daily.cost_basis_usd + HODL here but leaves Std DCA stale
+          // until the next carry_forward_daily_balances() run, making the
+          // portal's Std DCA NAV/ROI understate the benchmark for the rest of
+          // the day. See SDD v0.6 (Std DCA intraday staleness fix).
+          try {
+            const { error: stdErr } = await sb.rpc("recompute_std_dca_balances", {
+              p_customer_id: customer_id,
+              p_org_id: org_id,
+            });
+            if (stdErr) {
+              console.error("Error recomputing std_dca_balances_daily", { dateStr, customer_id, stdErr });
+            }
+          } catch (stdErr) {
+            console.error("Error recomputing std_dca_balances_daily", { dateStr, customer_id, stdErr });
+          }
         }
       }
     }
