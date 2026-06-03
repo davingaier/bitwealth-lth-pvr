@@ -1212,7 +1212,7 @@ Deno.serve(async (req: Request) => {
           // previous balance
           const { data: prevRows, error: prevErr } = await sb
             .from("balances_daily")
-            .select("btc_balance, usdt_balance, zar_balance, usdpc_balance")
+            .select("btc_balance, usdt_balance, zar_balance, usdpc_balance, cost_basis_usd")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .lt("date", dateStr)
@@ -1232,12 +1232,12 @@ Deno.serve(async (req: Request) => {
           }
 
           const prev =
-            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number, zar_balance: 0 as number, usdpc_balance: 0 as number };
+            prevRows?.[0] ?? { btc_balance: 0 as number, usdt_balance: 0 as number, zar_balance: 0 as number, usdpc_balance: 0 as number, cost_basis_usd: 0 as number };
 
           // today deltas (including fees)
           const { data: sums, error: sumsErr } = await sb
             .from("ledger_lines")
-            .select("amount_btc, amount_usdt, amount_zar, amount_usdpc, fee_btc, fee_usdt, fee_usdpc")
+            .select("kind, amount_btc, amount_usdt, amount_zar, amount_usdpc, fee_btc, fee_usdt, fee_usdpc")
             .eq("org_id", org_id)
             .eq("customer_id", customer_id)
             .eq("trade_date", dateStr);
@@ -1260,7 +1260,12 @@ Deno.serve(async (req: Request) => {
             dUsdpc = 0,
             fBtc = 0,
             fUsdt = 0,
-            fUsdpc = 0;
+            fUsdpc = 0,
+            // Net contribution (USD) today: +topup deposits, -withdrawals.
+            // Drives cost_basis_usd. Only fiat/crypto funding legs use kind
+            // topup/withdrawal; convert/trade legs are excluded so internal
+            // ZAR→USDT→USDPC moves never inflate cost basis.
+            dContribUsd = 0;
 
           for (const s of (sums ?? []) as any[]) {
             dBtc += Number(s.amount_btc ?? 0);
@@ -1270,12 +1275,19 @@ Deno.serve(async (req: Request) => {
             fBtc += Number(s.fee_btc ?? 0);
             fUsdt += Number(s.fee_usdt ?? 0);
             fUsdpc += Number(s.fee_usdpc ?? 0);
+            const k = String(s.kind ?? "").toLowerCase();
+            if (k === "topup" || k === "deposit") dContribUsd += Number(s.amount_usdt ?? 0);
+            else if (k === "withdrawal" || k === "withdraw") dContribUsd -= Math.abs(Number(s.amount_usdt ?? 0));
           }
 
           const btc = Number(prev.btc_balance ?? 0) + dBtc - fBtc;
           const usdt = Number(prev.usdt_balance ?? 0) + dUsdt - fUsdt;
           const usdpc = Number(prev.usdpc_balance ?? 0) + dUsdpc - fUsdpc;
           const zar = Number(prev.zar_balance ?? 0) + dZar;
+          // Cumulative net contributions (floored at 0). Carried forward from the
+          // prior balance row + today's net contribution. Matches the one-time
+          // backfill in 20260602_usdpc_carry_forward_daily_balances.sql.
+          const costBasis = Math.max(0, Number((prev as any).cost_basis_usd ?? 0) + dContribUsd);
           // ZAR is tracked separately from nav_usd to avoid needing a daily USDT/ZAR rate.
           // Reporting layers can convert ZAR → USD on demand if a unified NAV is required.
           const nav = btc * px + usdt + usdpc * usdpcPx;
@@ -1291,6 +1303,7 @@ Deno.serve(async (req: Request) => {
               usdpc_price_usd: usdpcPx,
               zar_balance: zar,
               nav_usd: nav,
+              cost_basis_usd: costBasis,
               band_source: bandSource,
             },
             { onConflict: "org_id,customer_id,date" },
