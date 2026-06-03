@@ -5083,20 +5083,41 @@
 
       <!-- Pipeline Control Panel — MOVED to Customer Transactions tab (merged into Live Customer Transactions card) -->
 
-      <!-- Pending ZAR Conversions Panel -->
+      <!-- Pending Conversions Panel -->
       <div class="card" id="pendingZarCard">
-        <h3>⏳ Pending ZAR Conversions</h3>
-        <p class="small-muted">ZAR deposits awaiting conversion to USDT. Auto-syncs every 30 minutes to detect conversions.</p>
-        
+        <h3>⏳ Pending Conversions</h3>
+        <p class="small-muted">Customer cash awaiting conversion. Auto-syncs every 30 minutes. Two stages: ZAR deposits → USDT, then idle USDT → USDPC yield (for USDPC-enabled customers).</p>
+
+        <!-- Section 1: ZAR → USDT -->
+        <div style="margin-bottom:.5rem;">
+          <h4 style="margin:.25rem 0;font-size:1rem;">1) Pending ZAR → USDT Conversions</h4>
+          <p class="small-muted" style="margin:.1rem 0 .6rem;">ZAR deposits awaiting conversion to USDT.</p>
+        </div>
         <div id="zarConversionsContainer" style="margin-bottom:1rem;">
           <div id="zarConversionsList" style="display:grid;gap:.75rem;">
             <!-- Populated dynamically -->
           </div>
         </div>
-        
-        <div style="display:flex;gap:.75rem;align-items:center;">
+
+        <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:1.25rem;">
           <button id="zarSyncNowBtn" type="button" class="btn btn-secondary-sm">🔄 Sync Now</button>
           <span id="zarRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
+        </div>
+
+        <!-- Section 2: USDT → USDPC -->
+        <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:1rem;margin-bottom:.5rem;">
+          <h4 style="margin:.25rem 0;font-size:1rem;">2) Pending USDT → USDPC Conversions</h4>
+          <p class="small-muted" style="margin:.1rem 0 .6rem;">USDPC-enabled customers holding idle USDT that should be swept into yield-bearing USDPC.</p>
+        </div>
+        <div id="usdpcConversionsContainer" style="margin-bottom:1rem;">
+          <div id="usdpcConversionsList" style="display:grid;gap:.75rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <div style="display:flex;gap:.75rem;align-items:center;">
+          <button id="usdpcRefreshBtn" type="button" class="btn btn-secondary-sm">🔄 Refresh</button>
+          <span id="usdpcRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
         </div>
       </div>
 
@@ -14058,6 +14079,9 @@
         // Wait for database triggers to process
         setTimeout(() => {
           loadPendingZarConversions();
+          if (typeof window.loadPendingUsdpcConversions === 'function') {
+            window.loadPendingUsdpcConversions();
+          }
         }, 2000);
 
       } catch (err) {
@@ -14090,6 +14114,214 @@
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
             loadPendingZarConversions();
+          }
+        });
+      }
+    }, 5 * 60 * 1000);
+  })();
+
+  // --- Pending USDT → USDPC Conversions (Administration module) ---
+  (() => {
+    const usdpcListEl = document.getElementById('usdpcConversionsList');
+    const usdpcRefreshBtn = document.getElementById('usdpcRefreshBtn');
+    const usdpcRefreshMessage = document.getElementById('usdpcRefreshMessage');
+
+    if (!usdpcListEl || !usdpcRefreshBtn) return;
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadPendingUsdpcConversions() {
+      if (!supabaseClient) {
+        usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
+        return;
+      }
+
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Please sign in to view pending conversions.</div>';
+        return;
+      }
+
+      try {
+        usdpcRefreshMessage.textContent = 'Loading...';
+        usdpcRefreshMessage.style.color = '#6c757d';
+
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('v_pending_usdpc_conversions')
+          .select('*')
+          .order('idle_usdt', { ascending: false });
+
+        if (error) {
+          console.error('Error loading pending USDPC conversions:', error);
+          usdpcListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Error: ${error.message}</div>`;
+          usdpcRefreshMessage.textContent = 'Error loading conversions';
+          usdpcRefreshMessage.style.color = '#dc3545';
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">✅ No pending USDPC conversions</div>';
+          usdpcRefreshMessage.textContent = 'All USDPC sweeps complete';
+          usdpcRefreshMessage.style.color = '#28a745';
+          return;
+        }
+
+        usdpcListEl.innerHTML = data.map(row => {
+          const modelBadge = row.account_model === 'api'
+            ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
+            : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
+
+          // Today's sweep status drives the initial dot. 'executed' means a sweep
+          // already ran today but this customer still holds idle USDT (e.g. funds
+          // arrived after the morning sweep) → needs a fresh forced sweep.
+          const st = row.status_today;
+          let initDotStatus, initDotLabel;
+          if (st === 'error' || st === 'failed') { initDotStatus = 'failed'; initDotLabel = 'Last sweep failed'; }
+          else if (st === 'executed' || st === 'filled') { initDotStatus = 'in_progress'; initDotLabel = 'Idle USDT after sweep'; }
+          else if (st === 'pending' || st === 'open') { initDotStatus = 'in_progress'; initDotLabel = 'Sweep in progress'; }
+          else { initDotStatus = 'not_started'; initDotLabel = 'Awaiting sweep'; }
+
+          const lastAt = row.last_intent_at ? new Date(row.last_intent_at).toLocaleString() : '—';
+          const idle = Number(row.idle_usdt);
+          const usdpcBal = Number(row.usdpc_balance);
+
+          return `
+            <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:500;margin-bottom:.25rem;">
+                  ${escapeHtml(row.first_names)} ${escapeHtml(row.last_name)}${modelBadge}
+                </div>
+                <div style="font-size:.85rem;color:#4b5563;margin-bottom:.25rem;">
+                  <strong>Idle USDT:</strong> <span style="color:#059669;font-weight:600;">$${idle.toFixed(2)}</span>
+                  <span style="margin:0 .5rem;">•</span>
+                  <strong>USDPC held:</strong> ${usdpcBal.toFixed(2)}
+                </div>
+                <div style="font-size:.8rem;color:#6c757d;">
+                  Today: ${row.intents_today || 0} sweep intent${(row.intents_today === 1) ? '' : 's'}${st ? ' (' + escapeHtml(st) + ')' : ''}
+                  · Last: ${lastAt}
+                </div>
+              </div>
+              <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;">
+                <div style="display:flex;align-items:center;gap:.4rem;">
+                  <span class="lp-light lp-light--${initDotStatus}" id="usdpcDot_${row.customer_id}"></span>
+                  <span id="usdpcDotLabel_${row.customer_id}" style="font-size:.72rem;color:#6c757d;white-space:nowrap;">${initDotLabel}</span>
+                </div>
+                <button id="usdpcBtn_${row.customer_id}"
+                        onclick="window.executeUsdpcConversion(${row.customer_id}, '${escapeHtml(row.first_names)}', '${escapeHtml(row.last_name)}')"
+                        style="padding:.4rem .8rem;font-size:.85em;background:#8b5cf6;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
+                  ⚡ Force USDT→USDPC
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        usdpcRefreshMessage.textContent = `${data.length} pending USDPC conversion${data.length === 1 ? '' : 's'}`;
+        usdpcRefreshMessage.style.color = '#6c757d';
+
+      } catch (err) {
+        console.error('Error in loadPendingUsdpcConversions:', err);
+        usdpcListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Unexpected error</div>`;
+        usdpcRefreshMessage.textContent = 'Error';
+        usdpcRefreshMessage.style.color = '#dc3545';
+      }
+    }
+
+    // Force a single-customer USDT→USDPC sweep. Mirrors the resume-pipeline sweep
+    // sequence: sweep (force) → execute → poll → post-ledger. The forced sweep uses
+    // a unique idempotency key server-side so it never collides with the day's
+    // already-executed chunk-indexed sweep intents.
+    window.executeUsdpcConversion = async function(customerId, firstName, lastName) {
+      const btn = document.getElementById(`usdpcBtn_${customerId}`);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Sweeping…'; }
+
+      const setDot = (status, label) => {
+        const dot = document.getElementById(`usdpcDot_${customerId}`);
+        const lbl = document.getElementById(`usdpcDotLabel_${customerId}`);
+        if (dot) dot.className = 'lp-light lp-light--' + status;
+        if (lbl) lbl.textContent = label;
+      };
+      setDot('in_progress', 'Creating sweep…');
+
+      const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const authHeaders = {
+        'Authorization': `Bearer ${session?.access_token || window.SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
+
+      const callEf = async (fn, body) => {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+          method: 'POST', headers: authHeaders, body: JSON.stringify(body || {})
+        });
+        let json = null;
+        try { json = await res.json(); } catch (_e) { /* ignore non-JSON */ }
+        if (!res.ok) throw new Error((json && (json.error || json.message)) || `${fn} failed (${res.status})`);
+        return json;
+      };
+
+      try {
+        usdpcRefreshMessage.textContent = `Forcing USDPC sweep for ${firstName} ${lastName}…`;
+        usdpcRefreshMessage.style.color = '#6c757d';
+
+        const sweep = await callEf('ef_sweep_usdt_to_usdpc', { customer_id: customerId, force: true });
+        if (!sweep || !sweep.created) {
+          // Nothing to sweep (e.g. idle USDT below the minimum at the exchange).
+          setDot('not_started', 'Nothing to sweep');
+          usdpcRefreshMessage.textContent = `No USDPC sweep created for ${firstName} ${lastName}`;
+          usdpcRefreshMessage.style.color = '#6c757d';
+          if (btn) { btn.disabled = false; btn.textContent = '⚡ Force USDT→USDPC'; }
+          return;
+        }
+
+        setDot('in_progress', 'Placing order…');
+        await callEf('ef_execute_orders', {});
+        setDot('in_progress', 'Confirming fill…');
+        await callEf('ef_poll_orders', {});
+        await callEf('ef_post_ledger_and_balances', {});
+
+        setDot('complete', 'Swept to USDPC');
+        usdpcRefreshMessage.textContent = `✅ USDPC sweep complete for ${firstName} ${lastName}`;
+        usdpcRefreshMessage.style.color = '#28a745';
+        setTimeout(() => loadPendingUsdpcConversions(), 1800);
+      } catch (err) {
+        console.error('executeUsdpcConversion error:', err);
+        setDot('failed', 'Failed');
+        usdpcRefreshMessage.textContent = `❌ ${err.message}`;
+        usdpcRefreshMessage.style.color = '#dc3545';
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ Force USDT→USDPC'; }
+      }
+    };
+
+    usdpcRefreshBtn.addEventListener('click', loadPendingUsdpcConversions);
+
+    // Expose for external calls (e.g. the ZAR Sync Now button refreshes both).
+    window.loadPendingUsdpcConversions = loadPendingUsdpcConversions;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPendingUsdpcConversions();
+          }
+        });
+      }
+    });
+
+    setInterval(() => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            loadPendingUsdpcConversions();
           }
         });
       }

@@ -18,22 +18,52 @@ import { getServiceClient, yyyymmdd } from "./client.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { loadUsdpcConfig, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
 
-Deno.serve(async () => {
+Deno.serve(async (req: Request) => {
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
   if (!org_id) return new Response("ORG_ID missing", { status: 500 });
+
+  // Optional request body:
+  //   { customer_id?: number, force?: boolean }
+  // - customer_id: restrict the sweep to a single customer (admin "force" action
+  //   from the Pending Conversions card). Omitted → the normal daily all-customer
+  //   sweep run by the pipeline orchestrator.
+  // - force: when true, the idempotency key is made unique per invocation so a
+  //   fresh sweep intent is created even if the customer already swept today.
+  //   This is required for the manual force-convert button: a customer (e.g. one
+  //   who converted ZAR→USDT after the morning sweep ran) has already-executed
+  //   sweep intents under today's deterministic keys; without force we would
+  //   upsert-collide onto those executed rows. force is ONLY honoured together
+  //   with an explicit customer_id to keep the daily run fully idempotent.
+  let targetCustomerId: number | null = null;
+  let force = false;
+  try {
+    if (req.headers.get("content-type")?.includes("application/json")) {
+      const body = await req.json().catch(() => null);
+      if (body && typeof body === "object") {
+        if (body.customer_id != null && Number.isFinite(Number(body.customer_id))) {
+          targetCustomerId = Number(body.customer_id);
+        }
+        if (body.force === true) force = true;
+      }
+    }
+  } catch (_e) { /* ignore — treat as the default daily run */ }
+  // Guard: force only applies to a single explicitly-targeted customer.
+  if (force && targetCustomerId == null) force = false;
 
   const todayStr = yyyymmdd(new Date());
   const cfg = await loadUsdpcConfig(sb);
 
   // Enabled customers for the LTH_PVR strategy.
-  const { data: csRows, error: csErr } = await sb
+  let csQuery = sb
     .schema("public")
     .from("customer_strategies")
     .select("customer_id")
     .eq("org_id", org_id)
     .eq("strategy_code", "LTH_PVR")
     .eq("usdpc_enabled", true);
+  if (targetCustomerId != null) csQuery = csQuery.eq("customer_id", targetCustomerId);
+  const { data: csRows, error: csErr } = await csQuery;
 
   if (csErr) {
     console.error("customer_strategies query failed", csErr);
@@ -87,11 +117,15 @@ Deno.serve(async () => {
       // VALR caps a single USDPC BUY at ~10 000 USDT (quote). Split larger
       // sweeps into multiple intents, each its own market order.
       const chunks = splitConversionAmount(sweepUsdt, cfg.maxQuoteUsdt, 2);
+      // A forced manual sweep gets a unique key suffix so it never upsert-collides
+      // with the customer's already-executed daily sweep intents (same
+      // org/customer/date/chunk). The daily run keeps the deterministic key.
+      const forceTag = force ? `|FORCE|${Date.now()}` : "";
       let chunkErr = false;
       for (let ci = 0; ci < chunks.length; ci++) {
         const chunkUsdt = chunks[ci];
         if (!(chunkUsdt > 0)) continue;
-        const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP", String(ci)].join("|");
+        const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP", String(ci) + forceTag].join("|");
         const keyHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyParts));
         const idKey = Array.from(new Uint8Array(keyHash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -130,7 +164,7 @@ Deno.serve(async () => {
   }
 
   console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}`);
-  return new Response(JSON.stringify({ success: true, created, skipped }), {
+  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force }), {
     headers: { "Content-Type": "application/json" },
   });
 });
