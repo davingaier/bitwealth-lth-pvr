@@ -13924,7 +13924,15 @@
             : conv.conversion_status === 'pending'
             ? '<span style="background:#6c757d;color:#fff;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PENDING</span>'
             : '';
-          
+
+          // Status dot reflecting the conversion trade state (same lights as the
+          // Live Customer Transactions card). Initial state derives from the view:
+          // a partially-filled conversion is shown as in_progress, otherwise the
+          // deposit is awaiting conversion (not_started). The dot is updated live
+          // by executeZarConversion when the admin clicks Convert.
+          const initDotStatus = conv.conversion_status === 'partial' ? 'in_progress' : 'not_started';
+          const initDotLabel = conv.conversion_status === 'partial' ? 'Partially converted' : 'Awaiting conversion';
+
           return `
             <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
               <div style="flex:1;min-width:0;">
@@ -13942,7 +13950,11 @@
                   · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
                 </div>
               </div>
-              <div style="flex-shrink:0;">
+              <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;">
+                <div style="display:flex;align-items:center;gap:.4rem;">
+                  <span class="lp-light lp-light--${initDotStatus}" id="zarDot_${conv.id}"></span>
+                  <span id="zarDotLabel_${conv.id}" style="font-size:.72rem;color:#6c757d;white-space:nowrap;">${initDotLabel}</span>
+                </div>
                 <button id="convertBtn_${conv.id}"
                         onclick="window.executeZarConversion('${conv.id}', '${escapeHtml(conv.first_names)}', '${escapeHtml(conv.last_name)}')"
                         style="padding:.4rem .8rem;font-size:.85em;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
@@ -13969,6 +13981,15 @@
       const btn = document.getElementById(`convertBtn_${conversionId}`);
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing order…'; }
 
+      // Drive the row status dot (same lights as Live Customer Transactions).
+      const setZarDot = (status, label) => {
+        const dot = document.getElementById(`zarDot_${conversionId}`);
+        const lbl = document.getElementById(`zarDotLabel_${conversionId}`);
+        if (dot) dot.className = 'lp-light lp-light--' + status;
+        if (lbl) lbl.textContent = label;
+      };
+      setZarDot('in_progress', 'Placing order…');
+
       try {
         zarRefreshMessage.textContent = `Converting for ${firstName} ${lastName}…`;
         zarRefreshMessage.style.color = '#6c757d';
@@ -13987,17 +14008,20 @@
         const result = await response.json();
 
         if (response.ok && result.success) {
+          setZarDot('complete', 'Converted');
           zarRefreshMessage.textContent = `✅ Conversion complete for ${firstName} ${lastName}`;
           zarRefreshMessage.style.color = '#28a745';
           setTimeout(() => loadPendingZarConversions(), 1500);
         } else {
           const errMsg = result.error || result.message || 'Unknown error';
+          setZarDot('failed', 'Failed');
           zarRefreshMessage.textContent = `❌ Conversion failed: ${errMsg}`;
           zarRefreshMessage.style.color = '#dc3545';
           if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }
         }
       } catch (err) {
         console.error('executeZarConversion error:', err);
+        setZarDot('failed', 'Failed');
         zarRefreshMessage.textContent = `Error: ${err.message}`;
         zarRefreshMessage.style.color = '#dc3545';
         if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }

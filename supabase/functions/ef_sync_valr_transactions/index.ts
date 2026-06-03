@@ -1059,6 +1059,47 @@ Deno.serve(async (req) => {
                   console.error(`  Error sending deposit email:`, emailError);
                 }
               }
+
+              // Admin notification for SUBSEQUENT deposits. The first/activation
+              // deposit's admin alert is sent by ef_deposit_scan; once a customer is
+              // active their later deposits are detected here, so notify the admin
+              // with the same funds_deposited_admin_notification template. Guarded by
+              // the same active + non-conversion conditions as the customer email so
+              // we never double-alert on the first deposit or on internal conversion
+              // proceeds.
+              if (isDeposit && customer.customer_status?.toLowerCase() === "active" && !isConversionProceeds) {
+                try {
+                  const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
+
+                  const adminEmailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${supabaseKey}`,
+                    },
+                    body: JSON.stringify({
+                      template_key: "funds_deposited_admin_notification",
+                      to_email: adminEmail,
+                      data: {
+                        first_name: customer.first_names,
+                        last_name: customer.last_name ?? "",
+                        customer_id: customer.customer_id,
+                        email: customer.email,
+                        balances: `${currency}: ${Math.abs(amount).toFixed(8)}`,
+                        to_email: adminEmail,
+                      },
+                    }),
+                  });
+
+                  if (adminEmailResponse.ok) {
+                    console.log(`  📧 Sent admin deposit notification to ${adminEmail}`);
+                  } else {
+                    console.error(`  Failed to send admin deposit email: ${await adminEmailResponse.text()}`);
+                  }
+                } catch (adminEmailError) {
+                  console.error(`  Error sending admin deposit email:`, adminEmailError);
+                }
+              }
             }
 
           } catch (txError) {
