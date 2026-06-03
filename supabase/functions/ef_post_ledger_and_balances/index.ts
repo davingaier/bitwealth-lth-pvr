@@ -15,6 +15,7 @@ type FillRow = {
   intent_side?: string | null;
   fill_qty?: number | string | null;
   fill_price?: number | string | null;
+  fill_raw?: Record<string, unknown> | null;
   fee_asset?: string | null;
   fee_qty?: number | string | null;
   intent_id?: string | null;
@@ -118,7 +119,7 @@ Deno.serve(async (req: Request) => {
       .from("v_fills_with_customer")
       .select(
         "fill_id, exchange_order_id, customer_id, trade_date, " +
-        "order_side, intent_side, fill_qty, fill_price, " +
+        "order_side, intent_side, fill_qty, fill_price, fill_raw, " +
         "fee_asset, fee_qty, intent_id, base_asset, quote_asset",
       )
       .eq("org_id", org_id)
@@ -192,7 +193,13 @@ Deno.serve(async (req: Request) => {
         if (isUsdpc) {
           const isBuyUsdpc = side === "BUY"; // buying USDPC with USDT
           const amountUsdpc = isBuyUsdpc ? qty : -qty;     // USDPC delta
-          const amountUsdtConv = isBuyUsdpc ? -notional : notional; // USDT delta
+          // USDT moved = the exact quote VALR settled ("total"), NOT qty*price.
+          // USDPC prices sit near 1.15, so deriving USDT from a rounded price
+          // over/under-states the spend and can overdraw the USDT balance.
+          // Fall back to qty*price only if the raw total is unavailable.
+          const rawTotal = Number((raw.fill_raw as any)?.total ?? 0);
+          const usdtMoved = rawTotal > 0 ? rawTotal : notional;
+          const amountUsdtConv = isBuyUsdpc ? -usdtMoved : usdtMoved; // USDT delta
           const feeUsdpcC = feeAsset === "USDPC" ? feeQty : 0;
           const feeUsdtC = feeAsset === "USDT" ? feeQty : 0;
           toInsert.push({
