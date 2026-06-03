@@ -510,6 +510,18 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const hwmUsd = Number(hwmRow?.high_water_mark_usd ?? 0);
   const hwmContribCum = Number(hwmRow?.hwm_contrib_net_cum ?? 0);
 
+  // ── Fee threshold (the figure shown as "High-water mark" on the statement) ──
+  // high_water_mark_usd is the *profit-only* baseline (max(0, NAV − net
+  // contributions)), which only ratchets when a performance fee is actually
+  // charged. For a never-profited customer it is $0, so the bare value is
+  // meaningless on its own. The figure customers care about is the level their
+  // NAV must exceed before any new performance fee accrues:
+  //   threshold = HWM + contributions_since_HWM
+  //   contributions_since_HWM = max(0, cum_net_contrib_to_date − hwm_contrib_net_cum)
+  // This matches the Customer Portal's "Fee Threshold (HWM)" line.
+  const contribsSinceHwm = Math.max(0, costBasisUsd - hwmContribCum);
+  const hwmThreshold = hwmUsd + contribsSinceHwm;
+
   // ── Annual accrual lookup (if either fee is on annual schedule) ──
   if (platSchedule === "annual" || perfSchedule === "annual") {
     const { data: accrualRows } = await supabase
@@ -539,8 +551,6 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
       //   gain_above_hwm = max(0, closingNav - HWM - contributions_since_HWM)
       //   contributions_since_HWM = cum_net_contrib_to_date - hwm_contrib_net_cum
       // This prevents deposits from being treated as performance (issue #4).
-      const contribsSinceHwm = Math.max(0, costBasisUsd - hwmContribCum);
-      const hwmThreshold = hwmUsd + contribsSinceHwm;
       const interimMonthlyPerfUsd = Math.max(0, closingNav - hwmThreshold) * perfRate;
       if (interimMonthlyPerfUsd > 0) {
         accruedFees.push({
@@ -671,7 +681,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     platform_fee_label: `${(platRate * 100).toFixed(2)} % · ${platSchedule}`,
     performance_fee_label: `${(perfRate * 100).toFixed(2)} % · ${perfSchedule} (HWM)`,
     next_anniversary_label: nextBillingDateLabel,
-    hwm_usd: hwmUsd > 0 ? fmtUsd(hwmUsd) : "—",
+    hwm_usd: hwmThreshold > 0 ? fmtUsd(hwmThreshold) : "—",
   };
 
   return { data, filename, storagePath, statementMonth };

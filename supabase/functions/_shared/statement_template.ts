@@ -469,7 +469,7 @@ export function renderStatementHtml(d: StatementData): string {
       <tr><td class="k">Platform fee</td><td class="v">${e(d.platform_fee_label)}</td></tr>
       <tr><td class="k">Performance fee</td><td class="v">${e(d.performance_fee_label)}</td></tr>
       <tr><td class="k">Next fee anniversary</td><td class="v">${e(d.next_anniversary_label)}</td></tr>
-      <tr><td class="k">High-water mark</td><td class="v">${e(d.hwm_usd)}</td></tr>
+      <tr><td class="k">Fee threshold (HWM)</td><td class="v">${e(d.hwm_usd)}</td></tr>
     </table>
   </div>
 
