@@ -14273,6 +14273,8 @@
         usdpcRefreshMessage.textContent = `Forcing USDPC sweep for ${firstName} ${lastName}…`;
         usdpcRefreshMessage.style.color = '#6c757d';
 
+        // The sweep function orchestrates execute → poll → post-ledger server-side
+        // (service-to-service), so the browser only makes this single call.
         const sweep = await callEf('ef_sweep_usdt_to_usdpc', { customer_id: customerId, force: true });
         if (!sweep || !sweep.created) {
           // Nothing to sweep (e.g. idle USDT below the minimum at the exchange).
@@ -14283,11 +14285,15 @@
           return;
         }
 
-        setDot('in_progress', 'Placing order…');
-        await callEf('ef_execute_orders', {});
-        setDot('in_progress', 'Confirming fill…');
-        await callEf('ef_poll_orders', {});
-        await callEf('ef_post_ledger_and_balances', {});
+        // Surface any downstream pipeline step that failed (e.g. VALR margin block).
+        const failedStep = (sweep.pipeline || []).find(s => !s.ok);
+        if (failedStep) {
+          setDot('failed', 'Order failed');
+          usdpcRefreshMessage.textContent = `❌ Sweep created but ${failedStep.step} failed (${failedStep.status}) for ${firstName} ${lastName}`;
+          usdpcRefreshMessage.style.color = '#dc3545';
+          setTimeout(() => loadPendingUsdpcConversions(), 1800);
+          return;
+        }
 
         setDot('complete', 'Swept to USDPC');
         usdpcRefreshMessage.textContent = `✅ USDPC sweep complete for ${firstName} ${lastName}`;

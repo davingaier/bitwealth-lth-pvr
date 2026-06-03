@@ -175,7 +175,41 @@ Deno.serve(async (req: Request) => {
   }
 
   console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}`);
-  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force }), {
+
+  // When invoked as a forced single-customer sweep from the Admin UI, run the
+  // downstream execute -> poll -> post_ledger pass server-side (service-to-service,
+  // no CORS) so the browser only ever calls this one function. The daily pipeline
+  // run (no force) skips this — the orchestrator handles the sequence itself.
+  let pipeline: Array<{ step: string; ok: boolean; status: number }> | undefined;
+  if (force && created > 0) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const callEf = async (name: string) => {
+      const r = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { step: name, ok: r.ok, status: r.status };
+    };
+    pipeline = [];
+    for (const name of ["ef_execute_orders", "ef_poll_orders", "ef_post_ledger_and_balances"]) {
+      try {
+        const res = await callEf(name);
+        pipeline.push(res);
+        if (!res.ok) {
+          console.error(`forced sweep step ${name} failed (${res.status})`);
+          break;
+        }
+      } catch (err) {
+        console.error(`forced sweep step ${name} error:`, err);
+        pipeline.push({ step: name, ok: false, status: 0 });
+        break;
+      }
+    }
+  }
+
+  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force, pipeline }), {
     headers: { "Content-Type": "application/json", ...CORS },
   });
 });
