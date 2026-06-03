@@ -372,7 +372,11 @@
                                     </div>
                                 </div>
                             </div>
-                            <canvas id="perfChart" style="max-height: 500px;"></canvas>
+                            <!-- Canvas lives in its own fixed-height wrapper so the gauge above it
+                                 flows naturally and the chart never overflows into the metrics table. -->
+                            <div id="perfChartWrap" style="position: relative; height: 500px;">
+                                <canvas id="perfChart"></canvas>
+                            </div>
                         </div>
                         <!-- Metrics table -->
                         <div style="padding: 0 20px 20px;">
@@ -3180,13 +3184,9 @@
             const labels = perfData.daily.map(d => d.date);
             const ctx = document.getElementById('perfChart').getContext('2d');
 
-            // Show/position the at-a-glance gauge first so we can reserve room
-            // for it; otherwise the fixed-height canvas overflows into the
-            // metrics table below.
+            // The gauge flows above the fixed-height canvas wrapper, so it just
+            // needs its values refreshed (no container-height juggling).
             updateHwmGauge();
-            const gauge = document.getElementById('perfHwmGauge');
-            const gaugeExtra = (gauge && gauge.style.display !== 'none') ? gauge.offsetHeight + 18 : 0;
-            document.getElementById('perfChart').parentElement.style.height = (500 + gaugeExtra) + 'px';
 
             if (type === 'nav') {
                 buildNavChart(ctx, labels);
