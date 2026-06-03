@@ -3,11 +3,54 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-02 (v0.6.116)
+**Last updated:** 2026-06-03 (v0.6.117)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.117 – Cost-basis chart fix + customer 31/54 reconciliation
+**Date:** 2026-06-03
+**Status:** ✅ DEPLOYED
+
+#### 1 — `cost_basis_usd` now maintained by the daily pipeline
+
+**Symptom:** Customer 49 deposited R200,000 today, which converted ZAR→USDT→USDPC. NAV and the USDPC tile stepped up, but the portal NAV chart's **Cost Basis** line stayed flat at the pre-deposit value.
+
+**Root cause:** The portal chart reads `lth_pvr.balances_daily.cost_basis_usd` directly (`website/customer-portal.html` ~L3186). That column was **only ever populated by the one-time migration** `20260602_usdpc_carry_forward_daily_balances.sql`. The daily upsert in `ef_post_ledger_and_balances` never wrote `cost_basis_usd`, so it went stale the moment any deposit/withdrawal landed after the migration date.
+
+**Fix (`supabase/functions/ef_post_ledger_and_balances/index.ts`, deployed):**
+- prev-balance SELECT now includes `cost_basis_usd`; sums SELECT now includes `kind`.
+- New per-day accumulator `dContribUsd = Σ amount_usdt(kind topup/deposit) − Σ |amount_usdt|(kind withdrawal)`.
+- Daily upsert now writes `cost_basis_usd = max(0, prev.cost_basis_usd + dContribUsd)`.
+- Only `topup`/`withdrawal` legs count — `convert`/trade legs are excluded so internal ZAR→USDT→USDPC moves never inflate cost basis.
+- Customer 49 recomputed for 2026-06-03 → `cost_basis_usd` = **42,071.95** (29,881.76 + 12,190.19 deposited today). Marginally above NAV ($41,958.83) because the two conversions incurred small fees — expected/correct.
+
+**Carry-forward caveat:** `ef_post_ledger_and_balances` only recomputes days with activity (or an existing row in the requested range) and does **not** propagate a corrected carry through no-activity days. Historical one-off corrections must be applied to every affected day directly (cumulative SQL UPDATE), not via a single-day recompute.
+
+#### 2 — Customer 31 reconciliation (VALR ↔ portal)
+
+- **USDT dust:** the single USDT→USDPC convert (2026-05-30) was booked at the rounded price (1.15) instead of VALR's settled `fill_raw.total` (price 1.1539) — the same rounding class as the customer-49 negative-balance bug. Corrected the convert ledger line to `-(raw.total)` and propagated the corrected USDT carry forward through the no-activity days 05-31…06-03 via direct SQL.
+- **ZAR over-count (fixed earlier this session):** 7 crypto→ZAR conversions on 2026-04-21 were double-recorded as both `zar_deposit`(leg=credit, csv_backfill) and `zar_balance` events (R159.52 duplicated). Deleted the 7 duplicate `ledger_lines` + 7 duplicate funding events and recomputed `zar_balance` cumulatively.
+- Result — all four assets now match VALR: BTC 0.00002163 ✅, USDPC 5.2947 ✅, USDT ≈0.01 ✅, ZAR R14.52 ✅.
+
+#### 3 — Customer 54 stale cost basis (bonus catch)
+
+Validation after the §1 fix found customer 54 (a $3 test account) with stored `cost_basis_usd = 0` vs a correct $3.05 (single 3.04699805 USDT topup on 2026-05-30). Corrected all dates from 2026-05-30 onward with a cumulative cost-basis UPDATE mirroring the `20260602` migration's refresh.
+
+#### 4 — HWM is intentionally NOT bumped by deposits
+
+The stored `lth_pvr.customer_state_daily.high_water_mark_usd` represents the **profit-only baseline** (NAV minus cumulative net contributions) and only moves when a performance fee is actually charged (`ef_calculate_performance_fees` / interim / annual: `newHWM = newNAV − totalNetContrib`). A deposit does **not** touch the stored HWM. Instead, deposits/withdrawals are folded in **at fee-calculation time** via `additionalContrib` (read fresh from `ledger_lines` topup/withdrawal since the last state date) → `totalNetContrib`, and the fee threshold is computed as `high_water_mark_usd + totalNetContrib`. This is what prevents a performance fee from being charged on freshly contributed capital. Hence the portal's gold HWM line correctly stays flat after a deposit until the next monthly fee run re-baselines it.
+
+#### 5 — HWM seeding double-count bug (live cohort audit) — FIXED
+
+**Bug:** `lth_pvr.ensure_hwm_initialised(p_org_id, p_customer_id)` (the post-Jan-2026 seeding fn; runs daily via cron `lth_pvr_ensure_hwm_initialised_daily` 03:30 UTC and is invoked by `ef_resume_pipeline` through `ensure_hwm_initialised_all()`) seeded `high_water_mark_usd = NAV` **and** simultaneously stored `hwm_contrib_net_cum = net_contributions`. Because the fee threshold is `HWM + totalNetContrib`, this **double-counted contributed capital** (`threshold = NAV + net_contrib`), systematically **under-charging** the first performance fee by ~`feeRate × net_contrib`. Direction is BitWealth revenue loss, never customer over-charge.
+
+**Mitigating factor:** `ef_calculate_performance_fees` re-initialises any customer whose `last_perf_fee_month IS NULL` (`initialHWM = max(0, monthEndNAV − netContrib)`), so the buggy seed self-heals at the next monthly run for most customers. The genuine residual exposure was (a) the mid-month interim-withdrawal path (`ef_calculate_interim_performance_fee`, which reads the stored HWM directly) and (b) any customer already carrying `last_perf_fee_month`.
+
+**Fix (migration `20260603_fix_hwm_seeding_double_count`):** seed `high_water_mark_usd = GREATEST(0, NAV − net_contrib)` (profit-only floor) in both the UPDATE and INSERT branches; `hwm_contrib_net_cum` still carries net contributions. The skip-if-`HWM > 0` guard is unchanged, so legitimately-ratcheted HWMs are never overwritten.
+
+**Data remediation:** recomputed `high_water_mark_usd = GREATEST(0, NAV_asof − net_contrib_to_date)` and `hwm_contrib_net_cum = net_contrib_to_date` per day for affected live customers (12, 31, 44, 45, 48, 49, 54). Excluded customer 47 (genuine Feb-2026 performance fee — HWM legitimately ratcheted; the seeding fn already skipped it) and 999 (dev/test). Result: customer 49's effective fee threshold corrected from **$59,763** → **$42,071.95** (= contributed capital; NAV $41,958.83 is below it, so $0 owed — closing a ~$1,769 future under-charge). All other affected customers were sub-$15 with negligible impact.
 
 ### v0.6.116 – USDPC Phase 6/7/8: RPC + UI surfacing, on-demand backfill, verification
 **Date:** 2026-06-02
