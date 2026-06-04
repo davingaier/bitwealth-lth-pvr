@@ -47,7 +47,10 @@ Deno.serve(async (req: Request) => {
 
   if (customerId == null) return json({ ok: false, error: "customer_id is required" }, 400);
 
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createClient(url, key, {
+    auth: { persistSession: false },
+    db: { schema: "lth_pvr" }, // get_customer_valr_credentials() lives in lth_pvr
+  });
 
   try {
     const creds = await resolveCustomerCredentials(sb, customerId);

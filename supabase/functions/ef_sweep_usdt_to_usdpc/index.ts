@@ -17,12 +17,27 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { loadUsdpcConfig, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
+import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { getAccountBalances, pickAvailable } from "../_shared/valrClient.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// ── Live-VALR reconciliation tuning ──────────────────────────────────────────
+// balances_daily.usdt_balance is a pure ledger rollup and can silently drift
+// from the real VALR available USDT (e.g. USDPC-yield settlement, conversion
+// rounding) because the daily pipeline has no live-balance reconciliation step.
+// Before sizing a sweep we read the customer's LIVE VALR USDT and, when it
+// differs from the recorded balance, book an `adjustment` ledger line so
+// balances_daily re-converges to the exchange — then size the sweep off the
+// live figure. Only the swept asset (USDT) is reconciled here.
+const RECON_EPSILON_USDT = 0.01;   // ignore sub-cent drift
+const RECON_MAX_AUTO_USDT = 100;   // auto-heal up to this; larger deltas likely
+                                   // signal an un-booked deposit/withdrawal and
+                                   // must be investigated, not silently absorbed.
 
 Deno.serve(async (req: Request) => {
   // Allow the Admin UI to invoke the forced single-customer sweep from the browser.
@@ -99,10 +114,11 @@ Deno.serve(async (req: Request) => {
 
   let created = 0;
   let skipped = 0;
+  let reconciled = 0;
 
   for (const customer_id of enabledIds) {
     try {
-      // Latest known idle USDT for this customer.
+      // Latest recorded (ledger-derived) USDT for this customer.
       const { data: balRows, error: balErr } = await sb
         .from("balances_daily")
         .select("usdt_balance")
@@ -116,15 +132,95 @@ Deno.serve(async (req: Request) => {
           { customer_id, error: balErr.message }, org_id, customer_id);
         continue;
       }
-      const idleUsdt = Number(balRows?.[0]?.usdt_balance ?? 0);
+      const dbUsdt = Number(balRows?.[0]?.usdt_balance ?? 0);
+
+      // ── Live-VALR reconciliation ───────────────────────────────────────────
+      // Read the customer's real VALR available USDT. If it differs from the
+      // recorded figure, book a one-per-day `adjustment` ledger line so
+      // balances_daily re-converges to the exchange, and size the sweep off the
+      // live figure. On any failure we fall back to the recorded figure (the
+      // pre-reconciliation behaviour) so a VALR hiccup never blocks the sweep.
+      let effectiveUsdt = dbUsdt; // default: conservative, ledger-derived basis
+      try {
+        const creds = await resolveCustomerCredentials(sb, customer_id);
+        const liveBalances = await getAccountBalances(creds.subaccountId, {
+          apiKey: creds.apiKey,
+          apiSecret: creds.apiSecret,
+        });
+        const liveUsdt = pickAvailable(liveBalances as any, "USDT");
+        const delta = +(liveUsdt - dbUsdt).toFixed(8);
+
+        if (Math.abs(delta) > RECON_EPSILON_USDT) {
+          if (Math.abs(delta) > RECON_MAX_AUTO_USDT) {
+            // Too large to auto-absorb — almost certainly an un-booked funding
+            // event. Do NOT reconcile or trust the live figure; sweep off the
+            // recorded balance and alert for manual investigation.
+            await logAlert(sb, "ef_sweep_usdt_to_usdpc", "critical",
+              `USDT drift exceeds auto-reconcile cap for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sizing sweep off recorded balance; investigate for an un-booked deposit/withdrawal.`,
+              { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
+          } else {
+            // Only book once per customer per day. If already reconciled today,
+            // the recorded balance is authoritative for sizing (stay conservative).
+            const { data: existingRecon } = await sb
+              .from("ledger_lines")
+              .select("ledger_id")
+              .eq("org_id", org_id)
+              .eq("customer_id", customer_id)
+              .eq("trade_date", todayStr)
+              .eq("kind", "adjustment")
+              .ilike("note", "usdt_recon%")
+              .limit(1);
+
+            if (!existingRecon || existingRecon.length === 0) {
+              const { error: recErr } = await sb.from("ledger_lines").insert({
+                org_id,
+                customer_id,
+                trade_date: todayStr,
+                kind: "adjustment",
+                amount_btc: 0,
+                amount_usdt: delta,
+                amount_usdpc: 0,
+                amount_zar: 0,
+                fee_btc: 0,
+                fee_usdt: 0,
+                fee_usdpc: 0,
+                note: `usdt_recon: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(2)})`,
+                conversion_metadata: {
+                  source: "ef_sweep_usdt_to_usdpc",
+                  reconcile: "usdt",
+                  valr_usdt: liveUsdt,
+                  db_usdt: dbUsdt,
+                  delta,
+                },
+              });
+              if (recErr) {
+                await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",
+                  `USDT reconcile ledger insert failed for customer ${customer_id}: ${recErr.message}`,
+                  { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta, error: recErr.message }, org_id, customer_id);
+              } else {
+                reconciled++;
+                effectiveUsdt = liveUsdt; // sweep off the now-reconciled live figure
+                await logAlert(sb, "ef_sweep_usdt_to_usdpc", "info",
+                  `USDT reconciled for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}).`,
+                  { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
+              }
+            }
+          }
+        }
+      } catch (recEx) {
+        // Live balance unavailable — fall back to the recorded figure.
+        await logAlert(sb, "ef_sweep_usdt_to_usdpc", "warn",
+          `Live VALR balance unavailable for customer ${customer_id}; sweeping off recorded balance. ${recEx instanceof Error ? recEx.message : String(recEx)}`,
+          { customer_id, db_usdt: dbUsdt }, org_id, customer_id);
+      }
 
       // Dust stays as USDT (do not sweep tiny amounts).
-      if (idleUsdt < cfg.minOrderUsdt) {
+      if (effectiveUsdt < cfg.minOrderUsdt) {
         skipped++;
         continue;
       }
 
-      const sweepUsdt = +idleUsdt.toFixed(2);
+      const sweepUsdt = +effectiveUsdt.toFixed(2);
       // VALR caps a single USDPC BUY at ~10 000 USDT (quote). Split larger
       // sweeps into multiple intents, each its own market order.
       const chunks = splitConversionAmount(sweepUsdt, cfg.maxQuoteUsdt, 2);
@@ -174,14 +270,16 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}`);
+  console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}, reconciled=${reconciled}`);
 
   // When invoked as a forced single-customer sweep from the Admin UI, run the
   // downstream execute -> poll -> post_ledger pass server-side (service-to-service,
   // no CORS) so the browser only ever calls this one function. The daily pipeline
   // run (no force) skips this — the orchestrator handles the sequence itself.
+  // A reconcile-only correction (no sweep intent) still needs post_ledger to
+  // fold the adjustment line into balances_daily.
   let pipeline: Array<{ step: string; ok: boolean; status: number }> | undefined;
-  if (force && created > 0) {
+  if (force && (created > 0 || reconciled > 0)) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const callEf = async (name: string) => {
@@ -209,7 +307,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force, pipeline }), {
+  return new Response(JSON.stringify({ success: true, created, skipped, reconciled, target_customer_id: targetCustomerId, force, pipeline }), {
     headers: { "Content-Type": "application/json", ...CORS },
   });
 });
