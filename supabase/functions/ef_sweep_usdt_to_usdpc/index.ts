@@ -134,12 +134,27 @@ Deno.serve(async (req: Request) => {
       }
       const dbUsdt = Number(balRows?.[0]?.usdt_balance ?? 0);
 
-      // ── Live-VALR reconciliation ───────────────────────────────────────────
-      // Read the customer's real VALR available USDT. If it differs from the
-      // recorded figure, book a one-per-day `adjustment` ledger line so
-      // balances_daily re-converges to the exchange, and size the sweep off the
-      // live figure. On any failure we fall back to the recorded figure (the
-      // pre-reconciliation behaviour) so a VALR hiccup never blocks the sweep.
+      // ── Live-VALR reconciliation (credit-only) ─────────────────────────────
+      // Read the customer's real VALR available USDT. balances_daily.usdt_balance
+      // is re-derived by two INDEPENDENT and mutually-inconsistent processes
+      // (ef_post_ledger_and_balances = incremental prev+delta; and
+      // carry_forward_daily_balances() = cumulative ledger sum), and for some
+      // customers the ledger does not fully reconstruct the balance (large
+      // historical snapshot offset). An earlier two-way reconciliation that
+      // booked BOTH credits and debits therefore OSCILLATED: it would credit +X
+      // one day and, after the balance was re-derived to a transient higher
+      // value, debit −X the next — never converging (a limit cycle).
+      //
+      // Fix: reconcile in ONE direction only. We only ever book a POSITIVE
+      // credit when the recorded USDT is BELOW the live VALR balance — i.e. a
+      // genuine un-booked inflow (typically a USDPC yield distribution that
+      // funds this very sweep). We NEVER auto-book a negative adjustment: if the
+      // recorded balance EXCEEDS live, we alert for manual review instead. This
+      // is provably stable (each credit is consumed by the sweep conversion that
+      // follows, returning USDT to ~0) and cannot oscillate.
+      //
+      // On any VALR failure we fall back to the recorded figure so a hiccup
+      // never blocks the sweep.
       let effectiveUsdt = dbUsdt; // default: conservative, ledger-derived basis
       try {
         const creds = await resolveCustomerCredentials(sb, customer_id);
@@ -150,17 +165,17 @@ Deno.serve(async (req: Request) => {
         const liveUsdt = pickAvailable(liveBalances as any, "USDT");
         const delta = +(liveUsdt - dbUsdt).toFixed(8);
 
-        if (Math.abs(delta) > RECON_EPSILON_USDT) {
-          if (Math.abs(delta) > RECON_MAX_AUTO_USDT) {
-            // Too large to auto-absorb — almost certainly an un-booked funding
-            // event. Do NOT reconcile or trust the live figure; sweep off the
-            // recorded balance and alert for manual investigation.
+        if (delta > RECON_EPSILON_USDT) {
+          // Recorded USDT is BELOW real VALR → genuine un-booked inflow.
+          if (delta > RECON_MAX_AUTO_USDT) {
+            // Too large to be yield — almost certainly an un-booked deposit that
+            // must be booked as a `topup` (and reflected in cost basis), not as
+            // a yield credit. Do NOT auto-credit or sweep the excess; alert.
             await logAlert(sb, "ef_sweep_usdt_to_usdpc", "critical",
-              `USDT drift exceeds auto-reconcile cap for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sizing sweep off recorded balance; investigate for an un-booked deposit/withdrawal.`,
+              `USDT inflow exceeds auto-reconcile cap for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ +${delta.toFixed(2)}). Sizing sweep off recorded balance; investigate for an un-booked deposit.`,
               { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
           } else {
-            // Only book once per customer per day. If already reconciled today,
-            // the recorded balance is authoritative for sizing (stay conservative).
+            // Book the genuine inflow once per customer per day (idempotent).
             const { data: existingRecon } = await sb
               .from("ledger_lines")
               .select("ledger_id")
@@ -168,7 +183,7 @@ Deno.serve(async (req: Request) => {
               .eq("customer_id", customer_id)
               .eq("trade_date", todayStr)
               .eq("kind", "adjustment")
-              .ilike("note", "usdt_recon%")
+              .ilike("note", "usdt_yield_recon%")
               .limit(1);
 
             if (!existingRecon || existingRecon.length === 0) {
@@ -178,16 +193,16 @@ Deno.serve(async (req: Request) => {
                 trade_date: todayStr,
                 kind: "adjustment",
                 amount_btc: 0,
-                amount_usdt: delta,
+                amount_usdt: delta, // always positive here
                 amount_usdpc: 0,
                 amount_zar: 0,
                 fee_btc: 0,
                 fee_usdt: 0,
                 fee_usdpc: 0,
-                note: `usdt_recon: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(2)})`,
+                note: `usdt_yield_recon: un-booked VALR USDT inflow +${delta.toFixed(2)} (VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)})`,
                 conversion_metadata: {
                   source: "ef_sweep_usdt_to_usdpc",
-                  reconcile: "usdt",
+                  reconcile: "usdt_inflow",
                   valr_usdt: liveUsdt,
                   db_usdt: dbUsdt,
                   delta,
@@ -195,17 +210,32 @@ Deno.serve(async (req: Request) => {
               });
               if (recErr) {
                 await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",
-                  `USDT reconcile ledger insert failed for customer ${customer_id}: ${recErr.message}`,
+                  `USDT inflow credit insert failed for customer ${customer_id}: ${recErr.message}`,
                   { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta, error: recErr.message }, org_id, customer_id);
               } else {
                 reconciled++;
-                effectiveUsdt = liveUsdt; // sweep off the now-reconciled live figure
+                effectiveUsdt = liveUsdt; // sweep off the now-credited live figure
                 await logAlert(sb, "ef_sweep_usdt_to_usdpc", "info",
-                  `USDT reconciled for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}).`,
+                  `Booked un-booked USDT inflow for customer ${customer_id}: +${delta.toFixed(2)} (VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)}).`,
                   { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
               }
+            } else {
+              // Already credited today — size off live (lower of risk) safely.
+              effectiveUsdt = liveUsdt;
             }
           }
+        } else if (delta < -RECON_EPSILON_USDT) {
+          // Recorded USDT EXCEEDS real VALR. NEVER auto-debit (that caused the
+          // oscillation). Size off the live (lower) figure so we never try to
+          // convert USDT the account does not actually hold, and alert so the
+          // over-statement can be investigated manually.
+          effectiveUsdt = liveUsdt;
+          await logAlert(sb, "ef_sweep_usdt_to_usdpc", "warn",
+            `Recorded USDT exceeds live VALR for customer ${customer_id}: DB ${dbUsdt.toFixed(2)} vs VALR ${liveUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sizing sweep off live balance; no auto-adjustment booked — review for an over-stated balance.`,
+            { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
+        } else {
+          // In sync — size off the live figure (== recorded within epsilon).
+          effectiveUsdt = liveUsdt;
         }
       } catch (recEx) {
         // Live balance unavailable — fall back to the recorded figure.
