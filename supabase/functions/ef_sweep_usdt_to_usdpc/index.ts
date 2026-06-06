@@ -26,18 +26,19 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ── Live-VALR reconciliation tuning ──────────────────────────────────────────
-// balances_daily.usdt_balance is a pure ledger rollup and can silently drift
-// from the real VALR available USDT (e.g. USDPC-yield settlement, conversion
-// rounding) because the daily pipeline has no live-balance reconciliation step.
-// Before sizing a sweep we read the customer's LIVE VALR USDT and, when it
-// differs from the recorded balance, book an `adjustment` ledger line so
-// balances_daily re-converges to the exchange — then size the sweep off the
-// live figure. Only the swept asset (USDT) is reconciled here.
-const RECON_EPSILON_USDT = 0.01;   // ignore sub-cent drift
-const RECON_MAX_AUTO_USDT = 100;   // auto-heal up to this; larger deltas likely
-                                   // signal an un-booked deposit/withdrawal and
-                                   // must be investigated, not silently absorbed.
+// ── Live-VALR sizing / divergence alerting ───────────────────────────────────
+// balances_daily.usdt_balance is a ledger rollup that can diverge from the real
+// VALR available USDT. We therefore size the sweep off the customer's LIVE VALR
+// USDT (so we never try to convert funds the account does not actually hold).
+//
+// We deliberately do NOT inject any reconciling ledger line. Doing so caused two
+// production incidents on customer 49: the ledger already reconstructs the real
+// balance on its own, so an injected `adjustment` double-books — and because
+// balances_daily is re-derived by two inconsistent processes (incremental
+// ef_post_ledger_and_balances vs cumulative carry_forward_daily_balances), the
+// injected line then oscillated / inflated the balance on later days. The ledger
+// is the source of truth; divergences are surfaced via alerts for manual review.
+const RECON_EPSILON_USDT = 0.01;   // ignore sub-cent drift when alerting
 
 Deno.serve(async (req: Request) => {
   // Allow the Admin UI to invoke the forced single-customer sweep from the browser.
@@ -114,7 +115,6 @@ Deno.serve(async (req: Request) => {
 
   let created = 0;
   let skipped = 0;
-  let reconciled = 0;
 
   for (const customer_id of enabledIds) {
     try {
@@ -134,27 +134,15 @@ Deno.serve(async (req: Request) => {
       }
       const dbUsdt = Number(balRows?.[0]?.usdt_balance ?? 0);
 
-      // ── Live-VALR reconciliation (credit-only) ─────────────────────────────
-      // Read the customer's real VALR available USDT. balances_daily.usdt_balance
-      // is re-derived by two INDEPENDENT and mutually-inconsistent processes
-      // (ef_post_ledger_and_balances = incremental prev+delta; and
-      // carry_forward_daily_balances() = cumulative ledger sum), and for some
-      // customers the ledger does not fully reconstruct the balance (large
-      // historical snapshot offset). An earlier two-way reconciliation that
-      // booked BOTH credits and debits therefore OSCILLATED: it would credit +X
-      // one day and, after the balance was re-derived to a transient higher
-      // value, debit −X the next — never converging (a limit cycle).
-      //
-      // Fix: reconcile in ONE direction only. We only ever book a POSITIVE
-      // credit when the recorded USDT is BELOW the live VALR balance — i.e. a
-      // genuine un-booked inflow (typically a USDPC yield distribution that
-      // funds this very sweep). We NEVER auto-book a negative adjustment: if the
-      // recorded balance EXCEEDS live, we alert for manual review instead. This
-      // is provably stable (each credit is consumed by the sweep conversion that
-      // follows, returning USDT to ~0) and cannot oscillate.
-      //
-      // On any VALR failure we fall back to the recorded figure so a hiccup
-      // never blocks the sweep.
+      // ── Size off LIVE VALR; alert on divergence (no ledger writes) ──────────
+      // Read the customer's real VALR available USDT and size the sweep off it,
+      // so we never attempt to convert funds the account does not actually hold.
+      // We do NOT book any reconciling ledger line: the ledger already
+      // reconstructs the real balance, and injecting an `adjustment` double-books
+      // (and, given balances_daily's dual incremental/cumulative derivation,
+      // inflates the balance on later days). Divergence is surfaced via an alert
+      // for manual review only. On any VALR failure we fall back to the recorded
+      // figure so a hiccup never blocks the sweep.
       let effectiveUsdt = dbUsdt; // default: conservative, ledger-derived basis
       try {
         const creds = await resolveCustomerCredentials(sb, customer_id);
@@ -165,77 +153,15 @@ Deno.serve(async (req: Request) => {
         const liveUsdt = pickAvailable(liveBalances as any, "USDT");
         const delta = +(liveUsdt - dbUsdt).toFixed(8);
 
-        if (delta > RECON_EPSILON_USDT) {
-          // Recorded USDT is BELOW real VALR → genuine un-booked inflow.
-          if (delta > RECON_MAX_AUTO_USDT) {
-            // Too large to be yield — almost certainly an un-booked deposit that
-            // must be booked as a `topup` (and reflected in cost basis), not as
-            // a yield credit. Do NOT auto-credit or sweep the excess; alert.
-            await logAlert(sb, "ef_sweep_usdt_to_usdpc", "critical",
-              `USDT inflow exceeds auto-reconcile cap for customer ${customer_id}: VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)} (Δ +${delta.toFixed(2)}). Sizing sweep off recorded balance; investigate for an un-booked deposit.`,
-              { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
-          } else {
-            // Book the genuine inflow once per customer per day (idempotent).
-            const { data: existingRecon } = await sb
-              .from("ledger_lines")
-              .select("ledger_id")
-              .eq("org_id", org_id)
-              .eq("customer_id", customer_id)
-              .eq("trade_date", todayStr)
-              .eq("kind", "adjustment")
-              .ilike("note", "usdt_yield_recon%")
-              .limit(1);
+        // Always size the actual sweep off the live (real) figure.
+        effectiveUsdt = liveUsdt;
 
-            if (!existingRecon || existingRecon.length === 0) {
-              const { error: recErr } = await sb.from("ledger_lines").insert({
-                org_id,
-                customer_id,
-                trade_date: todayStr,
-                kind: "adjustment",
-                amount_btc: 0,
-                amount_usdt: delta, // always positive here
-                amount_usdpc: 0,
-                amount_zar: 0,
-                fee_btc: 0,
-                fee_usdt: 0,
-                fee_usdpc: 0,
-                note: `usdt_yield_recon: un-booked VALR USDT inflow +${delta.toFixed(2)} (VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)})`,
-                conversion_metadata: {
-                  source: "ef_sweep_usdt_to_usdpc",
-                  reconcile: "usdt_inflow",
-                  valr_usdt: liveUsdt,
-                  db_usdt: dbUsdt,
-                  delta,
-                },
-              });
-              if (recErr) {
-                await logAlert(sb, "ef_sweep_usdt_to_usdpc", "error",
-                  `USDT inflow credit insert failed for customer ${customer_id}: ${recErr.message}`,
-                  { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta, error: recErr.message }, org_id, customer_id);
-              } else {
-                reconciled++;
-                effectiveUsdt = liveUsdt; // sweep off the now-credited live figure
-                await logAlert(sb, "ef_sweep_usdt_to_usdpc", "info",
-                  `Booked un-booked USDT inflow for customer ${customer_id}: +${delta.toFixed(2)} (VALR ${liveUsdt.toFixed(2)} vs DB ${dbUsdt.toFixed(2)}).`,
-                  { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
-              }
-            } else {
-              // Already credited today — size off live (lower of risk) safely.
-              effectiveUsdt = liveUsdt;
-            }
-          }
-        } else if (delta < -RECON_EPSILON_USDT) {
-          // Recorded USDT EXCEEDS real VALR. NEVER auto-debit (that caused the
-          // oscillation). Size off the live (lower) figure so we never try to
-          // convert USDT the account does not actually hold, and alert so the
-          // over-statement can be investigated manually.
-          effectiveUsdt = liveUsdt;
+        if (Math.abs(delta) > RECON_EPSILON_USDT) {
+          // Recorded ledger balance and live VALR disagree. Surface it for manual
+          // review — but never auto-correct the ledger from here.
           await logAlert(sb, "ef_sweep_usdt_to_usdpc", "warn",
-            `Recorded USDT exceeds live VALR for customer ${customer_id}: DB ${dbUsdt.toFixed(2)} vs VALR ${liveUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sizing sweep off live balance; no auto-adjustment booked — review for an over-stated balance.`,
+            `Recorded USDT differs from live VALR for customer ${customer_id}: DB ${dbUsdt.toFixed(2)} vs VALR ${liveUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sweep sized off live balance; no ledger adjustment booked — review if persistent.`,
             { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
-        } else {
-          // In sync — size off the live figure (== recorded within epsilon).
-          effectiveUsdt = liveUsdt;
         }
       } catch (recEx) {
         // Live balance unavailable — fall back to the recorded figure.
@@ -300,16 +226,14 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}, reconciled=${reconciled}`);
+  console.info(`ef_sweep_usdt_to_usdpc: created=${created}, skipped=${skipped}`);
 
   // When invoked as a forced single-customer sweep from the Admin UI, run the
   // downstream execute -> poll -> post_ledger pass server-side (service-to-service,
   // no CORS) so the browser only ever calls this one function. The daily pipeline
   // run (no force) skips this — the orchestrator handles the sequence itself.
-  // A reconcile-only correction (no sweep intent) still needs post_ledger to
-  // fold the adjustment line into balances_daily.
   let pipeline: Array<{ step: string; ok: boolean; status: number }> | undefined;
-  if (force && (created > 0 || reconciled > 0)) {
+  if (force && created > 0) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const callEf = async (name: string) => {
@@ -337,7 +261,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, created, skipped, reconciled, target_customer_id: targetCustomerId, force, pipeline }), {
+  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force, pipeline }), {
     headers: { "Content-Type": "application/json", ...CORS },
   });
 });
