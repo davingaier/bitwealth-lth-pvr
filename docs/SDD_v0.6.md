@@ -3,11 +3,87 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-03 (v0.6.117)
+**Last updated:** 2026-06-06 (v0.6.119)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.119 – HWM phantom from NAV-inflation latching
+**Date:** 2026-06-06
+**Status:** ✅ DEPLOYED (data fix only)
+
+**Symptom.** Customer 49's portal "Profit vs High-Water Mark" chart showed HWM = $34.49 while their true profit was only $12.51.
+
+**Root cause.** The HWM seeding cron (`lth_pvr_ensure_hwm_initialised_daily`, 03:30 UTC) seeds `high_water_mark_usd = GREATEST(0, latest_nav − net_contrib)` on the latest `customer_state_daily` row, and then **never revisits it** (the skip-if-HWM->-0 guard prevents self-correction). On 2026-06-06 the cron ran at 03:30 before a morning data correction had removed a spurious +$21.98 ledger adjustment (see v0.6.118). The inflated NAV ($42,106.44) was therefore snapshotted: HWM = 42,106.44 − 42,071.95 = **$34.49** (phantom, $21.98 too high). The real HWM should be $0.00 at this point (no performance fee has ever been charged for customer 49).
+
+**Effect.** Portal "Profit vs High-Water Mark" showed the HWM line sitting ~$22 above the actual profit line — no fee was ever at risk of being over-charged, but the chart was visually confusing.
+
+**Fix.** Direct UPDATE to reset the latched value:
+```sql
+UPDATE lth_pvr.customer_state_daily
+SET high_water_mark_usd = 0.00
+WHERE customer_id = 49
+  AND date = '2026-06-05'
+  AND high_water_mark_usd = 34.49;
+```
+The 03:30 cron on the next run re-seeds from the corrected NAV ($42,084.46), yielding the correct HWM = 42,084.46 − 42,071.95 = **$12.51**.
+
+**General lesson.** Any correction to `balances_daily.nav_usd` must be followed by a check of the most recent `customer_state_daily.high_water_mark_usd`. If the seeding cron ran between the inflation event and the correction, the HWM will be latched at the wrong value and must be manually reset (set to 0 if no fee has been charged; set to the correct `GREATEST(0, corrected_nav − net_contrib)` value otherwise, **then** remove the >0 guard from the seeding fn's execution path for that customer by zeroing first).
+
+---
+
+### v0.6.118 – `ef_sweep_usdt_to_usdpc` USDT reconciliation — made alert-only (no ledger injection)
+**Date:** 2026-06-04 → 2026-06-06
+**Status:** ✅ DEPLOYED
+
+#### Background: the oscillating-adjustment incidents
+
+Three consecutive days of data corruption for customer 49 drove the full design revision.
+
+**Day 1 — 2026-06-04 (before v0.6.118).** A genuine ~$21.99 USDT inflow (a VALR USDPC-yield distribution) arrived and funded the 06-04 daily sweep conversion. The sweep conversion outflow (−$21.98) was correctly booked to the ledger; the inflow was **not** (VALR yield distributions are not automatically booked to the ledger — they appear as VALR balance changes). `ef_post_ledger_and_balances` then derived the next day's balance **incrementally** (prev balance + today's ledger deltas) → balance rolled to −$21.97. This is the correct ledger-coherent result: the ledger simply never saw the inflow.
+
+**The initial attempted fix (two-way VALR reconciliation, deployed 2026-06-04).** `ef_sweep_usdt_to_usdpc` was modified to read live VALR USDT balance, compare to `balances_daily.usdt_balance`, and inject an `adjustment` ledger line for any signed divergence. On 2026-06-04 this correctly booked +$21.98 and healed the negative. On 2026-06-05 the oscillation began: `carry_forward_daily_balances()` (which derives balances as the **cumulative sum** of the entire ledger, not incrementally) rebuilt the 06-05 row including the injected credit → transient balance showed ~$21.99 → the two-way recon then booked −$21.98 → 06-05 balance went to −$21.97 again. A limit cycle.
+
+**Root cause of oscillation.** `lth_pvr.balances_daily` rows are produced by **two independent and mutually inconsistent processes**:
+1. `ef_post_ledger_and_balances` — *incremental*: `prev_row.balance + Σ today's ledger deltas`.
+2. `lth_pvr.carry_forward_daily_balances()` — *cumulative*: `SUM(all ledger_lines where trade_date ≤ d)`, gap-fills missing days with `ON CONFLICT DO NOTHING`.
+
+For customer 49 these two processes diverge massively (the ledger's cumulative USDT sum was −$355 vs real ~$0.01) because the ledger was never designed to reconstruct the opening balance — it relies on a snapshot carried forward from an earlier date. Injecting a reconciling ledger line therefore re-enters the cumulative calculation and produces a different number the next time `carry_forward_daily_balances()` runs. This creates the feedback loop.
+
+**Corrective attempt (credit-only recon, deployed 2026-06-05).** The two-way recon was replaced with a credit-only version: only book a positive `adjustment` when live VALR > recorded DB (genuine un-booked inflow); never debit. Seemed sound — each credit would be consumed by the following sweep. But it still injected ledger lines.
+
+**Day 3 — 2026-06-06 (v0.6.118 failure).** The manual `+$21.98` corrective credit booked on 2026-06-05 (as part of the data cleanup after the oscillation) was **itself a double-booking**: re-examining the full ledger showed the genuine ledger lines (topups + actual VALR conversions) already sum exactly to $0.01028761 — the real VALR balance. The inflow was already implicitly accounted for because the ledger's opening topup entries establish the correct running balance. The `carry_forward_daily_balances()` cron ran at 03:00 UTC on 06-06, included the spurious credit in its cumulative sum, and gap-filled 06-06 as 0.01028761 + 21.98191374 = **$21.99220135** — the exact figure in the portal.
+
+#### Final fix: alert-only sweep (v0.6.118)
+
+**Principle:** The ledger is the source of truth. It already reconstructs the real VALR balance for customer 49 at the cumulative level. Injecting any ledger line to "correct" a divergence double-books against that cumulative sum, corrupting later days. **No reconciling ledger lines must ever be injected by the sweep.**
+
+**Data fix applied 2026-06-06:**
+```sql
+-- 1. Remove the spurious manual credit (double-booking confirmed)
+DELETE FROM lth_pvr.ledger_lines
+WHERE ledger_id = '0ae7c994-5f82-42dc-b5cc-93a55927ee89' AND customer_id = 49;
+-- 2. Restore correct 06-06 balance (carry_forward had already run using the spurious line)
+UPDATE lth_pvr.balances_daily
+SET usdt_balance = 0.01028761,
+    nav_usd      = nav_usd - 21.98191374
+WHERE customer_id = 49 AND date = '2026-06-06';
+```
+Cumulative ledger USDT sum now = $0.01028761 (= real VALR); zero `adjustment` lines remain for customer 49.
+
+**Code change — `supabase/functions/ef_sweep_usdt_to_usdpc/index.ts` (deployed):**
+
+The reconciliation block was fully rewritten:
+- **Old (two-way / credit-only):** Compared live VALR USDT to `balances_daily.usdt_balance`; injected a positive or negative `adjustment` ledger line; sized the sweep off the corrected figure.
+- **New (alert-only):** Reads live VALR USDT; sizes the sweep off the **live** figure (so it never attempts to convert funds the account does not actually hold); emits a `warn` alert if `|live − recorded| > $0.01`; **books no ledger line under any circumstances**. On VALR fetch failure, falls back to the recorded balance and emits a warn. The forced-sweep downstream pass (`ef_execute_orders → ef_poll_orders → ef_post_ledger_and_balances`) now triggers only when `created > 0` (not when `reconciled > 0`, which no longer exists).
+
+**`RECON_MAX_AUTO_USDT` constant removed.** There is no auto-healing cap any more — the sweep never auto-heals. Any divergence above $0.01 generates a single `warn` alert for manual investigation.
+
+**Design invariant going forward:**
+> Reconciling a VALR live balance by injecting ledger lines is architecturally unsafe when `balances_daily` is derived by two inconsistent methods (incremental + cumulative) and when the ledger does not reconstruct the opening balance. The **only** correct approaches are: (1) alert-only with manual investigation and a proper `topup` booking (which updates cost basis) if a real un-booked deposit is found, or (2) a single authoritative derivation method for `balances_daily`.
+
+---
 
 ### v0.6.117 – Cost-basis chart fix + customer 31/54 reconciliation
 **Date:** 2026-06-03
