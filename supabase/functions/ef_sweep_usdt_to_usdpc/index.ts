@@ -38,7 +38,8 @@ const CORS = {
 // ef_post_ledger_and_balances vs cumulative carry_forward_daily_balances), the
 // injected line then oscillated / inflated the balance on later days. The ledger
 // is the source of truth; divergences are surfaced via alerts for manual review.
-const RECON_EPSILON_USDT = 0.01;   // ignore sub-cent drift when alerting
+const RECON_EPSILON_USDT  = 0.01;  // ignore sub-cent drift when alerting
+const RECON_EPSILON_USDPC = 1.00;  // alert if live vs DB USDPC diverges by ≥ 1 unit
 
 Deno.serve(async (req: Request) => {
   // Allow the Admin UI to invoke the forced single-customer sweep from the browser.
@@ -121,7 +122,7 @@ Deno.serve(async (req: Request) => {
       // Latest recorded (ledger-derived) USDT for this customer.
       const { data: balRows, error: balErr } = await sb
         .from("balances_daily")
-        .select("usdt_balance")
+        .select("usdt_balance, usdpc_balance")
         .eq("org_id", org_id)
         .eq("customer_id", customer_id)
         .order("date", { ascending: false })
@@ -132,7 +133,8 @@ Deno.serve(async (req: Request) => {
           { customer_id, error: balErr.message }, org_id, customer_id);
         continue;
       }
-      const dbUsdt = Number(balRows?.[0]?.usdt_balance ?? 0);
+      const dbUsdt  = Number(balRows?.[0]?.usdt_balance  ?? 0);
+      const dbUsdpc = Number(balRows?.[0]?.usdpc_balance ?? 0);
 
       // ── Size off LIVE VALR; alert on divergence (no ledger writes) ──────────
       // Read the customer's real VALR available USDT and size the sweep off it,
@@ -150,18 +152,30 @@ Deno.serve(async (req: Request) => {
           apiKey: creds.apiKey,
           apiSecret: creds.apiSecret,
         });
-        const liveUsdt = pickAvailable(liveBalances as any, "USDT");
-        const delta = +(liveUsdt - dbUsdt).toFixed(8);
+        const liveUsdt  = pickAvailable(liveBalances as any, "USDT");
+        const liveUsdpc = pickAvailable(liveBalances as any, "USDPC");
+        const deltaUsdt  = +(liveUsdt  - dbUsdt).toFixed(8);
+        const deltaUsdpc = +(liveUsdpc - dbUsdpc).toFixed(8);
 
         // Always size the actual sweep off the live (real) figure.
         effectiveUsdt = liveUsdt;
 
-        if (Math.abs(delta) > RECON_EPSILON_USDT) {
+        if (Math.abs(deltaUsdt) > RECON_EPSILON_USDT) {
           // Recorded ledger balance and live VALR disagree. Surface it for manual
           // review — but never auto-correct the ledger from here.
           await logAlert(sb, "ef_sweep_usdt_to_usdpc", "warn",
-            `Recorded USDT differs from live VALR for customer ${customer_id}: DB ${dbUsdt.toFixed(2)} vs VALR ${liveUsdt.toFixed(2)} (Δ ${delta.toFixed(2)}). Sweep sized off live balance; no ledger adjustment booked — review if persistent.`,
-            { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta }, org_id, customer_id);
+            `Recorded USDT differs from live VALR for customer ${customer_id}: DB ${dbUsdt.toFixed(2)} vs VALR ${liveUsdt.toFixed(2)} (Δ ${deltaUsdt.toFixed(2)}). Sweep sized off live balance; no ledger adjustment booked — review if persistent.`,
+            { customer_id, live_usdt: liveUsdt, db_usdt: dbUsdt, delta: deltaUsdt }, org_id, customer_id);
+        }
+
+        if (Math.abs(deltaUsdpc) > RECON_EPSILON_USDPC) {
+          // USDPC on VALR doesn't match the ledger-derived balance. This most
+          // commonly means a manual USDPC buy/sell was executed directly on VALR
+          // without going through the pipeline. Alert for manual review; no
+          // ledger adjustment is ever written from here.
+          await logAlert(sb, "ef_sweep_usdt_to_usdpc", "warn",
+            `Recorded USDPC differs from live VALR for customer ${customer_id}: DB ${dbUsdpc.toFixed(4)} vs VALR ${liveUsdpc.toFixed(4)} (Δ ${deltaUsdpc.toFixed(4)}). No ledger adjustment booked — review ledger for un-booked conversions.`,
+            { customer_id, live_usdpc: liveUsdpc, db_usdpc: dbUsdpc, delta: deltaUsdpc }, org_id, customer_id);
         }
       } catch (recEx) {
         // Live balance unavailable — fall back to the recorded figure.
