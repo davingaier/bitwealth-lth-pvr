@@ -3,11 +3,84 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-06 (v0.6.119)
+**Last updated:** 2026-06-08 (v0.6.121)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.121 – USDPC live-balance reconciliation check in `ef_sweep_usdt_to_usdpc`
+**Date:** 2026-06-08
+**Status:** ✅ DEPLOYED
+
+**Motivation.** Customer 999 manually executed three USDPC Market/Simple Buy conversions directly on VALR (2026-05-12 × 2, 2026-05-26 × 1) that were never booked to the ledger. The discrepancy went undetected for ~25 days because the sweep only compared live vs recorded **USDT**; no equivalent check existed for USDPC. Had the check been in place, a `warn` alert would have fired on 2026-05-13 morning.
+
+**Change — `supabase/functions/ef_sweep_usdt_to_usdpc/index.ts` (deployed 2026-06-08):**
+- Added `RECON_EPSILON_USDPC = 1.00` constant (alert threshold: ≥ 1 USDPC unit, ~$1.15).
+- `balances_daily` SELECT now fetches `usdpc_balance` alongside `usdt_balance` (single query, no extra round-trip).
+- After the existing `getAccountBalances` call, `liveUsdpc = pickAvailable(liveBalances, "USDPC")` is read from the same API response.
+- If `|liveUsdpc − dbUsdpc| > RECON_EPSILON_USDPC`, a `warn` alert fires: `"Recorded USDPC differs from live VALR for customer X: DB Y vs VALR Z (Δ W). No ledger adjustment booked — review ledger for un-booked conversions."`
+- As with the USDT check, **no ledger line is ever written**. Alert-only; manual investigation required.
+- The existing USDT delta variable was renamed `deltaUsdt` (from `delta`) for consistency with the new `deltaUsdpc`.
+
+**Invariant extended:** The sweep now surfaces divergence in both USDT and USDPC against the live VALR account each morning.
+
+---
+
+### v0.6.120 – Customer 999 ledger backfill and `balances_daily` correction
+**Date:** 2026-06-07
+**Status:** ✅ DATA FIX APPLIED
+
+**Background.** Customer 999 is Davin's personal VALR subaccount used for live LTH PVR trading. Three USDPC conversions executed directly on VALR between 2026-05-12 and 2026-05-26 were never booked to the ledger, leaving `balances_daily` showing stale USDT = $13,937 and USDPC = 0 for the entire period.
+
+**Un-booked events (all three executed directly on VALR UI, not via BitWealth pipeline):**
+
+| Date | Type | Amount | Notes |
+|------|------|--------|-------|
+| 2026-05-12 | Market Buy USDPC | −$9,999.991240 USDT → +8,684.456850 USDPC | First manual buy |
+| 2026-05-12 | Market Buy USDPC | −$3,937.176975 USDT → +3,419.227350 USDPC | Second manual buy |
+| 2026-05-25 | ZAR topup R7,000 | +$423.999941 USDT equivalent | Existing ledger line — amount corrected |
+| 2026-05-26 | ZAR→USDT physical | −R7,009.12 ZAR → $0 USDT | Physical conversion, no USDT received |
+| 2026-05-26 | Simple Buy USDPC | −$423.982080 USDT → +362.151360 USDPC | Third manual buy |
+
+**Ledger fix applied (single transaction):**
+```sql
+-- 1. Correct 05-25 topup (ZAR→USDT equivalent was wrong)
+UPDATE lth_pvr.ledger_lines
+SET amount_usdt = 423.999941
+WHERE ledger_id = '0a4c0b73-d9a9-4aae-b7ea-ee17458b4172';
+
+-- 2. Insert 05-26 ZAR→USDT physical conversion
+INSERT INTO lth_pvr.ledger_lines (...) VALUES (..., kind='convert', amount_zar=-7009.12, amount_usdt=0, ...);
+
+-- 3. Insert 05-12 Market Buy #1 convert leg
+INSERT INTO lth_pvr.ledger_lines (...) VALUES (..., kind='convert', amount_usdt=-9999.991240, amount_usdpc=8684.456850, ...);
+
+-- 4. Insert 05-12 Market Buy #2 convert leg
+INSERT INTO lth_pvr.ledger_lines (...) VALUES (..., kind='convert', amount_usdt=-3937.176975, amount_usdpc=3419.227350, ...);
+
+-- 5. Insert 05-26 Simple Buy convert leg
+INSERT INTO lth_pvr.ledger_lines (...) VALUES (..., kind='convert', amount_usdt=-423.982080, amount_usdpc=362.151360, ...);
+```
+
+**Cumulative ledger after fix:** `cum_usdt = 0.02329670`, `cum_usdpc = 12465.83556`, `cum_zar = 0.04` — matches VALR exactly.
+
+**`balances_daily` corrected (27 rows, 2026-05-12 → 2026-06-07) in four periods:**
+
+| Period | USDT | USDPC | ZAR | price_usd | cost_basis |
+|--------|------|-------|-----|-----------|------------|
+| 05-12 to 05-24 | 0.00544 | 12,103.684 | 9.16 | 1.15030 | 13,937.174 |
+| 05-25 | 424.005 | 12,103.684 | 7,009.16 | 1.15030 | 14,361.174 |
+| 05-26 to 05-29 | 0.02330 | 12,465.836 | 0.04 | 1.15200 | 14,361.174 |
+| 05-30 to 06-07 | 0.02330 | 12,465.836 | 0.04 | actual from `usdpc_prices_daily` | 14,361.174 |
+
+`cost_basis_usd` = $14,361.17 = SUM(topup `amount_usdt`) − SUM(|withdrawal `amount_usdt`|) across full ledger history.
+
+**`customer_state_daily` corrected:** `hwm_contrib_net_cum` set to $14,361.17 and phantom `high_water_mark_usd` = $40.88 (artefact from HWM seeding cron before data correction) reset to $0.00 for all rows 2026-06-02 → 2026-06-06.
+
+**Root cause / prevention.** The system only auto-books orders it places via `ef_execute_orders`. Manual USDPC buys executed on the VALR UI bypass the pipeline entirely and are invisible until manually reconciled. Going forward: deposit USDT and let `ef_sweep_usdt_to_usdpc` convert it the next morning, or use the Admin UI **Force USDT→USDPC** button. The new v0.6.121 USDPC recon check (same day) will surface any future manual conversions within 24 hours.
+
+---
 
 ### v0.6.119 – HWM phantom from NAV-inflation latching
 **Date:** 2026-06-06
