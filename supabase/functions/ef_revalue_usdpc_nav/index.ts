@@ -104,7 +104,6 @@ Deno.serve(async () => {
         usdpc_price_usd: usdpcPx,
         zar_balance: zar,
         nav_usd: nav,
-        band_source: "rb",
       }, { onConflict: "org_id,customer_id,date" });
       if (upErr) {
         await logAlert(sb, "ef_revalue_usdpc_nav", "error",

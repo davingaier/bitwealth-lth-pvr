@@ -3,11 +3,27 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-08 (v0.6.121)
+**Last updated:** 2026-06-08 (v0.6.122)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.122 – Drop `band_source` column from `lth_pvr.balances_daily`
+**Date:** 2026-06-08
+**Status:** ✅ DEPLOYED (migration + two EFs)
+
+**Motivation.** Since the CI→RB migration completed on 2026-05-19, every row written to `lth_pvr.balances_daily` carried `band_source = 'ci'` (the column default was never updated). The column was written by two edge functions but never read by anything — not the portal, not the customer portal, not any SQL function or view. It conveyed no information and was actively misleading (all live rows post-2026-05-19 should be `'rb'`).
+
+**Changes:**
+- **Migration `drop_band_source_from_balances_daily`:** `ALTER TABLE lth_pvr.balances_daily DROP COLUMN band_source`.
+- **`ef_post_ledger_and_balances`:** removed `band_source: bandSource` from the `balances_daily` upsert payload.
+- **`ef_revalue_usdpc_nav`:** removed `band_source: "rb"` from the `balances_daily` upsert payload.
+- Both functions redeployed.
+
+**Note.** The `band_source` column on `lth_pvr.decisions_daily` is **not** affected — it correctly records which band source drove each daily buy/sell decision and remains useful for audit and historical back-test comparison.
+
+---
 
 ### v0.6.121 – USDPC live-balance reconciliation check in `ef_sweep_usdt_to_usdpc`
 **Date:** 2026-06-08

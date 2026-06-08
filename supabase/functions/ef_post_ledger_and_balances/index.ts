@@ -1304,7 +1304,6 @@ Deno.serve(async (req: Request) => {
               zar_balance: zar,
               nav_usd: nav,
               cost_basis_usd: costBasis,
-              band_source: bandSource,
             },
             { onConflict: "org_id,customer_id,date" },
           );
