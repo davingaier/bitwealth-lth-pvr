@@ -839,7 +839,7 @@ Deno.serve(async (req)=>{
         contrib_net_usdt_cum: stdContribNetCum,
         total_roi_percent: stdRoi,
         cagr_percent: stdCagr,
-        total_exchange_fees_btc: stdExchangeFeeBtcCum,
+        total_exchange_fees_btc: stdExchangeFeesBtcCum,
         total_exchange_fees_usdt: stdExchangeFeesUsdtCum
       });
       // HODL benchmark daily mark-to-market
