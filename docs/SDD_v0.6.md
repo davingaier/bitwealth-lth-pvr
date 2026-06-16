@@ -3,11 +3,25 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-08 (v0.6.122)
+**Last updated:** 2026-06-16 (v0.6.123)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.123 – Fix `ef_renew_rb_token` renewal window (14 days → 7 days)
+**Date:** 2026-06-16  
+**Status:** ✅ DEPLOYED
+
+**Root cause.** `RENEWAL_WINDOW_DAYS` was set to 14, but the Research Bitcoin API enforces a server-side 7-day renewal window — any attempt more than 7 days before expiry is rejected with **HTTP 403 "Token not close to expiry"**. The token issued 2026-03-28 expires 2026-06-26, so the function started failing on **2026-06-12** (14 days out) and generated a `critical` alert every day until the window actually opens on 2026-06-19.
+
+**Changes:**
+- **`ef_renew_rb_token`:** `RENEWAL_WINDOW_DAYS` changed from `14` → `7`. Added explicit early-exit log message (`console.info`) when outside the renewal window so the skip is auditable in function logs without creating alert noise. Redeployed.
+- **Existing spurious critical alerts** (5 rows) marked `notified_at = now()` to clear the alert panel.
+
+**No schema changes.**
+
+---
 
 ### v0.6.122 – Drop `band_source` column from `lth_pvr.balances_daily`
 **Date:** 2026-06-08
@@ -3935,7 +3949,7 @@ supabase functions deploy ef_execute_public_backtests --project-ref wqnmxpooabme
 #### 2. New edge functions
 
 - **`ef_fetch_rb_bands`** – Daily RB-sourced band computation. Reads token from `rb_api_token`, fetches 3 RB endpoints (`supply_lth`, `realized_price_lth`, `price`) via CSV API, updates Welford state in `rb_bands_state`, computes all 10 band prices, upserts to `rb_bands_daily`. Formula: `price_at_X = (pvr_target × cum_std + lth_rc) / lth_supply`. Validated to <0.3% of CI values.
-- **`ef_renew_rb_token`** – Daily token renewal check. If `expires_at ≤ today + 14 days`, calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <token>`, stores new token + new expiry (today + 90 days) in `rb_api_token`, logs `info` alert on success or `critical` alert on failure.
+- **`ef_renew_rb_token`** – Daily token renewal check. If `expires_at ≤ today + 7 days` (RB API enforces a 7-day server-side renewal window; earlier attempts return HTTP 403), calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <token>`, stores new token + new expiry (today + 90 days) in `rb_api_token`, logs `info` alert on success or `critical` alert on failure.
 
 #### 3. New cron jobs (all use `lth_pvr.call_edge()`)
 
@@ -10390,7 +10404,7 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 - **`lth_pvr.rb_api_token`** *(added 2026-03-28)*
   - Stores the Research Bitcoin API token with expiry metadata
   - Columns: `org_id` (PK), `token` text, `issued_at` date, `expires_at` date, `updated_at` timestamptz
-  - Tokens expire every 90 days; auto-renewed by `ef_renew_rb_token` within 14-day window before expiry
+  - Tokens expire every 90 days; auto-renewed by `ef_renew_rb_token` within **7-day** window before expiry (RB API rejects renewal attempts earlier than 7 days with HTTP 403)
   - Used by `ef_fetch_rb_bands` instead of env secret (table allows programmatic updates)
 
 - **`lth_pvr.ci_bands_guard_log`**
@@ -10426,8 +10440,9 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 - **`ef_renew_rb_token`** *(added 2026-03-28)*
   - Scheduled daily at **00:03 UTC** (before band fetches)
   - Reads current token from `rb_api_token`; checks days until expiry
-  - If `expires_at > today + 14 days` → returns `{skipped: true, reason: "not_due"}`
-  - If within 14-day window (or `force: true` in payload) → calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <current_token>`
+  - If `expires_at > today + 7 days` → logs info to function console and returns `{skipped: true, reason: "not_due"}` (no alert generated)
+  - If within **7-day** window (or `force: true` in payload) → calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <current_token>`
+  - **Note:** The RB API enforces a strict 7-day server-side window; attempts earlier than 7 days before expiry return HTTP 403 "Token not close to expiry"
   - On success: stores new token + `expires_at = today + 90 days` in `rb_api_token`, logs `info` alert
   - On failure: logs `critical` alert (surfaces in daily digest email), retries next day
   - First automatic renewal attempt: **2026-06-12** (14 days before 2026-06-26 expiry)

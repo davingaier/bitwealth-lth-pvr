@@ -2,7 +2,7 @@
 // ===========================================================
 // Runs daily at 00:03 UTC (before ef_fetch_rb_bands at 00:06).
 // Checks whether the Research Bitcoin API token stored in
-// lth_pvr.rb_api_token is within its renewal window (14 days
+// lth_pvr.rb_api_token is within its renewal window (7 days
 // before expiry). If so, calls the RB renewal endpoint with
 // the current token, stores the new token + expiry, and logs
 // an info alert on success or a critical alert on failure.
@@ -12,13 +12,18 @@
 //   Header: Authorization: Bearer <current_token>
 //   Response: JSON { token: "new_token" }
 //
+// IMPORTANT: The RB API enforces a 7-day renewal window — attempts
+// more than 7 days before expiry will be rejected with HTTP 403.
+// This function exits early (no-op) when days_until_expiry > 7.
+//
 // Idempotent and safe to call multiple times per day.
 // ===========================================================
 
 import { getServiceClient } from "./client.ts";
 
 const RB_RENEW_URL = "https://api.researchbitcoin.net/v2/auth/renew";
-const RENEWAL_WINDOW_DAYS = 14; // start attempting renewal this many days before expiry
+// The RB API enforces a strict 7-day renewal window (HTTP 403 if attempted earlier).
+const RENEWAL_WINDOW_DAYS = 7; // must match RB API's server-side enforcement
 
 // ---------------------------------------------------------------------------
 // Alert helper
@@ -135,6 +140,11 @@ Deno.serve(async (req: Request) => {
   const force = body.force === true;
 
   if (!force && daysUntilExpiry > RENEWAL_WINDOW_DAYS) {
+    // RB API will reject with HTTP 403 if we try before the 7-day window.
+    // Log at info level so there is an audit trail but no alert spam.
+    console.info(
+      `ef_renew_rb_token: not in renewal window — ${daysUntilExpiry} days until expiry (window opens at ${RENEWAL_WINDOW_DAYS} days). Skipping.`,
+    );
     return new Response(
       JSON.stringify({
         skipped: true,
