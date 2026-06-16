@@ -364,7 +364,7 @@ deno_version = 2
 RESEND_API_KEY = "re_ZUoZ9aRn_LUxV8exouZvKXNW7xYk6jXYc"
 # Alert email configuration
 ALERT_EMAIL_FROM = "alerts@bitwealth.co.za"
-ALERT_EMAIL_TO = "davin.gaier@gmail.com"
+ALERT_EMAIL_TO = "admin@bitwealth.co.za"
 
 [analytics]
 enabled = true

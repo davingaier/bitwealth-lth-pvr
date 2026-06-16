@@ -20,11 +20,14 @@ async function sendEmail(subject: string, text: string) {
   const from = Deno.env.get("ALERT_EMAIL_FROM") || "admin@bitwealth.co.za";
   const to = Deno.env.get("ALERT_EMAIL_TO") || "support@bitwealth.co.za";
 
+  console.info(`ef_alert_digest: sending SMTP from=${from} to=${to}`);
+
   const result = await sendTextEmail(to, from, subject, text);
 
   if (!result.success) {
     throw new Error(`SMTP error: ${result.error}`);
   }
+  console.info(`ef_alert_digest: SMTP accepted — messageId=${result.messageId}`);
 }
 
 Deno.serve(async (req: Request) => {
