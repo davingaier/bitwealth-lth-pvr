@@ -3238,9 +3238,25 @@
             const currentThreshold = thresholdStep.length ? thresholdStep[thresholdStep.length - 1] : 0;
             const thresholdFlat = daily.map(() => currentThreshold);
             const currentNav = daily.length ? parseFloat(daily[daily.length - 1].nav_usd || 0) : 0;
+
+            // Running Peak: cumulative maximum of profit (NAV − contributions) since the
+            // start of the current fee period.  This ratchets upward each time a new NAV
+            // high is set and never decreases — giving the customer a clear view of "the
+            // highest profit you have ever achieved" vs the fee threshold line.
+            // Expressed in profit-dollar terms (same units as hwmProfit).
+            const runningPeak = [];
+            let peakProfit = 0;
+            for (let i = 0; i < daily.length; i++) {
+                const nav = parseFloat(daily[i].nav_usd || 0);
+                const profit = Math.max(0, nav - cumContrib[i]);
+                peakProfit = Math.max(peakProfit, profit);
+                runningPeak.push(+peakProfit.toFixed(2));
+            }
+            const currentRunningPeak = runningPeak.length ? runningPeak[runningPeak.length - 1] : 0;
+
             return {
                 cumContrib, hwmProfit, thresholdStep, thresholdFlat, currentThreshold,
-                currentNav,
+                currentNav, runningPeak, currentRunningPeak,
                 currentHwmProfit: hwmProfit.length ? hwmProfit[hwmProfit.length - 1] : 0,
                 currentContrib:  cumContrib.length ? cumContrib[cumContrib.length - 1] : 0
             };
@@ -3290,6 +3306,7 @@
             }
             const t = computeHwmThreshold(perfData.daily, perfData.contributions);
             const nav = t.currentNav, thr = t.currentThreshold, floor = t.currentContrib;
+            const peak = t.currentRunningPeak;  // profit dollars, not NAV
             box.style.display = 'block';
 
             const lo = Math.min(floor, nav, thr), hi = Math.max(floor, nav, thr);
@@ -3307,11 +3324,12 @@
 
             const dist = nav - thr;
             const st = document.getElementById('hwmGaugeStatus');
+            const peakLabel = peak > 0 ? ` | Running Peak +${usd(peak)}` : '';
             if (dist >= 0) {
-                st.textContent = 'Above HWM — fees accrue (+' + usd(dist) + ')';
+                st.textContent = 'Above fee threshold — fees accrue (+' + usd(dist) + ')' + peakLabel;
                 st.style.color = '#10b981';
             } else {
-                st.textContent = usd(-dist) + ' below HWM — no fee owed';
+                st.textContent = usd(-dist) + ' below fee threshold — no fee owed' + peakLabel;
                 st.style.color = '#f59e0b';
             }
         }
@@ -3370,6 +3388,8 @@
                 const navData = daily.map(d => parseFloat(d.nav_usd || 0));
                 const thrLabel = `Fee Threshold (HWM $${t.currentThreshold.toLocaleString('en-US', { maximumFractionDigits: 0 })})`;
 
+                // Running peak in absolute NAV terms: cost-basis floor + profit peak
+                const peakNavData = t.runningPeak.map((v, i) => +(t.cumContrib[i] + v).toFixed(2));
                 datasets = [
                     {
                         label: thrLabel,
@@ -3382,6 +3402,19 @@
                         fill: false,
                         tension: 0,
                         stepped: style === 'step' ? 'after' : false,
+                        spanGaps: true
+                    },
+                    {
+                        label: `Running Peak ($${t.currentRunningPeak.toLocaleString('en-US', {maximumFractionDigits:0})})`,
+                        data: peakNavData,
+                        borderColor: '#22d3ee',
+                        borderWidth: 1.5,
+                        borderDash: [4,3],
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        stepped: 'after',
                         spanGaps: true
                     },
                     {
@@ -3409,18 +3442,21 @@
                 const mode = getProfitMode();
                 const navData = daily.map(d => parseFloat(d.nav_usd || 0));
                 if (mode === 'pct') {
-                    const profitPct = daily.map((_, i) => t.cumContrib[i] > 0 ? +(((navData[i] - t.cumContrib[i]) / t.cumContrib[i]) * 100).toFixed(2) : 0);
-                    const hwmPct    = daily.map((_, i) => t.cumContrib[i] > 0 ? +((t.hwmProfit[i] / t.cumContrib[i]) * 100).toFixed(2) : 0);
+                    const profitPct   = daily.map((_, i) => t.cumContrib[i] > 0 ? +(((navData[i] - t.cumContrib[i]) / t.cumContrib[i]) * 100).toFixed(2) : 0);
+                    const hwmPct      = daily.map((_, i) => t.cumContrib[i] > 0 ? +((t.hwmProfit[i]    / t.cumContrib[i]) * 100).toFixed(2) : 0);
+                    const peakPct     = daily.map((_, i) => t.cumContrib[i] > 0 ? +((t.runningPeak[i]  / t.cumContrib[i]) * 100).toFixed(2) : 0);
                     datasets = [
                         { label: 'Profit %', data: profitPct, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.10)', fill: true, borderWidth: 2.2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 },
-                        { label: 'High-Water Mark', data: hwmPct, borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: 'Fee Threshold', data: hwmPct, borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: `Running Peak (${(t.currentRunningPeak / (t.cumContrib[t.cumContrib.length-1]||1) * 100).toFixed(1)}%)`, data: peakPct, borderColor: '#22d3ee', borderWidth: 1.5, borderDash: [4,3], pointRadius: 0, tension: 0, stepped: 'after' },
                         { label: 'Breakeven', data: daily.map(() => 0), borderColor: '#64748b', borderWidth: 1, borderDash: [2,4], pointRadius: 0 }
                     ];
                 } else {
                     const profitAbs = daily.map((_, i) => +(navData[i] - t.cumContrib[i]).toFixed(2));
                     datasets = [
                         { label: 'Profit', data: profitAbs, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.10)', fill: true, borderWidth: 2.2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3 },
-                        { label: 'High-Water Mark', data: t.hwmProfit.slice(), borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: 'Fee Threshold', data: t.hwmProfit.slice(), borderColor: PERF_COLORS.navGreen, borderWidth: 2, borderDash: [8,4], pointRadius: 0, tension: 0 },
+                        { label: `Running Peak ($${t.currentRunningPeak.toLocaleString('en-US',{maximumFractionDigits:0})})`, data: t.runningPeak.slice(), borderColor: '#22d3ee', borderWidth: 1.5, borderDash: [4,3], pointRadius: 0, tension: 0, stepped: 'after' },
                         { label: 'Breakeven', data: daily.map(() => 0), borderColor: '#64748b', borderWidth: 1, borderDash: [2,4], pointRadius: 0 }
                     ];
                 }

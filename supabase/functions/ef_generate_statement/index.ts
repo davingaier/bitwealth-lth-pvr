@@ -501,7 +501,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: hwmRow } = await supabase
     .schema("lth_pvr")
     .from("customer_state_daily")
-    .select("high_water_mark_usd, hwm_contrib_net_cum")
+    .select("high_water_mark_usd, hwm_contrib_net_cum, last_perf_fee_month")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .order("date", { ascending: false })
@@ -509,18 +509,18 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     .maybeSingle();
   const hwmUsd = Number(hwmRow?.high_water_mark_usd ?? 0);
   const hwmContribCum = Number(hwmRow?.hwm_contrib_net_cum ?? 0);
+  const hwmLastPerfFeeMonth = hwmRow?.last_perf_fee_month ?? null;
 
   // ── Fee threshold (the figure shown as "High-water mark" on the statement) ──
-  // high_water_mark_usd is the *profit-only* baseline (max(0, NAV − net
-  // contributions)), which only ratchets when a performance fee is actually
-  // charged. For a never-profited customer it is $0, so the bare value is
-  // meaningless on its own. The figure customers care about is the level their
-  // NAV must exceed before any new performance fee accrues:
-  //   threshold = HWM + contributions_since_HWM
-  //   contributions_since_HWM = max(0, cum_net_contrib_to_date − hwm_contrib_net_cum)
-  // This matches the Customer Portal's "Fee Threshold (HWM)" line.
-  const contribsSinceHwm = Math.max(0, costBasisUsd - hwmContribCum);
-  const hwmThreshold = hwmUsd + contribsSinceHwm;
+  // Mirrors the threshold logic used by ef_collect_annual_fees exactly:
+  //   • Never-fee'd customers (last_perf_fee_month IS NULL):
+  //       threshold = hwm_contrib_net_cum  (total net contributions = full cost basis)
+  //   • Previously fee'd customers:
+  //       threshold = high_water_mark_usd + (net contributions since HWM was set)
+  //       contributions since HWM ≈ max(0, cost_basis_usd − hwm_contrib_net_cum)
+  const hwmThreshold = hwmLastPerfFeeMonth === null
+    ? hwmContribCum                                          // first-time: threshold = total contributions
+    : hwmUsd + Math.max(0, costBasisUsd - hwmContribCum);  // previously fee'd: HWM profit + new contrib
 
   // ── Annual accrual lookup (if either fee is on annual schedule) ──
   if (platSchedule === "annual" || perfSchedule === "annual") {
@@ -558,7 +558,9 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
           amount_usd: fmtUsd(interimMonthlyPerfUsd),
         });
       }
-      accruedYtdPerformanceUsd += Number(latestAccrual?.accrued_performance_fee_usdt ?? 0);
+      accruedYtdPerformanceUsd +=
+        Number(latestAccrual?.accrued_performance_fee_usdt ?? 0) ||
+        interimMonthlyPerfUsd;  // fall back when accrual table not yet seeded
     }
 
     // Anniversary = next yearly anniversary of inception after today.
