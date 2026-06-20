@@ -12,9 +12,14 @@
 //   Header: Authorization: Bearer <current_token>
 //   Response: JSON { token: "new_token" }
 //
-// IMPORTANT: The RB API enforces a 7-day renewal window — attempts
-// more than 7 days before expiry will be rejected with HTTP 403.
-// This function exits early (no-op) when days_until_expiry > 7.
+// IMPORTANT: The RB API enforces a strict <7-day renewal window — attempts
+// at exactly 7 days or more before expiry are rejected with HTTP 403.
+// This function exits early (no-op) when days_until_expiry >= 7 (i.e. only
+// attempts renewal when 6 or fewer days remain).
+//
+// RB API response shape (as of 2026-06-20):
+//   { api_key: "new_token", api_key_expires_at: "...", status: "success", ... }
+// Note: older response shape used { token: "..." } — both are accepted.
 //
 // Idempotent and safe to call multiple times per day.
 // ===========================================================
@@ -22,8 +27,9 @@
 import { getServiceClient } from "./client.ts";
 
 const RB_RENEW_URL = "https://api.researchbitcoin.net/v2/auth/renew";
-// The RB API enforces a strict 7-day renewal window (HTTP 403 if attempted earlier).
-const RENEWAL_WINDOW_DAYS = 7; // must match RB API's server-side enforcement
+// The RB API allows renewal only when days_until_expiry < 7 (strictly less than).
+// At exactly 7 days it still returns HTTP 403. Use 6 as the trigger threshold.
+const RENEWAL_WINDOW_DAYS = 6; // start attempting when 6 or fewer days remain
 
 // ---------------------------------------------------------------------------
 // Alert helper
@@ -126,7 +132,7 @@ Deno.serve(async (req: Request) => {
     await logAlert(
       sb,
       "warn",
-      `Research Bitcoin API token expires in ${daysUntilExpiry} day(s) (on ${tokenRow.expires_at}). Auto-renewal will attempt within the 14-day window; capture a manual token via the Administration module if renewal continues to fail.`,
+      `Research Bitcoin API token expires in ${daysUntilExpiry} day(s) (on ${tokenRow.expires_at}). Auto-renewal will attempt within the 6-day window; capture a manual token via the Administration module if renewal continues to fail.`,
       {
         org_id,
         expires_at: tokenRow.expires_at,
@@ -183,14 +189,22 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Non-JSON response: ${responseText.slice(0, 200)}`);
     }
 
-    // RB returns { token: "..." }
-    if (typeof parsed.token !== "string" || !parsed.token) {
+    // RB API response may use 'api_key' (current) or legacy 'token' field.
+    // Accept either to be robust across API versions.
+    const rawToken = parsed.api_key ?? parsed.token;
+    if (typeof rawToken !== "string" || !rawToken) {
       throw new Error(
-        `Unexpected response shape — no 'token' field: ${JSON.stringify(parsed).slice(0, 200)}`,
+        `Unexpected response shape — no 'api_key' or 'token' field: ${JSON.stringify(parsed).slice(0, 200)}`,
       );
     }
+    // Extract expiry from response if available (avoids hardcoding 90-day assumption)
+    const apiExpiresAt = typeof parsed.api_key_expires_at === "string"
+      ? parsed.api_key_expires_at.slice(0, 10)
+      : null;
 
-    newToken = parsed.token;
+    newToken = rawToken;
+    // Store response expiry for use below (overrides computed newExpiresAt if available)
+    (body as Record<string, unknown>)._rbExpiresAt = apiExpiresAt;
   } catch (e) {
     const msg = `RB token renewal failed: ${String((e as Error)?.message ?? e)}`;
     console.error(msg);
@@ -208,11 +222,10 @@ Deno.serve(async (req: Request) => {
     return new Response(msg, { status: 502 });
   }
 
-  // ---- Compute new expiry (90 days from today) and persist -----------------
+  // ---- Compute new expiry — prefer API-reported expiry, fall back to +90 days ---
   const newIssuedAt = today.toISOString().slice(0, 10);
-  const newExpiresAt = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const newExpiresAt = (body as Record<string, unknown>)._rbExpiresAt as string | null
+    ?? new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const { error: updateErr } = await sb
     .schema("lth_pvr")
