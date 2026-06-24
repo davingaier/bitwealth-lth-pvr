@@ -3,11 +3,69 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-16 (v0.6.123)
+**Last updated:** 2026-06-24 (v0.6.124)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.124 – `hwm_contrib_net_cum` DEFAULT 0 bug → phantom $1,056 performance fee; portal chart dual-HWM lines; statement threshold fix
+**Date:** 2026-06-24  
+**Status:** ✅ DEPLOYED
+
+#### Bug A – `hwm_contrib_net_cum DEFAULT 0 NOT NULL` resets HWM carry-forward (critical)
+
+**Symptom.** Customer 49's portal balance card showed **accrued performance fee = $1,056.16** (should be ~$4.36: ($42,246 NAV − $42,072 threshold) × 2.5%). Customers 31, 54, and 999 were also affected.
+
+**Root cause.** `lth_pvr.customer_state_daily.hwm_contrib_net_cum` was defined `NUMERIC DEFAULT 0 NOT NULL`. Each morning `ef_generate_decisions` upserts today's signal-date row using only the decision-state columns (bear_pause, was_above_p1, etc.) — it never sets the HWM columns. When the row does not yet exist (first INSERT of the day), PostgreSQL fills the column default: `0`. The `ensure_hwm_initialised` cron (03:30 UTC) then reads the latest row and checks `IF v_latest_contrib IS NOT NULL THEN RETURN skipped` — but `0 IS NOT NULL` is `TRUE`, so it treats the freshly-inserted `0` as "already seeded" and exits without carrying forward the real value ($42,071.95). The threshold collapses to `high_water_mark_usd + 0 = $0`, so `get_customer_accrued_fees` computed performance fee ≈ `NAV × rate`.
+
+**Affected rows.** 16 rows, customers 31 / 49 / 54 / 999, dates 2026-06-20 → 2026-06-23.
+
+**Fix (migration `fix_hwm_contrib_nullable_default`):**
+```sql
+ALTER TABLE lth_pvr.customer_state_daily
+  ALTER COLUMN hwm_contrib_net_cum DROP NOT NULL,
+  ALTER COLUMN hwm_contrib_net_cum SET DEFAULT NULL,
+  ALTER COLUMN high_water_mark_usd DROP NOT NULL,
+  ALTER COLUMN high_water_mark_usd SET DEFAULT NULL;
+```
+Fresh INSERTs from `ef_generate_decisions` now land as `NULL`. The `IS NOT NULL` guard in `ensure_hwm_initialised` now correctly detects uninitialized rows.
+
+**Data remediation.** Carry-forward UPDATE for all 16 broken rows (DISTINCT ON latest seeded row per customer, update all later rows with 0/NULL contrib back to the correct value). Result: customer 49 threshold restored to $42,071.95; accrued performance fee corrected to $4.36.
+
+#### Bug B – `get_customer_accrued_fees` always returned $0 performance fee for annual-schedule customers
+
+**Root cause.** The function read `accrued_performance_fee_usdt` from `lth_pvr.annual_fee_accrual`, which is only populated by the annual fee-collection event (`ef_collect_annual_fees`). For customers who have never had a fee charged, the table value is `0.00`, so the function always returned $0.
+
+**Fix.** `get_customer_accrued_fees` rewritten to compute performance fee **on-the-fly** for all schedules when the stored value is 0, using the same HWM threshold formula as `ef_collect_annual_fees`:
+- Never-fee'd customer (`last_perf_fee_month IS NULL`): `threshold = hwm_contrib_net_cum`
+- Previously fee'd: `threshold = high_water_mark_usd + hwm_contrib_net_cum`
+- `perf_fee = GREATEST(0, latest_nav − threshold) × performance_fee_rate`
+
+For annual schedule the stored table value is preferred when > 0 (accrual event has fired). For all other schedules (monthly, immediate, quarterly, bi-annual, any future) fees are settled on each event so on-the-fly is always used. The function is now schedule-agnostic for performance fee computation.
+
+#### Bug C – `ef_generate_statement` hwmThreshold formula returned ~$0 for first-time customers
+
+**Root cause.** The statement computed `contribsSinceHwm = max(0, costBasisUsd − hwmContribCum)`. For customer 49, `costBasisUsd = 42071.95099761` and `hwmContribCum = 42071.95` (rounded during HWM seeding), so `contribsSinceHwm ≈ 0.001` → `hwmThreshold ≈ $0`. The statement showed `hwm_usd: "—"` and computed accrued performance fee ≈ `NAV × rate ≈ $4,222`.
+
+**Fix.** Added `last_perf_fee_month` to the HWM state query; formula now matches `ef_collect_annual_fees` exactly:
+```typescript
+const hwmThreshold = hwmLastPerfFeeMonth === null
+  ? hwmContribCum                                         // first-time: threshold = total contributions
+  : hwmUsd + Math.max(0, costBasisUsd - hwmContribCum);  // post-fee: HWM profit + new contrib
+```
+`accruedYtdPerformanceUsd` also falls back to the on-the-fly interim value when the stored table value is 0. `ef_generate_statement` redeployed.
+
+#### Feature – Portal chart: dual HWM lines (Fee Threshold + Running Peak)
+
+- `computeHwmThreshold()` now computes and returns `runningPeak[]` (cumulative maximum of `nav − cumContrib` since inception) and `currentRunningPeak`.
+- **HWM sub-option chart**: new cyan (`#22d3ee`) dashed "Running Peak ($X)" line showing the highest absolute NAV ever achieved.
+- **Profit/% sub-option chart**: "High-Water Mark" renamed to **"Fee Threshold"**; cyan dashed **"Running Peak"** line added showing the highest profit ever achieved.
+- **HWM gauge above the chart removed** — the two chart lines convey the same information more clearly without the extra UI element.
+
+**Schema changes:** `lth_pvr.customer_state_daily.hwm_contrib_net_cum` and `high_water_mark_usd` both changed from `NOT NULL DEFAULT 0` → nullable `DEFAULT NULL` (migration `fix_hwm_contrib_nullable_default`).
+
+---
 
 ### v0.6.123 – Fix `ef_renew_rb_token` renewal window (14 days → 7 days)
 **Date:** 2026-06-16  

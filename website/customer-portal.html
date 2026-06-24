@@ -358,22 +358,7 @@
                                 <div style="font-size: 40px; margin-bottom: 12px;">📊</div>
                                 <p>No performance data available yet. Charts will appear once trading begins.</p>
                             </div>
-                            <!-- Option E: at-a-glance HWM gauge (NAV between Cost Basis floor and Fee Threshold) -->
-                            <div id="perfHwmGauge" style="display: none; margin: 0 0 18px; padding: 14px 16px; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
-                                    <span id="hwmGaugeFloorLabel">Cost Basis</span>
-                                    <span id="hwmGaugeStatus" style="font-weight: 600;">—</span>
-                                    <span id="hwmGaugeTopLabel">Fee Threshold (HWM)</span>
-                                </div>
-                                <div style="position: relative; height: 24px; border-radius: 999px; background: linear-gradient(90deg, rgba(20,184,166,0.25), rgba(255,180,0,0.25)); border: 1px solid rgba(255,255,255,0.08);">
-                                    <div id="hwmGaugeThr" style="position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--gold);"></div>
-                                    <div id="hwmGaugeMarker" style="position: absolute; top: -5px; width: 3px; height: 34px; background: #fff; border-radius: 2px; box-shadow: 0 0 8px rgba(255,255,255,0.6);">
-                                        <div id="hwmGaugeBub" style="position: absolute; top: -24px; left: 50%; transform: translateX(-50%); background: #fff; color: #0b1220; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; white-space: nowrap;">NAV</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Canvas lives in its own fixed-height wrapper so the gauge above it
-                                 flows naturally and the chart never overflows into the metrics table. -->
+                            <!-- Canvas wrapper: fixed height so the chart never overflows into the metrics table. -->
                             <div id="perfChartWrap" style="position: relative; height: 500px;">
                                 <canvas id="perfChart"></canvas>
                             </div>
@@ -3184,10 +3169,6 @@
             const labels = perfData.daily.map(d => d.date);
             const ctx = document.getElementById('perfChart').getContext('2d');
 
-            // The gauge flows above the fixed-height canvas wrapper, so it just
-            // needs its values refreshed (no container-height juggling).
-            updateHwmGauge();
-
             if (type === 'nav') {
                 buildNavChart(ctx, labels);
             } else if (type === 'roi') {
@@ -3263,6 +3244,9 @@
         }
 
         // Deposit / withdrawal scatter markers, pinned to the NAV line.
+        // (The HWM gauge that previously sat above the chart was removed in
+        // v0.6.124 — the chart's dual Fee Threshold / Running Peak lines
+        // convey the same information more clearly.)
         function flowMarkerDatasets(daily) {
             const navByDate = new Map(daily.map(d => [d.date, parseFloat(d.nav_usd || 0)]));
             const depositMarkers = [], withdrawalMarkers = [];
@@ -3290,48 +3274,6 @@
                     showLine: false
                 }
             ];
-        }
-
-        // Option E — position the current NAV between the Cost Basis floor and
-        // the Fee Threshold on a horizontal gauge.
-        function updateHwmGauge() {
-            const box = document.getElementById('perfHwmGauge');
-            if (!box) return;
-            const type = document.getElementById('perfChartType').value;
-            const sub  = document.getElementById('perfNavSubOption').value;
-            const showFor = ['benchmarks', 'hwm', 'profit', 'headroom'];
-            if (!perfData?.daily?.length || type !== 'nav' || !showFor.includes(sub)) {
-                box.style.display = 'none';
-                return;
-            }
-            const t = computeHwmThreshold(perfData.daily, perfData.contributions);
-            const nav = t.currentNav, thr = t.currentThreshold, floor = t.currentContrib;
-            const peak = t.currentRunningPeak;  // profit dollars, not NAV
-            box.style.display = 'block';
-
-            const lo = Math.min(floor, nav, thr), hi = Math.max(floor, nav, thr);
-            const span = (hi - lo) || Math.max(1, hi || 1);
-            const pad = span * 0.08;
-            const min = lo - pad, max = hi + pad, rng = (max - min) || 1;
-            const pctOf = x => Math.max(0, Math.min(100, ((x - min) / rng) * 100));
-            const usd = n => '$' + Math.round(n).toLocaleString('en-US');
-
-            document.getElementById('hwmGaugeThr').style.left = pctOf(thr) + '%';
-            document.getElementById('hwmGaugeMarker').style.left = pctOf(nav) + '%';
-            document.getElementById('hwmGaugeBub').textContent = 'NAV ' + usd(nav);
-            document.getElementById('hwmGaugeFloorLabel').textContent = 'Cost Basis ' + usd(floor);
-            document.getElementById('hwmGaugeTopLabel').textContent = 'Fee Threshold ' + usd(thr);
-
-            const dist = nav - thr;
-            const st = document.getElementById('hwmGaugeStatus');
-            const peakLabel = peak > 0 ? ` | Running Peak +${usd(peak)}` : '';
-            if (dist >= 0) {
-                st.textContent = 'Above fee threshold — fees accrue (+' + usd(dist) + ')' + peakLabel;
-                st.style.color = '#10b981';
-            } else {
-                st.textContent = usd(-dist) + ' below fee threshold — no fee owed' + peakLabel;
-                st.style.color = '#f59e0b';
-            }
         }
 
         function buildNavChart(ctx, labels) {
