@@ -147,12 +147,16 @@ def build_variables(ws_v, mode):
          "Month 37 = July 2029", True),
         ("y5_start",   "Year 5 starts (model month #)",                          49,
          "Month 49 = July 2030 — start of next BTC halving cycle", True),
-        ("ret_y5_8",   "Annual portfolio return — Years 5–8 (p.a.)",             0.50,
-         "Next BTC bull cycle. Set to 0% for conservative Y5-8 assumption", True),
+        ("ret_y5_7",   "Annual portfolio return — Years 5–7 (p.a.)",             0.50,
+         "Bull cycle (months y5_start → y8_start-1). Default 50% — adjust for conservative scenario", True),
+        ("y8_start",   "Year 8 starts (model month #)",                          85,
+         "Month 85 = July 2033 — final bear/consolidation year", True),
+        ("ret_y8",     "Annual portfolio return — Year 8 (p.a.)",                0.10,
+         "Final year bear/consolidation. Mirrors Y4 assumption. Change to 0% for severe bear", True),
         ("perf_period","Performance fee crystallisation period (months)",         12,
          "12 = annual crystallisation (simplified to monthly accrual in formulas)", True),
         ("reserve_pm", "Monthly liquidity buffer provision (R)",                  10580,
-         "Set aside each month in Y1-3 to fund cash deficit in Y4; tracked in Reserve Fund Bal", True),
+         "Set aside in Y1-3 AND Y5-7 (bull years). Not provisioned in Y4 and Y8 (bear years). Reserve Fund Bal tracks cumulative total", True),
     ])
 
     # ── EXCHANGE FEE SHARE ──────────────────────────────────────────────
@@ -160,7 +164,9 @@ def build_variables(ws_v, mode):
         ("exch_fee_rate",  "VALR exchange fee rate per trade",                    0.001,
          "0.1% default. Covers ZAR/USDT, USDT/BTC, and USDT/USDPC conversions. Adjust if VALR rate changes", True),
         ("exch_fee_share", "BitWealth share of exchange fees",                    0.50,
-         "50% — as negotiated with VALR. Revenue = total monthly contributions × fee_rate × this share", True),
+         "50% — as negotiated with VALR. Applied to both AUM-trading and new-contribution revenue streams", True),
+        ("exch_trade_pct","% of total AUM traded per month (rebalancing/DCA)",   0.25,
+         "25% default: a quarter of existing AUM is traded/rebalanced each month. AUM revenue = prev_AUM × trade_pct × fee_rate × share", True),
     ], title_color=GREEN_D)
 
     # ── FSP COSTS (mode-dependent) ──────────────────────────────────────
@@ -170,8 +176,10 @@ def build_variables(ws_v, mode):
              "Juristic Representative appointment; non-recurring", False),
             ("caep_h13", "CAEP hosting — Months 1–3 (per month)",                 23000, "", True),
             ("caep_h46", "CAEP hosting — Months 4–6 (per month)",                 34500, "", True),
-            ("caep_h7p", "CAEP hosting — Month 7+ (per month, steady-state)",     46000,
+            ("caep_h7p",      "CAEP hosting — Month 7+ (per month, steady-state)", 46000,
              "Negotiate a contractual cap; dominant cost driver", True),
+            ("caep_inflation","CAEP hosting annual inflation rate",                 0.06,
+             "6% p.a. default. Compounds year-on-year from Year 2 on all hosting tiers (Year 1 = base rate)", True),
             ("caep_aum", "CAEP AUM fee (% of AUM, billed annually)",               0.0025,
              "0.25% p.a.; charged in months 12, 24, 36 … 96 on end-of-month AUM", True),
             ("software", "Software & infrastructure (monthly)",                    5000,
@@ -226,8 +234,8 @@ def build_variables(ws_v, mode):
 
     # ── NEW CLIENTS ─────────────────────────────────────────────────────
     row = vr(row, "NEW CLIENT ACQUISITION (rolling monthly ramp)", [
-        ("nc_max",       "Maximum cohort batches to model",                       48,
-         "48 batches × interval=1 month → fills months 3-50; stays at 48 clients from month 50", True),
+        ("nc_max",       "Maximum cohort batches to model",                       94,
+         "94 batches × 1 per month from month 3 → new clients joining every month through month 96", True),
         ("nc_start",     "First cohort — start month",                            3,
          "Month 3 = August 2026", True),
         ("nc_interval",  "Cohort interval (months)",                              1,
@@ -364,9 +372,10 @@ def build_forecast(ws_f, V, mode):
                 f"MOD({V['fc_month']}+$A{r}-2,12)+1,1),\"mmm-yy\")")
 
     def f_return(r):
-        """3-tier: Y1-3 / Y4 / Y5-8."""
+        """4-tier: Y1-3 (bull) / Y4 (bear) / Y5-7 (bull) / Y8 (bear)."""
         return (f"=IF($A{r}<{V['y4_start']},{V['ret_y1_3']}/12,"
-                f"IF($A{r}<{V['y5_start']},{V['ret_y4']}/12,{V['ret_y5_8']}/12))")
+                f"IF($A{r}<{V['y5_start']},{V['ret_y4']}/12,"
+                f"IF($A{r}<{V['y8_start']},{V['ret_y5_7']}/12,{V['ret_y8']}/12)))")
 
     # Per-client helpers
     def f_contrib(r, start_v, lump_v, monthly_v):
@@ -422,8 +431,12 @@ def build_forecast(ws_f, V, mode):
         return (f"={cl(6)}{r}+{cl(10)}{r}+{cl(14)}{r}+{cl(18)}{r}+{cl(23)}{r}")
 
     def f_exch_fee_rev(r):
-        # Revenue from VALR exchange-fee share on all monthly contributions
-        return f"={cl(25)}{r}*{V['exch_fee_rate']}*{V['exch_fee_share']}"
+        # AUM-based: prev-month closing AUM × trade_pct × fee_rate × share
+        # Contribution-based: new money this month × fee_rate × share
+        aum_prev    = f"IF($A{r}=1,0,{cl(30)}{r-1})"
+        aum_part    = f"({aum_prev}*{V['exch_trade_pct']}*{V['exch_fee_rate']}*{V['exch_fee_share']})"
+        contrib_part = f"({cl(25)}{r}*{V['exch_fee_rate']}*{V['exch_fee_share']})"
+        return f"={aum_part}+{contrib_part}"
 
     def f_total_rev(r):
         # Platform fees + Perf fees + Exchange fee share
@@ -440,10 +453,12 @@ def build_forecast(ws_f, V, mode):
         return "=0"
 
     def f_fsp2(r):
-        """CAEP: tiered hosting.  Finova: platform-fee share paid to Finova."""
+        """CAEP: tiered hosting with annual CPI inflation.  Finova: platform-fee share."""
         if mode == "caep":
-            return (f"=IF($A{r}<=3,{V['caep_h13']},"
+            base = (f"IF($A{r}<=3,{V['caep_h13']},"
                     f"IF($A{r}<=6,{V['caep_h46']},{V['caep_h7p']}))")
+            infl = f"(1+{V['caep_inflation']})^INT(($A{r}-1)/12)"
+            return f"={base}*{infl}"
         # Finova: 50% of total platform fees
         return f"={cl(26)}{r}*{V['finova_plat_share']}"
 
@@ -466,7 +481,11 @@ def build_forecast(ws_f, V, mode):
                 f"{cl(34)}{r}+{cl(35)}{r}")
 
     def f_reserve_prov(r):
-        return f"=IF($A{r}<{V['y4_start']},{V['reserve_pm']},0)"
+        # Provision in BULL years only: Y1-3 (months < y4_start) AND Y5-7 (y5_start ≤ month < y8_start)
+        # No provision in Y4 (bear) or Y8 (bear)
+        bull_y1_3 = f"$A{r}<{V['y4_start']}"
+        bull_y5_7 = f"AND($A{r}>={V['y5_start']},$A{r}<{V['y8_start']})"
+        return f"=IF(OR({bull_y1_3},{bull_y5_7}),{V['reserve_pm']},0)"
 
     def f_net_cash(r):
         # Total Revenue (29) - Total Costs (36) - Reserve (37)
@@ -611,10 +630,10 @@ def build_forecast(ws_f, V, mode):
             "NOTES:  "
             "① Expand group D:X (click + above column D) to view per-client detail.  "
             "② Performance fee = simplified monthly accrual (AUM × monthly_return × perf_rate).  "
-            "③ Exchange fee revenue = total contributions × exch_fee_rate × exch_fee_share (Variables).  "
-            "   Applies to ZAR/USDT, USDT/BTC, and USDT/USDPC conversions.  "
-            "④ Returns: 3-tier: 60% p.a. Y1-3 → 10% Y4 → 50% Y5-8 (next BTC cycle); all adjustable in Variables.  "
-            "⑤ Reserve provision accumulates monthly (Y1-3) in the Reserve Fund Balance column; "
+            "③ Exchange fee revenue = (prev_AUM × 25% traded × 0.1% fee × 50% share) + (contributions × 0.1% × 50% share). "
+            "   Both rates adjustable in Variables. Covers ZAR/USDT, USDT/BTC, USDT/USDPC conversions.  "
+            "④ Returns: 4-tier: 60% Y1-3 → 10% Y4 (bear) → 50% Y5-7 → 10% Y8 (bear); all adjustable in Variables.  "
+            "⑤ Reserve provision accumulates in BULL years only (Y1-3 and Y5-7); no provision in Y4 and Y8 (bear years). "
             "   no automated drawdown — compare Reserve Fund Bal vs Cumulative Cash to assess Y4 coverage.  "
             f"⑥ {fsp_note}"
         )).fill = fp(L_GOLD)
