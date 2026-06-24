@@ -1565,11 +1565,6 @@
                     <option value="false">No</option><option value="true">Yes</option>
                   </select>
                 </label>
-                <label><span class="label-line">USDPC yield enabled</span>
-                  <select name="usdpc_enabled">
-                    <option value="false">No</option><option value="true">Yes</option>
-                  </select>
-                </label>
                 <label><span class="label-line">Account model</span>
                   <select name="account_model">
                     <option value="omnibus">Omnibus</option><option value="subaccount">Subaccount</option>
@@ -1754,15 +1749,6 @@
             </div>
           </fieldset>
 
-          <!-- Yield Options -->
-          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
-            <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Yield Options</legend>
-            <label style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;cursor:pointer;">
-              <input id="strategyModalUsdpcEnabled" type="checkbox" style="margin-top:.2rem;">
-              <span><strong>Enable USDPC yield</strong><br><span style="color:#6c757d;font-size:.82rem;">Idle USDT is automatically converted to the yield-bearing USDPC stablecoin while waiting to buy BTC, then converted back just-in-time. (LTH PVR only.)</span></span>
-            </label>
-          </fieldset>
-
           <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1.25rem;">
             <button id="strategyModalCancelBtn" class="btn btn-secondary-sm" style="padding:.5rem 1.25rem;">Cancel</button>
             <button id="strategyModalConfirmBtn" class="btn btn-primary-sm" style="padding:.5rem 1.25rem;">Confirm Strategy</button>
@@ -1941,18 +1927,6 @@
                 <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
               </select>
             </div>
-            <div style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem;">
-              <input id="simUsdpcEnabled" type="checkbox" style="width:auto;" />
-              <label for="simUsdpcEnabled" style="font-size:.9rem;margin:0;cursor:pointer;">Model USDPC yield on idle cash</label>
-            </div>
-            <div>
-              <label for="simUsdpcApy" style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC APY (%):</label>
-              <input id="simUsdpcApy" type="number" min="0" max="100" step="0.1" value="10" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
-            </div>
-            <div>
-              <label for="simUsdpcFee" style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC conv. fee (%):</label>
-              <input id="simUsdpcFee" type="number" min="0" max="5" step="0.01" value="0.1" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
-            </div>
           </div>
           <div style="display:flex;gap:.75rem;justify-content:center;">
             <button id="runSimBtn" type="button" style="padding:.75rem 1.5rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Run Simulation</button>
@@ -2013,18 +1987,6 @@
                   <option value="rb" selected>RB – Research Bitcoin (live default)</option>
                   <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
                 </select>
-              </div>
-              <div style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem;">
-                <input id="optUsdpcEnabled" type="checkbox" style="width:auto;" />
-                <label for="optUsdpcEnabled" style="font-size:.9rem;margin:0;cursor:pointer;">Model USDPC yield on idle cash</label>
-              </div>
-              <div>
-                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC APY (%):</label>
-                <input id="optUsdpcApy" type="number" min="0" max="100" step="0.1" value="10" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
-              </div>
-              <div>
-                <label style="display:block;margin-bottom:.25rem;font-size:.9rem;">USDPC conv. fee (%):</label>
-                <input id="optUsdpcFee" type="number" min="0" max="5" step="0.01" value="0.1" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
               </div>
             </div>
 
@@ -2593,7 +2555,7 @@
             </div>
             <div style="color:#cbd5e1">→</div>
             <div class="lp-orgstep-text" style="font-size:.72rem;color:var(--muted)">
-              Per-customer steps: <strong style="color:var(--ink)">Decision · Intent · Execute · Settle</strong> <span style="color:var(--muted)">(+ Convert when a USDPC yield conversion runs)</span>
+              Per-customer steps: <strong style="color:var(--ink)">Decision · Intent · Execute · Settle</strong>
             </div>
           </div>
 
@@ -2626,45 +2588,6 @@
             </div>
             <button type="button" id="histViewBtn" disabled>View Transaction History</button>
           </div>
-        </div>
-
-        <!-- =============== Customer Balances (live VALR) =============== -->
-        <style>
-          #balancesCard{margin-top:1.5rem}
-          #balancesCard .lp-title{color:var(--ink)}
-          #balancesCard .bal-row{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.5rem}
-          #balCustSelect{position:relative;flex:1;min-width:280px;max-width:520px}
-          #balCustInput{width:100%;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;font-size:.9rem;background:var(--bg-input);color:var(--ink)}
-          #balCustList{position:absolute;top:100%;left:0;right:0;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;margin-top:.25rem;max-height:300px;overflow-y:auto;display:none;z-index:50;box-shadow:var(--shadow-md);color:var(--ink)}
-          #balCustList.open{display:block}
-          #balCustList .hist-opt{padding:.5rem .7rem;cursor:pointer;display:grid;grid-template-columns:3rem 1fr auto;gap:.5rem;align-items:center;font-size:.85rem;color:var(--ink)}
-          #balCustList .hist-opt:hover,#balCustList .hist-opt.active{background:var(--accent-soft)}
-          #balCustList .hist-opt-id{color:var(--muted);font-variant-numeric:tabular-nums}
-          #balFetchBtn{padding:.5rem 1rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;font-weight:500;cursor:pointer}
-          #balFetchBtn:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
-          #balFetchBtn:disabled{background:var(--muted-2);border-color:var(--muted-2);cursor:not-allowed;opacity:.6}
-          #balCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-top:.9rem}
-          .bal-tile{background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:.85rem 1rem}
-          .bal-tile .bal-ccy{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-          .bal-tile .bal-total{font-size:1.25rem;font-weight:600;color:var(--ink);margin-top:.2rem;font-variant-numeric:tabular-nums}
-          .bal-tile .bal-sub{font-size:.72rem;color:var(--muted);margin-top:.3rem;font-variant-numeric:tabular-nums}
-          .bal-tile .bal-sub .neg{color:var(--danger)}
-          #balMeta{font-size:.75rem;color:var(--muted);margin-top:.6rem}
-        </style>
-        <div class="card" id="balancesCard">
-          <h3 class="lp-title" style="margin-bottom:.5rem">Customer Balances</h3>
-          <p style="font-size:.8rem;color:var(--muted);margin:0 0 .75rem">
-            Select a customer to fetch their <strong>live VALR balances</strong> (ZAR, BTC, USDT &amp; USDPC) straight from the exchange.
-          </p>
-          <div class="bal-row">
-            <div id="balCustSelect">
-              <input type="text" id="balCustInput" placeholder="Search by customer number or name…" autocomplete="off" />
-              <div id="balCustList"></div>
-            </div>
-            <button type="button" id="balFetchBtn" disabled>Fetch Live Balances</button>
-          </div>
-          <div id="balCards"></div>
-          <div id="balMeta"></div>
         </div>
 
         <!-- =============== History Modal =============== -->
@@ -3102,12 +3025,6 @@
             { name: 'Execute',  s: r.execute  },
             { name: 'Settle',   s: r.settle   },
           ];
-          // USDPC yield conversion (sweep / pre-buy). Only show the light when a
-          // conversion actually happened for this customer/day so non-USDPC rows
-          // stay uncluttered; flashes amber while in progress, green/red on result.
-          if (r.convert && r.convert.status && r.convert.status !== 'na') {
-            steps.push({ name: 'Convert', s: r.convert });
-          }
           const lights = steps.map(st => `
             <div class="lp-step-grp" title="${escapeHtml(st.name + ': ' + (st.s?.label || ''))}">
               <span class="lp-step-name">${st.name}</span>
@@ -3339,94 +3256,6 @@
             </tr>`;
         }).join('');
       }
-
-      // ============= Customer Balances (live VALR) =============
-      const balInput   = $('#balCustInput');
-      const balList    = $('#balCustList');
-      const balBtn     = $('#balFetchBtn');
-      const balCards   = $('#balCards');
-      const balMeta    = $('#balMeta');
-      let balSelected  = null;
-
-      function renderBalCustList(filter) {
-        const f = (filter || '').toLowerCase().trim();
-        const matches = allCustomers.filter(c =>
-          !f || String(c.id).includes(f) || c.name.toLowerCase().includes(f) || c.email.toLowerCase().includes(f)
-        ).slice(0, 50);
-        if (!matches.length) {
-          balList.innerHTML = `<div class="hist-opt" style="color:var(--muted);cursor:default">No matches</div>`;
-        } else {
-          balList.innerHTML = matches.map(c => `
-            <div class="hist-opt" data-id="${c.id}">
-              <div class="hist-opt-id">#${c.id}</div>
-              <div>${escapeHtml(c.name)}<div style="font-size:.7rem;color:var(--muted)">${escapeHtml(c.email)}</div></div>
-              <div>${regBadge(c.status)}</div>
-            </div>`).join('');
-        }
-        balList.classList.add('open');
-      }
-
-      balInput.addEventListener('focus', () => { if (allCustomers.length === 0) loadCustomers().then(() => renderBalCustList('')); else renderBalCustList(balInput.value); });
-      balInput.addEventListener('input', () => { balSelected = null; balBtn.disabled = true; renderBalCustList(balInput.value); });
-      balList.addEventListener('mousedown', (e) => {
-        const opt = e.target.closest('.hist-opt[data-id]');
-        if (!opt) return;
-        const id = parseInt(opt.dataset.id, 10);
-        balSelected = allCustomers.find(c => c.id === id);
-        if (balSelected) {
-          balInput.value = `#${balSelected.id} · ${balSelected.name}`;
-          balBtn.disabled = false;
-        }
-        balList.classList.remove('open');
-      });
-      document.addEventListener('mousedown', (e) => {
-        if (!e.target.closest('#balCustSelect')) balList.classList.remove('open');
-      });
-
-      const balFmt = (sym, n) => {
-        const v = Number(n) || 0;
-        const dp = sym === 'BTC' ? 8 : sym === 'ZAR' ? 2 : 4;
-        return v.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
-      };
-      const balPrefix = (sym) => sym === 'ZAR' ? 'R ' : sym === 'BTC' ? '₿ ' : '';
-
-      async function fetchBalances() {
-        if (!balSelected) return;
-        balBtn.disabled = true;
-        balCards.innerHTML = '';
-        balMeta.textContent = '';
-        balCards.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:1.25rem">Fetching live balances from VALR…</div>`;
-        try {
-          const { data, error } = await window.supabaseClient.functions.invoke('ef_customer_valr_balances', {
-            body: { customer_id: balSelected.id }
-          });
-          if (error) throw new Error(error.message || 'Edge Function error');
-          if (!data || data.ok === false) throw new Error(data?.error || 'Failed to fetch balances');
-
-          const tiles = (data.balances || []).map(b => {
-            const reservedTxt = Number(b.reserved)
-              ? `<div class="bal-sub">Available ${balPrefix(b.currency)}${balFmt(b.currency, b.available)} · Reserved ${balPrefix(b.currency)}${balFmt(b.currency, b.reserved)}</div>`
-              : `<div class="bal-sub">Available ${balPrefix(b.currency)}${balFmt(b.currency, b.available)}</div>`;
-            const negCls = Number(b.total) < 0 ? ' neg' : '';
-            return `
-              <div class="bal-tile">
-                <div class="bal-ccy">${escapeHtml(b.currency)}</div>
-                <div class="bal-total"><span class="${negCls.trim()}">${balPrefix(b.currency)}${balFmt(b.currency, b.total)}</span></div>
-                ${reservedTxt}
-              </div>`;
-          }).join('');
-          balCards.innerHTML = tiles || `<div style="grid-column:1/-1;color:var(--muted)">No balances returned.</div>`;
-          const when = data.fetched_at ? new Date(data.fetched_at).toLocaleString('en-ZA') : '—';
-          const model = data.account_model === 'subaccount' ? `subaccount ${data.subaccount_id || ''}`.trim() : 'API model';
-          balMeta.textContent = `Live from VALR · ${model} · fetched ${when}`;
-        } catch (e) {
-          console.error('[Balances] fetch failed:', e);
-          balCards.innerHTML = `<div style="grid-column:1/-1;color:var(--danger);padding:1rem">Error: ${escapeHtml(e.message || String(e))}</div>`;
-        } finally {
-          balBtn.disabled = !balSelected;
-        }
-      }
-      balBtn.addEventListener('click', fetchBalances);
     })();
     </script>
 
@@ -5210,41 +5039,20 @@
 
       <!-- Pipeline Control Panel — MOVED to Customer Transactions tab (merged into Live Customer Transactions card) -->
 
-      <!-- Pending Conversions Panel -->
+      <!-- Pending ZAR Conversions Panel -->
       <div class="card" id="pendingZarCard">
-        <h3>⏳ Pending Conversions</h3>
-        <p class="small-muted">Customer cash awaiting conversion. Auto-syncs every 30 minutes. Two stages: ZAR deposits → USDT, then idle USDT → USDPC yield (for USDPC-enabled customers).</p>
-
-        <!-- Section 1: ZAR → USDT -->
-        <div style="margin-bottom:.5rem;">
-          <h4 style="margin:.25rem 0;font-size:1rem;">1) Pending ZAR → USDT Conversions</h4>
-          <p class="small-muted" style="margin:.1rem 0 .6rem;">ZAR deposits awaiting conversion to USDT.</p>
-        </div>
+        <h3>⏳ Pending ZAR Conversions</h3>
+        <p class="small-muted">ZAR deposits awaiting conversion to USDT. Auto-syncs every 30 minutes to detect conversions.</p>
+        
         <div id="zarConversionsContainer" style="margin-bottom:1rem;">
           <div id="zarConversionsList" style="display:grid;gap:.75rem;">
             <!-- Populated dynamically -->
           </div>
         </div>
-
-        <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:1.25rem;">
+        
+        <div style="display:flex;gap:.75rem;align-items:center;">
           <button id="zarSyncNowBtn" type="button" class="btn btn-secondary-sm">🔄 Sync Now</button>
           <span id="zarRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
-        </div>
-
-        <!-- Section 2: USDT → USDPC -->
-        <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:1rem;margin-bottom:.5rem;">
-          <h4 style="margin:.25rem 0;font-size:1rem;">2) Pending USDT → USDPC Conversions</h4>
-          <p class="small-muted" style="margin:.1rem 0 .6rem;">USDPC-enabled customers holding idle USDT that should be swept into yield-bearing USDPC.</p>
-        </div>
-        <div id="usdpcConversionsContainer" style="margin-bottom:1rem;">
-          <div id="usdpcConversionsList" style="display:grid;gap:.75rem;">
-            <!-- Populated dynamically -->
-          </div>
-        </div>
-
-        <div style="display:flex;gap:.75rem;align-items:center;">
-          <button id="usdpcRefreshBtn" type="button" class="btn btn-secondary-sm">🔄 Refresh</button>
-          <span id="usdpcRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
         </div>
       </div>
 
@@ -8780,7 +8588,7 @@
     // VALR via ef_link_bank_account and rendered as data-readonly displays.
     const CM_BANK_FIELDS = ['bank_account_type'];
     const CM_EX_FIELDS   = ['exchange','subaccount_ref','subaccount_id','deposit_ref','btc_wallet_address','usdt_wallet_address','usdt_deposit_network','api_key_label'];
-    const CM_STRAT_FIELDS= ['strategy_label','live_enabled','usdpc_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
+    const CM_STRAT_FIELDS= ['strategy_label','live_enabled','platform_fee_rate','platform_fee_schedule','performance_fee_rate','performance_fee_schedule'];
     const CM_RO_FIELDS   = ['kyc_id_verified_at','kyc_verified_by','bank_linked_at','bank_link_method','bank_valr_id','api_key_created_at','api_key_expires_at','api_key_verified_at','api_key_has_view','api_key_has_trade','api_key_has_withdraw','api_key_has_link_bank','strategy_code','portal_access_granted_at','terms_accepted_at','privacy_accepted_at','disclaimer_signed_at','fic_kyc_reviewed_at','fic_kyc_reviewed_by','compliance_frozen_at'];
     const CM_REG_NEXT = { prospect:'kyc', kyc:'setup', setup:'deposit', deposit:'active', active:'active', inactive:'inactive' };
 
@@ -8942,7 +8750,6 @@
       // Strategy (from customer_strategies)
       cmSetField('strategy_label', strat.label);
       cmSetField('live_enabled', strat.live_enabled);
-      cmSetField('usdpc_enabled', strat.usdpc_enabled);
       cmSetField('platform_fee_rate', strat.platform_fee_rate);
       cmSetField('platform_fee_schedule', strat.platform_fee_schedule);
       cmSetField('performance_fee_rate', strat.performance_fee_rate);
@@ -8999,7 +8806,7 @@
       const obj = {};
       for(const [k,v] of fd.entries()){ obj[k] = v; }
       // Coerce booleans
-      ['live_enabled','usdpc_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
+      ['live_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
         if(k in obj) obj[k] = obj[k] === 'true';
       });
       // Numbers (keep '' as null)
@@ -9196,7 +9003,6 @@
         const stratPatch = {
           label: payload.strategy_label || strat.label,
           live_enabled: !!payload.live_enabled,
-          usdpc_enabled: !!payload.usdpc_enabled,
           platform_fee_rate: payload.platform_fee_rate,
           platform_fee_schedule: payload.platform_fee_schedule || strat.platform_fee_schedule,
           performance_fee_rate: payload.performance_fee_rate,
@@ -12035,7 +11841,7 @@
       try{
         const { data } = await supabaseClient
           .from('customer_strategies')
-          .select('strategy_code, strategy_variation_id, platform_fee_rate, platform_fee_schedule, performance_fee_rate, performance_fee_schedule, status, live_enabled, usdpc_enabled')
+          .select('strategy_code, strategy_variation_id, platform_fee_rate, platform_fee_schedule, performance_fee_rate, performance_fee_schedule, status, live_enabled')
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -12083,9 +11889,6 @@
         if (fr && existing.performance_fee_rate != null) fr.value = existing.performance_fee_rate;
         if (fs && existing.performance_fee_schedule) fs.value = existing.performance_fee_schedule;
       }
-      // USDPC yield toggle (reset, then reflect existing config)
-      const usdpcCb = document.getElementById('strategyModalUsdpcEnabled');
-      if (usdpcCb) usdpcCb.checked = !!(existing && existing.usdpc_enabled);
 
       // Initial variation panel visibility
       const initialCode = preselectStrategyCode || allStrategies[0]?.strategy_code;
@@ -12131,7 +11934,6 @@
       const platformFeeSchedule = document.getElementById('strategyModalPlatformSchedule').value;
       const performanceFeeRate = parseFloat(document.getElementById('strategyModalPerfRate').value);
       const performanceFeeSchedule = document.getElementById('strategyModalPerfSchedule').value;
-      const usdpcEnabled = !!document.getElementById('strategyModalUsdpcEnabled')?.checked;
 
       const strategyName = allStrategies.find(s => s.strategy_code === strategyCode)?.name || strategyCode;
       const variationName = allVariations.find(v => v.id === variationId)?.display_name;
@@ -12140,8 +11942,7 @@
         `Strategy: ${strategyName}\n` +
         (variationName ? `Variation: ${variationName}\n` : '') +
         `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n` +
-        `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n` +
-        `USDPC yield: ${usdpcEnabled ? 'Enabled' : 'Disabled'}\n\n` +
+        `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
         `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
 
       if (!confirm(confirmMsg)) return;
@@ -12167,7 +11968,6 @@
             platform_fee_schedule: platformFeeSchedule,
             performance_fee_rate: performanceFeeRate,
             performance_fee_schedule: performanceFeeSchedule,
-            usdpc_enabled: usdpcEnabled,
             admin_email: adminEmail
           })
         });
@@ -14072,15 +13872,7 @@
             : conv.conversion_status === 'pending'
             ? '<span style="background:#6c757d;color:#fff;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PENDING</span>'
             : '';
-
-          // Status dot reflecting the conversion trade state (same lights as the
-          // Live Customer Transactions card). Initial state derives from the view:
-          // a partially-filled conversion is shown as in_progress, otherwise the
-          // deposit is awaiting conversion (not_started). The dot is updated live
-          // by executeZarConversion when the admin clicks Convert.
-          const initDotStatus = conv.conversion_status === 'partial' ? 'in_progress' : 'not_started';
-          const initDotLabel = conv.conversion_status === 'partial' ? 'Partially converted' : 'Awaiting conversion';
-
+          
           return `
             <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
               <div style="flex:1;min-width:0;">
@@ -14098,11 +13890,7 @@
                   · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
                 </div>
               </div>
-              <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;">
-                <div style="display:flex;align-items:center;gap:.4rem;">
-                  <span class="lp-light lp-light--${initDotStatus}" id="zarDot_${conv.id}"></span>
-                  <span id="zarDotLabel_${conv.id}" style="font-size:.72rem;color:#6c757d;white-space:nowrap;">${initDotLabel}</span>
-                </div>
+              <div style="flex-shrink:0;">
                 <button id="convertBtn_${conv.id}"
                         onclick="window.executeZarConversion('${conv.id}', '${escapeHtml(conv.first_names)}', '${escapeHtml(conv.last_name)}')"
                         style="padding:.4rem .8rem;font-size:.85em;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
@@ -14129,15 +13917,6 @@
       const btn = document.getElementById(`convertBtn_${conversionId}`);
       if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing order…'; }
 
-      // Drive the row status dot (same lights as Live Customer Transactions).
-      const setZarDot = (status, label) => {
-        const dot = document.getElementById(`zarDot_${conversionId}`);
-        const lbl = document.getElementById(`zarDotLabel_${conversionId}`);
-        if (dot) dot.className = 'lp-light lp-light--' + status;
-        if (lbl) lbl.textContent = label;
-      };
-      setZarDot('in_progress', 'Placing order…');
-
       try {
         zarRefreshMessage.textContent = `Converting for ${firstName} ${lastName}…`;
         zarRefreshMessage.style.color = '#6c757d';
@@ -14156,20 +13935,17 @@
         const result = await response.json();
 
         if (response.ok && result.success) {
-          setZarDot('complete', 'Converted');
           zarRefreshMessage.textContent = `✅ Conversion complete for ${firstName} ${lastName}`;
           zarRefreshMessage.style.color = '#28a745';
           setTimeout(() => loadPendingZarConversions(), 1500);
         } else {
           const errMsg = result.error || result.message || 'Unknown error';
-          setZarDot('failed', 'Failed');
           zarRefreshMessage.textContent = `❌ Conversion failed: ${errMsg}`;
           zarRefreshMessage.style.color = '#dc3545';
           if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }
         }
       } catch (err) {
         console.error('executeZarConversion error:', err);
-        setZarDot('failed', 'Failed');
         zarRefreshMessage.textContent = `Error: ${err.message}`;
         zarRefreshMessage.style.color = '#dc3545';
         if (btn) { btn.disabled = false; btn.textContent = '⚡ Convert ZAR→USDT'; }
@@ -14206,9 +13982,6 @@
         // Wait for database triggers to process
         setTimeout(() => {
           loadPendingZarConversions();
-          if (typeof window.loadPendingUsdpcConversions === 'function') {
-            window.loadPendingUsdpcConversions();
-          }
         }, 2000);
 
       } catch (err) {
@@ -14241,220 +14014,6 @@
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
             loadPendingZarConversions();
-          }
-        });
-      }
-    }, 5 * 60 * 1000);
-  })();
-
-  // --- Pending USDT → USDPC Conversions (Administration module) ---
-  (() => {
-    const usdpcListEl = document.getElementById('usdpcConversionsList');
-    const usdpcRefreshBtn = document.getElementById('usdpcRefreshBtn');
-    const usdpcRefreshMessage = document.getElementById('usdpcRefreshMessage');
-
-    if (!usdpcListEl || !usdpcRefreshBtn) return;
-
-    function escapeHtml(value) {
-      if (value === null || value === undefined) return '';
-      return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    async function loadPendingUsdpcConversions() {
-      if (!supabaseClient) {
-        usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
-        return;
-      }
-
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      if (!session?.user) {
-        usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Please sign in to view pending conversions.</div>';
-        return;
-      }
-
-      try {
-        usdpcRefreshMessage.textContent = 'Loading...';
-        usdpcRefreshMessage.style.color = '#6c757d';
-
-        const { data, error } = await supabaseClient
-          .schema('lth_pvr')
-          .from('v_pending_usdpc_conversions')
-          .select('*')
-          .order('idle_usdt', { ascending: false });
-
-        if (error) {
-          console.error('Error loading pending USDPC conversions:', error);
-          usdpcListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Error: ${error.message}</div>`;
-          usdpcRefreshMessage.textContent = 'Error loading conversions';
-          usdpcRefreshMessage.style.color = '#dc3545';
-          return;
-        }
-
-        if (!data || data.length === 0) {
-          usdpcListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">✅ No pending USDPC conversions</div>';
-          usdpcRefreshMessage.textContent = 'All USDPC sweeps complete';
-          usdpcRefreshMessage.style.color = '#28a745';
-          return;
-        }
-
-        usdpcListEl.innerHTML = data.map(row => {
-          const modelBadge = row.account_model === 'api'
-            ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
-            : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
-
-          // Today's sweep status drives the initial dot. 'executed' means a sweep
-          // already ran today but this customer still holds idle USDT (e.g. funds
-          // arrived after the morning sweep) → needs a fresh forced sweep.
-          const st = row.status_today;
-          let initDotStatus, initDotLabel;
-          if (st === 'error' || st === 'failed') { initDotStatus = 'failed'; initDotLabel = 'Last sweep failed'; }
-          else if (st === 'executed' || st === 'filled') { initDotStatus = 'in_progress'; initDotLabel = 'Idle USDT after sweep'; }
-          else if (st === 'pending' || st === 'open') { initDotStatus = 'in_progress'; initDotLabel = 'Sweep in progress'; }
-          else { initDotStatus = 'not_started'; initDotLabel = 'Awaiting sweep'; }
-
-          const lastAt = row.last_intent_at ? new Date(row.last_intent_at).toLocaleString() : '—';
-          const idle = Number(row.idle_usdt);
-          const usdpcBal = Number(row.usdpc_balance);
-
-          return `
-            <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-              <div style="flex:1;min-width:0;">
-                <div style="font-weight:500;margin-bottom:.25rem;">
-                  ${escapeHtml(row.first_names)} ${escapeHtml(row.last_name)}${modelBadge}
-                </div>
-                <div style="font-size:.85rem;color:#4b5563;margin-bottom:.25rem;">
-                  <strong>Idle USDT:</strong> <span style="color:#059669;font-weight:600;">$${idle.toFixed(2)}</span>
-                  <span style="margin:0 .5rem;">•</span>
-                  <strong>USDPC held:</strong> ${usdpcBal.toFixed(2)}
-                </div>
-                <div style="font-size:.8rem;color:#6c757d;">
-                  Today: ${row.intents_today || 0} sweep intent${(row.intents_today === 1) ? '' : 's'}${st ? ' (' + escapeHtml(st) + ')' : ''}
-                  · Last: ${lastAt}
-                </div>
-              </div>
-              <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;">
-                <div style="display:flex;align-items:center;gap:.4rem;">
-                  <span class="lp-light lp-light--${initDotStatus}" id="usdpcDot_${row.customer_id}"></span>
-                  <span id="usdpcDotLabel_${row.customer_id}" style="font-size:.72rem;color:#6c757d;white-space:nowrap;">${initDotLabel}</span>
-                </div>
-                <button id="usdpcBtn_${row.customer_id}"
-                        onclick="window.executeUsdpcConversion(${row.customer_id}, '${escapeHtml(row.first_names)}', '${escapeHtml(row.last_name)}')"
-                        style="padding:.4rem .8rem;font-size:.85em;background:#8b5cf6;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
-                  ⚡ Force USDT→USDPC
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        usdpcRefreshMessage.textContent = `${data.length} pending USDPC conversion${data.length === 1 ? '' : 's'}`;
-        usdpcRefreshMessage.style.color = '#6c757d';
-
-      } catch (err) {
-        console.error('Error in loadPendingUsdpcConversions:', err);
-        usdpcListEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Unexpected error</div>`;
-        usdpcRefreshMessage.textContent = 'Error';
-        usdpcRefreshMessage.style.color = '#dc3545';
-      }
-    }
-
-    // Force a single-customer USDT→USDPC sweep. Mirrors the resume-pipeline sweep
-    // sequence: sweep (force) → execute → poll → post-ledger. The forced sweep uses
-    // a unique idempotency key server-side so it never collides with the day's
-    // already-executed chunk-indexed sweep intents.
-    window.executeUsdpcConversion = async function(customerId, firstName, lastName) {
-      const btn = document.getElementById(`usdpcBtn_${customerId}`);
-      if (btn) { btn.disabled = true; btn.textContent = '⏳ Sweeping…'; }
-
-      const setDot = (status, label) => {
-        const dot = document.getElementById(`usdpcDot_${customerId}`);
-        const lbl = document.getElementById(`usdpcDotLabel_${customerId}`);
-        if (dot) dot.className = 'lp-light lp-light--' + status;
-        if (lbl) lbl.textContent = label;
-      };
-      setDot('in_progress', 'Creating sweep…');
-
-      const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const authHeaders = {
-        'Authorization': `Bearer ${session?.access_token || window.SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      };
-
-      const callEf = async (fn, body) => {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
-          method: 'POST', headers: authHeaders, body: JSON.stringify(body || {})
-        });
-        let json = null;
-        try { json = await res.json(); } catch (_e) { /* ignore non-JSON */ }
-        if (!res.ok) throw new Error((json && (json.error || json.message)) || `${fn} failed (${res.status})`);
-        return json;
-      };
-
-      try {
-        usdpcRefreshMessage.textContent = `Forcing USDPC sweep for ${firstName} ${lastName}…`;
-        usdpcRefreshMessage.style.color = '#6c757d';
-
-        // The sweep function orchestrates execute → poll → post-ledger server-side
-        // (service-to-service), so the browser only makes this single call.
-        const sweep = await callEf('ef_sweep_usdt_to_usdpc', { customer_id: customerId, force: true });
-        if (!sweep || !sweep.created) {
-          // Nothing to sweep (e.g. idle USDT below the minimum at the exchange).
-          setDot('not_started', 'Nothing to sweep');
-          usdpcRefreshMessage.textContent = `No USDPC sweep created for ${firstName} ${lastName}`;
-          usdpcRefreshMessage.style.color = '#6c757d';
-          if (btn) { btn.disabled = false; btn.textContent = '⚡ Force USDT→USDPC'; }
-          return;
-        }
-
-        // Surface any downstream pipeline step that failed (e.g. VALR margin block).
-        const failedStep = (sweep.pipeline || []).find(s => !s.ok);
-        if (failedStep) {
-          setDot('failed', 'Order failed');
-          usdpcRefreshMessage.textContent = `❌ Sweep created but ${failedStep.step} failed (${failedStep.status}) for ${firstName} ${lastName}`;
-          usdpcRefreshMessage.style.color = '#dc3545';
-          setTimeout(() => loadPendingUsdpcConversions(), 1800);
-          return;
-        }
-
-        setDot('complete', 'Swept to USDPC');
-        usdpcRefreshMessage.textContent = `✅ USDPC sweep complete for ${firstName} ${lastName}`;
-        usdpcRefreshMessage.style.color = '#28a745';
-        setTimeout(() => loadPendingUsdpcConversions(), 1800);
-      } catch (err) {
-        console.error('executeUsdpcConversion error:', err);
-        setDot('failed', 'Failed');
-        usdpcRefreshMessage.textContent = `❌ ${err.message}`;
-        usdpcRefreshMessage.style.color = '#dc3545';
-        if (btn) { btn.disabled = false; btn.textContent = '⚡ Force USDT→USDPC'; }
-      }
-    };
-
-    usdpcRefreshBtn.addEventListener('click', loadPendingUsdpcConversions);
-
-    // Expose for external calls (e.g. the ZAR Sync Now button refreshes both).
-    window.loadPendingUsdpcConversions = loadPendingUsdpcConversions;
-
-    document.addEventListener('DOMContentLoaded', () => {
-      if (supabaseClient) {
-        supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
-            loadPendingUsdpcConversions();
-          }
-        });
-      }
-    });
-
-    setInterval(() => {
-      if (supabaseClient) {
-        supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
-            loadPendingUsdpcConversions();
           }
         });
       }
@@ -14873,9 +14432,6 @@ Momentum:
         // Call simulator edge function
         const simBandSourceEl = document.getElementById('simBandSource');
         const simBandSource = (simBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
-        const simUsdpcEnabled = document.getElementById('simUsdpcEnabled')?.checked || false;
-        const simUsdpcApy = parseFloat(document.getElementById('simUsdpcApy')?.value);
-        const simUsdpcFee = parseFloat(document.getElementById('simUsdpcFee')?.value);
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
           method: 'POST',
           headers: {
@@ -14888,10 +14444,7 @@ Momentum:
             upfront_usd: upfront,
             monthly_usd: monthly,
             variation_ids: [currentVariationId],
-            band_source: simBandSource,
-            usdpc_enabled: simUsdpcEnabled,
-            usdpc_apy_percent: isFinite(simUsdpcApy) ? simUsdpcApy : 10,
-            usdpc_conversion_fee_percent: isFinite(simUsdpcFee) ? simUsdpcFee : 0.1
+            band_source: simBandSource
           })
         });
 
@@ -15405,9 +14958,6 @@ Momentum:
         // Build request body
         const optBandSourceEl = document.getElementById('optBandSource');
         const optBandSource = (optBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
-        const optUsdpcEnabled = document.getElementById('optUsdpcEnabled')?.checked || false;
-        const optUsdpcApyVal = parseFloat(document.getElementById('optUsdpcApy')?.value);
-        const optUsdpcFeeVal = parseFloat(document.getElementById('optUsdpcFee')?.value);
         const requestBody = {
           variation_id: variationId,
           start_date: startDate,
@@ -15415,10 +14965,7 @@ Momentum:
           upfront_usd: upfront,
           monthly_usd: monthly,
           objective: objective,
-          band_source: optBandSource,
-          usdpc_enabled: optUsdpcEnabled,
-          usdpc_apy_percent: isFinite(optUsdpcApyVal) ? optUsdpcApyVal : 10,
-          usdpc_conversion_fee_percent: isFinite(optUsdpcFeeVal) ? optUsdpcFeeVal : 0.1
+          band_source: optBandSource
         };
 
         // Add ranges if specified
@@ -16265,8 +15812,7 @@ function runSim(
   B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11,
   momoThr, roc,
   upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
-  enableRetrace,
-  usdpcEnabled, usdpcApy, usdpcConvFee
+  enableRetrace
 ) {
   /* ---- warmup pass: initialise bear-pause + retrace state ---- */
   let bp = false, wp1 = false, wp15 = false, r1 = false, r15 = false;
@@ -16292,20 +15838,11 @@ function runSim(
   let btc=0, usdt=0, gCum=0, nCum=0, hwm=0, hwmN=0;
   let pfCum=0, xBtcCum=0, lastYM=-1, lastPerfYM=-1;
   let peakNav=0, maxDD=0, usdtNavSum=0, navCount=0, firstRow=true;
-  /* USDPC yield-stablecoin state (idle USDT swept to USDPC). Guarded by usdpcEnabled. */
-  let usdpcBal=0, prevUsdpcP=1;
 
   for (let i = warmupLen; i < N; i++) {
     const p = px[i]; if (p <= 0) continue;
     const ymv = ym[i];
     const newMonth = (ymv !== lastYM);
-
-    /* USDPC synthetic price + yield on holding carried into today */
-    let usdpcP = 1;
-    if (usdpcEnabled) {
-      const days = i - warmupLen;
-      usdpcP = (usdpcApy > 0 && days > 0) ? Math.pow(1 + usdpcApy, days / 365) : 1;
-    }
 
     /* contributions */
     if (firstRow) {
@@ -16369,21 +15906,9 @@ function runSim(
     }
 
     /* execute */
-    if (act===1 && pct>0) {
-      /* Buying power includes USDPC value; convert just-enough USDPC->USDT first. */
-      const buyPower = usdpcEnabled ? (usdt + usdpcBal*usdpcP) : usdt;
-      let tu = buyPower*pct;
-      if (usdpcEnabled && tu > usdt && usdpcBal > 0) {
-        const needUsdt = tu - usdt;
-        const usdpcSell = Math.min(usdpcBal, needUsdt/(usdpcP*(1-usdpcConvFee)));
-        const got = usdpcSell*usdpcP*(1-usdpcConvFee);
-        usdpcBal -= usdpcSell; usdt += got;
-        if (tu > usdt) tu = usdt;
-      }
-      if (tu > 0 && usdt > 0) {
-        const bg=tu/p, fee=bg*tradeRate;
-        usdt-=tu; btc+=bg-fee; xBtcCum+=fee;
-      }
+    if (act===1 && pct>0 && usdt>0) {
+      const tu=usdt*pct, bg=tu/p, fee=bg*tradeRate;
+      usdt-=tu; btc+=bg-fee; xBtcCum+=fee;
     } else if (act===-1 && pct>0 && btc>0) {
       const bg=btc*pct, fee=bg*tradeRate;
       btc-=bg+fee; usdt+=bg*p; xBtcCum+=fee;
@@ -16391,45 +15916,27 @@ function runSim(
 
     /* monthly performance fee */
     if (ymv!==lastPerfYM && lastPerfYM!==-1) {
-      const nav=usdt+btc*p+usdpcBal*usdpcP, cs=nCum-hwmN, navAdj=nav-cs;
+      const nav=usdt+btc*p, cs=nCum-hwmN, navAdj=nav-cs;
       if (navAdj>hwm && perfRate>0) {
         const fee=(navAdj-hwm)*perfRate;
-        /* ensure USDT covers the fee (convert USDPC if needed) */
-        if (usdpcEnabled && usdt < fee && usdpcBal > 0) {
-          const needUsdt = fee - usdt;
-          const usdpcSell = Math.min(usdpcBal, needUsdt/(usdpcP*(1-usdpcConvFee)));
-          usdpcBal -= usdpcSell; usdt += usdpcSell*usdpcP*(1-usdpcConvFee);
-        }
         usdt-=fee; pfCum+=fee;
         if (usdt<0 && btc>0) {
           const bSell=Math.min(btc,(-usdt)/(p*(1-tradeRate))), bFee=bSell*tradeRate;
           btc-=bSell; usdt+=(bSell-bFee)*p; xBtcCum+=bFee;
         }
-        const navA=usdt+btc*p+usdpcBal*usdpcP; hwm=navA-cs; hwmN=nCum;
+        const navA=usdt+btc*p; hwm=navA-cs; hwmN=nCum;
       } else if (navAdj>hwm) { hwm=navAdj; hwmN=nCum; }
     }
     if (ymv!==lastPerfYM) lastPerfYM=ymv;
 
-    /* end-of-day: sweep idle USDT into USDPC (above $5 dust), then roll price */
-    if (usdpcEnabled) {
-      if (usdt >= 5) {
-        usdpcBal += (usdt/usdpcP)*(1-usdpcConvFee);
-        usdt = 0;
-      }
-      prevUsdpcP = usdpcP;
-    }
-
     /* metrics */
-    const nav=usdt+btc*p+usdpcBal*usdpcP;
+    const nav=usdt+btc*p;
     if (nav>peakNav) peakNav=nav;
     if (peakNav>0) { const dd=(peakNav-nav)/peakNav*100; if(dd>maxDD) maxDD=dd; }
-    if (nav>0) { usdtNavSum+=(usdt+usdpcBal*usdpcP)/nav*100; navCount++; }
+    if (nav>0) { usdtNavSum+=usdt/nav*100; navCount++; }
   }
 
-  const finalUsdpcP = usdpcEnabled
-    ? ((usdpcApy > 0 && (N-1-warmupLen) > 0) ? Math.pow(1 + usdpcApy, (N-1-warmupLen)/365) : 1)
-    : 1;
-  const finalNav = usdt + (N > warmupLen ? btc * px[N-1] : 0) + usdpcBal*finalUsdpcP;
+  const finalNav = usdt + (N > warmupLen ? btc * px[N-1] : 0);
   let cagr = 0;
   if (simYears > 0 && gCum > 0 && finalNav > 0)
     cagr = (Math.pow(finalNav / gCum, 1 / simYears) - 1) * 100;
@@ -16449,9 +15956,6 @@ self.onmessage = function(e) {
 
   const { px,mean,m025,m050,m075,m100,p050,p100,p150,p200,p250,bearP,ym,bpExit } = ci;
   const { upfront, monthly, platRate, tradeRate, perfRate, contribRate } = simParams;
-  const usdpcEnabled = !!simParams.usdpcEnabled;
-  const usdpcApy = simParams.usdpcApy != null ? simParams.usdpcApy : 0;
-  const usdpcConvFee = simParams.usdpcConvFee != null ? simParams.usdpcConvFee : 0.001;
   const { b1v,b2v,b3v,b4v,b5v,b6v,b7v,b8v,b9v,b10v,b11v } = bVals;
 
   /* Pre-compute ROC for each momoLen (avoids recomputing per sim) */
@@ -16505,8 +16009,7 @@ self.onmessage = function(e) {
                               B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,
                               momoThr, roc,
                               upfront, monthly, platRate, tradeRate, perfRate, contribRate, simYears,
-                              enableRetrace,
-                              usdpcEnabled, usdpcApy, usdpcConvFee
+                              enableRetrace
                             );
                             const score = objective==='nav' ? r.nav
                                         : objective==='sharpe' ? r.sharpe
@@ -16539,17 +16042,6 @@ self.onmessage = function(e) {
 
     // ── Utilities ────────────────────────────────────────────────────────────
     function fmt(n) { return n > 1e6 ? (n/1e6).toFixed(2)+'M' : n > 1e3 ? (n/1e3).toFixed(1)+'K' : Math.round(n).toString(); }
-    // Read optional USDPC yield-stablecoin inputs for the optimizer (defaults: OFF).
-    function readUsdpcOptParams() {
-      const en = document.getElementById('optUsdpcEnabled')?.checked || false;
-      const apy = parseFloat(document.getElementById('optUsdpcApy')?.value);
-      const fee = parseFloat(document.getElementById('optUsdpcFee')?.value);
-      return {
-        usdpcEnabled: en,
-        usdpcApy: isFinite(apy) ? apy / 100 : 0.10,
-        usdpcConvFee: isFinite(fee) ? fee / 100 : 0.001,
-      };
-    }
     function fmtETA(s) {
       if (!isFinite(s) || s > 86400) return '> 1 day';
       if (s > 3600) return (s/3600).toFixed(1)+'h';
@@ -16763,7 +16255,7 @@ self.onmessage = function(e) {
                      b6v:B_VALS.b6, b7v:B_VALS.b7, b8v:B_VALS.b8, b9v:B_VALS.b9, b10v:B_VALS.b10, b11v:B_VALS.b11 },
             momoLens: MOMO_LENS, momoThrs: MOMO_THRS,
             workerId: wid, numWorkers, simYears, objective,
-            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, ...readUsdpcOptParams() },
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
             enableRetrace
           });
         }
@@ -17186,7 +16678,7 @@ self.onmessage = function(e) {
             N, warmupLen, ci, bVals,
             momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
             workerId: wid, numWorkers, simYears, objective,
-            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018, ...readUsdpcOptParams() },
+            simParams: { upfront, monthly, platRate:0.0075, tradeRate:0.0008, perfRate:0.10, contribRate:0.0018 },
             enableRetrace
           });
         }
@@ -17277,7 +16769,7 @@ self.onmessage = function(e) {
           N, warmupLen, ci, bVals,
           momoLens: fixedMomoLens, momoThrs: fixedMomoThrs,
           workerId: wid, numWorkers, simYears, objective,
-          simParams: { upfront, monthly, platRate, tradeRate, perfRate, contribRate, ...readUsdpcOptParams() },
+          simParams: { upfront, monthly, platRate, tradeRate, perfRate, contribRate },
           enableRetrace
         });
       }
