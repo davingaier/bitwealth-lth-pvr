@@ -24,17 +24,22 @@
     .header h1 span{color:var(--gold);}
     .header .sub{color:var(--txt2);font-size:12px;margin-top:3px;}
     .header .badge{font-size:11px;color:var(--txt3);}
-    .controls{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;align-items:start;}
-    .ctrl label{display:block;font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
-    .ctrl input[type=number]{width:100%;background:var(--bg3);border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:7px 10px;color:var(--white);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;}
-    .ctrl input[type=number]:focus{border-color:var(--gold);}
-    .ctrl .rw{display:flex;align-items:center;gap:8px;}
+    .controls{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px 16px;align-items:start;}
+    .ctrl{display:flex;flex-direction:column;}
+    .ctrl label{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;min-height:26px;display:flex;align-items:flex-end;line-height:1.25;}
+    .ctrl input[type=number],.ctrl input[type=date]{width:100%;height:34px;background:var(--bg3);border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:7px 10px;color:var(--white);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;color-scheme:dark;}
+    .ctrl input[type=number]:focus,.ctrl input[type=date]:focus{border-color:var(--gold);}
+    .ctrl .rw{display:flex;align-items:center;gap:8px;height:34px;}
     .ctrl input[type=range]{flex:1;accent-color:var(--gold);height:3px;cursor:pointer;}
     .ctrl .rv{font-size:13px;font-weight:700;color:var(--gold);min-width:44px;text-align:right;}
     .ctrl-hint{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5;}
     .ctrl-hint strong{color:var(--txt2);}
-    .recalc{width:100%;background:var(--gold);color:#000;border:none;border-radius:6px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-top:22px;}
+    .recalc{width:100%;background:var(--gold);color:#000;border:none;border-radius:6px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
     .recalc:hover{background:var(--gold-lt);}
+    .recalc2{width:100%;background:transparent;color:var(--gold);border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;margin-top:8px;}
+    .recalc2:hover{border-color:var(--gold);background:rgba(255,180,0,.08);}
+    .clear-link{font-size:10px;color:var(--blue);cursor:pointer;text-decoration:underline;margin-top:5px;align-self:flex-start;}
+    .clear-link:hover{color:var(--gold);}
     .fee-row{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 20px;margin-top:8px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:18px;}
     .fee-row .fl{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;}
     .fee-row label{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px;font-weight:500;}
@@ -130,6 +135,19 @@
       <input type="number" id="iPerf" value="10" min="0" step="1" max="50">
     </div>
     <div class="ctrl">
+      <label>End Date (period anchor)</label>
+      <input type="date" id="iEndDate">
+    </div>
+    <div class="ctrl">
+      <label>Custom Range — Start</label>
+      <input type="date" id="iRangeStart">
+    </div>
+    <div class="ctrl">
+      <label>Custom Range — End</label>
+      <input type="date" id="iRangeEnd">
+      <span class="clear-link" id="clearRange">Clear custom range</span>
+    </div>
+    <div class="ctrl">
       <label>BTC Allocation (of each contribution)</label>
       <div class="rw">
         <input type="range" id="iBtcAlloc" min="0" max="100" value="75">
@@ -147,6 +165,7 @@
     <div class="ctrl">
       <label>&nbsp;</label>
       <button class="recalc" id="btnCalc">Recalculate</button>
+      <button class="recalc2" id="btnExport">↓ Export CSV</button>
     </div>
   </div>
 
@@ -273,7 +292,9 @@
     <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. (Hypothetical alternative structure — not part of the live product, so it is never anchored.)<br>
     <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>).<br>
     <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
-    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
+    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). At the daily level, monthly fees are attributed to the day they are charged: <strong>platform</strong> &amp; <strong>exchange</strong> on the contribution day (month start), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
+    <strong>Date range:</strong> <strong>End Date</strong> re-anchors the 1/3/5/7/10-year windows to end on the chosen date (computed backwards from there). Setting both <strong>Custom Range</strong> dates replaces the standard periods with a single window covering exactly that span. Custom dates use the reconstruction estimate (the ✓ anchors apply only to the standard periods ending on the latest data date).<br>
+    <strong>Export:</strong> <strong>Export CSV</strong> downloads every period's daily back-test NAV, daily return and attributed fees for analysis in Excel.<br>
     <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
   </div>
 
@@ -304,7 +325,29 @@ const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec
 ═══════════════════════════════════════════════════════════ */
 let M5=null,M10=null;
 function sampleMonthly(raw){const out=[];let last='';for(const r of raw){const ym=r[0].slice(0,7);if(ym!==last){out.push(r);last=ym;}}return out;}
-function getWindow(period){const src=period.src==='5yr'?M5:M10;if(!src)return null;if(period.slice==='all')return src;return src.slice(Math.max(0,src.length-period.months-1));}
+function latestDate(){return M10?M10[M10.length-1][0]:(M5?M5[M5.length-1][0]:null);}
+function firstDate(){return M10?M10[0][0]:(M5?M5[0][0]:null);}
+// Resolve the monthly NAV window for a period. Supports:
+//   • default end date → original 5yr/10yr split (keeps anchors valid)
+//   • custom end date  → period ends at endDate, taken from the 10yr series
+//   • custom range     → exactly the rows between start and end (10yr series)
+function getWindow(period){
+  if(period.custom){
+    if(!M10)return null;
+    const w=M10.filter(r=>r[0]>=period.start&&r[0]<=period.end);
+    return w.length>=2?w:null;
+  }
+  if(period.isDefaultEnd){
+    const src=period.src==='5yr'?M5:M10;
+    if(!src)return null;
+    return period.slice==='all'?src:src.slice(Math.max(0,src.length-period.months-1));
+  }
+  // dated standard: end at endDate, take the last (months+1) monthly points from the 10yr series
+  const base=M10||M5;if(!base)return null;
+  const upto=base.filter(r=>r[0]<=period.endDate);
+  if(upto.length<2)return null;
+  return upto.slice(Math.max(0,upto.length-period.months-1));
+}
 
 /* ─────────────────────────────────────────────────────────────
    AUTHORITATIVE ANCHORS (chart-data-daily.js → _lthAnchors)
@@ -408,15 +451,20 @@ const fmtN=(v,dp=0)=>v==null?'—':'$'+v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d
 const fmtFee=v=>v==null?'—':'$'+parseFloat(v.toFixed(4));
 const fmtDate=d=>{const p=d.split('-');return p[2]+' '+MO[+p[1]-1]+' '+p[0];};
 
+// Robust numeric read — preserves an explicit 0 (the `+v||def` idiom wrongly treats 0 as falsy)
+function numVal(id,def){const el=document.getElementById(id);if(!el)return def;const v=el.value;if(v===''||v==null)return def;const n=+v;return isNaN(n)?def:n;}
 function getP(){
   return{
-    initial: +document.getElementById('iInitial').value||2400,
-    monthly: +document.getElementById('iMonthly').value||200,
-    mgmtRate:+document.getElementById('iMgmt').value/100,
-    pltRate: +document.getElementById('iPlatform').value/100,
-    prfRate: +document.getElementById('iPerf').value/100,
-    btcAlloc:+document.getElementById('iBtcAlloc').value/100,
-    clients: +document.getElementById('iClients').value||1,
+    initial: Math.max(0,numVal('iInitial',2400)),
+    monthly: Math.max(0,numVal('iMonthly',200)),
+    mgmtRate:Math.max(0,numVal('iMgmt',0))/100,
+    pltRate: Math.max(0,numVal('iPlatform',0))/100,
+    prfRate: Math.max(0,numVal('iPerf',0))/100,
+    btcAlloc:numVal('iBtcAlloc',75)/100,
+    clients: Math.max(1,Math.round(numVal('iClients',1))),
+    endDate: document.getElementById('iEndDate')?document.getElementById('iEndDate').value:'',
+    rangeStart: document.getElementById('iRangeStart')?document.getElementById('iRangeStart').value:'',
+    rangeEnd: document.getElementById('iRangeEnd')?document.getElementById('iRangeEnd').value:'',
   };
 }
 function getT(){return{mgmt:document.getElementById('tMgmt').checked,exch:document.getElementById('tExch').checked,plt:document.getElementById('tPlt').checked,prf:document.getElementById('tPrf').checked};}
@@ -440,21 +488,37 @@ function summaryFigures(r,t){
 /* ═══════════════════════════════════════════════════════════
    MAIN CALCULATION
 ═══════════════════════════════════════════════════════════ */
-let RESULTS=[];
+let RESULTS=[],ACTIVE_CUSTOM=false;
+// Decide which periods to show: a single custom-range window when both range dates
+// are set, otherwise the standard 1/3/5/7/10-year windows re-anchored to End Date.
+function resolvePeriods(p){
+  const rs=p.rangeStart,re=p.rangeEnd;
+  if(rs&&re&&rs<re){
+    ACTIVE_CUSTOM=true;
+    return[{label:'Custom Range',custom:true,start:rs,end:re,src:'10yr'}];
+  }
+  ACTIVE_CUSTOM=false;
+  const ld=latestDate();
+  const isDefaultEnd=!p.endDate||p.endDate>=ld;
+  return PERIODS.map(period=>({...period,endDate:p.endDate||ld,isDefaultEnd}));
+}
 function runAll(p,t){
-  RESULTS=PERIODS.map(period=>{
+  const periods=resolvePeriods(p);
+  // Use daily data if chart-data-daily.js is loaded, else weekly back-test data
+  const rawSrc5 =(typeof _lth5_daily !=='undefined')?_lth5_daily :_lth5_raw;
+  const rawSrc10=(typeof _lth10_daily!=='undefined')?_lth10_daily:_lth10_raw;
+  RESULTS=periods.map(period=>{
     const win=getWindow(period);if(!win||win.length<2)return null;
-    // Use daily data if chart-data-daily.js is loaded, else weekly back-test data
-    const rawSrc5 =(typeof _lth5_daily !=='undefined')?_lth5_daily :_lth5_raw;
-    const rawSrc10=(typeof _lth10_daily!=='undefined')?_lth10_daily:_lth10_raw;
-    const rawSrc=period.src==='5yr'?rawSrc5:rawSrc10;
+    // Custom range / non-default end date can reach before the 5yr series → use the 10yr daily series for drill-down
+    const useTen=period.custom||!period.isDefaultEnd||period.src==='10yr';
+    const rawSrc=useTen?rawSrc10:rawSrc5;
     const{navs,rets,mgmt,exch,curr}=buildPortfolio(win,p,t);
     const months=navs.length-1;
     const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
     const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p);
-    // Authoritative simulator figures for this period when inputs match the product defaults.
-    const anchor=(ANCHORS&&isProductRates(p))?(ANCHORS[period.label]||null):null;
+    // Authoritative simulator figures apply only to the standard periods ending at the latest data date.
+    const anchor=(ANCHORS&&isProductRates(p)&&!period.custom&&period.isDefaultEnd)?(ANCHORS[period.label]||null):null;
     return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
       totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
       invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
@@ -547,11 +611,15 @@ const charts={};
 function kc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 const bOpts={
   responsive:true,maintainAspectRatio:true,animation:{duration:350},
+  // Robust hover/tooltip: trigger on the nearest x-index without needing to land exactly on a point
+  interaction:{mode:'index',intersect:false,axis:'x'},
+  hover:{mode:'index',intersect:false},
   plugins:{
     legend:{labels:{color:CG.text,font:{family:'Inter',size:10},padding:10,boxWidth:12}},
-    tooltip:{backgroundColor:'#151B2E',borderColor:'rgba(255,180,0,0.3)',borderWidth:1,
+    tooltip:{enabled:true,mode:'index',intersect:false,position:'nearest',
+      backgroundColor:'#151B2E',borderColor:'rgba(255,180,0,0.3)',borderWidth:1,padding:10,
       titleColor:'#fff',bodyColor:CG.text,
-      callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}
+      callbacks:{label:ctx=>ctx.parsed.y==null?null:` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}
   },
   scales:{
     x:{ticks:{color:CG.text,font:{size:9},maxTicksLimit:14},grid:{color:CG.grid}},
@@ -778,26 +846,82 @@ function renderDrillWeeks(r){
       +`<br>Applied to fresh portfolio: <code>${fmtK(prev.freshNav)} &times; (1+r) + $${contrib} = <strong>${fmtK(row.freshNav)}</strong></code>`;
   }
   const isDaily=row.isDaily;
+  const t=getT();
   const entryLbl=isDaily?'Day':'Week';
-  const head=`<tr><th>${entryLbl}</th><th>Date</th><th>Hist. LTH PVR NAV</th><th>${isDaily?'Day-on-Day':'Week-on-Week'} Δ</th><th>Note</th></tr>`;
+  // Index of the last entry that still belongs to THIS month (excludes the appended next-month reference row)
+  let lastInMonth=-1;row.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
+  const head=`<tr><th>${entryLbl}</th><th>Date</th><th>Hist. LTH PVR NAV</th><th>${isDaily?'Day-on-Day':'Week-on-Week'} Δ</th>
+    <th>Contribution</th><th style="color:var(--orange)">Platform</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--blue)">Mgmt</th><th style="color:var(--purple)">Perf</th><th>Note</th></tr>`;
+  const feeCell=(v,on,cls)=>v?`<td class="${on?cls:'off'}">${fmtN(v,2)}</td>`:`<td class="dim">—</td>`;
   const rows=row.weeks.map((w,i)=>{
     const wRet=w.wkRet!=null?((w.wkRet*100).toFixed(2)+'%'):'—';
     const wC=w.wkRet!=null?(w.wkRet>=0?'vgr':'vr'):'dim';
     let note='',rowCls='';
-    if(w.isRef){note='◀ Start of this month — denominator of monthly return formula';rowCls='row-ref';}
-    if(w.isNextRef){note='▶ Start of NEXT month — numerator (nav_next) in formula';rowCls='row-nxt';}
+    if(w.isRef){note='◀ Month start — contribution charged (platform + exchange)';rowCls='row-ref';}
+    else if(w.isNextRef){note='▶ Start of NEXT month';rowCls='row-nxt';}
+    else if(i===lastInMonth){note='■ Month end — management + performance fee charged';}
+    // Fee attribution: contribution-day fees on the month-start row, NAV-based fees on the month-end row
+    const onStart=w.isRef, onEnd=(i===lastInMonth)&&!w.isNextRef;
+    const cont=onStart?row.contrib:0, plt=onStart?row.pltFee:0, exf=onStart?row.exchFee:0;
+    const mgf=onEnd?row.mgmtFee:0, prf=onEnd?row.prfFee:0;
     return `<tr class="${rowCls}">
       <td>${w.isNextRef?'→ Next':entryLbl+(i+1)}</td>
       <td>${fmtDate(w.date)}</td>
       <td class="${w.isRef?'vb':w.isNextRef?'vg':'dim'}" style="font-family:monospace;font-size:12px">${fmtN(w.histNav,2)}</td>
       <td class="${wC}">${wRet}</td>
+      ${cont?`<td>${fmtN(cont,2)}</td>`:'<td class="dim">—</td>'}
+      ${feeCell(plt,t.plt,'vor')}
+      ${feeCell(exf,t.exch,'vgr')}
+      ${feeCell(mgf,t.mgmt,'vb')}
+      ${feeCell(prf,t.prf,'vpr')}
       <td class="dim" style="font-size:10px">${note}</td>
     </tr>`;
   }).join('');
   document.getElementById('drillContent').innerHTML=
     `<div class="drill-info"><strong>${isDaily?'Daily':'Weekly'} back-test data for ${row.dateLabel}</strong>${calcNote}<br>
-    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Blue row = month start (denominator); gold row = next-month start (numerator).</small></div>`
+    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Fees are charged monthly: <span style="color:var(--orange)">platform</span> &amp; <span style="color:var(--green)">exchange</span> on the contribution day (month start), <span style="color:var(--blue)">management</span> &amp; <span style="color:var(--purple)">performance</span> at month end. Dimmed = that fee toggle is off.</small></div>`
     +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CSV EXPORT — every period's daily back-test NAV + attributed fees
+═══════════════════════════════════════════════════════════ */
+function csvEsc(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+function exportCSV(){
+  if(!RESULTS.length){alert('Nothing to export yet — run a calculation first.');return;}
+  const t=getT();
+  const header=['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV',
+    'Contribution','PlatformFee','ExchangeRebate','MgmtFee','PerfFee','ActiveTotal'];
+  const lines=[header.join(',')];
+  RESULTS.forEach(r=>{
+    r.detail.forEach(mo=>{
+      let lastInMonth=-1;mo.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
+      mo.weeks.forEach((w,i)=>{
+        if(w.isNextRef)return;                       // avoid duplicating the next month's first row
+        const onStart=w.isRef, onEnd=(i===lastInMonth);
+        const cont=onStart?mo.contrib:0, plt=onStart?mo.pltFee:0, exf=onStart?mo.exchFee:0;
+        const mgf=onEnd?mo.mgmtFee:0, prf=onEnd?mo.prfFee:0;
+        const act=(t.mgmt?mgf:0)+(t.exch?exf:0)+(t.plt?plt:0)+(t.prf?prf:0);
+        lines.push([
+          r.period.label, w.date,
+          w.histNav!=null?w.histNav.toFixed(2):'',
+          w.wkRet!=null?(w.wkRet*100).toFixed(4):'',
+          w.isRef?mo.freshNav.toFixed(2):'',
+          cont?cont.toFixed(2):'',
+          plt?plt.toFixed(4):'', exf?exf.toFixed(4):'',
+          mgf?mgf.toFixed(4):'', prf?prf.toFixed(4):'',
+          act?act.toFixed(4):''
+        ].map(csvEsc).join(','));
+      });
+    });
+  });
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`lth-pvr-fee-model-${ACTIVE_CUSTOM?'custom':'periods'}-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -820,6 +944,10 @@ function calc(){
       return;
     }
     M5=sampleMonthly(src5);M10=sampleMonthly(src10);
+    // Initialise date controls once the data span is known
+    const ed=document.getElementById('iEndDate');
+    if(ed){ed.min=firstDate();ed.max=latestDate();if(!ed.value)ed.value=latestDate();}
+    ['iRangeStart','iRangeEnd'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=firstDate();el.max=latestDate();}});
   }
   const p=getP(),t=getT();
   runAll(p,t);
@@ -830,8 +958,12 @@ function calc(){
   if(DS.open)renderDrill();
   const s5=M5[0][0]+' – '+M5[M5.length-1][0]+'('+M5.length+' mo)';
   const s10=M10[0][0]+' – '+M10[M10.length-1][0]+'('+M10.length+' mo)';
+  let modeNote;
+  if(ACTIVE_CUSTOM){modeNote=`Custom range ${p.rangeStart} → ${p.rangeEnd} (${RESULTS[0]?RESULTS[0].months:0} mo)`;}
+  else if(p.endDate&&p.endDate<latestDate()){modeNote=`Periods ending ${p.endDate}`;}
+  else{modeNote=`5yr: ${s5} · 10yr: ${s10}`;}
   document.getElementById('status').textContent=
-    `Updated · 5yr: ${s5} · 10yr: ${s10} · Client: $${p.initial.toLocaleString()}+$${p.monthly}/mo · ${p.clients.toLocaleString()} client${p.clients!==1?'s':''}`;
+    `Updated · ${modeNote} · Client: $${p.initial.toLocaleString()}+$${p.monthly}/mo · ${p.clients.toLocaleString()} client${p.clients!==1?'s':''}`;
 }
 
 // Re-render client-count column only (no fee impact on NAV)
@@ -845,10 +977,22 @@ function softRender(){
    EVENT WIRING
 ═══════════════════════════════════════════════════════════ */
 document.getElementById('btnCalc').addEventListener('click',calc);
+document.getElementById('btnExport').addEventListener('click',exportCSV);
 
 // Numeric inputs — debounced full recalc
 ['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{
   document.getElementById(id).addEventListener('input',scheduleRecalc);
+});
+
+// Date controls — End Date re-anchors periods; Custom Range overrides them
+['iEndDate','iRangeStart','iRangeEnd'].forEach(id=>{
+  const el=document.getElementById(id);if(el)el.addEventListener('change',scheduleRecalc);
+});
+const clr=document.getElementById('clearRange');
+if(clr)clr.addEventListener('click',()=>{
+  document.getElementById('iRangeStart').value='';
+  document.getElementById('iRangeEnd').value='';
+  calc();
 });
 
 // Range sliders — update label + debounced recalc (btcAlloc) or soft render (clients)
