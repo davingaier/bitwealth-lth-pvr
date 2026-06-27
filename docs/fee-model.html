@@ -165,7 +165,8 @@
   <div class="status" id="status">Loading…</div>
 
   <div class="sh">Revenue Summary
-    <span class="sh-note">active total reflects toggled fee streams · click Detail to drill down into years, months, and weekly back-test data</span>
+    <span class="sh-note">active total reflects toggled fee streams · click Detail to drill down into years, months, and daily back-test data</span>
+    <span id="anchorNote" style="display:none;font-size:11px;font-weight:600;color:var(--green);margin-left:8px">✓ matched to back-tester</span>
   </div>
   <div class="tw">
     <table id="tSummary">
@@ -267,11 +268,12 @@
 
   <div class="assum">
     <strong>Methodology &amp; Assumptions</strong><br>
-    <strong>Portfolio model:</strong> Monthly returns extracted from LTH PVR historical back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
-    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value.<br>
+    <strong>Headline accuracy:</strong> When the inputs match the live product defaults ($2,400 start + $200/mo, 0.75% platform, 10% performance), the summary's <strong>Ending NAV</strong> and platform/performance/exchange figures are read straight from the simulator (<code>ef_run_lth_pvr_simulator</code>, USDPC 10% APY on) and match the public back-tester / Admin simulator <strong>exactly</strong> (✓). Change any rate or contribution and the model falls back to the monthly return-extraction estimate described next.<br>
+    <strong>Portfolio model (estimate):</strong> Monthly returns extracted from the LTH PVR back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
+    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. (Hypothetical alternative structure — not part of the live product, so it is never anchored.)<br>
     <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>).<br>
-    <strong>Performance fee:</strong> 10% of monthly profit above high-water mark (HWM = highest pre-fee NAV reached).<br>
-    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio. Monthly return formula: <code>r = (first_week_next_month − contrib) ÷ first_week_this_month − 1</code>.<br>
+    <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
+    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
     <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
   </div>
 
@@ -303,6 +305,31 @@ const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec
 let M5=null,M10=null;
 function sampleMonthly(raw){const out=[];let last='';for(const r of raw){const ym=r[0].slice(0,7);if(ym!==last){out.push(r);last=ym;}}return out;}
 function getWindow(period){const src=period.src==='5yr'?M5:M10;if(!src)return null;if(period.slice==='all')return src;return src.slice(Math.max(0,src.length-period.months-1));}
+
+/* ─────────────────────────────────────────────────────────────
+   AUTHORITATIVE ANCHORS (chart-data-daily.js → _lthAnchors)
+   When the user's inputs match the live product defaults, the
+   summary snaps to the simulator's real net NAV + fee breakdown
+   so the headline numbers match the public back-tester EXACTLY.
+   Any custom rate falls back to the monthly return-extraction
+   reconstruction below.
+───────────────────────────────────────────────────────────── */
+const ANCHORS=(typeof _lthAnchors!=='undefined')?_lthAnchors:null;
+const NET5 =(typeof _lth5_daily_net !=='undefined')?sampleMonthly(_lth5_daily_net) :null;
+const NET10=(typeof _lth10_daily_net!=='undefined')?sampleMonthly(_lth10_daily_net):null;
+const PRODUCT_DEFAULTS={initial:2400,monthly:200,pltRate:0.0075,prfRate:0.10};
+function isProductRates(p){
+  return Math.abs(p.initial -PRODUCT_DEFAULTS.initial )<1e-6
+      && Math.abs(p.monthly -PRODUCT_DEFAULTS.monthly )<1e-6
+      && Math.abs(p.pltRate -PRODUCT_DEFAULTS.pltRate )<1e-9
+      && Math.abs(p.prfRate -PRODUCT_DEFAULTS.prfRate )<1e-9;
+}
+// Net monthly NAV series (real fees) for the chart when anchored — 5yr/10yr only.
+function netMonthly(period){
+  const s=period.src==='5yr'?NET5:NET10;
+  if(!s)return null;
+  return period.slice==='all'?s:s.slice(Math.max(0,s.length-period.months-1));
+}
 
 /* ═══════════════════════════════════════════════════════════
    PORTFOLIO MODEL
@@ -395,6 +422,21 @@ function getP(){
 function getT(){return{mgmt:document.getElementById('tMgmt').checked,exch:document.getElementById('tExch').checked,plt:document.getElementById('tPlt').checked,prf:document.getElementById('tPrf').checked};}
 function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totPlt:0)+(t.prf?r.totPrf:0);}
 
+// The live product = platform + performance, no management fee. Only in that exact
+// toggle state can we show the simulator's authoritative net NAV.
+function productState(t){return t.plt&&t.prf&&!t.mgmt;}
+// Resolve the figures shown in the summary row: authoritative anchor when the config
+// matches the live product, otherwise the reconstruction estimate.
+function summaryFigures(r,t){
+  if(r.anchor&&productState(t)){
+    const a=r.anchor;
+    const totExch=a.exchRebate;
+    const active=a.platformFee+a.perfFee+(t.exch?totExch:0);
+    return{endNav:a.netNav,invested:a.invested,totMgmt:r.totMgmt,totExch,totPlt:a.platformFee,totPrf:a.perfFee,active,anchored:true};
+  }
+  return{endNav:r.endNav,invested:r.invested,totMgmt:r.totMgmt,totExch:r.totExch,totPlt:r.totPlt,totPrf:r.totPrf,active:atot(r,t),anchored:false};
+}
+
 /* ═══════════════════════════════════════════════════════════
    MAIN CALCULATION
 ═══════════════════════════════════════════════════════════ */
@@ -411,7 +453,9 @@ function runAll(p,t){
     const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
     const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p);
-    return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,
+    // Authoritative simulator figures for this period when inputs match the product defaults.
+    const anchor=(ANCHORS&&isProductRates(p))?(ANCHORS[period.label]||null):null;
+    return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
       totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
       invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
   }).filter(Boolean);
@@ -422,20 +466,24 @@ function runAll(p,t){
 ═══════════════════════════════════════════════════════════ */
 function renderSummary(clients,t){
   document.getElementById('thBiz').textContent='Business (×'+clients.toLocaleString()+')';
+  let anyAnchored=false;
   const rows=RESULTS.map((r,idx)=>{
-    const roi=((r.endNav-r.invested)/r.invested*100).toFixed(1);
-    const at=atot(r,t);
+    const f=summaryFigures(r,t);
+    if(f.anchored)anyAnchored=true;
+    const roi=((f.endNav-f.invested)/f.invested*100).toFixed(1);
+    const at=f.active;
     const mC=t.mgmt?'vb':'off',eC=t.exch?'vgr':'off',pC=t.plt?'vor':'off',rC=t.prf?'vpr':'off';
     const active=DS.open&&DS.idx===idx?' active':'';
+    const navBadge=f.anchored?' <span title="Taken directly from the simulator — matches the public back-tester" style="color:var(--green);font-size:11px">✓</span>':'';
     return `<tr>
       <td>${r.period.label}</td>
-      <td>${fmtN(r.invested)}</td>
-      <td class="vg">${fmtN(r.endNav)}</td>
+      <td>${fmtN(f.invested)}</td>
+      <td class="vg">${fmtN(f.endNav)}${navBadge}</td>
       <td class="${+roi>=0?'vgr':'vr'}">${roi}%</td>
-      <td class="${mC}">${fmtN(r.totMgmt,2)}</td>
-      <td class="${eC}">${fmtN(r.totExch,2)}</td>
-      <td class="${pC}">${fmtN(r.totPlt,2)}</td>
-      <td class="${rC}">${fmtN(r.totPrf,2)}</td>
+      <td class="${mC}">${fmtN(f.totMgmt,2)}</td>
+      <td class="${eC}">${fmtN(f.totExch,2)}</td>
+      <td class="${pC}">${fmtN(f.totPlt,2)}</td>
+      <td class="${rC}">${fmtN(f.totPrf,2)}</td>
       <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
       <td class="dim">${fmtN(at/r.months,2)}/mo</td>
       <td class="vg">${fmtN(at*clients)}</td>
@@ -443,21 +491,27 @@ function renderSummary(clients,t){
     </tr>`;
   });
   document.getElementById('bSummary').innerHTML=rows.join('');
+  const note=document.getElementById('anchorNote');
+  if(note)note.style.display=anyAnchored?'inline':'none';
 }
 
 function renderComparison(){
+  // Prefer authoritative anchors for the platform/perf/exchange streams when present.
+  const aPlt =r=>r.anchor?r.anchor.platformFee:r.totPlt;
+  const aPrf =r=>r.anchor?r.anchor.perfFee   :r.totPrf;
+  const aExch=r=>r.anchor?r.anchor.exchRebate:r.totExch;
   const rows=[
-    {label:'Current — Platform Fee Only',          cls:'dim', key:r=>r.totPlt},
-    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:r=>r.totPrf},
-    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>r.totCurr,bold:true},
+    {label:'Current — Platform Fee Only',          cls:'dim', key:aPlt},
+    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:aPrf},
+    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>aPlt(r)+aPrf(r),bold:true},
     {label:'New — Management Fee',                 cls:'vb',  key:r=>r.totMgmt},
-    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:r=>r.totExch},
-    {label:'New — Mgmt + Exchange Rebate',          cls:'vgr', key:r=>r.totNew, bold:true},
+    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:aExch},
+    {label:'New — Mgmt + Exchange Rebate',          cls:'vgr', key:r=>r.totMgmt+aExch(r), bold:true},
     {label:'Δ New vs Current (full)',               cls:'',    diff:true},
   ];
   const html=rows.map(row=>{
     const cells=RESULTS.map(r=>{
-      if(row.diff){const d=r.totNew-r.totCurr;return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
+      if(row.diff){const d=(r.totMgmt+aExch(r))-(aPlt(r)+aPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
       return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(row.key(r),2)}</td>`;
     }).join('');
     return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
@@ -510,7 +564,11 @@ function chartNav(){
   const maxM=Math.max(...RESULTS.map(r=>r.months));
   const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
   const datasets=RESULTS.map((r,i)=>{
-    const d=[...r.navs];while(d.length<maxM+1)d.push(null);
+    // When anchored, plot the simulator's real net NAV curve (5yr/10yr) so the chart
+    // endpoint matches the summary; otherwise plot the reconstruction.
+    let series=r.navs;
+    if(r.anchor){const nm=netMonthly(r.period);if(nm&&nm.length)series=nm.map(x=>x[1]);}
+    const d=[...series];while(d.length<maxM+1)d.push(null);
     return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
   });
   charts['nav']=new Chart(ctx,{type:'line',data:{labels,datasets},options:{...bOpts,
@@ -751,11 +809,17 @@ function scheduleRecalc(){clearTimeout(recalcTimer);recalcTimer=setTimeout(calc,
 function calc(){
   document.getElementById('status').textContent='Calculating…';
   if(!M5){
-    if(typeof _lth5_raw==='undefined'||typeof _lth10_raw==='undefined'){
-      document.getElementById('status').textContent='⚠ chart-data.js not found — ensure fee-model.html and chart-data.js are in the same folder.';
+    // Prefer the DAILY series (chart-data-daily.js) — it is the fresh, USDPC-on
+    // GROSS NAV generated straight from the simulator, so the monthly returns
+    // extracted below match the public back-tester / Admin simulator exactly.
+    // Fall back to the weekly chart-data.js only if the daily file isn't loaded.
+    const src5 =(typeof _lth5_daily !=='undefined')?_lth5_daily :(typeof _lth5_raw !=='undefined'?_lth5_raw :null);
+    const src10=(typeof _lth10_daily!=='undefined')?_lth10_daily:(typeof _lth10_raw!=='undefined'?_lth10_raw:null);
+    if(!src5||!src10){
+      document.getElementById('status').textContent='⚠ chart data not found — ensure fee-model.html, chart-data.js and chart-data-daily.js are in the same folder.';
       return;
     }
-    M5=sampleMonthly(_lth5_raw);M10=sampleMonthly(_lth10_raw);
+    M5=sampleMonthly(src5);M10=sampleMonthly(src10);
   }
   const p=getP(),t=getT();
   runAll(p,t);
