@@ -23,11 +23,17 @@ $dailyArrays = @{}
 foreach ($p in $periods) {
     Write-Host "Fetching $($p.label) daily data..." -NoNewline
     $body = @{
-        start_date    = $p.start
-        end_date      = $p.end
-        upfront_usd   = 2400
-        monthly_usd   = 200
-        variation_ids = @($progId)
+        start_date           = $p.start
+        end_date             = $p.end
+        upfront_usd          = 2400
+        monthly_usd          = 200
+        variation_ids        = @($progId)
+        # Zero-fee overrides: generate GROSS NAV so fee-model.html can apply its
+        # own fee structure without double-counting simulator defaults (0.75%/10%).
+        platform_fee_rate    = 0
+        performance_fee_rate = 0
+        trade_fee_rate       = 0
+        contrib_fee_rate     = 0
     } | ConvertTo-Json
 
     try {

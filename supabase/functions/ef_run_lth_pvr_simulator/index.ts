@@ -60,6 +60,13 @@ Deno.serve(async (req) => {
     const usdpc_enabled = !!body.usdpc_enabled;
     const usdpc_apy = body.usdpc_apy_percent != null ? Number(body.usdpc_apy_percent) / 100 : 0.10;
     const usdpc_conversion_fee_rate = body.usdpc_conversion_fee_percent != null ? Number(body.usdpc_conversion_fee_percent) / 100 : 0.001;
+    // Optional fee overrides — callers can pass 0 to get gross (pre-fee) NAV data
+    // e.g. gen-chart-js-daily.ps1 passes platform_fee_rate=0, performance_fee_rate=0
+    // to produce a baseline that fee-model.html can then apply its own fee structure to.
+    const platform_fee_rate    = body.platform_fee_rate    != null ? Number(body.platform_fee_rate)    : undefined;
+    const performance_fee_rate = body.performance_fee_rate != null ? Number(body.performance_fee_rate) : undefined;
+    const trade_fee_rate       = body.trade_fee_rate       != null ? Number(body.trade_fee_rate)       : undefined;
+    const contrib_fee_rate     = body.contrib_fee_rate     != null ? Number(body.contrib_fee_rate)     : undefined;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
     // Day 5 of CI->RB migration (2026-05-19): default simulator source is RB.
     // normaliseBandSource defaults to 'ci' for missing/invalid input, which is
@@ -216,7 +223,11 @@ Deno.serve(async (req) => {
         sim_start_date: start_date,  // financial sim begins here; rows before are warmup-only
         usdpc_enabled,
         usdpc_apy,
-        usdpc_conversion_fee_rate
+        usdpc_conversion_fee_rate,
+        ...(platform_fee_rate    !== undefined && { platform_fee_rate }),
+        ...(performance_fee_rate !== undefined && { performance_fee_rate }),
+        ...(trade_fee_rate       !== undefined && { trade_fee_rate }),
+        ...(contrib_fee_rate     !== undefined && { contrib_fee_rate }),
       });
       
       // Add variation metadata

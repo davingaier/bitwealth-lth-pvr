@@ -311,9 +311,10 @@ function getWindow(period){const src=period.src==='5yr'?M5:M10;if(!src)return nu
 ═══════════════════════════════════════════════════════════ */
 function buildPortfolio(win,p,t){
   // Initial contribution fees
+  // Exchange fee = VALR's charge, always borne by client regardless of toggle (toggle is BitWealth revenue only)
   const initExch=exchRebate(p.initial,p.btcAlloc);
   const initPlt=p.initial*p.pltRate;
-  let nav=Math.max(0,p.initial-(t.exch?initExch:0)-(t.plt?initPlt:0));
+  let nav=Math.max(0,p.initial-(t.plt?initPlt:0));
   let hwm=nav;
   const navs=[nav],rets=[null];
   const mgmtArr=[],exchArr=[initExch],currArr=[{plt:initPlt,prf:0}];
@@ -331,8 +332,8 @@ function buildPortfolio(win,p,t){
     // Performance fee on gain above HWM
     let prfFee=0;
     if(navM>hwm){prfFee=(navM-hwm)*p.prfRate;}
-    // Net client NAV after all active fees
-    nav=Math.max(0,navM-(t.exch?ef:0)-(t.plt?pf:0)-(t.prf?prfFee:0));
+    // Net client NAV — exchange fee excluded (VALR's charge, always paid)
+    nav=Math.max(0,navM-(t.plt?pf:0)-(t.prf?prfFee:0));
     hwm=Math.max(hwm,nav);
     navs.push(nav);mgmtArr.push(mf);exchArr.push(ef);currArr.push({plt:pf,prf:prfFee});
   }
@@ -376,6 +377,8 @@ function exchRebate(amt,btcAlloc){
 ═══════════════════════════════════════════════════════════ */
 const fmtK=v=>v==null?'—':'$'+(Math.abs(v)>=1e6?(v/1e6).toFixed(2)+'M':Math.abs(v)>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2));
 const fmtN=(v,dp=0)=>v==null?'—':'$'+v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+// Strips trailing zeros up to 4 dp — $0.3600→$0.36, $0.0250→$0.025
+const fmtFee=v=>v==null?'—':'$'+parseFloat(v.toFixed(4));
 const fmtDate=d=>{const p=d.split('-');return p[2]+' '+MO[+p[1]-1]+' '+p[0];};
 
 function getP(){
@@ -473,13 +476,13 @@ function renderExchDetail(p){
     return `<tr><td>${x.name} <span class="dim" style="font-size:10px">(${x.note})</span></td>
       <td>${(x.rate*100).toFixed(2)}%</td><td class="dim">${x.basis}</td>
       <td class="dim">${fmtN(x.amt,2)}</td>
-      <td class="dim">${fmtN(fee,4)}</td>
-      <td class="vgr">${fmtN(share,4)}</td>
+      <td class="dim">${fmtFee(fee)}</td>
+      <td class="vgr">${fmtFee(share)}</td>
       <td class="vb">${fmtN(share*12,2)}</td></tr>`;
   });
   const initFee=exchRebate(p.initial,p.btcAlloc),monFee=exchRebate(p.monthly,p.btcAlloc);
-  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="4"></td><td class="vgr">${fmtN(initFee,4)}</td><td class="dim">one-off</td></tr>`);
-  rows.push(`<tr><td><strong>Monthly $${p.monthly} total (all pairs)</strong></td><td colspan="4"></td><td class="vgr">${fmtN(monFee,4)}</td><td class="vb">${fmtN(monFee*12,2)}/yr</td></tr>`);
+  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="4"></td><td class="vgr">${fmtFee(initFee)}</td><td class="dim">one-off</td></tr>`);
+  rows.push(`<tr><td><strong>Monthly $${p.monthly} total (all pairs)</strong></td><td colspan="4"></td><td class="vgr">${fmtFee(monFee)}</td><td class="vb">${fmtN(monFee*12,2)}/yr</td></tr>`);
   document.getElementById('bExch').innerHTML=rows.join('');
 }
 
