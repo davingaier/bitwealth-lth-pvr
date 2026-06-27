@@ -14123,6 +14123,10 @@
     const refreshBtn = document.getElementById('usdpcRefreshBtn');
     if (!listEl || !refreshBtn) return;
 
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
     // ── Status dot helper ────────────────────────────────────────────────
     // Two steps (market-only, no LIMIT/fallback):
     //   1. Placed  — MARKET order submitted to VALR (intent = executed)
