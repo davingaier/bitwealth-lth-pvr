@@ -14213,7 +14213,8 @@
             ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
             : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
           const dots = usdpcConvStatusDots(row.status_today, row.intents_today);
-          const showSweepBtn = !row.intents_today || !row.status_today;
+          const _usdpcHasFailed = row.status_today && row.status_today.split(',').map(s => s.trim()).includes('error');
+          const showSweepBtn = !row.intents_today || !row.status_today || _usdpcHasFailed;
 
           // Human-readable status label shown below the dots
           const statusLine = (() => {
