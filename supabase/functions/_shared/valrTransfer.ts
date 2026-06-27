@@ -99,19 +99,21 @@ export async function transferToMainAccount(
     // VALR API: Internal Transfer Subaccounts
     // https://api.valr.com/v1/account/subaccounts/transfer (note: plural "subaccounts")
     const path = "/v1/account/subaccounts/transfer";
-    const body = {
-      fromId: request.fromSubaccountId,
-      toId: request.toAccount, 
-      currencyCode: request.currency,
-      amount: request.amount.toString()
-    };
+
+    // VALR requires fromId and toId as *integers* (not strings).
+    // Primary account ID is 0; subaccount IDs are large 64-bit integers.
+    // JavaScript's JSON.stringify cannot safely represent integers > 2^53, so we
+    // build the body string manually to preserve the exact subaccount ID digits.
+    // allowBorrow is a required field per VALR schema (use false unless borrowing).
+    const toId = request.toAccount === "main" ? 0 : request.toAccount;
+    const bodyString = `{"fromId":${request.fromSubaccountId},"toId":${toId},"currencyCode":"${request.currency}","amount":"${request.amount.toString()}","allowBorrow":false}`;
 
     const timestamp = Date.now().toString();
     const signature = await signVALR(
       timestamp,
       "POST",
       path,
-      JSON.stringify(body),
+      bodyString,
       valrApiSecret
     );
 
@@ -123,7 +125,7 @@ export async function transferToMainAccount(
         "X-VALR-SIGNATURE": signature,
         "X-VALR-TIMESTAMP": timestamp
       },
-      body: JSON.stringify(body)
+      body: bodyString
     });
 
     // Handle empty responses (204 No Content or empty body)
