@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LTH PVR — Commercial Fee Model | BitWealth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0A0F1E;
+      --bg2:     #151B2E;
+      --bg3:     #1A2138;
+      --gold:    #FFB400;
+      --gold-lt: #FFC933;
+      --white:   #FFFFFF;
+      --txt2:    #A8B2D1;
+      --txt3:    #6B7896;
+      --green:   #10B981;
+      --red:     #EF4444;
+      --blue:    #3B82F6;
+      --orange:  #F59E0B;
+      --purple:  #8B5CF6;
+      --teal:    #06B6D4;
+      --border:  rgba(255,180,0,0.15);
+    }
+    html, body {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--white);
+      background: var(--bg);
+      min-height: 100vh;
+    }
+    .container { max-width: 1440px; margin: 0 auto; padding: 24px 20px 40px; }
+
+    /* ── Header ── */
+    .header {
+      border-bottom: 2px solid var(--gold);
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .header h1 { font-size: 22px; font-weight: 800; }
+    .header h1 span { color: var(--gold); }
+    .header .sub { color: var(--txt2); font-size: 12px; margin-top: 3px; }
+    .header .badge { font-size: 11px; color: var(--txt3); text-align: right; }
+
+    /* ── Controls ── */
+    .controls {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      align-items: end;
+    }
+    .ctrl label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--txt3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 5px;
+    }
+    .ctrl input[type=number], .ctrl select {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: var(--white);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .ctrl input[type=number]:focus, .ctrl select:focus { border-color: var(--gold); }
+    .ctrl .rw { display: flex; align-items: center; gap: 8px; }
+    .ctrl input[type=range] { flex: 1; accent-color: var(--gold); height: 3px; cursor: pointer; }
+    .ctrl .rv { font-size: 13px; font-weight: 700; color: var(--gold); min-width: 52px; text-align: right; }
+    .recalc {
+      width: 100%;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.18s;
+    }
+    .recalc:hover { background: var(--gold-lt); }
+
+    /* ── Section heading ── */
+    .sh {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--white);
+      margin: 22px 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sh::before { content:''; display:block; width:3px; height:16px; background:var(--gold); border-radius:2px; }
+    .sh-note { font-size: 11px; font-weight: 400; color: var(--txt3); margin-left: 4px; }
+
+    /* ── Tables ── */
+    .tw { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 22px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    th {
+      background: var(--bg3);
+      padding: 9px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--txt3);
+      text-align: right;
+      white-space: nowrap;
+    }
+    th:first-child { text-align: left; }
+    td {
+      padding: 9px 14px;
+      font-size: 12px;
+      text-align: right;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      color: var(--txt2);
+      white-space: nowrap;
+    }
+    td:first-child { text-align: left; color: var(--white); font-weight: 600; }
+    tr:hover td { background: rgba(255,255,255,0.025); }
+    .vg  { color: var(--gold);   font-weight: 600; }
+    .vgr { color: var(--green);  font-weight: 600; }
+    .vb  { color: var(--blue);   font-weight: 600; }
+    .vor { color: var(--orange); font-weight: 600; }
+    .vr  { color: var(--red);    font-weight: 600; }
+    .vt  { color: var(--teal);   font-weight: 600; }
+    .dim { color: var(--txt3); font-style: italic; }
+
+    /* ── Charts ── */
+    .cg { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
+    @media(max-width:860px) { .cg { grid-template-columns: 1fr; } }
+    .cc {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .cc h3 { font-size: 11px; font-weight: 600; color: var(--txt2); margin-bottom: 10px; }
+    .cc.full { grid-column: 1 / -1; }
+    canvas { max-width: 100%; }
+
+    /* ── Period selector tabs ── */
+    .ptabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ptab {
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      color: var(--txt3);
+      background: transparent;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .ptab.on { background: var(--gold); color: #000; border-color: var(--gold); }
+
+    /* ── Assumptions ── */
+    .assum {
+      background: rgba(255,180,0,0.04);
+      border: 1px solid rgba(255,180,0,0.18);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 10.5px;
+      color: var(--txt3);
+      line-height: 1.75;
+      margin-bottom: 10px;
+    }
+    .assum strong { color: var(--txt2); }
+
+    /* ── Status ── */
+    .status { font-size: 10px; color: var(--txt3); text-align: right; margin-bottom: 10px; min-height: 14px; }
+
+    /* ── Loading ── */
+    .loading { text-align: center; padding: 28px; color: var(--txt3); font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ══ HEADER ══ -->
+  <div class="header">
+    <div>
+      <h1>LTH PVR — <span>Commercial Fee Model</span></h1>
+      <div class="sub">Management fee &amp; VALR exchange rebate revenue forecast · historical back-test basis</div>
+    </div>
+    <div class="badge">BitWealth · June 2026</div>
+  </div>
+
+  <!-- ══ CONTROLS ══ -->
+  <div class="controls">
+    <div class="ctrl">
+      <label>Initial Contribution (USD)</label>
+      <input type="number" id="iInitial"  value="2400" min="0"   step="100">
+    </div>
+    <div class="ctrl">
+      <label>Monthly Contribution (USD)</label>
+      <input type="number" id="iMonthly" value="200"  min="0"   step="50">
+    </div>
+    <div class="ctrl">
+      <label>Mgmt Fee Rate (% p.a.)</label>
+      <input type="number" id="iMgmt"    value="1.0"  min="0"   step="0.1" max="5">
+    </div>
+    <div class="ctrl">
+      <label>Current Platform Fee (% on contributions)</label>
+      <input type="number" id="iPlatform" value="0.75" min="0" step="0.05" max="5">
+    </div>
+    <div class="ctrl">
+      <label>Current Perf Fee (% of profit, HWM)</label>
+      <input type="number" id="iPerf"    value="10"   min="0"   step="1"   max="50">
+    </div>
+    <div class="ctrl">
+      <label>BTC Allocation (of contribution)</label>
+      <div class="rw">
+        <input type="range" id="iBtcAlloc" min="40" max="100" value="75">
+        <span class="rv" id="oBtcAlloc">75%</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Number of Clients</label>
+      <div class="rw">
+        <input type="range" id="iClients" min="1" max="2000" value="1">
+        <span class="rv" id="oClients">1</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>&nbsp;</label>
+      <button class="recalc" id="btnCalc">Recalculate</button>
+    </div>
+  </div>
+
+  <div class="status" id="status">Loading…</div>
+
+  <!-- ══ SUMMARY TABLE — NEW MODEL ══ -->
+  <div class="sh">Revenue Summary — New Fee Model
+    <span class="sh-note">1% management fee p.a. (monthly) + 50% VALR exchange rebate</span>
+  </div>
+  <div class="tw">
+    <table id="tSummary">
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Total Invested</th>
+          <th>Ending Portfolio NAV</th>
+          <th>Total Return</th>
+          <th>Mgmt Fee Revenue</th>
+          <th>Exchange Rebate</th>
+          <th>Total Revenue (per client)</th>
+          <th>Avg Monthly Revenue</th>
+          <th id="thBiz">Business Total (×1 client)</th>
+        </tr>
+      </thead>
+      <tbody id="bSummary"><tr><td colspan="9" class="loading">Calculating…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ══ CHARTS ROW 1: NAV + Cumulative Revenue ══ -->
+  <div class="cg">
+    <div class="cc">
+      <h3>Portfolio NAV Growth — fresh client, historical returns (log scale)</h3>
+      <canvas id="cNav" height="240"></canvas>
+    </div>
+    <div class="cc">
+      <h3>Cumulative BitWealth Revenue — new model, per client</h3>
+      <canvas id="cCumul" height="240"></canvas>
+    </div>
+  </div>
+
+  <!-- ══ CHARTS ROW 2: Annual Breakdown + Business Scale ══ -->
+  <div class="cg">
+    <div class="cc">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0">Annual Revenue Breakdown — Mgmt Fee vs Exchange Rebate</h3>
+        <div class="ptabs" id="breakdownTabs">
+          <button class="ptab" data-m="12">1yr</button>
+          <button class="ptab" data-m="36">3yr</button>
+          <button class="ptab" data-m="60">5yr</button>
+          <button class="ptab" data-m="84">7yr</button>
+          <button class="ptab on" data-m="120">10yr</button>
+        </div>
+      </div>
+      <canvas id="cBreakdown" height="240"></canvas>
+    </div>
+    <div class="cc">
+      <h3>Annual BitWealth Revenue at Scale (avg annualised)</h3>
+      <canvas id="cScale" height="240"></canvas>
+    </div>
+  </div>
+
+  <!-- ══ COMPARISON TABLE ══ -->
+  <div class="sh">Fee Structure Comparison — Current vs New
+    <span class="sh-note">same portfolio trajectory, all fee structures applied on top</span>
+  </div>
+  <div class="tw">
+    <table id="tCompare">
+      <thead>
+        <tr>
+          <th>Fee Structure</th>
+          <th>1 Year</th>
+          <th>3 Years</th>
+          <th>5 Years</th>
+          <th>7 Years</th>
+          <th>10 Years</th>
+        </tr>
+      </thead>
+      <tbody id="bCompare"><tr><td colspan="6" class="loading">Calculating…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ══ CHART: Wide Comparison ══ -->
+  <div class="cg">
+    <div class="cc full">
+      <h3>Fee Revenue Comparison — all periods, per single client (note: perf fee is very high in sustained bull markets)</h3>
+      <canvas id="cCompare" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- ══ EXCHANGE FEE DETAIL TABLE ══ -->
+  <div class="sh">Exchange Fee Sharing Detail
+    <span class="sh-note">50% of VALR trading fees — per $200 monthly contribution</span>
+  </div>
+  <div class="tw">
+    <table id="tExch">
+      <thead>
+        <tr>
+          <th>Pair</th>
+          <th>Maker Rate</th>
+          <th>Taker Rate</th>
+          <th>Blended (50/50)</th>
+          <th>On $200 Trade</th>
+          <th>50% BitWealth Share</th>
+          <th>Annual (12 months)</th>
+        </tr>
+      </thead>
+      <tbody id="bExch"></tbody>
+    </table>
+  </div>
+
+  <!-- ══ ASSUMPTIONS ══ -->
+  <div class="assum">
+    <strong>Methodology &amp; Assumptions</strong><br>
+    <strong>Portfolio model:</strong> Monthly returns are extracted from the LTH PVR historical back-test (BitWealth proprietary simulator).
+    For each monthly interval the <em>pure</em> return is isolated by removing the $200 contribution effect:
+    <code>r = (nav_next − $200) / nav_prev − 1</code>. This return sequence is then applied to a fresh $2,400 portfolio with $200/month additions.
+    For sub-periods (1yr, 3yr, 7yr) the most-recent N months of the 5yr or 10yr dataset are used, rebased to a fresh start.<br>
+    <strong>Management fee:</strong> 1.0% p.a., charged monthly = NAV × (rate / 12) at end of month.<br>
+    <strong>Exchange fee sharing:</strong> 50% of VALR fees. USDT/ZAR blended 0.265% (maker 0.18% / taker 0.35%);
+    BTC/USDT &amp; USDPC/USDT blended 0.090% (maker 0.08% / taker 0.10%). Fee applies to: ZAR→USDT conversion of each contribution, BTC/USDT DCA buy, USDPC/USDT idle-USDT sweep.<br>
+    <strong>Current fee comparison:</strong> 0.75% platform fee on each contribution (upfront); 10% performance fee on monthly profit above high-water mark (HWM resets to new NAV peak).<br>
+    <strong>Disclaimer:</strong> Back-test data is from June 2016 – June 2026. Past performance does not guarantee future results. This model is for commercial planning purposes only.
+  </div>
+
+</div>
+
+<!-- ══ SCRIPTS ══ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="chart-data.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════ */
+const VALR = {
+  usdtZarMaker:  0.0018,
+  usdtZarTaker:  0.0035,
+  btcUsdtMaker:  0.0008,
+  btcUsdtTaker:  0.0010,
+  usdpcMaker:    0.0008,
+  usdpcTaker:    0.0010,
+};
+
+const PERIODS = [
+  { label:'1 Year',  months:12,  src:'5yr',  slice:'last' },
+  { label:'3 Years', months:36,  src:'5yr',  slice:'last' },
+  { label:'5 Years', months:60,  src:'5yr',  slice:'all'  },
+  { label:'7 Years', months:84,  src:'10yr', slice:'last' },
+  { label:'10 Years',months:120, src:'10yr', slice:'all'  },
+];
+
+const PAL = ['#FFB400','#3B82F6','#10B981','#8B5CF6','#F59E0B'];
+const CG = { text:'#A8B2D1', grid:'rgba(255,255,255,0.055)' };
+
+/* ═══════════════════════════════════════════════════════════
+   DATA UTILITIES
+═══════════════════════════════════════════════════════════ */
+let M5 = null, M10 = null;  // monthly-sampled datasets
+
+function sampleMonthly(raw) {
+  // Returns one row per calendar month (first entry of each month)
+  const out = [];
+  let lastYM = '';
+  for (const r of raw) {
+    const ym = r[0].slice(0,7);
+    if (ym !== lastYM) { out.push(r); lastYM = ym; }
+  }
+  return out;
+}
+
+function getWindow(period) {
+  const src = period.src === '5yr' ? M5 : M10;
+  if (!src) return null;
+  if (period.slice === 'all') return src;
+  // last N months + 1 (need the prior month as starting point)
+  return src.slice(Math.max(0, src.length - period.months - 1));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PORTFOLIO MODEL
+   For each month i (1..n):
+     pure_return[i] = (hist_nav[i] - monthly_contrib) / hist_nav[i-1] - 1
+     fresh_nav[i]   = fresh_nav[i-1] * (1 + pure_return[i]) + monthly_contrib
+═══════════════════════════════════════════════════════════ */
+function buildPortfolio(win, initial, monthly) {
+  const navs = [initial];
+  for (let i = 1; i < win.length; i++) {
+    const ph = win[i-1][1], ch = win[i][1];
+    const r  = (ch - monthly) / ph - 1;         // pure monthly return
+    const nv = navs[navs.length-1] * (1 + r) + monthly;
+    navs.push(Math.max(0, nv));
+  }
+  return navs;  // length = win.length  (months 0..n)
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FEE ENGINES
+═══════════════════════════════════════════════════════════ */
+function blended(maker, taker) { return (maker + taker) / 2; }
+
+// Exchange rebate for a single contribution amount
+function exchRebate(amount, btcAlloc) {
+  const rZar  = amount * blended(VALR.usdtZarMaker, VALR.usdtZarTaker) * 0.5;
+  const rBtc  = amount * btcAlloc      * blended(VALR.btcUsdtMaker, VALR.btcUsdtTaker) * 0.5;
+  const rUsdc = amount * (1-btcAlloc)  * blended(VALR.usdpcMaker,   VALR.usdpcTaker)   * 0.5;
+  return rZar + rBtc + rUsdc;
+}
+
+// Management fees: array[i] = navs[i+1] * monthlyRate   (length = months)
+function calcMgmtFees(navs, annRate) {
+  const mr = annRate / 12;
+  return navs.slice(1).map(n => n * mr);
+}
+
+// Exchange rebates: array[0]=initial fee, array[i>0]=monthly fee   (length = months+1)
+function calcExchFees(months, initial, monthly, btcAlloc) {
+  const out = [exchRebate(initial, btcAlloc)];
+  for (let i = 0; i < months; i++) out.push(exchRebate(monthly, btcAlloc));
+  return out;
+}
+
+// Current fee structure: platform on contributions + perf fee (monthly HWM)
+// Returns array[i] = { plt, prf }  (length = months+1, index 0 = initial contrib)
+function calcCurrentFees(navs, initial, monthly, pltRate, prfRate) {
+  const fees = [{ plt: initial * pltRate, prf: 0 }];
+  let hwm = navs[0];
+  for (let i = 1; i < navs.length; i++) {
+    const nav = navs[i];
+    let prf = 0;
+    if (nav > hwm) {
+      prf = (nav - hwm) * prfRate;
+      hwm = nav;                // HWM updated to pre-fee peak
+    }
+    fees.push({ plt: monthly * pltRate, prf });
+  }
+  return fees;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN CALCULATION
+═══════════════════════════════════════════════════════════ */
+let RESULTS = [];
+
+function runAll(p) {
+  RESULTS = PERIODS.map(period => {
+    const win = getWindow(period);
+    if (!win || win.length < 2) return null;
+
+    const navs       = buildPortfolio(win, p.initial, p.monthly);
+    const months     = navs.length - 1;
+
+    const mgmt       = calcMgmtFees(navs, p.mgmtRate);
+    const exch       = calcExchFees(months, p.initial, p.monthly, p.btcAlloc);
+    const curr       = calcCurrentFees(navs, p.initial, p.monthly, p.pltRate, p.prfRate);
+
+    const totMgmt    = mgmt.reduce((a,b) => a+b, 0);
+    const totExch    = exch.reduce((a,b) => a+b, 0);
+    const totPlt     = curr.reduce((a,b) => a+b.plt, 0);
+    const totPrf     = curr.reduce((a,b) => a+b.prf, 0);
+    const totCurr    = totPlt + totPrf;
+    const totNew     = totMgmt + totExch;
+    const invested   = p.initial + p.monthly * months;
+    const endNav     = navs[navs.length-1];
+
+    return {
+      period, win, navs, mgmt, exch, curr, months,
+      totMgmt, totExch, totPlt, totPrf, totCurr, totNew,
+      invested, endNav,
+      avgMonNew: totNew / months,
+    };
+  }).filter(Boolean);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORMATTERS
+═══════════════════════════════════════════════════════════ */
+const fmtK = v => v == null ? '—' : '$' + (Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2)+'M' : Math.abs(v) >= 1e3 ? (v/1e3).toFixed(1)+'k' : v.toFixed(2));
+const fmtD = v => v == null ? '—' : '$' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,'‚');
+const fmtN = (v, dp=0) => v == null ? '—' : '$' + v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const pct  = (a,b) => b ? ((a-b)/b*100).toFixed(1)+'%' : '—';
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER — TABLES
+═══════════════════════════════════════════════════════════ */
+function renderSummary(clients) {
+  document.getElementById('thBiz').textContent = `Business Total (×${clients.toLocaleString()} clients)`;
+  const rows = RESULTS.map(r => {
+    const roi = ((r.endNav - r.invested) / r.invested * 100).toFixed(1);
+    return `<tr>
+      <td>${r.period.label}</td>
+      <td>${fmtN(r.invested)}</td>
+      <td class="vg">${fmtN(r.endNav)}</td>
+      <td class="${roi>=0?'vgr':'vr'}">${roi}%</td>
+      <td class="vb">${fmtN(r.totMgmt,2)}</td>
+      <td>${fmtN(r.totExch,2)}</td>
+      <td class="vgr">${fmtN(r.totNew,2)}</td>
+      <td class="dim">${fmtN(r.avgMonNew,2)}/mo</td>
+      <td class="vg">${fmtN(r.totNew * clients)}</td>
+    </tr>`;
+  });
+  document.getElementById('bSummary').innerHTML = rows.join('');
+}
+
+function renderComparison() {
+  const periods = RESULTS;
+
+  const rows = [
+    { label:'Current — Platform Fee Only',            cls:'dim',  key: r => r.totPlt },
+    { label:'Current — Performance Fee Only',         cls:'vor',  key: r => r.totPrf },
+    { label:'Current — Full (Platform + Perf 10%)',   cls:'vor',  key: r => r.totCurr, bold:true },
+    { label:'New — Management Fee (1% p.a.)',         cls:'vb',   key: r => r.totMgmt },
+    { label:'New — Exchange Rebate (50% VALR)',       cls:'',     key: r => r.totExch },
+    { label:'New — Management Fee + Exchange Rebate', cls:'vgr',  key: r => r.totNew, bold:true },
+    { label:'New vs Current (full comparison)',       cls:'',     key: r => null, diff:true },
+  ];
+
+  const html = rows.map(row => {
+    const cells = periods.map(r => {
+      if (row.diff) {
+        const delta = r.totNew - r.totCurr;
+        const cls = delta > 0 ? 'vgr' : 'vr';
+        return `<td class="${cls}">${delta>=0?'+':''}${fmtN(delta,2)}</td>`;
+      }
+      const v = row.key(r);
+      return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(v,2)}</td>`;
+    }).join('');
+    return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
+  }).join('');
+
+  document.getElementById('bCompare').innerHTML = html;
+}
+
+function renderExchDetail(p) {
+  const pairs = [
+    { name:'USDT/ZAR',   maker:VALR.usdtZarMaker, taker:VALR.usdtZarTaker, amt:p.monthly,            note:'ZAR→USDT conversion' },
+    { name:'BTC/USDT',   maker:VALR.btcUsdtMaker,  taker:VALR.btcUsdtTaker,  amt:p.monthly*p.btcAlloc, note:`${(p.btcAlloc*100).toFixed(0)}% BTC buy` },
+    { name:'USDPC/USDT', maker:VALR.usdpcMaker,    taker:VALR.usdpcTaker,    amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% idle sweep` },
+  ];
+
+  const rows = pairs.map(x => {
+    const bl = blended(x.maker, x.taker);
+    const fee = x.amt * bl;
+    const share = fee * 0.5;
+    const annual = share * 12;
+    return `<tr>
+      <td>${x.name} <span style="font-weight:400;color:var(--txt3);font-size:10px">(${x.note})</span></td>
+      <td>${(x.maker*100).toFixed(3)}%</td>
+      <td>${(x.taker*100).toFixed(3)}%</td>
+      <td>${(bl*100).toFixed(4)}%</td>
+      <td class="dim">${fmtN(fee,4)}</td>
+      <td class="vgr">${fmtN(share,4)}</td>
+      <td class="vb">${fmtN(annual,4)}</td>
+    </tr>`;
+  });
+
+  // Initial contribution row
+  const initTotal = exchRebate(p.initial, p.btcAlloc);
+  rows.push(`<tr style="border-top:2px solid var(--border)">
+    <td><strong>Initial $${p.initial.toLocaleString()} contribution (one-off)</strong></td>
+    <td colspan="4"></td>
+    <td class="vgr">${fmtN(initTotal,4)}</td>
+    <td class="dim">one-off</td>
+  </tr>`);
+
+  const monthTotal = exchRebate(p.monthly, p.btcAlloc);
+  rows.push(`<tr>
+    <td><strong>Monthly $${p.monthly.toLocaleString()} contribution (total all pairs)</strong></td>
+    <td colspan="4"></td>
+    <td class="vgr">${fmtN(monthTotal,4)}</td>
+    <td class="vb">${fmtN(monthTotal*12,4)}</td>
+  </tr>`);
+
+  document.getElementById('bExch').innerHTML = rows.join('');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER — CHARTS
+═══════════════════════════════════════════════════════════ */
+const charts = {};
+function kc(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+const baseOpts = {
+  responsive: true,
+  maintainAspectRatio: true,
+  animation: { duration: 400 },
+  plugins: {
+    legend: { labels: { color: CG.text, font:{ family:'Inter', size:10 }, padding:10, boxWidth:12 } },
+    tooltip: {
+      backgroundColor:'#151B2E', borderColor:'rgba(255,180,0,0.3)', borderWidth:1,
+      titleColor:'#fff', bodyColor:CG.text,
+      callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` }
+    }
+  },
+  scales: {
+    x: { ticks:{ color:CG.text, font:{size:9}, maxTicksLimit:14 }, grid:{ color:CG.grid } },
+    y: { ticks:{ color:CG.text, font:{size:9}, callback: v => fmtK(v) }, grid:{ color:CG.grid } },
+  }
+};
+
+function chartNav() {
+  kc('nav');
+  const ctx = document.getElementById('cNav').getContext('2d');
+  const datasets = RESULTS.map((r,i) => ({
+    label: r.period.label,
+    data: r.navs,
+    borderColor: PAL[i],
+    backgroundColor: 'transparent',
+    tension: 0.3,
+    borderWidth: 1.5,
+    pointRadius: 0,
+    pointHoverRadius: 3,
+  }));
+  const maxM = Math.max(...RESULTS.map(r => r.months));
+  const labels = Array.from({length: maxM+1}, (_,i) => i===0?'Start':`M${i}`);
+  datasets.forEach(ds => { while (ds.data.length < maxM+1) ds.data.push(null); });
+
+  charts['nav'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      ...baseOpts,
+      scales:{
+        x: { ...baseOpts.scales.x },
+        y: {
+          type:'logarithmic',
+          ticks:{ color:CG.text, font:{size:9}, callback: v => fmtK(v) },
+          grid:{ color:CG.grid }
+        }
+      }
+    }
+  });
+}
+
+function chartCumul() {
+  kc('cumul');
+  const ctx = document.getElementById('cCumul').getContext('2d');
+  const datasets = RESULTS.map((r,i) => {
+    let cum = 0;
+    const data = [0, ...r.mgmt.map((mf, j) => {
+      cum += mf + (r.exch[j+1]||0);
+      return cum;
+    })];
+    return {
+      label: r.period.label,
+      data,
+      borderColor: PAL[i],
+      backgroundColor: 'transparent',
+      tension: 0.3,
+      borderWidth: 1.5,
+      pointRadius: 0,
+    };
+  });
+  const maxM = Math.max(...RESULTS.map(r => r.months));
+  const labels = Array.from({length: maxM+1}, (_,i) => i===0?'Start':`M${i}`);
+  datasets.forEach(ds => { while (ds.data.length < maxM+1) ds.data.push(null); });
+
+  charts['cumul'] = new Chart(ctx, { type:'line', data:{ labels, datasets }, options: baseOpts });
+}
+
+let breakdownPeriodM = 120;
+
+function chartBreakdown(months) {
+  breakdownPeriodM = months;
+  kc('bd');
+  const ctx = document.getElementById('cBreakdown').getContext('2d');
+  const r = RESULTS.find(x => x.period.months === months) || RESULTS[RESULTS.length-1];
+  if (!r) return;
+
+  const yrs = Math.ceil(r.months/12);
+  const annMgmt = [], annExch = [];
+  for (let y=0; y<yrs; y++) {
+    const s = y*12, e = Math.min((y+1)*12, r.months);
+    // Include the one-off initial contribution fee in Year 1
+    let m=0, ex = (y===0 ? (r.exch[0]||0) : 0);
+    for (let i=s; i<e; i++) {
+      m  += r.mgmt[i]||0;
+      ex += r.exch[i+1]||0;  // exch[0]=initial, exch[1..n]=monthly
+    }
+    annMgmt.push(m); annExch.push(ex);
+  }
+  const labels = Array.from({length:yrs}, (_,i) => `Y${i+1}`);
+
+  charts['bd'] = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'Mgmt Fee (1% p.a.)',       data:annMgmt, backgroundColor:'#3B82F6BB', borderColor:'#3B82F6', borderWidth:1, stack:'s' },
+        { label:'Exchange Rebate (50% VALR)',data:annExch, backgroundColor:'#10B981BB', borderColor:'#10B981', borderWidth:1, stack:'s' },
+      ]
+    },
+    options:{
+      ...baseOpts,
+      scales:{
+        x:{ ...baseOpts.scales.x, stacked:true },
+        y:{ ...baseOpts.scales.y, stacked:true },
+      }
+    }
+  });
+}
+
+function chartScale() {
+  kc('sc');
+  const ctx = document.getElementById('cScale').getContext('2d');
+  const counts = [1,5,10,25,50,100,250,500,1000,2000];
+  const datasets = RESULTS.map((r,i) => ({
+    label: r.period.label + ' avg/yr',
+    data: counts.map(c => (r.totNew / (r.months/12)) * c),
+    borderColor: PAL[i],
+    backgroundColor: 'transparent',
+    tension: 0.3,
+    borderWidth: 1.5,
+    pointRadius: 2,
+  }));
+  charts['sc'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels: counts.map(c => c.toLocaleString()), datasets },
+    options:{
+      ...baseOpts,
+      scales:{
+        x:{ ...baseOpts.scales.x, title:{ display:true, text:'Number of Clients', color:CG.text, font:{size:10} } },
+        y:{ ...baseOpts.scales.y }
+      }
+    }
+  });
+}
+
+function chartCompare() {
+  kc('cmp');
+  const ctx = document.getElementById('cCompare').getContext('2d');
+  const labels = RESULTS.map(r => r.period.label);
+  charts['cmp'] = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'Current — Platform Fee Only',        data:RESULTS.map(r=>r.totPlt),  backgroundColor:'#6B789644', borderColor:'#6B7896', borderWidth:1 },
+        { label:'Current — Full (Platform + Perf 10%)',data:RESULTS.map(r=>r.totCurr),backgroundColor:'#F59E0BAA', borderColor:'#F59E0B', borderWidth:1 },
+        { label:'New — Mgmt Fee (1% p.a.)',            data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA', borderColor:'#3B82F6', borderWidth:1 },
+        { label:'New — Mgmt + Exchange Rebate',        data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA', borderColor:'#10B981', borderWidth:1 },
+      ]
+    },
+    options:{
+      ...baseOpts,
+      plugins:{
+        ...baseOpts.plugins,
+        tooltip:{ ...baseOpts.plugins.tooltip, callbacks:{ label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` } }
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN CONTROLLER
+═══════════════════════════════════════════════════════════ */
+function getP() {
+  return {
+    initial:  +document.getElementById('iInitial').value  || 2400,
+    monthly:  +document.getElementById('iMonthly').value  || 200,
+    mgmtRate: (+document.getElementById('iMgmt').value    || 1.0) / 100,
+    pltRate:  (+document.getElementById('iPlatform').value|| 0.75) / 100,
+    prfRate:  (+document.getElementById('iPerf').value    || 10)   / 100,
+    btcAlloc: +document.getElementById('iBtcAlloc').value / 100,
+    clients:  +document.getElementById('iClients').value  || 1,
+  };
+}
+
+function calc() {
+  document.getElementById('status').textContent = 'Calculating…';
+
+  // Ensure data loaded
+  if (!M5) {
+    if (typeof _lth5_raw === 'undefined' || typeof _lth10_raw === 'undefined') {
+      document.getElementById('status').textContent = '⚠ chart-data.js not found — ensure fee-model.html and chart-data.js are in the same folder.';
+      return;
+    }
+    M5  = sampleMonthly(_lth5_raw);
+    M10 = sampleMonthly(_lth10_raw);
+  }
+
+  const p = getP();
+  runAll(p);
+  renderSummary(p.clients);
+  renderComparison();
+  renderExchDetail(p);
+  chartNav();
+  chartCumul();
+  chartBreakdown(breakdownPeriodM);
+  chartScale();
+  chartCompare();
+
+  const endDate5  = M5[M5.length-1][0];
+  const endDate10 = M10[M10.length-1][0];
+  document.getElementById('status').textContent =
+    `Updated · 5yr: ${M5[0][0]} – ${endDate5} (${M5.length} months) · 10yr: ${M10[0][0]} – ${endDate10} (${M10.length} months) · Client: $${p.initial.toLocaleString()} + $${p.monthly}/mo · Clients: ${p.clients.toLocaleString()}`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EVENT WIRING
+═══════════════════════════════════════════════════════════ */
+document.getElementById('btnCalc').addEventListener('click', calc);
+
+document.getElementById('iBtcAlloc').addEventListener('input', function() {
+  document.getElementById('oBtcAlloc').textContent = this.value + '%';
+});
+document.getElementById('iClients').addEventListener('input', function() {
+  document.getElementById('oClients').textContent = (+this.value).toLocaleString();
+});
+
+// Period tabs for annual breakdown chart
+document.querySelectorAll('.ptab[data-m]').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.ptab[data-m]').forEach(b => b.classList.remove('on'));
+    this.classList.add('on');
+    chartBreakdown(+this.dataset.m);
+  });
+});
+
+// Auto-run when data is available
+window.addEventListener('load', () => setTimeout(calc, 120));
+</script>
+</body>
+</html>
