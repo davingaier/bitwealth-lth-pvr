@@ -252,14 +252,13 @@
   </div>
 
   <div class="sh">Exchange Fee Sharing Detail
-    <span class="sh-note">50% of VALR trading fees · BTC Allocation slider adjusts columns 5–7</span>
+    <span class="sh-note">50% of VALR trading fees · using same rates as simulator (18/8/10 bps) · BTC Allocation slider adjusts rows 2–3</span>
   </div>
   <div class="tw">
     <table>
       <thead>
         <tr>
-          <th>Pair</th><th>Maker Rate</th><th>Taker Rate</th><th>Blended</th>
-          <th>Trade Amount</th><th>Total Fee</th><th>50% Share</th><th>Annual (12×)</th>
+          <th>Pair</th><th>Rate Used</th><th>Basis</th><th>Trade Amount</th><th>VALR Fee (100%)</th><th>BitWealth Share (50%)</th><th>Annual (12×)</th>
         </tr>
       </thead>
       <tbody id="bExch"></tbody>
@@ -270,7 +269,7 @@
     <strong>Methodology &amp; Assumptions</strong><br>
     <strong>Portfolio model:</strong> Monthly returns extracted from LTH PVR historical back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
     <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value.<br>
-    <strong>Exchange fee sharing:</strong> 50% of VALR fees. USDT/ZAR blended 0.265% (maker 0.18% / taker 0.35%); BTC/USDT &amp; USDPC/USDT blended 0.090% (maker 0.08% / taker 0.10%).<br>
+    <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>).<br>
     <strong>Performance fee:</strong> 10% of monthly profit above high-water mark (HWM = highest pre-fee NAV reached).<br>
     <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio. Monthly return formula: <code>r = (first_week_next_month − contrib) ÷ first_week_this_month − 1</code>.<br>
     <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
@@ -279,10 +278,14 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="chart-data.js"></script>
+<!-- Optional: chart-data-daily.js enables daily drill-down. Generate with gen-chart-js-daily.ps1 -->
+<script src="chart-data-daily.js" onerror="void(0)"></script>
 <script>/* ═══════════════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════════════ */
-const VALR={usdtZarMaker:.0018,usdtZarTaker:.0035,btcUsdtMaker:.0008,btcUsdtTaker:.0010,usdpcMaker:.0008,usdpcTaker:.0010};
+// Rates match the simulator (ef_bt_execute & lth_pvr_simulator.ts):
+//   USDT/ZAR 18 bps maker, BTC/USDT 8 bps maker, USDPC/USDT 10 bps taker (market order)
+const VALR={usdtZar:0.0018, btcUsdt:0.0008, usdpc:0.0010};
 const PERIODS=[
   {label:'1 Year',  months:12, src:'5yr', slice:'last'},
   {label:'3 Years', months:36, src:'5yr', slice:'last'},
@@ -303,20 +306,43 @@ function getWindow(period){const src=period.src==='5yr'?M5:M10;if(!src)return nu
 
 /* ═══════════════════════════════════════════════════════════
    PORTFOLIO MODEL
+   Fees ARE deducted from client NAV when their toggle is ON.
+   Deducted fees = BitWealth revenue. Off fees = client keeps them.
 ═══════════════════════════════════════════════════════════ */
-function buildPortfolio(win,initial,monthly){
-  const navs=[initial],rets=[null];
+function buildPortfolio(win,p,t){
+  // Initial contribution fees
+  const initExch=exchRebate(p.initial,p.btcAlloc);
+  const initPlt=p.initial*p.pltRate;
+  let nav=Math.max(0,p.initial-(t.exch?initExch:0)-(t.plt?initPlt:0));
+  let hwm=nav;
+  const navs=[nav],rets=[null];
+  const mgmtArr=[],exchArr=[initExch],currArr=[{plt:initPlt,prf:0}];
   for(let i=1;i<win.length;i++){
-    const r=(win[i][1]-monthly)/win[i-1][1]-1;
-    navs.push(Math.max(0,navs[navs.length-1]*(1+r)+monthly));
+    const r=(win[i][1]-p.monthly)/win[i-1][1]-1;
     rets.push(r);
+    // Gross NAV after market return and contribution
+    const gross=Math.max(0,nav*(1+r)+p.monthly);
+    // Fee amounts (stored regardless of toggle for reference)
+    const mf=gross*(p.mgmtRate/12);
+    const ef=exchRebate(p.monthly,p.btcAlloc);
+    const pf=p.monthly*p.pltRate;
+    // Apply mgmt fee first (standard practice)
+    const navM=gross-(t.mgmt?mf:0);
+    // Performance fee on gain above HWM
+    let prfFee=0;
+    if(navM>hwm){prfFee=(navM-hwm)*p.prfRate;}
+    // Net client NAV after all active fees
+    nav=Math.max(0,navM-(t.exch?ef:0)-(t.plt?pf:0)-(t.prf?prfFee:0));
+    hwm=Math.max(hwm,nav);
+    navs.push(nav);mgmtArr.push(mf);exchArr.push(ef);currArr.push({plt:pf,prf:prfFee});
   }
-  return{navs,rets};
+  return{navs,rets,mgmt:mgmtArr,exch:exchArr,curr:currArr};
 }
 
 function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
   const winStart=win[0][0],winEnd=win[win.length-1][0];
   const raw2=rawSrc.filter(r=>r[0]>=winStart&&r[0]<=winEnd);
+  const isDaily=raw2.length>win.length*2;  // daily has ~7× more entries than weekly
   return navs.map((nav,m)=>{
     const ym=win[m][0].slice(0,7);
     const nextYm=m+1<win.length?win[m+1][0].slice(0,7):null;
@@ -331,26 +357,18 @@ function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
       exchFee:exch[m]||0,
       pltFee:curr[m]?curr[m].plt:0,
       prfFee:curr[m]?curr[m].prf:0,
-      weeks,
+      weeks,isDaily,
     };
   });
 }
 
 /* ═══════════════════════════════════════════════════════════
-   FEE ENGINES
+   FEE ENGINE — returns BitWealth's 50% share of VALR fees
 ═══════════════════════════════════════════════════════════ */
-const bl=(m,t)=>(m+t)/2;
 function exchRebate(amt,btcAlloc){
-  return amt*bl(VALR.usdtZarMaker,VALR.usdtZarTaker)*.5
-        +amt*btcAlloc*bl(VALR.btcUsdtMaker,VALR.btcUsdtTaker)*.5
-        +amt*(1-btcAlloc)*bl(VALR.usdpcMaker,VALR.usdpcTaker)*.5;
-}
-function calcMgmtFees(navs,annRate){const mr=annRate/12;return navs.slice(1).map(n=>n*mr);}
-function calcExchFees(months,initial,monthly,btcAlloc){const out=[exchRebate(initial,btcAlloc)];for(let i=0;i<months;i++)out.push(exchRebate(monthly,btcAlloc));return out;}
-function calcCurrentFees(navs,initial,monthly,pltRate,prfRate){
-  const fees=[{plt:initial*pltRate,prf:0}];let hwm=navs[0];
-  for(let i=1;i<navs.length;i++){const nav=navs[i];let prf=0;if(nav>hwm){prf=(nav-hwm)*prfRate;hwm=nav;}fees.push({plt:monthly*pltRate,prf});}
-  return fees;
+  return amt*VALR.usdtZar*.5                    // USDT/ZAR 18 bps maker
+        +amt*btcAlloc*VALR.btcUsdt*.5           // BTC/USDT 8 bps maker
+        +amt*(1-btcAlloc)*VALR.usdpc*.5;        // USDPC/USDT 10 bps taker
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -378,14 +396,15 @@ function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totP
    MAIN CALCULATION
 ═══════════════════════════════════════════════════════════ */
 let RESULTS=[];
-function runAll(p){
+function runAll(p,t){
   RESULTS=PERIODS.map(period=>{
     const win=getWindow(period);if(!win||win.length<2)return null;
-    const rawSrc=period.src==='5yr'?_lth5_raw:_lth10_raw;
-    const{navs,rets}=buildPortfolio(win,p.initial,p.monthly);
+    // Use daily data if chart-data-daily.js is loaded, else weekly back-test data
+    const rawSrc5 =(typeof _lth5_daily !=='undefined')?_lth5_daily :_lth5_raw;
+    const rawSrc10=(typeof _lth10_daily!=='undefined')?_lth10_daily:_lth10_raw;
+    const rawSrc=period.src==='5yr'?rawSrc5:rawSrc10;
+    const{navs,rets,mgmt,exch,curr}=buildPortfolio(win,p,t);
     const months=navs.length-1;
-    const mgmt=calcMgmtFees(navs,p.mgmtRate),exch=calcExchFees(months,p.initial,p.monthly,p.btcAlloc);
-    const curr=calcCurrentFees(navs,p.initial,p.monthly,p.pltRate,p.prfRate);
     const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
     const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p);
@@ -445,20 +464,22 @@ function renderComparison(){
 
 function renderExchDetail(p){
   const pairs=[
-    {name:'USDT/ZAR',  mk:VALR.usdtZarMaker, tk:VALR.usdtZarTaker, amt:p.monthly,                note:`Full $${p.monthly} → ZAR→USDT`},
-    {name:'BTC/USDT',  mk:VALR.btcUsdtMaker,  tk:VALR.btcUsdtTaker,  amt:p.monthly*p.btcAlloc,     note:`${(p.btcAlloc*100).toFixed(0)}% of $${p.monthly} → buy BTC`},
-    {name:'USDPC/USDT',mk:VALR.usdpcMaker,    tk:VALR.usdpcTaker,    amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% of $${p.monthly} → USDPC`},
+    {name:'USDT/ZAR', rate:VALR.usdtZar, basis:'Maker (limit)',  amt:p.monthly,                note:`All $${p.monthly} → ZAR→USDT conversion`},
+    {name:'BTC/USDT', rate:VALR.btcUsdt, basis:'Maker (limit)',  amt:p.monthly*p.btcAlloc,     note:`${(p.btcAlloc*100).toFixed(0)}% of $${p.monthly} → buy BTC`},
+    {name:'USDPC/USDT',rate:VALR.usdpc,  basis:'Taker (market)', amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% of $${p.monthly} → sweep to USDPC`},
   ];
   const rows=pairs.map(x=>{
-    const blr=bl(x.mk,x.tk),fee=x.amt*blr,share=fee*.5;
+    const fee=x.amt*x.rate, share=fee*.5;
     return `<tr><td>${x.name} <span class="dim" style="font-size:10px">(${x.note})</span></td>
-      <td>${(x.mk*100).toFixed(3)}%</td><td>${(x.tk*100).toFixed(3)}%</td><td>${(blr*100).toFixed(4)}%</td>
-      <td class="dim">${fmtN(x.amt,2)}</td><td class="dim">${fmtN(fee,5)}</td>
-      <td class="vgr">${fmtN(share,5)}</td><td class="vb">${fmtN(share*12,4)}</td></tr>`;
+      <td>${(x.rate*100).toFixed(2)}%</td><td class="dim">${x.basis}</td>
+      <td class="dim">${fmtN(x.amt,2)}</td>
+      <td class="dim">${fmtN(fee,4)}</td>
+      <td class="vgr">${fmtN(share,4)}</td>
+      <td class="vb">${fmtN(share*12,2)}</td></tr>`;
   });
   const initFee=exchRebate(p.initial,p.btcAlloc),monFee=exchRebate(p.monthly,p.btcAlloc);
-  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="5"></td><td class="vgr">${fmtN(initFee,5)}</td><td class="dim">one-off</td></tr>`);
-  rows.push(`<tr><td><strong>Monthly $${p.monthly} total</strong></td><td colspan="5"></td><td class="vgr">${fmtN(monFee,5)}</td><td class="vb">${fmtN(monFee*12,4)}</td></tr>`);
+  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="4"></td><td class="vgr">${fmtN(initFee,4)}</td><td class="dim">one-off</td></tr>`);
+  rows.push(`<tr><td><strong>Monthly $${p.monthly} total (all pairs)</strong></td><td colspan="4"></td><td class="vgr">${fmtN(monFee,4)}</td><td class="vb">${fmtN(monFee*12,2)}/yr</td></tr>`);
   document.getElementById('bExch').innerHTML=rows.join('');
 }
 
@@ -671,16 +692,17 @@ function renderDrillMonths(r){
       <td>${fmtN(row.contrib)}</td>
       <td class="vg" style="font-family:monospace">${fmtK(row.freshNav)}</td>
       <td class="${retC}">${retS}</td>
-      <td class="${t.mgmt?'vb':'off'}">${fmtN(row.mgmtFee,4)}</td>
-      <td class="${t.exch?'vgr':'off'}">${fmtN(row.exchFee,4)}</td>
-      <td class="${t.plt?'vor':'off'}">${fmtN(row.pltFee,4)}</td>
-      <td class="${t.prf?'vpr':'off'}">${fmtN(row.prfFee,4)}</td>
-      <td class="vg" style="font-weight:700">${fmtN(at,4)}</td>
+      <td class="${t.mgmt?'vb':'off'}">${fmtN(row.mgmtFee,2)}</td>
+      <td class="${t.exch?'vgr':'off'}">${fmtN(row.exchFee,2)}</td>
+      <td class="${t.plt?'vor':'off'}">${fmtN(row.pltFee,2)}</td>
+      <td class="${t.prf?'vpr':'off'}">${fmtN(row.prfFee,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
       <td class="dim">${fmtN(cumTotal,2)}</td>
     </tr>`;
   }).join('');
+  const granNote=allRows[1]&&allRows[1].isDaily?'daily':'weekly';
   document.getElementById('drillContent').innerHTML=
-    `<div class="drill-info">Click any monthly row (except Initial) to see the underlying weekly back-test data for that month.</div>`
+    `<div class="drill-info">Click any monthly row (except Initial) to see ${granNote} back-test data for that month. ${granNote==='weekly'?'<span style="color:var(--orange)">Daily granularity requires running <code>gen-chart-js-daily.ps1</code> to generate <code>chart-data-daily.js</code>.</span>':''}</div>`
     +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -694,7 +716,9 @@ function renderDrillWeeks(r){
     calcNote=`<br>Monthly return formula: <code>r = (${fmtN(row.histNavRef,2)} &minus; $${contrib}) &divide; ${fmtN(prev.histNavRef,2)} &minus; 1 = <strong>${(row.histRet*100).toFixed(4)}%</strong></code>`
       +`<br>Applied to fresh portfolio: <code>${fmtK(prev.freshNav)} &times; (1+r) + $${contrib} = <strong>${fmtK(row.freshNav)}</strong></code>`;
   }
-  const head=`<tr><th>Week</th><th>Date</th><th>Hist. LTH PVR NAV</th><th>Week-on-Week Δ</th><th>Note</th></tr>`;
+  const isDaily=row.isDaily;
+  const entryLbl=isDaily?'Day':'Week';
+  const head=`<tr><th>${entryLbl}</th><th>Date</th><th>Hist. LTH PVR NAV</th><th>${isDaily?'Day-on-Day':'Week-on-Week'} Δ</th><th>Note</th></tr>`;
   const rows=row.weeks.map((w,i)=>{
     const wRet=w.wkRet!=null?((w.wkRet*100).toFixed(2)+'%'):'—';
     const wC=w.wkRet!=null?(w.wkRet>=0?'vgr':'vr'):'dim';
@@ -702,7 +726,7 @@ function renderDrillWeeks(r){
     if(w.isRef){note='◀ Start of this month — denominator of monthly return formula';rowCls='row-ref';}
     if(w.isNextRef){note='▶ Start of NEXT month — numerator (nav_next) in formula';rowCls='row-nxt';}
     return `<tr class="${rowCls}">
-      <td>${w.isNextRef?'→ Next':'W'+(i+1)}</td>
+      <td>${w.isNextRef?'→ Next':entryLbl+(i+1)}</td>
       <td>${fmtDate(w.date)}</td>
       <td class="${w.isRef?'vb':w.isNextRef?'vg':'dim'}" style="font-family:monospace;font-size:12px">${fmtN(w.histNav,2)}</td>
       <td class="${wC}">${wRet}</td>
@@ -710,8 +734,8 @@ function renderDrillWeeks(r){
     </tr>`;
   }).join('');
   document.getElementById('drillContent').innerHTML=
-    `<div class="drill-info"><strong>Weekly back-test data for ${row.dateLabel}</strong>${calcNote}<br>
-    <small>Hist. NAV = raw back-test portfolio for the original simulation. Blue row = month start reference; gold row = next-month endpoint.</small></div>`
+    `<div class="drill-info"><strong>${isDaily?'Daily':'Weekly'} back-test data for ${row.dateLabel}</strong>${calcNote}<br>
+    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Blue row = month start (denominator); gold row = next-month start (numerator).</small></div>`
     +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -731,7 +755,7 @@ function calc(){
     M5=sampleMonthly(_lth5_raw);M10=sampleMonthly(_lth10_raw);
   }
   const p=getP(),t=getT();
-  runAll(p);
+  runAll(p,t);
   renderSummary(p.clients,t);
   renderComparison();
   renderExchDetail(p);
@@ -743,13 +767,11 @@ function calc(){
     `Updated · 5yr: ${s5} · 10yr: ${s10} · Client: $${p.initial.toLocaleString()}+$${p.monthly}/mo · ${p.clients.toLocaleString()} client${p.clients!==1?'s':''}`;
 }
 
-// Re-render only tables+charts that depend on toggles or client count — no recompute of model
+// Re-render client-count column only (no fee impact on NAV)
 function softRender(){
   if(!RESULTS.length)return;
   const p=getP(),t=getT();
   renderSummary(p.clients,t);
-  chartCumul(t);chartBreakdown(BD_M,t);chartScale(t);
-  if(DS.open)renderDrill();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -770,8 +792,8 @@ document.getElementById('iClients').addEventListener('input',function(){
   document.getElementById('oClients').textContent=(+this.value).toLocaleString();softRender();
 });
 
-// Fee toggles — soft re-render only (model unchanged)
-document.querySelectorAll('.ftoggle').forEach(cb=>cb.addEventListener('change',softRender));
+// Fee toggles — fees affect NAV so a full recompute is needed
+document.querySelectorAll('.ftoggle').forEach(cb=>cb.addEventListener('change',scheduleRecalc));
 
 // Period tabs for annual breakdown chart
 document.querySelectorAll('.ptab[data-m]').forEach(btn=>{
@@ -784,5 +806,6 @@ document.querySelectorAll('.ptab[data-m]').forEach(btn=>{
 
 window.addEventListener('load',()=>setTimeout(calc,120));
 </script>
+<script src="chart-data-daily.js"></script>
 </body>
 </html>
