@@ -3,11 +3,135 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-24 (v0.6.124)
+**Last updated:** 2026-06-28 (v0.6.126)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.126 – Commercial Fee Model: 6 UX fixes and enhancements
+**Date:** 2026-06-28  
+**Status:** ✅ DEPLOYED (client-side only — no edge function or schema changes)
+
+#### Fix 1 – Recalculate button ignored when Initial Contribution = 0
+**Root cause.** `getP()` read input values as `+el.value || default`, which treats an explicit `0` as falsy and silently reverted to the previous default. Clicking **Recalculate** appeared to do nothing.
+
+**Fix.** Replaced with a `numVal(id, def)` helper that only falls back to the default when the field is blank or `NaN`; an explicit `0` is preserved. All five numeric inputs (`iInitial`, `iMonthly`, `iMgmt`, `iPlatform`, `iPerf`) now use this helper.
+
+#### Fix 2 – Control panel alignment
+- Labels given `min-height: 26px` and `align-items: flex-end` so one-line and two-line labels share the same bottom baseline.
+- `input[type=number]`, `input[type=date]` and slider rows (`.rw`) all set to a uniform `height: 34px`.
+- Grid column width widened slightly (`minmax(160px,1fr)`) to avoid crowding on the new date inputs.
+
+#### Feature 3 – Daily-level fees in the Detail Explorer drill-down
+Previously the daily (innermost) drill-down table showed only four columns: Day, Date, Hist. NAV, Day-on-Day Δ.
+
+**New columns added:** Contribution, Platform Fee, Exchange Rebate, Mgmt Fee, Perf Fee.
+
+**Fee attribution logic:** fees are charged monthly in the portfolio model, so they are pinned to the day they actually occur:
+- **Contribution + Platform + Exchange:** attributed to the month-start day (where the monthly NAV data row carries `isRef = true`).
+- **Management + Performance:** attributed to the last day of the month (`lastInMonth` — the final day before the next-month reference row).
+
+A `■ Month end — management + performance fee charged` note appears on the month-end row. Columns are dimmed when their toggle is off (respects the active fee selection). The explanatory footer was updated to document the attribution rule.
+
+#### Feature 4 – CSV export
+New **↓ Export CSV** button below **Recalculate**. Calls `exportCSV()`, which iterates `RESULTS → detail → weeks` and emits one row per daily back-test point with columns:
+
+`Period, Date, HistBacktestNAV, DailyReturnPct, ReconstructedNAV, Contribution, PlatformFee, ExchangeRebate, MgmtFee, PerfFee, ActiveTotal`
+
+- `ActiveTotal` respects the current toggle state (same logic as the summary table).
+- Next-month reference rows (`isNextRef`) are excluded to avoid duplication.
+- File is named `lth-pvr-fee-model-periods-YYYY-MM-DD.csv` (or `-custom-` when a custom range is active).
+- Uses `Blob + URL.createObjectURL` — no server round-trip.
+
+#### Feature 5 – Date range controls
+Two new control types added to the input panel:
+
+**End Date** (`iEndDate`)  
+- When set to a date earlier than the latest data point, re-anchors all five standard periods (1/3/5/7/10yr) to end on that date. Each period's window is computed backwards from the chosen end date using the 10yr monthly series.
+- Initialised to the latest available data date on first load.
+- Simulator ✓ anchors apply only when End Date equals the latest data date (i.e. the default product window); any earlier date falls back to the reconstruction estimate.
+
+**Custom Range — Start / End** (`iRangeStart` / `iRangeEnd`)  
+- When both dates are set and Start < End, the standard five periods are replaced by a single **"Custom Range"** period covering exactly that span.
+- Source: filtered from the 10yr monthly series.
+- A **Clear custom range** link resets both fields and returns to standard periods.
+- Custom ranges always use the reconstruction estimate (no ✓ anchor).
+
+`resolvePeriods(p)` encapsulates the period-selection logic. The status bar shows `Custom range START → END (N mo)` or `Periods ending DATE` when non-default modes are active.
+
+#### Fix 6 – Chart tooltip not triggering reliably
+**Root cause.** All four Chart.js instances used default interaction mode (`'point'`). Because line series are rendered with `pointRadius: 0`, the hover target area was a single pixel at each data point — practically impossible to hit.
+
+**Fix.** Added to the shared `bOpts` options object:
+```js
+interaction: { mode: 'index', intersect: false, axis: 'x' },
+hover:       { mode: 'index', intersect: false },
+```
+Tooltip also moved to `mode: 'index'` and `position: 'nearest'`. Null data points are filtered from tooltip labels (`label` callback returns `null` for `parsed.y == null`). This matches the robust tooltip pattern used on the Admin UI and the customer portal.
+
+**Files changed:**
+- `docs/fee-model.html` — all six fixes above
+- `docs/SDD_v0.6.md` — this change log entry
+
+---
+
+### v0.6.125 – Commercial Fee Model: back-tester anchoring + daily data generator
+**Date:** 2026-06-28  
+**Status:** ✅ DEPLOYED (client-side files only — no edge function or schema changes)
+
+#### Problem
+The public Commercial Fee Model (`docs/fee-model.html`) showed a 10-year Ending NAV of ~$2.8M, compared to $5.57M in the Admin simulator and public back-tester. Two compounding causes:
+1. The summary was reading from the stale weekly `_lth5_raw` / `_lth10_raw` arrays (pre-USDPC, generated in June 2026 without USDPC yield).
+2. Even with fresh data, a monthly return-reconstruction cannot reproduce a daily-simulation result exactly: window endpoint mismatch, simplified HWM definition, exchange/trade fees excluded from the reconstruction, monthly vs daily performance-fee accrual timing — all compound over 10 years to a ~9% gap.
+
+#### Solution
+
+**Part A – `gen-chart-js-daily.ps1` rewrite**
+
+The existing weekly-data generator was replaced with a new daily-resolution generator that calls `ef_run_lth_pvr_simulator` (progressive variation `f7ec6155-5b31-4ba2-9d44-f3516f76c1a7`, USDPC 10% APY on, window ending 2026-06-09). It emits three artefacts into `docs/chart-data-daily.js`:
+
+| Symbol | Content | Usage |
+|---|---|---|
+| `_lth5_daily` / `_lth10_daily` | GROSS daily NAV (all fee rates = 0) for 5yr / 10yr | Monthly return extraction for the reconstruction; daily drill-down |
+| `_lth5_daily_net` / `_lth10_daily_net` | NET daily NAV (real product fees) for 5yr / 10yr | NAV-growth chart series when anchored |
+| `_lthAnchors` | Authoritative per-period `{invested, netNav, platformFee, perfFee, exchRebate, days}` for all five periods (1/3/5/7/10yr) | Summary table when anchored |
+
+The script requires `$env:SUPABASE_ANON_KEY`. Run after any strategy or fee-rate change to refresh anchor data.
+
+**Regenerated anchor values (period end 2026-06-09, $2,400 start + $200/mo):**
+
+| Period | Net NAV | Platform Fee | Perf Fee | Exch Rebate |
+|---|---|---|---|---|
+| 1 Year  | $5,054.49    | $37.43  | $252.24     | $6.85      |
+| 3 Years | $22,879.64   | $73.37  | $2,237.48   | $33.75     |
+| 5 Years | $51,369.89   | $109.30 | $5,408.84   | $70.45     |
+| 7 Years | $213,526.13  | $145.24 | $23,459.75  | $269.71    |
+| 10 Years| $5,566,066   | $199.14 | $619,302.88 | $6,707.54  |
+
+**Part B – `fee-model.html` anchoring wiring**
+
+When the user's inputs exactly match the live product defaults ($2,400 start + $200/mo, 0.75% platform fee, 10% performance fee) and the fee toggles are in the product state (Platform ON, Performance ON, Management OFF), the summary table sources its figures directly from `_lthAnchors` rather than from the reconstruction.
+
+Key functions added:
+- `isProductRates(p)` — tolerance comparison against `PRODUCT_DEFAULTS`.
+- `productState(t)` — checks toggle state.
+- `summaryFigures(r, t)` — returns `{endNav, invested, totMgmt, totExch, totPlt, totPrf, active, anchored: true/false}`; falls back to reconstruction when not anchored.
+- `netMonthly(period)` — returns the net monthly NAV series for the NAV-growth chart when anchored.
+- `renderSummary` updated to show a green **✓** badge in the Ending NAV cell and a **"✓ matched to back-tester"** note in the section header when any row is anchored.
+- `renderComparison` updated to prefer anchor values for the platform/performance/exchange rows in the Fee Structure Comparison table.
+- `chartNav` updated to plot the simulator's real net series (from `_lth5_daily_net` / `_lth10_daily_net`) for anchored 5yr/10yr periods so the chart endpoint matches the summary.
+- Any custom rate, custom contribution, or custom toggle state falls back to the reconstruction estimate (labelled "estimate" in the methodology note).
+
+**Methodology note updated** to document: headline accuracy / anchoring, estimation fallback path, simplified HWM wording, daily (not weekly) drill-down, formula using `first_day_next_month`.
+
+**Files changed:**
+- `gen-chart-js-daily.ps1` — full rewrite
+- `docs/chart-data-daily.js` — regenerated (264 KB, emits gross daily, net daily, and anchors for all 5 periods)
+- `docs/fee-model.html` — anchoring wiring, methodology note
+- `docs/SDD_v0.6.md` — this change log entry
+
+---
 
 ### v0.6.124 – `hwm_contrib_net_cum` DEFAULT 0 bug → phantom $1,056 performance fee; portal chart dual-HWM lines; statement threshold fix
 **Date:** 2026-06-24  
