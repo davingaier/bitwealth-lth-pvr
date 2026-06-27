@@ -5056,6 +5056,23 @@
         </div>
       </div>
 
+      <!-- Pending USDPC Conversions Panel -->
+      <div class="card" id="pendingUsdpcCard">
+        <h3>⏳ Pending USDPC Sweeps</h3>
+        <p class="small-muted">Customers with idle USDT awaiting sweep into USDPC. Market orders only — no LIMIT/fallback.</p>
+
+        <div id="usdpcConversionsContainer" style="margin-bottom:1rem;">
+          <div id="usdpcConversionsList" style="display:grid;gap:.75rem;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <div style="display:flex;gap:.75rem;align-items:center;">
+          <button id="usdpcRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          <span id="usdpcRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
+        </div>
+      </div>
+
       <!-- ===========================================================
            Research Bitcoin (RB) API Token
            - Shows current issue / expiry / days remaining
@@ -13823,6 +13840,60 @@
         .replace(/'/g, '&#39;');
     }
 
+    // ── Status dot helper ──────────────────────────────────────────────────
+    // Reuses the .lp-light / .lp-step-grp CSS already defined in the
+    // Live Customer Transactions section.
+    //
+    // Three steps:
+    //   1. Placed   — order has been submitted to VALR
+    //   2. Polling  — watching for fill (unfilled = in_progress/amber,
+    //                 market fill pending = in_progress, failed = red)
+    //   3. Fallback — market order path (grey when limit filled/never needed,
+    //                 in_progress while market queuing/placed, complete when done)
+    function zarConvStatusDots(status, orderType) {
+      let s1, s2, s3, l2, l3;
+      switch (status) {
+        case 'limit_placed':
+          s1='complete';    s2='in_progress'; s3='not_started';
+          l2='Polling';     l3='Fallback';
+          break;
+        case 'market_pending':
+          s1='complete';    s2='in_progress'; s3='in_progress';
+          l2='Cancelling';  l3='Queuing';
+          break;
+        case 'market_placed':
+          s1='complete';    s2='in_progress'; s3='complete';
+          l2='Filling';     l3='Market ✓';
+          break;
+        case 'failed':
+          s1='complete';    s2='failed';      s3=orderType==='market' ? 'failed' : 'not_started';
+          l2='Failed';      l3=orderType==='market' ? 'Failed' : 'Fallback';
+          break;
+        default: // 'pending' or unknown
+          s1='not_started'; s2='not_started'; s3='not_started';
+          l2='Polling';     l3='Fallback';
+      }
+      const dot = (state, label) =>
+        `<div class="lp-step-grp" title="${label}: ${state.replace('_',' ')}">
+           <span class="lp-step-name">${label}</span>
+           <span class="lp-light lp-light--${state}"></span>
+         </div>`;
+      return `<div class="lp-lights">${dot(s1,'Placed')}${dot(s2,l2)}${dot(s3,l3)}</div>`;
+    }
+
+    // ── Auto-refresh management ───────────────────────────────────────────────
+    let _zarAutoTimer = null;
+    const ZAR_POLL_INTERVAL_MS = 10_000;
+    const ZAR_INFLIGHT_STATUSES = ['limit_placed', 'market_pending', 'market_placed'];
+
+    function _zarStartAutoRefresh() {
+      if (_zarAutoTimer) return;               // already running
+      _zarAutoTimer = setInterval(loadPendingZarConversions, ZAR_POLL_INTERVAL_MS);
+    }
+    function _zarStopAutoRefresh() {
+      if (_zarAutoTimer) { clearInterval(_zarAutoTimer); _zarAutoTimer = null; }
+    }
+
     async function loadPendingZarConversions() {
       if (!supabaseClient) {
         zarListEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
@@ -13862,47 +13933,63 @@
 
         // Render pending conversions
         zarListEl.innerHTML = data.map(conv => {
-          const hoursAgo = Math.floor(conv.hours_pending);
-          const timeColor = hoursAgo > 24 ? '#dc3545' : hoursAgo > 4 ? '#ffc107' : '#28a745';
-          const modelBadge = conv.account_model === 'api'
+          const hoursAgo      = Math.floor(conv.hours_pending);
+          const timeColor     = hoursAgo > 24 ? '#dc3545' : hoursAgo > 4 ? '#ffc107' : '#28a745';
+          const modelBadge    = conv.account_model === 'api'
             ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
             : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
-          const statusBadge = conv.conversion_status === 'partial'
-            ? '<span style="background:#ffc107;color:#000;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PARTIAL</span>'
-            : conv.conversion_status === 'pending'
-            ? '<span style="background:#6c757d;color:#fff;font-size:.7rem;padding:.1rem .3rem;border-radius:3px;margin-left:.5rem;">PENDING</span>'
-            : '';
-          
+          const dots          = zarConvStatusDots(conv.status, conv.order_type);
+          const showConvertBtn = conv.status === 'pending';
+
+          // Human-readable in-flight label shown below the dots
+          const statusLine = {
+            limit_placed:   `<span style="font-size:.78rem;color:#d97706;">LIMIT order placed @ R${conv.limit_price ? Number(conv.limit_price).toFixed(2) : '–'} — polling for fill…</span>`,
+            market_pending: `<span style="font-size:.78rem;color:#d97706;">Cancelling LIMIT, queuing MARKET order…</span>`,
+            market_placed:  `<span style="font-size:.78rem;color:#059669;">MARKET order placed — confirming fill…</span>`,
+            failed:         `<span style="font-size:.78rem;color:#dc3545;">&#9888; ${escapeHtml(conv.error_message || 'Order failed')}</span>`,
+          }[conv.status] || '';
+
           return `
-            <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+            <div style="background:var(--bg-elev,#f8f9fa);border:1px solid var(--border,#e9ecef);border-radius:8px;padding:.75rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
               <div style="flex:1;min-width:0;">
-                <div style="font-weight:500;margin-bottom:.25rem;">
-                  ${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}${modelBadge}${statusBadge}
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.3rem;">
+                  <span style="font-weight:500;">${escapeHtml(conv.first_names)} ${escapeHtml(conv.last_name)}${modelBadge}</span>
+                  ${dots}
                 </div>
-                <div style="font-size:.85rem;color:#4b5563;margin-bottom:.25rem;">
+                ${statusLine ? `<div style="margin-bottom:.25rem;">${statusLine}</div>` : ''}
+                <div style="font-size:.85rem;color:var(--muted,#4b5563);margin-bottom:.25rem;">
                   <strong>Deposited:</strong> R${Number(conv.original_zar_amount).toFixed(2)}
                   <span style="margin:0 .5rem;">•</span>
                   <strong>Remaining:</strong> <span style="color:#059669;font-weight:600;">R${Number(conv.remaining_amount).toFixed(2)}</span>
                 </div>
-                <div style="font-size:.8rem;color:#6c757d;">
+                <div style="font-size:.8rem;color:var(--muted,#6c757d);">
                   <span style="color:${timeColor};font-weight:500;">${hoursAgo}h ago</span>
                   · ${new Date(conv.occurred_at).toLocaleString()}
                   · Balance: ${Number(conv.current_usdt_balance).toFixed(2)} USDT
                 </div>
               </div>
-              <div style="flex-shrink:0;">
+              <div style="flex-shrink:0;padding-top:.1rem;">
+                ${showConvertBtn ? `
                 <button id="convertBtn_${conv.id}"
                         onclick="window.executeZarConversion('${conv.id}', '${escapeHtml(conv.first_names)}', '${escapeHtml(conv.last_name)}')"
                         style="padding:.4rem .8rem;font-size:.85em;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
                   ⚡ Convert ZAR→USDT
-                </button>
+                </button>` : ''}
               </div>
             </div>
           `;
         }).join('');
 
-        zarRefreshMessage.textContent = `${data.length} pending conversion${data.length === 1 ? '' : 's'}`;
-        zarRefreshMessage.style.color = '#6c757d';
+        // Start auto-refresh while any conversion is in-flight; stop when all are settled
+        const anyInFlight = data.some(c => ZAR_INFLIGHT_STATUSES.includes(c.status));
+        if (anyInFlight) _zarStartAutoRefresh();
+        else             _zarStopAutoRefresh();
+
+        const inFlightCount = data.filter(c => ZAR_INFLIGHT_STATUSES.includes(c.status)).length;
+        zarRefreshMessage.textContent = inFlightCount
+          ? `${data.length} pending — ${inFlightCount} in-flight (auto-refreshing every 10 s)`
+          : `${data.length} pending conversion${data.length === 1 ? '' : 's'}`;
+        zarRefreshMessage.style.color = inFlightCount ? '#d97706' : '#6c757d';
 
       } catch (err) {
         console.error('Error in loadPendingZarConversions:', err);
@@ -13935,9 +14022,17 @@
         const result = await response.json();
 
         if (response.ok && result.success) {
-          zarRefreshMessage.textContent = `✅ Conversion complete for ${firstName} ${lastName}`;
-          zarRefreshMessage.style.color = '#28a745';
-          setTimeout(() => loadPendingZarConversions(), 1500);
+          const st = result.status || 'limit_placed';
+          if (st === 'filled') {
+            zarRefreshMessage.textContent = `✅ Conversion complete for ${firstName} ${lastName}`;
+            zarRefreshMessage.style.color = '#28a745';
+          } else {
+            zarRefreshMessage.textContent = `⚡ Order placed for ${firstName} ${lastName} — monitoring fill…`;
+            zarRefreshMessage.style.color = '#059669';
+          }
+          // Refresh immediately to show the in-flight status dots; auto-refresh
+          // will kick in automatically if the order is still open.
+          await loadPendingZarConversions();
         } else {
           const errMsg = result.error || result.message || 'Unknown error';
           zarRefreshMessage.textContent = `❌ Conversion failed: ${errMsg}`;
@@ -14015,6 +14110,238 @@
           if (session?.user) {
             loadPendingZarConversions();
           }
+        });
+      }
+    }, 5 * 60 * 1000);
+  })();
+
+  // =================== Pending USDPC Conversions (Administration module) ===================
+  (function() {
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const listEl    = document.getElementById('usdpcConversionsList');
+    const msgEl     = document.getElementById('usdpcRefreshMessage');
+    const refreshBtn = document.getElementById('usdpcRefreshBtn');
+    if (!listEl || !refreshBtn) return;
+
+    // ── Status dot helper ────────────────────────────────────────────────
+    // Two steps (market-only, no LIMIT/fallback):
+    //   1. Placed  — MARKET order submitted to VALR (intent = executed)
+    //   2. Filled  — fill confirmed + ledger posted (customer leaves view)
+    function usdpcConvStatusDots(statusToday, intentsToday) {
+      let s1, s2;
+      if (!intentsToday || !statusToday) {
+        s1 = 'not_started'; s2 = 'not_started';   // not yet triggered
+      } else {
+        const parts = statusToday.split(',').map(s => s.trim());
+        if (parts.includes('error')) {
+          s1 = 'failed';      s2 = 'not_started';
+        } else if (parts.includes('executed')) {
+          s1 = 'complete';    s2 = 'in_progress';  // order placed, fill pending
+        } else if (parts.includes('pending')) {
+          s1 = 'in_progress'; s2 = 'not_started';  // queuing market order
+        } else {
+          s1 = 'not_started'; s2 = 'not_started';
+        }
+      }
+      const dot = (state, label) =>
+        `<div class="lp-step-grp" title="${label}: ${state.replace('_',' ')}">
+           <span class="lp-step-name">${label}</span>
+           <span class="lp-light lp-light--${state}"></span>
+         </div>`;
+      return `<div class="lp-lights">${dot(s1,'Placed')}${dot(s2,'Filled')}</div>`;
+    }
+
+    // ── Auto-refresh management ───────────────────────────────────────────────
+    let _usdpcAutoTimer = null;
+    const USDPC_POLL_MS = 10_000;
+
+    function _isUsdpcInFlight(statusToday) {
+      if (!statusToday) return false;
+      return statusToday.split(',').some(s => s === 'pending' || s === 'executed');
+    }
+    function _usdpcStartAutoRefresh() {
+      if (_usdpcAutoTimer) return;
+      _usdpcAutoTimer = setInterval(loadPendingUsdpcConversions, USDPC_POLL_MS);
+    }
+    function _usdpcStopAutoRefresh() {
+      if (_usdpcAutoTimer) { clearInterval(_usdpcAutoTimer); _usdpcAutoTimer = null; }
+    }
+
+    // ── Loader ─────────────────────────────────────────────────────────
+    async function loadPendingUsdpcConversions() {
+      if (typeof supabaseClient === 'undefined' || !supabaseClient) {
+        listEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Loading Supabase client…</div>';
+        return;
+      }
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session?.user) {
+        listEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">Please sign in to view pending sweeps.</div>';
+        return;
+      }
+
+      msgEl.textContent = 'Loading…';
+      msgEl.style.color  = '#6c757d';
+
+      try {
+        const { data, error } = await supabaseClient
+          .schema('lth_pvr')
+          .from('v_pending_usdpc_conversions')
+          .select('customer_id,first_names,last_name,account_model,idle_usdt,usdpc_balance,usdpc_price_usd,balance_date,min_order_usdt,intents_today,status_today,last_intent_at');
+
+        if (error) {
+          console.error('Error loading pending USDPC sweeps:', error);
+          listEl.innerHTML = `<div style="color:#dc3545;font-size:.9rem;">Error: ${error.message}</div>`;
+          msgEl.textContent = 'Error loading sweeps';
+          msgEl.style.color = '#dc3545';
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          listEl.innerHTML = '<div style="color:#6c757d;font-size:.9rem;">✅ No pending USDPC sweeps</div>';
+          msgEl.textContent = 'All sweeps complete';
+          msgEl.style.color = '#28a745';
+          _usdpcStopAutoRefresh();
+          return;
+        }
+
+        listEl.innerHTML = data.map(row => {
+          const modelBadge = row.account_model === 'api'
+            ? '<span style="background:#6366f1;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🔑 API</span>'
+            : '<span style="background:#0ea5e9;color:#fff;font-size:.7em;padding:.1rem .3rem;border-radius:3px;margin-left:.4rem;">🏦 Subacct</span>';
+          const dots = usdpcConvStatusDots(row.status_today, row.intents_today);
+          const showSweepBtn = !row.intents_today || !row.status_today;
+
+          // Human-readable status label shown below the dots
+          const statusLine = (() => {
+            if (!row.status_today || !row.intents_today) return '';
+            const parts = row.status_today.split(',').map(s => s.trim());
+            if (parts.includes('error'))
+              return '<span style="font-size:.78rem;color:#dc3545;">&#9888; Market order failed</span>';
+            if (parts.includes('executed'))
+              return '<span style="font-size:.78rem;color:#d97706;">MARKET order placed — confirming fill…</span>';
+            if (parts.includes('pending'))
+              return '<span style="font-size:.78rem;color:#d97706;">Queuing MARKET order…</span>';
+            return '';
+          })();
+
+          const usdpcVal = row.usdpc_balance != null
+            ? `${Number(row.usdpc_balance).toFixed(2)} USDPC`
+            : '–';
+          const priceStr = row.usdpc_price_usd != null
+            ? `@ $${Number(row.usdpc_price_usd).toFixed(4)}/USDPC`
+            : '';
+
+          return `
+            <div style="background:var(--bg-elev,#f8f9fa);border:1px solid var(--border,#e9ecef);border-radius:8px;padding:.75rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.3rem;">
+                  <span style="font-weight:500;">${escapeHtml(row.first_names)} ${escapeHtml(row.last_name)}${modelBadge}</span>
+                  ${dots}
+                </div>
+                ${statusLine ? `<div style="margin-bottom:.25rem;">${statusLine}</div>` : ''}
+                <div style="font-size:.85rem;color:var(--muted,#4b5563);margin-bottom:.25rem;">
+                  <strong>Idle USDT:</strong> <span style="color:#059669;font-weight:600;">${Number(row.idle_usdt).toFixed(2)} USDT</span>
+                  <span style="margin:0 .5rem;">•</span>
+                  <strong>USDPC balance:</strong> ${usdpcVal} ${priceStr}
+                </div>
+                ${row.last_intent_at ? `
+                <div style="font-size:.8rem;color:var(--muted,#6c757d);">
+                  Last sweep: ${new Date(row.last_intent_at).toLocaleString()}
+                </div>` : ''}
+              </div>
+              <div style="flex-shrink:0;padding-top:.1rem;">
+                ${showSweepBtn ? `
+                <button id="usdpcSweepBtn_${row.customer_id}"
+                        onclick="window.executeUsdpcSweep(${row.customer_id}, '${escapeHtml(row.first_names)}', '${escapeHtml(row.last_name)}')"
+                        style="padding:.4rem .8rem;font-size:.85em;background:#10b981;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;">
+                  ⚡ Sweep USDT→USDPC
+                </button>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Auto-refresh while any row is in-flight
+        const anyInFlight = data.some(r => _isUsdpcInFlight(r.status_today));
+        if (anyInFlight) _usdpcStartAutoRefresh();
+        else             _usdpcStopAutoRefresh();
+
+        const inFlightCount = data.filter(r => _isUsdpcInFlight(r.status_today)).length;
+        msgEl.textContent = inFlightCount
+          ? `${data.length} pending — ${inFlightCount} in-flight (auto-refreshing every 10 s)`
+          : `${data.length} pending sweep${data.length === 1 ? '' : 's'}`;
+        msgEl.style.color = inFlightCount ? '#d97706' : '#6c757d';
+
+      } catch (err) {
+        console.error('Error in loadPendingUsdpcConversions:', err);
+        listEl.innerHTML = '<div style="color:#dc3545;font-size:.9rem;">Unexpected error</div>';
+        msgEl.textContent = 'Error';
+        msgEl.style.color = '#dc3545';
+      }
+    }
+
+    // ── Execute sweep ──────────────────────────────────────────────────
+    window.executeUsdpcSweep = async function(customerId, firstName, lastName) {
+      const btn = document.getElementById(`usdpcSweepBtn_${customerId}`);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Placing order…'; }
+
+      try {
+        msgEl.textContent = `Sweeping for ${firstName} ${lastName}…`;
+        msgEl.style.color = '#6c757d';
+
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_sweep_usdt_to_usdpc`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token || window.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ customer_id: customerId, force: true }),
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok && result.success) {
+          if (result.created === 0) {
+            // Nothing to sweep (balance may have dropped below min between render and click)
+            msgEl.textContent = `ℹ️ Nothing to sweep for ${firstName} ${lastName} — balance may already be below minimum`;
+            msgEl.style.color = '#6c757d';
+          } else {
+            msgEl.textContent = `⚡ Sweep placed for ${firstName} ${lastName} — monitoring fill…`;
+            msgEl.style.color = '#059669';
+          }
+          // Refresh immediately; auto-refresh kicks in if in-flight
+          await loadPendingUsdpcConversions();
+        } else {
+          const errMsg = result.error || result.message || 'Unknown error';
+          msgEl.textContent = `❌ Sweep failed: ${errMsg}`;
+          msgEl.style.color = '#dc3545';
+          if (btn) { btn.disabled = false; btn.textContent = '⚡ Sweep USDT→USDPC'; }
+        }
+      } catch (err) {
+        console.error('executeUsdpcSweep error:', err);
+        msgEl.textContent = `Error: ${err.message}`;
+        msgEl.style.color = '#dc3545';
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ Sweep USDT→USDPC'; }
+      }
+    };
+
+    refreshBtn.addEventListener('click', loadPendingUsdpcConversions);
+    window.loadPendingUsdpcConversions = loadPendingUsdpcConversions;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) loadPendingUsdpcConversions();
+        });
+      }
+    });
+
+    // Background refresh every 5 minutes (complements in-flight 10 s timer)
+    setInterval(() => {
+      if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) loadPendingUsdpcConversions();
         });
       }
     }, 5 * 60 * 1000);
