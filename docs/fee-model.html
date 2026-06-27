@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -10,235 +10,132 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg:      #0A0F1E;
-      --bg2:     #151B2E;
-      --bg3:     #1A2138;
-      --gold:    #FFB400;
-      --gold-lt: #FFC933;
-      --white:   #FFFFFF;
-      --txt2:    #A8B2D1;
-      --txt3:    #6B7896;
-      --green:   #10B981;
-      --red:     #EF4444;
-      --blue:    #3B82F6;
-      --orange:  #F59E0B;
-      --purple:  #8B5CF6;
-      --teal:    #06B6D4;
-      --border:  rgba(255,180,0,0.15);
+      --bg:#0A0F1E; --bg2:#151B2E; --bg3:#1A2138;
+      --gold:#FFB400; --gold-lt:#FFC933;
+      --white:#FFFFFF; --txt2:#A8B2D1; --txt3:#6B7896;
+      --green:#10B981; --red:#EF4444; --blue:#3B82F6;
+      --orange:#F59E0B; --purple:#8B5CF6; --teal:#06B6D4;
+      --border:rgba(255,180,0,0.15);
     }
-    html, body {
-      font-family: 'Inter', system-ui, sans-serif;
-      font-size: 14px;
-      line-height: 1.55;
-      color: var(--white);
-      background: var(--bg);
-      min-height: 100vh;
-    }
-    .container { max-width: 1440px; margin: 0 auto; padding: 24px 20px 40px; }
-
-    /* ── Header ── */
-    .header {
-      border-bottom: 2px solid var(--gold);
-      padding-bottom: 14px;
-      margin-bottom: 22px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .header h1 { font-size: 22px; font-weight: 800; }
-    .header h1 span { color: var(--gold); }
-    .header .sub { color: var(--txt2); font-size: 12px; margin-top: 3px; }
-    .header .badge { font-size: 11px; color: var(--txt3); text-align: right; }
-
-    /* ── Controls ── */
-    .controls {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px 20px;
-      margin-bottom: 20px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
-      align-items: end;
-    }
-    .ctrl label {
-      display: block;
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--txt3);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 5px;
-    }
-    .ctrl input[type=number], .ctrl select {
-      width: 100%;
-      background: var(--bg3);
-      border: 1px solid rgba(255,255,255,0.09);
-      border-radius: 6px;
-      padding: 7px 10px;
-      color: var(--white);
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .ctrl input[type=number]:focus, .ctrl select:focus { border-color: var(--gold); }
-    .ctrl .rw { display: flex; align-items: center; gap: 8px; }
-    .ctrl input[type=range] { flex: 1; accent-color: var(--gold); height: 3px; cursor: pointer; }
-    .ctrl .rv { font-size: 13px; font-weight: 700; color: var(--gold); min-width: 52px; text-align: right; }
-    .recalc {
-      width: 100%;
-      background: var(--gold);
-      color: #000;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 16px;
-      font-weight: 700;
-      font-size: 13px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.18s;
-    }
-    .recalc:hover { background: var(--gold-lt); }
-
-    /* ── Section heading ── */
-    .sh {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--white);
-      margin: 22px 0 10px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .sh::before { content:''; display:block; width:3px; height:16px; background:var(--gold); border-radius:2px; }
-    .sh-note { font-size: 11px; font-weight: 400; color: var(--txt3); margin-left: 4px; }
-
-    /* ── Tables ── */
-    .tw { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 22px; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; min-width: 640px; }
-    th {
-      background: var(--bg3);
-      padding: 9px 14px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--txt3);
-      text-align: right;
-      white-space: nowrap;
-    }
-    th:first-child { text-align: left; }
-    td {
-      padding: 9px 14px;
-      font-size: 12px;
-      text-align: right;
-      border-top: 1px solid rgba(255,255,255,0.04);
-      color: var(--txt2);
-      white-space: nowrap;
-    }
-    td:first-child { text-align: left; color: var(--white); font-weight: 600; }
-    tr:hover td { background: rgba(255,255,255,0.025); }
-    .vg  { color: var(--gold);   font-weight: 600; }
-    .vgr { color: var(--green);  font-weight: 600; }
-    .vb  { color: var(--blue);   font-weight: 600; }
-    .vor { color: var(--orange); font-weight: 600; }
-    .vr  { color: var(--red);    font-weight: 600; }
-    .vt  { color: var(--teal);   font-weight: 600; }
-    .dim { color: var(--txt3); font-style: italic; }
-
-    /* ── Charts ── */
-    .cg { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
-    @media(max-width:860px) { .cg { grid-template-columns: 1fr; } }
-    .cc {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
-    }
-    .cc h3 { font-size: 11px; font-weight: 600; color: var(--txt2); margin-bottom: 10px; }
-    .cc.full { grid-column: 1 / -1; }
-    canvas { max-width: 100%; }
-
-    /* ── Period selector tabs ── */
-    .ptabs { display: flex; gap: 6px; flex-wrap: wrap; }
-    .ptab {
-      padding: 4px 10px;
-      border-radius: 16px;
-      font-size: 10px;
-      font-weight: 700;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      color: var(--txt3);
-      background: transparent;
-      font-family: inherit;
-      transition: all 0.15s;
-    }
-    .ptab.on { background: var(--gold); color: #000; border-color: var(--gold); }
-
-    /* ── Assumptions ── */
-    .assum {
-      background: rgba(255,180,0,0.04);
-      border: 1px solid rgba(255,180,0,0.18);
-      border-radius: 8px;
-      padding: 12px 16px;
-      font-size: 10.5px;
-      color: var(--txt3);
-      line-height: 1.75;
-      margin-bottom: 10px;
-    }
-    .assum strong { color: var(--txt2); }
-
-    /* ── Status ── */
-    .status { font-size: 10px; color: var(--txt3); text-align: right; margin-bottom: 10px; min-height: 14px; }
-
-    /* ── Loading ── */
-    .loading { text-align: center; padding: 28px; color: var(--txt3); font-size: 12px; }
+    html,body{font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.55;color:var(--white);background:var(--bg);min-height:100vh;}
+    .container{max-width:1500px;margin:0 auto;padding:24px 20px 40px;}
+    .header{border-bottom:2px solid var(--gold);padding-bottom:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;}
+    .header h1{font-size:22px;font-weight:800;}
+    .header h1 span{color:var(--gold);}
+    .header .sub{color:var(--txt2);font-size:12px;margin-top:3px;}
+    .header .badge{font-size:11px;color:var(--txt3);}
+    .controls{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;align-items:start;}
+    .ctrl label{display:block;font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
+    .ctrl input[type=number]{width:100%;background:var(--bg3);border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:7px 10px;color:var(--white);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;}
+    .ctrl input[type=number]:focus{border-color:var(--gold);}
+    .ctrl .rw{display:flex;align-items:center;gap:8px;}
+    .ctrl input[type=range]{flex:1;accent-color:var(--gold);height:3px;cursor:pointer;}
+    .ctrl .rv{font-size:13px;font-weight:700;color:var(--gold);min-width:44px;text-align:right;}
+    .ctrl-hint{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5;}
+    .ctrl-hint strong{color:var(--txt2);}
+    .recalc{width:100%;background:var(--gold);color:#000;border:none;border-radius:6px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-top:22px;}
+    .recalc:hover{background:var(--gold-lt);}
+    .fee-row{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 20px;margin-top:8px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:18px;}
+    .fee-row .fl{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;}
+    .fee-row label{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px;font-weight:500;}
+    .fee-row input[type=checkbox]{accent-color:var(--gold);width:14px;height:14px;cursor:pointer;}
+    .fee-row .mgmt-col{color:var(--blue);}
+    .fee-row .exch-col{color:var(--green);}
+    .fee-row .plt-col{color:var(--orange);}
+    .fee-row .prf-col{color:var(--purple);}
+    .sh{font-size:14px;font-weight:700;color:var(--white);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+    .sh::before{content:'';display:block;width:3px;height:16px;background:var(--gold);border-radius:2px;}
+    .sh-note{font-size:11px;font-weight:400;color:var(--txt3);margin-left:4px;}
+    .tw{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:22px;overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;min-width:680px;}
+    th{background:var(--bg3);padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);text-align:right;white-space:nowrap;}
+    th:first-child{text-align:left;}
+    td{padding:8px 12px;font-size:11.5px;text-align:right;border-top:1px solid rgba(255,255,255,.04);color:var(--txt2);white-space:nowrap;}
+    td:first-child{text-align:left;color:var(--white);font-weight:600;}
+    tr:hover td{background:rgba(255,255,255,.025);}
+    .vg{color:var(--gold);font-weight:600;}
+    .vgr{color:var(--green);font-weight:600;}
+    .vb{color:var(--blue);font-weight:600;}
+    .vor{color:var(--orange);font-weight:600;}
+    .vpr{color:var(--purple);font-weight:600;}
+    .vr{color:var(--red);font-weight:600;}
+    .dim{color:var(--txt3);}
+    .off{color:var(--txt3);opacity:.4;}
+    .drill-btn{background:transparent;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;color:var(--txt2);cursor:pointer;font-family:inherit;white-space:nowrap;}
+    .drill-btn:hover{border-color:var(--gold);color:var(--gold);}
+    .drill-btn.active{background:var(--gold);color:#000;border-color:var(--gold);}
+    .drill-box{background:var(--bg2);border:2px solid var(--gold);border-radius:10px;margin-bottom:22px;overflow:hidden;}
+    .drill-bar{background:var(--bg3);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .drill-title{font-size:13px;font-weight:700;color:var(--gold);}
+    .drill-bc{display:flex;align-items:center;gap:4px;font-size:11px;flex:1;flex-wrap:wrap;}
+    .bc-sep{color:var(--txt3);}
+    .bc-link{color:var(--blue);cursor:pointer;text-decoration:underline;}
+    .bc-link:hover{color:var(--gold);}
+    .bc-curr{color:var(--txt2);font-weight:600;}
+    .drill-close{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:4px;padding:3px 10px;color:var(--txt3);cursor:pointer;font-family:inherit;font-size:11px;}
+    .drill-close:hover{border-color:var(--red);color:var(--red);}
+    .drill-content{padding:12px 16px;}
+    .drill-info{font-size:11px;color:var(--txt2);line-height:1.7;margin-bottom:8px;padding:10px 12px;background:rgba(255,180,0,.04);border:1px solid rgba(255,180,0,.12);border-radius:6px;}
+    .drill-info strong{color:var(--gold);}
+    .drill-info small{font-size:10px;color:var(--txt3);}
+    .drill-row{cursor:pointer;}
+    .drill-row:hover td{background:rgba(255,180,0,.07)!important;}
+    .row-ref td{background:rgba(59,130,246,.07);}
+    .row-nxt td{background:rgba(255,180,0,.06);}
+    .cg{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;}
+    @media(max-width:860px){.cg{grid-template-columns:1fr;}}
+    .cc{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+    .cc h3{font-size:11px;font-weight:600;color:var(--txt2);margin-bottom:10px;}
+    .cc.full{grid-column:1/-1;}
+    canvas{max-width:100%;}
+    .ptabs{display:flex;gap:6px;flex-wrap:wrap;}
+    .ptab{padding:3px 9px;border-radius:14px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--border);color:var(--txt3);background:transparent;font-family:inherit;}
+    .ptab.on{background:var(--gold);color:#000;border-color:var(--gold);}
+    .assum{background:rgba(255,180,0,.04);border:1px solid rgba(255,180,0,.18);border-radius:8px;padding:12px 16px;font-size:10.5px;color:var(--txt3);line-height:1.75;margin-bottom:10px;}
+    .assum strong{color:var(--txt2);}
+    .status{font-size:10px;color:var(--txt3);text-align:right;margin-bottom:10px;min-height:14px;}
+    code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;}
   </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- ══ HEADER ══ -->
   <div class="header">
     <div>
       <h1>LTH PVR — <span>Commercial Fee Model</span></h1>
-      <div class="sub">Management fee &amp; VALR exchange rebate revenue forecast · historical back-test basis</div>
+      <div class="sub">Management fee &amp; VALR exchange rebate forecast · toggle any fee stream on/off to compare structures</div>
     </div>
     <div class="badge">BitWealth · June 2026</div>
   </div>
 
-  <!-- ══ CONTROLS ══ -->
   <div class="controls">
     <div class="ctrl">
       <label>Initial Contribution (USD)</label>
-      <input type="number" id="iInitial"  value="2400" min="0"   step="100">
+      <input type="number" id="iInitial" value="2400" min="0" step="100">
     </div>
     <div class="ctrl">
       <label>Monthly Contribution (USD)</label>
-      <input type="number" id="iMonthly" value="200"  min="0"   step="50">
+      <input type="number" id="iMonthly" value="200" min="0" step="50">
     </div>
     <div class="ctrl">
       <label>Mgmt Fee Rate (% p.a.)</label>
-      <input type="number" id="iMgmt"    value="1.0"  min="0"   step="0.1" max="5">
+      <input type="number" id="iMgmt" value="1.0" min="0" step="0.1" max="5">
     </div>
     <div class="ctrl">
-      <label>Current Platform Fee (% on contributions)</label>
+      <label>Platform Fee (% on contributions)</label>
       <input type="number" id="iPlatform" value="0.75" min="0" step="0.05" max="5">
     </div>
     <div class="ctrl">
-      <label>Current Perf Fee (% of profit, HWM)</label>
-      <input type="number" id="iPerf"    value="10"   min="0"   step="1"   max="50">
+      <label>Perf Fee (% of profit above HWM)</label>
+      <input type="number" id="iPerf" value="10" min="0" step="1" max="50">
     </div>
     <div class="ctrl">
-      <label>BTC Allocation (of contribution)</label>
+      <label>BTC Allocation (of each contribution)</label>
       <div class="rw">
-        <input type="range" id="iBtcAlloc" min="40" max="100" value="75">
+        <input type="range" id="iBtcAlloc" min="0" max="100" value="75">
         <span class="rv" id="oBtcAlloc">75%</span>
       </div>
+      <div class="ctrl-hint">% of each contribution used to buy BTC on the <strong>BTC/USDT</strong> pair. Remainder sweeps to <strong>USDPC/USDT</strong>. This only affects the exchange-fee rebate calculation — portfolio NAV comes from historical back-test data and is unaffected.</div>
     </div>
     <div class="ctrl">
       <label>Number of Clients</label>
@@ -253,49 +150,70 @@
     </div>
   </div>
 
+  <div class="fee-row">
+    <span class="fl">Include in Active Total:</span>
+    <label><input type="checkbox" class="ftoggle" id="tMgmt" checked>
+      <span class="mgmt-col">Management Fee</span></label>
+    <label><input type="checkbox" class="ftoggle" id="tExch" checked>
+      <span class="exch-col">Exchange Rebate (50% VALR)</span></label>
+    <label><input type="checkbox" class="ftoggle" id="tPlt">
+      <span class="plt-col">Platform Fee</span></label>
+    <label><input type="checkbox" class="ftoggle" id="tPrf">
+      <span class="prf-col">Performance Fee (HWM)</span></label>
+  </div>
+
   <div class="status" id="status">Loading…</div>
 
-  <!-- ══ SUMMARY TABLE — NEW MODEL ══ -->
-  <div class="sh">Revenue Summary — New Fee Model
-    <span class="sh-note">1% management fee p.a. (monthly) + 50% VALR exchange rebate</span>
+  <div class="sh">Revenue Summary
+    <span class="sh-note">active total reflects toggled fee streams · click Detail to drill down into years, months, and weekly back-test data</span>
   </div>
   <div class="tw">
     <table id="tSummary">
       <thead>
         <tr>
           <th>Period</th>
-          <th>Total Invested</th>
-          <th>Ending Portfolio NAV</th>
-          <th>Total Return</th>
-          <th>Mgmt Fee Revenue</th>
-          <th>Exchange Rebate</th>
-          <th>Total Revenue (per client)</th>
-          <th>Avg Monthly Revenue</th>
-          <th id="thBiz">Business Total (×1 client)</th>
+          <th>Invested</th>
+          <th>Ending NAV</th>
+          <th>Return</th>
+          <th style="color:var(--blue)">Mgmt Fee</th>
+          <th style="color:var(--green)">Exch Rebate</th>
+          <th style="color:var(--orange)">Platform Fee</th>
+          <th style="color:var(--purple)">Perf Fee</th>
+          <th style="color:var(--gold)">Active Total</th>
+          <th>Avg/Month</th>
+          <th id="thBiz">Business (×1)</th>
+          <th></th>
         </tr>
       </thead>
-      <tbody id="bSummary"><tr><td colspan="9" class="loading">Calculating…</td></tr></tbody>
+      <tbody id="bSummary"><tr><td colspan="12" style="text-align:center;padding:20px;color:var(--txt3)">Calculating…</td></tr></tbody>
     </table>
   </div>
 
-  <!-- ══ CHARTS ROW 1: NAV + Cumulative Revenue ══ -->
+  <div class="drill-box" id="drillBox" style="display:none">
+    <div class="drill-bar">
+      <span class="drill-title" id="drillTitle">Detail Explorer</span>
+      <div class="drill-bc" id="drillBc"></div>
+      <button class="drill-close" onclick="closeDrill()">✕ Close</button>
+    </div>
+    <div class="drill-content" id="drillContent"></div>
+  </div>
+
   <div class="cg">
     <div class="cc">
       <h3>Portfolio NAV Growth — fresh client, historical returns (log scale)</h3>
       <canvas id="cNav" height="240"></canvas>
     </div>
     <div class="cc">
-      <h3>Cumulative BitWealth Revenue — new model, per client</h3>
+      <h3>Cumulative BitWealth Revenue — active fee selection, per client</h3>
       <canvas id="cCumul" height="240"></canvas>
     </div>
   </div>
 
-  <!-- ══ CHARTS ROW 2: Annual Breakdown + Business Scale ══ -->
   <div class="cg">
     <div class="cc">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <h3 style="margin:0">Annual Revenue Breakdown — Mgmt Fee vs Exchange Rebate</h3>
-        <div class="ptabs" id="breakdownTabs">
+        <h3 style="margin:0">Annual Revenue — active fee selection, by year</h3>
+        <div class="ptabs">
           <button class="ptab" data-m="12">1yr</button>
           <button class="ptab" data-m="36">3yr</button>
           <button class="ptab" data-m="60">5yr</button>
@@ -306,569 +224,565 @@
       <canvas id="cBreakdown" height="240"></canvas>
     </div>
     <div class="cc">
-      <h3>Annual BitWealth Revenue at Scale (avg annualised)</h3>
+      <h3>Annual Revenue at Scale — active selection, annualised average</h3>
       <canvas id="cScale" height="240"></canvas>
     </div>
   </div>
 
-  <!-- ══ COMPARISON TABLE ══ -->
-  <div class="sh">Fee Structure Comparison — Current vs New
-    <span class="sh-note">same portfolio trajectory, all fee structures applied on top</span>
+  <div class="sh">Fee Structure Comparison — All Scenarios
+    <span class="sh-note">same portfolio trajectory · all fee structures shown for reference regardless of toggles above</span>
   </div>
   <div class="tw">
-    <table id="tCompare">
+    <table>
       <thead>
         <tr>
           <th>Fee Structure</th>
-          <th>1 Year</th>
-          <th>3 Years</th>
-          <th>5 Years</th>
-          <th>7 Years</th>
-          <th>10 Years</th>
+          <th>1 Year</th><th>3 Years</th><th>5 Years</th><th>7 Years</th><th>10 Years</th>
         </tr>
       </thead>
-      <tbody id="bCompare"><tr><td colspan="6" class="loading">Calculating…</td></tr></tbody>
+      <tbody id="bCompare"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--txt3)">Calculating…</td></tr></tbody>
     </table>
   </div>
 
-  <!-- ══ CHART: Wide Comparison ══ -->
   <div class="cg">
     <div class="cc full">
-      <h3>Fee Revenue Comparison — all periods, per single client (note: perf fee is very high in sustained bull markets)</h3>
+      <h3>Fee Revenue Comparison — all periods, per single client (note: perf fee dominates in sustained bull markets)</h3>
       <canvas id="cCompare" height="180"></canvas>
     </div>
   </div>
 
-  <!-- ══ EXCHANGE FEE DETAIL TABLE ══ -->
   <div class="sh">Exchange Fee Sharing Detail
-    <span class="sh-note">50% of VALR trading fees — per $200 monthly contribution</span>
+    <span class="sh-note">50% of VALR trading fees · BTC Allocation slider adjusts columns 5–7</span>
   </div>
   <div class="tw">
-    <table id="tExch">
+    <table>
       <thead>
         <tr>
-          <th>Pair</th>
-          <th>Maker Rate</th>
-          <th>Taker Rate</th>
-          <th>Blended (50/50)</th>
-          <th>On $200 Trade</th>
-          <th>50% BitWealth Share</th>
-          <th>Annual (12 months)</th>
+          <th>Pair</th><th>Maker Rate</th><th>Taker Rate</th><th>Blended</th>
+          <th>Trade Amount</th><th>Total Fee</th><th>50% Share</th><th>Annual (12×)</th>
         </tr>
       </thead>
       <tbody id="bExch"></tbody>
     </table>
   </div>
 
-  <!-- ══ ASSUMPTIONS ══ -->
   <div class="assum">
     <strong>Methodology &amp; Assumptions</strong><br>
-    <strong>Portfolio model:</strong> Monthly returns are extracted from the LTH PVR historical back-test (BitWealth proprietary simulator).
-    For each monthly interval the <em>pure</em> return is isolated by removing the $200 contribution effect:
-    <code>r = (nav_next − $200) / nav_prev − 1</code>. This return sequence is then applied to a fresh $2,400 portfolio with $200/month additions.
-    For sub-periods (1yr, 3yr, 7yr) the most-recent N months of the 5yr or 10yr dataset are used, rebased to a fresh start.<br>
-    <strong>Management fee:</strong> 1.0% p.a., charged monthly = NAV × (rate / 12) at end of month.<br>
-    <strong>Exchange fee sharing:</strong> 50% of VALR fees. USDT/ZAR blended 0.265% (maker 0.18% / taker 0.35%);
-    BTC/USDT &amp; USDPC/USDT blended 0.090% (maker 0.08% / taker 0.10%). Fee applies to: ZAR→USDT conversion of each contribution, BTC/USDT DCA buy, USDPC/USDT idle-USDT sweep.<br>
-    <strong>Current fee comparison:</strong> 0.75% platform fee on each contribution (upfront); 10% performance fee on monthly profit above high-water mark (HWM resets to new NAV peak).<br>
-    <strong>Disclaimer:</strong> Back-test data is from June 2016 – June 2026. Past performance does not guarantee future results. This model is for commercial planning purposes only.
+    <strong>Portfolio model:</strong> Monthly returns extracted from LTH PVR historical back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
+    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value.<br>
+    <strong>Exchange fee sharing:</strong> 50% of VALR fees. USDT/ZAR blended 0.265% (maker 0.18% / taker 0.35%); BTC/USDT &amp; USDPC/USDT blended 0.090% (maker 0.08% / taker 0.10%).<br>
+    <strong>Performance fee:</strong> 10% of monthly profit above high-water mark (HWM = highest pre-fee NAV reached).<br>
+    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio. Monthly return formula: <code>r = (first_week_next_month − contrib) ÷ first_week_this_month − 1</code>.<br>
+    <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
   </div>
 
 </div>
-
-<!-- ══ SCRIPTS ══ -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script src="chart-data.js"></script>
-<script>
-/* ═══════════════════════════════════════════════════════════
+<script>/* ═══════════════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════════════ */
-const VALR = {
-  usdtZarMaker:  0.0018,
-  usdtZarTaker:  0.0035,
-  btcUsdtMaker:  0.0008,
-  btcUsdtTaker:  0.0010,
-  usdpcMaker:    0.0008,
-  usdpcTaker:    0.0010,
-};
-
-const PERIODS = [
-  { label:'1 Year',  months:12,  src:'5yr',  slice:'last' },
-  { label:'3 Years', months:36,  src:'5yr',  slice:'last' },
-  { label:'5 Years', months:60,  src:'5yr',  slice:'all'  },
-  { label:'7 Years', months:84,  src:'10yr', slice:'last' },
-  { label:'10 Years',months:120, src:'10yr', slice:'all'  },
+const VALR={usdtZarMaker:.0018,usdtZarTaker:.0035,btcUsdtMaker:.0008,btcUsdtTaker:.0010,usdpcMaker:.0008,usdpcTaker:.0010};
+const PERIODS=[
+  {label:'1 Year',  months:12, src:'5yr', slice:'last'},
+  {label:'3 Years', months:36, src:'5yr', slice:'last'},
+  {label:'5 Years', months:60, src:'5yr', slice:'all'},
+  {label:'7 Years', months:84, src:'10yr',slice:'last'},
+  {label:'10 Years',months:120,src:'10yr',slice:'all'},
 ];
-
-const PAL = ['#FFB400','#3B82F6','#10B981','#8B5CF6','#F59E0B'];
-const CG = { text:'#A8B2D1', grid:'rgba(255,255,255,0.055)' };
+const PAL=['#FFB400','#3B82F6','#10B981','#8B5CF6','#F59E0B'];
+const CG={text:'#A8B2D1',grid:'rgba(255,255,255,0.055)'};
+const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 /* ═══════════════════════════════════════════════════════════
-   DATA UTILITIES
+   DATA HELPERS
 ═══════════════════════════════════════════════════════════ */
-let M5 = null, M10 = null;  // monthly-sampled datasets
-
-function sampleMonthly(raw) {
-  // Returns one row per calendar month (first entry of each month)
-  const out = [];
-  let lastYM = '';
-  for (const r of raw) {
-    const ym = r[0].slice(0,7);
-    if (ym !== lastYM) { out.push(r); lastYM = ym; }
-  }
-  return out;
-}
-
-function getWindow(period) {
-  const src = period.src === '5yr' ? M5 : M10;
-  if (!src) return null;
-  if (period.slice === 'all') return src;
-  // last N months + 1 (need the prior month as starting point)
-  return src.slice(Math.max(0, src.length - period.months - 1));
-}
+let M5=null,M10=null;
+function sampleMonthly(raw){const out=[];let last='';for(const r of raw){const ym=r[0].slice(0,7);if(ym!==last){out.push(r);last=ym;}}return out;}
+function getWindow(period){const src=period.src==='5yr'?M5:M10;if(!src)return null;if(period.slice==='all')return src;return src.slice(Math.max(0,src.length-period.months-1));}
 
 /* ═══════════════════════════════════════════════════════════
    PORTFOLIO MODEL
-   For each month i (1..n):
-     pure_return[i] = (hist_nav[i] - monthly_contrib) / hist_nav[i-1] - 1
-     fresh_nav[i]   = fresh_nav[i-1] * (1 + pure_return[i]) + monthly_contrib
 ═══════════════════════════════════════════════════════════ */
-function buildPortfolio(win, initial, monthly) {
-  const navs = [initial];
-  for (let i = 1; i < win.length; i++) {
-    const ph = win[i-1][1], ch = win[i][1];
-    const r  = (ch - monthly) / ph - 1;         // pure monthly return
-    const nv = navs[navs.length-1] * (1 + r) + monthly;
-    navs.push(Math.max(0, nv));
+function buildPortfolio(win,initial,monthly){
+  const navs=[initial],rets=[null];
+  for(let i=1;i<win.length;i++){
+    const r=(win[i][1]-monthly)/win[i-1][1]-1;
+    navs.push(Math.max(0,navs[navs.length-1]*(1+r)+monthly));
+    rets.push(r);
   }
-  return navs;  // length = win.length  (months 0..n)
+  return{navs,rets};
+}
+
+function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
+  const winStart=win[0][0],winEnd=win[win.length-1][0];
+  const raw2=rawSrc.filter(r=>r[0]>=winStart&&r[0]<=winEnd);
+  return navs.map((nav,m)=>{
+    const ym=win[m][0].slice(0,7);
+    const nextYm=m+1<win.length?win[m+1][0].slice(0,7):null;
+    const thisW=raw2.filter(r=>r[0].slice(0,7)===ym);
+    const weeks=thisW.map((r,wi,arr)=>({date:r[0],histNav:r[1],wkRet:wi>0?(r[1]/arr[wi-1][1]-1):null,isRef:wi===0}));
+    if(nextYm){const nxt=raw2.find(r=>r[0].slice(0,7)===nextYm);if(nxt)weeks.push({date:nxt[0],histNav:nxt[1],wkRet:null,isNextRef:true});}
+    return{
+      m,ym,dateLabel:MO[+ym.slice(5,7)-1]+' '+ym.slice(0,4),
+      freshNav:nav,histNavRef:win[m][1],histRet:rets[m],
+      contrib:m===0?p.initial:p.monthly,
+      mgmtFee:m>0?(mgmt[m-1]||0):0,
+      exchFee:exch[m]||0,
+      pltFee:curr[m]?curr[m].plt:0,
+      prfFee:curr[m]?curr[m].prf:0,
+      weeks,
+    };
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════
    FEE ENGINES
 ═══════════════════════════════════════════════════════════ */
-function blended(maker, taker) { return (maker + taker) / 2; }
-
-// Exchange rebate for a single contribution amount
-function exchRebate(amount, btcAlloc) {
-  const rZar  = amount * blended(VALR.usdtZarMaker, VALR.usdtZarTaker) * 0.5;
-  const rBtc  = amount * btcAlloc      * blended(VALR.btcUsdtMaker, VALR.btcUsdtTaker) * 0.5;
-  const rUsdc = amount * (1-btcAlloc)  * blended(VALR.usdpcMaker,   VALR.usdpcTaker)   * 0.5;
-  return rZar + rBtc + rUsdc;
+const bl=(m,t)=>(m+t)/2;
+function exchRebate(amt,btcAlloc){
+  return amt*bl(VALR.usdtZarMaker,VALR.usdtZarTaker)*.5
+        +amt*btcAlloc*bl(VALR.btcUsdtMaker,VALR.btcUsdtTaker)*.5
+        +amt*(1-btcAlloc)*bl(VALR.usdpcMaker,VALR.usdpcTaker)*.5;
 }
-
-// Management fees: array[i] = navs[i+1] * monthlyRate   (length = months)
-function calcMgmtFees(navs, annRate) {
-  const mr = annRate / 12;
-  return navs.slice(1).map(n => n * mr);
-}
-
-// Exchange rebates: array[0]=initial fee, array[i>0]=monthly fee   (length = months+1)
-function calcExchFees(months, initial, monthly, btcAlloc) {
-  const out = [exchRebate(initial, btcAlloc)];
-  for (let i = 0; i < months; i++) out.push(exchRebate(monthly, btcAlloc));
-  return out;
-}
-
-// Current fee structure: platform on contributions + perf fee (monthly HWM)
-// Returns array[i] = { plt, prf }  (length = months+1, index 0 = initial contrib)
-function calcCurrentFees(navs, initial, monthly, pltRate, prfRate) {
-  const fees = [{ plt: initial * pltRate, prf: 0 }];
-  let hwm = navs[0];
-  for (let i = 1; i < navs.length; i++) {
-    const nav = navs[i];
-    let prf = 0;
-    if (nav > hwm) {
-      prf = (nav - hwm) * prfRate;
-      hwm = nav;                // HWM updated to pre-fee peak
-    }
-    fees.push({ plt: monthly * pltRate, prf });
-  }
+function calcMgmtFees(navs,annRate){const mr=annRate/12;return navs.slice(1).map(n=>n*mr);}
+function calcExchFees(months,initial,monthly,btcAlloc){const out=[exchRebate(initial,btcAlloc)];for(let i=0;i<months;i++)out.push(exchRebate(monthly,btcAlloc));return out;}
+function calcCurrentFees(navs,initial,monthly,pltRate,prfRate){
+  const fees=[{plt:initial*pltRate,prf:0}];let hwm=navs[0];
+  for(let i=1;i<navs.length;i++){const nav=navs[i];let prf=0;if(nav>hwm){prf=(nav-hwm)*prfRate;hwm=nav;}fees.push({plt:monthly*pltRate,prf});}
   return fees;
 }
 
 /* ═══════════════════════════════════════════════════════════
+   FORMATTERS & HELPERS
+═══════════════════════════════════════════════════════════ */
+const fmtK=v=>v==null?'—':'$'+(Math.abs(v)>=1e6?(v/1e6).toFixed(2)+'M':Math.abs(v)>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2));
+const fmtN=(v,dp=0)=>v==null?'—':'$'+v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const fmtDate=d=>{const p=d.split('-');return p[2]+' '+MO[+p[1]-1]+' '+p[0];};
+
+function getP(){
+  return{
+    initial: +document.getElementById('iInitial').value||2400,
+    monthly: +document.getElementById('iMonthly').value||200,
+    mgmtRate:+document.getElementById('iMgmt').value/100,
+    pltRate: +document.getElementById('iPlatform').value/100,
+    prfRate: +document.getElementById('iPerf').value/100,
+    btcAlloc:+document.getElementById('iBtcAlloc').value/100,
+    clients: +document.getElementById('iClients').value||1,
+  };
+}
+function getT(){return{mgmt:document.getElementById('tMgmt').checked,exch:document.getElementById('tExch').checked,plt:document.getElementById('tPlt').checked,prf:document.getElementById('tPrf').checked};}
+function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totPlt:0)+(t.prf?r.totPrf:0);}
+
+/* ═══════════════════════════════════════════════════════════
    MAIN CALCULATION
 ═══════════════════════════════════════════════════════════ */
-let RESULTS = [];
-
-function runAll(p) {
-  RESULTS = PERIODS.map(period => {
-    const win = getWindow(period);
-    if (!win || win.length < 2) return null;
-
-    const navs       = buildPortfolio(win, p.initial, p.monthly);
-    const months     = navs.length - 1;
-
-    const mgmt       = calcMgmtFees(navs, p.mgmtRate);
-    const exch       = calcExchFees(months, p.initial, p.monthly, p.btcAlloc);
-    const curr       = calcCurrentFees(navs, p.initial, p.monthly, p.pltRate, p.prfRate);
-
-    const totMgmt    = mgmt.reduce((a,b) => a+b, 0);
-    const totExch    = exch.reduce((a,b) => a+b, 0);
-    const totPlt     = curr.reduce((a,b) => a+b.plt, 0);
-    const totPrf     = curr.reduce((a,b) => a+b.prf, 0);
-    const totCurr    = totPlt + totPrf;
-    const totNew     = totMgmt + totExch;
-    const invested   = p.initial + p.monthly * months;
-    const endNav     = navs[navs.length-1];
-
-    return {
-      period, win, navs, mgmt, exch, curr, months,
-      totMgmt, totExch, totPlt, totPrf, totCurr, totNew,
-      invested, endNav,
-      avgMonNew: totNew / months,
-    };
+let RESULTS=[];
+function runAll(p){
+  RESULTS=PERIODS.map(period=>{
+    const win=getWindow(period);if(!win||win.length<2)return null;
+    const rawSrc=period.src==='5yr'?_lth5_raw:_lth10_raw;
+    const{navs,rets}=buildPortfolio(win,p.initial,p.monthly);
+    const months=navs.length-1;
+    const mgmt=calcMgmtFees(navs,p.mgmtRate),exch=calcExchFees(months,p.initial,p.monthly,p.btcAlloc);
+    const curr=calcCurrentFees(navs,p.initial,p.monthly,p.pltRate,p.prfRate);
+    const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
+    const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
+    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p);
+    return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,
+      totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
+      invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
   }).filter(Boolean);
 }
 
 /* ═══════════════════════════════════════════════════════════
-   FORMATTERS
+   RENDER TABLES
 ═══════════════════════════════════════════════════════════ */
-const fmtK = v => v == null ? '—' : '$' + (Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2)+'M' : Math.abs(v) >= 1e3 ? (v/1e3).toFixed(1)+'k' : v.toFixed(2));
-const fmtD = v => v == null ? '—' : '$' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,'‚');
-const fmtN = (v, dp=0) => v == null ? '—' : '$' + v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d))/g,',');
-const pct  = (a,b) => b ? ((a-b)/b*100).toFixed(1)+'%' : '—';
-
-/* ═══════════════════════════════════════════════════════════
-   RENDER — TABLES
-═══════════════════════════════════════════════════════════ */
-function renderSummary(clients) {
-  document.getElementById('thBiz').textContent = `Business Total (×${clients.toLocaleString()} clients)`;
-  const rows = RESULTS.map(r => {
-    const roi = ((r.endNav - r.invested) / r.invested * 100).toFixed(1);
+function renderSummary(clients,t){
+  document.getElementById('thBiz').textContent='Business (×'+clients.toLocaleString()+')';
+  const rows=RESULTS.map((r,idx)=>{
+    const roi=((r.endNav-r.invested)/r.invested*100).toFixed(1);
+    const at=atot(r,t);
+    const mC=t.mgmt?'vb':'off',eC=t.exch?'vgr':'off',pC=t.plt?'vor':'off',rC=t.prf?'vpr':'off';
+    const active=DS.open&&DS.idx===idx?' active':'';
     return `<tr>
       <td>${r.period.label}</td>
       <td>${fmtN(r.invested)}</td>
       <td class="vg">${fmtN(r.endNav)}</td>
-      <td class="${roi>=0?'vgr':'vr'}">${roi}%</td>
-      <td class="vb">${fmtN(r.totMgmt,2)}</td>
-      <td>${fmtN(r.totExch,2)}</td>
-      <td class="vgr">${fmtN(r.totNew,2)}</td>
-      <td class="dim">${fmtN(r.avgMonNew,2)}/mo</td>
-      <td class="vg">${fmtN(r.totNew * clients)}</td>
+      <td class="${+roi>=0?'vgr':'vr'}">${roi}%</td>
+      <td class="${mC}">${fmtN(r.totMgmt,2)}</td>
+      <td class="${eC}">${fmtN(r.totExch,2)}</td>
+      <td class="${pC}">${fmtN(r.totPlt,2)}</td>
+      <td class="${rC}">${fmtN(r.totPrf,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
+      <td class="dim">${fmtN(at/r.months,2)}/mo</td>
+      <td class="vg">${fmtN(at*clients)}</td>
+      <td><button class="drill-btn${active}" onclick="openDrill(${idx})">Detail ▼</button></td>
     </tr>`;
   });
-  document.getElementById('bSummary').innerHTML = rows.join('');
+  document.getElementById('bSummary').innerHTML=rows.join('');
 }
 
-function renderComparison() {
-  const periods = RESULTS;
-
-  const rows = [
-    { label:'Current — Platform Fee Only',            cls:'dim',  key: r => r.totPlt },
-    { label:'Current — Performance Fee Only',         cls:'vor',  key: r => r.totPrf },
-    { label:'Current — Full (Platform + Perf 10%)',   cls:'vor',  key: r => r.totCurr, bold:true },
-    { label:'New — Management Fee (1% p.a.)',         cls:'vb',   key: r => r.totMgmt },
-    { label:'New — Exchange Rebate (50% VALR)',       cls:'',     key: r => r.totExch },
-    { label:'New — Management Fee + Exchange Rebate', cls:'vgr',  key: r => r.totNew, bold:true },
-    { label:'New vs Current (full comparison)',       cls:'',     key: r => null, diff:true },
+function renderComparison(){
+  const rows=[
+    {label:'Current — Platform Fee Only',          cls:'dim', key:r=>r.totPlt},
+    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:r=>r.totPrf},
+    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>r.totCurr,bold:true},
+    {label:'New — Management Fee',                 cls:'vb',  key:r=>r.totMgmt},
+    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:r=>r.totExch},
+    {label:'New — Mgmt + Exchange Rebate',          cls:'vgr', key:r=>r.totNew, bold:true},
+    {label:'Δ New vs Current (full)',               cls:'',    diff:true},
   ];
-
-  const html = rows.map(row => {
-    const cells = periods.map(r => {
-      if (row.diff) {
-        const delta = r.totNew - r.totCurr;
-        const cls = delta > 0 ? 'vgr' : 'vr';
-        return `<td class="${cls}">${delta>=0?'+':''}${fmtN(delta,2)}</td>`;
-      }
-      const v = row.key(r);
-      return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(v,2)}</td>`;
+  const html=rows.map(row=>{
+    const cells=RESULTS.map(r=>{
+      if(row.diff){const d=r.totNew-r.totCurr;return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
+      return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(row.key(r),2)}</td>`;
     }).join('');
     return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
   }).join('');
-
-  document.getElementById('bCompare').innerHTML = html;
+  document.getElementById('bCompare').innerHTML=html;
 }
 
-function renderExchDetail(p) {
-  const pairs = [
-    { name:'USDT/ZAR',   maker:VALR.usdtZarMaker, taker:VALR.usdtZarTaker, amt:p.monthly,            note:'ZAR→USDT conversion' },
-    { name:'BTC/USDT',   maker:VALR.btcUsdtMaker,  taker:VALR.btcUsdtTaker,  amt:p.monthly*p.btcAlloc, note:`${(p.btcAlloc*100).toFixed(0)}% BTC buy` },
-    { name:'USDPC/USDT', maker:VALR.usdpcMaker,    taker:VALR.usdpcTaker,    amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% idle sweep` },
+function renderExchDetail(p){
+  const pairs=[
+    {name:'USDT/ZAR',  mk:VALR.usdtZarMaker, tk:VALR.usdtZarTaker, amt:p.monthly,                note:`Full $${p.monthly} → ZAR→USDT`},
+    {name:'BTC/USDT',  mk:VALR.btcUsdtMaker,  tk:VALR.btcUsdtTaker,  amt:p.monthly*p.btcAlloc,     note:`${(p.btcAlloc*100).toFixed(0)}% of $${p.monthly} → buy BTC`},
+    {name:'USDPC/USDT',mk:VALR.usdpcMaker,    tk:VALR.usdpcTaker,    amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% of $${p.monthly} → USDPC`},
   ];
-
-  const rows = pairs.map(x => {
-    const bl = blended(x.maker, x.taker);
-    const fee = x.amt * bl;
-    const share = fee * 0.5;
-    const annual = share * 12;
-    return `<tr>
-      <td>${x.name} <span style="font-weight:400;color:var(--txt3);font-size:10px">(${x.note})</span></td>
-      <td>${(x.maker*100).toFixed(3)}%</td>
-      <td>${(x.taker*100).toFixed(3)}%</td>
-      <td>${(bl*100).toFixed(4)}%</td>
-      <td class="dim">${fmtN(fee,4)}</td>
-      <td class="vgr">${fmtN(share,4)}</td>
-      <td class="vb">${fmtN(annual,4)}</td>
-    </tr>`;
+  const rows=pairs.map(x=>{
+    const blr=bl(x.mk,x.tk),fee=x.amt*blr,share=fee*.5;
+    return `<tr><td>${x.name} <span class="dim" style="font-size:10px">(${x.note})</span></td>
+      <td>${(x.mk*100).toFixed(3)}%</td><td>${(x.tk*100).toFixed(3)}%</td><td>${(blr*100).toFixed(4)}%</td>
+      <td class="dim">${fmtN(x.amt,2)}</td><td class="dim">${fmtN(fee,5)}</td>
+      <td class="vgr">${fmtN(share,5)}</td><td class="vb">${fmtN(share*12,4)}</td></tr>`;
   });
-
-  // Initial contribution row
-  const initTotal = exchRebate(p.initial, p.btcAlloc);
-  rows.push(`<tr style="border-top:2px solid var(--border)">
-    <td><strong>Initial $${p.initial.toLocaleString()} contribution (one-off)</strong></td>
-    <td colspan="4"></td>
-    <td class="vgr">${fmtN(initTotal,4)}</td>
-    <td class="dim">one-off</td>
-  </tr>`);
-
-  const monthTotal = exchRebate(p.monthly, p.btcAlloc);
-  rows.push(`<tr>
-    <td><strong>Monthly $${p.monthly.toLocaleString()} contribution (total all pairs)</strong></td>
-    <td colspan="4"></td>
-    <td class="vgr">${fmtN(monthTotal,4)}</td>
-    <td class="vb">${fmtN(monthTotal*12,4)}</td>
-  </tr>`);
-
-  document.getElementById('bExch').innerHTML = rows.join('');
+  const initFee=exchRebate(p.initial,p.btcAlloc),monFee=exchRebate(p.monthly,p.btcAlloc);
+  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="5"></td><td class="vgr">${fmtN(initFee,5)}</td><td class="dim">one-off</td></tr>`);
+  rows.push(`<tr><td><strong>Monthly $${p.monthly} total</strong></td><td colspan="5"></td><td class="vgr">${fmtN(monFee,5)}</td><td class="vb">${fmtN(monFee*12,4)}</td></tr>`);
+  document.getElementById('bExch').innerHTML=rows.join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
-   RENDER — CHARTS
+   CHARTS
 ═══════════════════════════════════════════════════════════ */
-const charts = {};
-function kc(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
-
-const baseOpts = {
-  responsive: true,
-  maintainAspectRatio: true,
-  animation: { duration: 400 },
-  plugins: {
-    legend: { labels: { color: CG.text, font:{ family:'Inter', size:10 }, padding:10, boxWidth:12 } },
-    tooltip: {
-      backgroundColor:'#151B2E', borderColor:'rgba(255,180,0,0.3)', borderWidth:1,
-      titleColor:'#fff', bodyColor:CG.text,
-      callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` }
-    }
+const charts={};
+function kc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+const bOpts={
+  responsive:true,maintainAspectRatio:true,animation:{duration:350},
+  plugins:{
+    legend:{labels:{color:CG.text,font:{family:'Inter',size:10},padding:10,boxWidth:12}},
+    tooltip:{backgroundColor:'#151B2E',borderColor:'rgba(255,180,0,0.3)',borderWidth:1,
+      titleColor:'#fff',bodyColor:CG.text,
+      callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}
   },
-  scales: {
-    x: { ticks:{ color:CG.text, font:{size:9}, maxTicksLimit:14 }, grid:{ color:CG.grid } },
-    y: { ticks:{ color:CG.text, font:{size:9}, callback: v => fmtK(v) }, grid:{ color:CG.grid } },
+  scales:{
+    x:{ticks:{color:CG.text,font:{size:9},maxTicksLimit:14},grid:{color:CG.grid}},
+    y:{ticks:{color:CG.text,font:{size:9},callback:v=>fmtK(v)},grid:{color:CG.grid}},
   }
 };
 
-function chartNav() {
-  kc('nav');
-  const ctx = document.getElementById('cNav').getContext('2d');
-  const datasets = RESULTS.map((r,i) => ({
-    label: r.period.label,
-    data: r.navs,
-    borderColor: PAL[i],
-    backgroundColor: 'transparent',
-    tension: 0.3,
-    borderWidth: 1.5,
-    pointRadius: 0,
-    pointHoverRadius: 3,
-  }));
-  const maxM = Math.max(...RESULTS.map(r => r.months));
-  const labels = Array.from({length: maxM+1}, (_,i) => i===0?'Start':`M${i}`);
-  datasets.forEach(ds => { while (ds.data.length < maxM+1) ds.data.push(null); });
-
-  charts['nav'] = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets },
-    options:{
-      ...baseOpts,
-      scales:{
-        x: { ...baseOpts.scales.x },
-        y: {
-          type:'logarithmic',
-          ticks:{ color:CG.text, font:{size:9}, callback: v => fmtK(v) },
-          grid:{ color:CG.grid }
-        }
-      }
-    }
+function chartNav(){
+  kc('nav');const ctx=document.getElementById('cNav').getContext('2d');
+  const maxM=Math.max(...RESULTS.map(r=>r.months));
+  const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
+  const datasets=RESULTS.map((r,i)=>{
+    const d=[...r.navs];while(d.length<maxM+1)d.push(null);
+    return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
   });
+  charts['nav']=new Chart(ctx,{type:'line',data:{labels,datasets},options:{...bOpts,
+    scales:{x:bOpts.scales.x,y:{type:'logarithmic',ticks:{color:CG.text,font:{size:9},callback:v=>fmtK(v)},grid:{color:CG.grid}}}}});
 }
 
-function chartCumul() {
-  kc('cumul');
-  const ctx = document.getElementById('cCumul').getContext('2d');
-  const datasets = RESULTS.map((r,i) => {
-    let cum = 0;
-    const data = [0, ...r.mgmt.map((mf, j) => {
-      cum += mf + (r.exch[j+1]||0);
-      return cum;
-    })];
-    return {
-      label: r.period.label,
-      data,
-      borderColor: PAL[i],
-      backgroundColor: 'transparent',
-      tension: 0.3,
-      borderWidth: 1.5,
-      pointRadius: 0,
-    };
+function chartCumul(t){
+  kc('cumul');const ctx=document.getElementById('cCumul').getContext('2d');
+  const maxM=Math.max(...RESULTS.map(r=>r.months));
+  const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
+  const datasets=RESULTS.map((r,i)=>{
+    let cum=0;const d=[0];
+    for(let j=0;j<r.months;j++){
+      cum+=(t.mgmt?r.mgmt[j]||0:0)+(t.exch?r.exch[j+1]||0:0)+(t.plt?r.curr[j+1]?.plt||0:0)+(t.prf?r.curr[j+1]?.prf||0:0);
+      d.push(cum);
+    }
+    while(d.length<maxM+1)d.push(null);
+    return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
   });
-  const maxM = Math.max(...RESULTS.map(r => r.months));
-  const labels = Array.from({length: maxM+1}, (_,i) => i===0?'Start':`M${i}`);
-  datasets.forEach(ds => { while (ds.data.length < maxM+1) ds.data.push(null); });
-
-  charts['cumul'] = new Chart(ctx, { type:'line', data:{ labels, datasets }, options: baseOpts });
+  charts['cumul']=new Chart(ctx,{type:'line',data:{labels,datasets},options:bOpts});
 }
 
-let breakdownPeriodM = 120;
-
-function chartBreakdown(months) {
-  breakdownPeriodM = months;
-  kc('bd');
-  const ctx = document.getElementById('cBreakdown').getContext('2d');
-  const r = RESULTS.find(x => x.period.months === months) || RESULTS[RESULTS.length-1];
-  if (!r) return;
-
-  const yrs = Math.ceil(r.months/12);
-  const annMgmt = [], annExch = [];
-  for (let y=0; y<yrs; y++) {
-    const s = y*12, e = Math.min((y+1)*12, r.months);
-    // Include the one-off initial contribution fee in Year 1
-    let m=0, ex = (y===0 ? (r.exch[0]||0) : 0);
-    for (let i=s; i<e; i++) {
-      m  += r.mgmt[i]||0;
-      ex += r.exch[i+1]||0;  // exch[0]=initial, exch[1..n]=monthly
+let BD_M=120;
+function chartBreakdown(months,t){
+  BD_M=months;kc('bd');const ctx=document.getElementById('cBreakdown').getContext('2d');
+  const r=RESULTS.find(x=>x.period.months===months)||RESULTS[RESULTS.length-1];if(!r)return;
+  const yrs=Math.ceil(r.months/12);
+  const aM=[],aE=[],aPl=[],aPr=[];
+  for(let y=0;y<yrs;y++){
+    const s=y*12,e=Math.min((y+1)*12,r.months);
+    let m=0,ex=y===0?r.exch[0]||0:0,pl=y===0?r.curr[0]?.plt||0:0,pr=0;
+    for(let i=s;i<e;i++){
+      m+=t.mgmt?r.mgmt[i]||0:0;ex+=t.exch?r.exch[i+1]||0:0;
+      pl+=t.plt?r.curr[i+1]?.plt||0:0;pr+=t.prf?r.curr[i+1]?.prf||0:0;
     }
-    annMgmt.push(m); annExch.push(ex);
+    aM.push(m);aE.push(ex);aPl.push(pl);aPr.push(pr);
   }
-  const labels = Array.from({length:yrs}, (_,i) => `Y${i+1}`);
-
-  charts['bd'] = new Chart(ctx, {
-    type:'bar',
-    data:{
-      labels,
-      datasets:[
-        { label:'Mgmt Fee (1% p.a.)',       data:annMgmt, backgroundColor:'#3B82F6BB', borderColor:'#3B82F6', borderWidth:1, stack:'s' },
-        { label:'Exchange Rebate (50% VALR)',data:annExch, backgroundColor:'#10B981BB', borderColor:'#10B981', borderWidth:1, stack:'s' },
-      ]
-    },
-    options:{
-      ...baseOpts,
-      scales:{
-        x:{ ...baseOpts.scales.x, stacked:true },
-        y:{ ...baseOpts.scales.y, stacked:true },
-      }
-    }
-  });
+  const labels=Array.from({length:yrs},(_,i)=>'Y'+(i+1));
+  const ds=[];
+  if(t.mgmt)ds.push({label:'Mgmt Fee',data:aM,backgroundColor:'#3B82F6BB',borderColor:'#3B82F6',borderWidth:1,stack:'s'});
+  if(t.exch)ds.push({label:'Exch Rebate',data:aE,backgroundColor:'#10B981BB',borderColor:'#10B981',borderWidth:1,stack:'s'});
+  if(t.plt)ds.push({label:'Platform',data:aPl,backgroundColor:'#F59E0BBB',borderColor:'#F59E0B',borderWidth:1,stack:'s'});
+  if(t.prf)ds.push({label:'Perf Fee',data:aPr,backgroundColor:'#8B5CF6BB',borderColor:'#8B5CF6',borderWidth:1,stack:'s'});
+  if(!ds.length)ds.push({label:'(none selected)',data:Array(yrs).fill(0),backgroundColor:'#6B789644'});
+  charts['bd']=new Chart(ctx,{type:'bar',data:{labels,datasets:ds},
+    options:{...bOpts,scales:{x:{...bOpts.scales.x,stacked:true},y:{...bOpts.scales.y,stacked:true}}}});
 }
 
-function chartScale() {
-  kc('sc');
-  const ctx = document.getElementById('cScale').getContext('2d');
-  const counts = [1,5,10,25,50,100,250,500,1000,2000];
-  const datasets = RESULTS.map((r,i) => ({
-    label: r.period.label + ' avg/yr',
-    data: counts.map(c => (r.totNew / (r.months/12)) * c),
-    borderColor: PAL[i],
-    backgroundColor: 'transparent',
-    tension: 0.3,
-    borderWidth: 1.5,
-    pointRadius: 2,
+function chartScale(t){
+  kc('sc');const ctx=document.getElementById('cScale').getContext('2d');
+  const counts=[1,5,10,25,50,100,250,500,1000,2000];
+  const datasets=RESULTS.map((r,i)=>({
+    label:r.period.label+' avg/yr',
+    data:counts.map(c=>(atot(r,t)/(r.months/12))*c),
+    borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:2,
   }));
-  charts['sc'] = new Chart(ctx, {
-    type:'line',
-    data:{ labels: counts.map(c => c.toLocaleString()), datasets },
-    options:{
-      ...baseOpts,
-      scales:{
-        x:{ ...baseOpts.scales.x, title:{ display:true, text:'Number of Clients', color:CG.text, font:{size:10} } },
-        y:{ ...baseOpts.scales.y }
-      }
-    }
-  });
+  charts['sc']=new Chart(ctx,{type:'line',data:{labels:counts.map(c=>c.toLocaleString()),datasets},
+    options:{...bOpts,scales:{x:{...bOpts.scales.x,title:{display:true,text:'Number of Clients',color:CG.text,font:{size:10}}},y:bOpts.scales.y}}});
 }
 
-function chartCompare() {
-  kc('cmp');
-  const ctx = document.getElementById('cCompare').getContext('2d');
-  const labels = RESULTS.map(r => r.period.label);
-  charts['cmp'] = new Chart(ctx, {
-    type:'bar',
-    data:{
-      labels,
-      datasets:[
-        { label:'Current — Platform Fee Only',        data:RESULTS.map(r=>r.totPlt),  backgroundColor:'#6B789644', borderColor:'#6B7896', borderWidth:1 },
-        { label:'Current — Full (Platform + Perf 10%)',data:RESULTS.map(r=>r.totCurr),backgroundColor:'#F59E0BAA', borderColor:'#F59E0B', borderWidth:1 },
-        { label:'New — Mgmt Fee (1% p.a.)',            data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA', borderColor:'#3B82F6', borderWidth:1 },
-        { label:'New — Mgmt + Exchange Rebate',        data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA', borderColor:'#10B981', borderWidth:1 },
-      ]
-    },
-    options:{
-      ...baseOpts,
-      plugins:{
-        ...baseOpts.plugins,
-        tooltip:{ ...baseOpts.plugins.tooltip, callbacks:{ label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` } }
-      }
-    }
-  });
+function chartCompare(){
+  kc('cmp');const ctx=document.getElementById('cCompare').getContext('2d');
+  charts['cmp']=new Chart(ctx,{type:'bar',
+    data:{labels:RESULTS.map(r=>r.period.label),datasets:[
+      {label:'Current — Platform Only', data:RESULTS.map(r=>r.totPlt),backgroundColor:'#6B789644',borderColor:'#6B7896',borderWidth:1},
+      {label:'Current — Full (Plt+Perf)',data:RESULTS.map(r=>r.totCurr),backgroundColor:'#F59E0BAA',borderColor:'#F59E0B',borderWidth:1},
+      {label:'New — Mgmt Fee',           data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA',borderColor:'#3B82F6',borderWidth:1},
+      {label:'New — Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
+    ]},
+    options:{...bOpts,plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DRILL-DOWN — state & helpers
+═══════════════════════════════════════════════════════════ */
+const DS={open:false,idx:null,level:'year',yearNum:null,detailIdx:null};
+
+function openDrill(idx){
+  DS.open=true;DS.idx=idx;DS.level='year';DS.yearNum=null;DS.detailIdx=null;
+  renderDrill();
+  document.querySelectorAll('.drill-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  setTimeout(()=>document.getElementById('drillBox').scrollIntoView({behavior:'smooth',block:'start'}),80);
+}
+function closeDrill(){
+  DS.open=false;document.getElementById('drillBox').style.display='none';
+  document.querySelectorAll('.drill-btn').forEach(b=>b.classList.remove('active'));
+}
+
+function getYearGroups(detail){
+  const months=detail.length-1,numYrs=Math.ceil(months/12);
+  return Array.from({length:numYrs},(_,y)=>{
+    const yi=y+1,mS=y*12+1,mE=Math.min(yi*12,months);
+    const mRows=detail.slice(mS,mE+1);if(!mRows.length)return null;
+    const initR=yi===1?detail[0]:null;
+    const sum=k=>(initR?initR[k]:0)+mRows.reduce((a,b)=>a+b[k],0);
+    return{y:yi,dateStart:(initR||mRows[0]).ym,dateEnd:mRows[mRows.length-1].ym,
+      navStart:detail[(yi-1)*12].freshNav,navEnd:mRows[mRows.length-1].freshNav,
+      contrib:sum('contrib'),totMgmt:mRows.reduce((a,b)=>a+b.mgmtFee,0),
+      totExch:sum('exchFee'),totPlt:sum('pltFee'),totPrf:mRows.reduce((a,b)=>a+b.prfFee,0),
+      months:mRows,initR};
+  }).filter(Boolean);
+}
+
+function renderDrill(){
+  const box=document.getElementById('drillBox');
+  if(!DS.open||DS.idx==null){box.style.display='none';return;}
+  box.style.display='block';
+  const r=RESULTS[DS.idx];if(!r)return;
+  // Breadcrumb
+  let bc='',backFn='closeDrill()';
+  if(DS.level==='year'){
+    bc='<span class="bc-curr">Year Overview</span>';
+  } else if(DS.level==='month'){
+    bc=`<span class="bc-link" onclick="DS.level='year';DS.yearNum=null;renderDrill()">Year Overview</span>`
+      +`<span class="bc-sep"> › </span><span class="bc-curr">Year ${DS.yearNum} — Months</span>`;
+    backFn=`DS.level='year';DS.yearNum=null;renderDrill()`;
+  } else {
+    const row=r.detail[DS.detailIdx];
+    bc=`<span class="bc-link" onclick="DS.level='year';DS.yearNum=null;renderDrill()">Year Overview</span>`
+      +`<span class="bc-sep"> › </span>`
+      +`<span class="bc-link" onclick="DS.level='month';DS.detailIdx=null;renderDrill()">Year ${DS.yearNum} — Months</span>`
+      +`<span class="bc-sep"> › </span>`
+      +`<span class="bc-curr">${row?row.dateLabel:'—'} — Weekly Data</span>`;
+    backFn=`DS.level='month';DS.detailIdx=null;renderDrill()`;
+  }
+  document.getElementById('drillTitle').textContent=`${r.period.label} — Detail Explorer`;
+  document.getElementById('drillBc').innerHTML=`<span class="bc-link" style="margin-right:6px" onclick="${backFn}">← Back</span>${bc}`;
+  if(DS.level==='year')renderDrillYears(r);
+  else if(DS.level==='month')renderDrillMonths(r);
+  else renderDrillWeeks(r);
+}
+
+function renderDrillYears(r){
+  const t=getT(),ygs=getYearGroups(r.detail);
+  const head=`<tr><th>Year</th><th>Date Range</th><th>Contributions</th><th>NAV Start</th><th>NAV End</th><th>Return</th>
+    <th style="color:var(--blue)">Mgmt Fee</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--orange)">Platform</th><th style="color:var(--purple)">Perf Fee</th>
+    <th style="color:var(--gold)">Active Total</th></tr>`;
+  const rows=ygs.map(yr=>{
+    const at=(t.mgmt?yr.totMgmt:0)+(t.exch?yr.totExch:0)+(t.plt?yr.totPlt:0)+(t.prf?yr.totPrf:0);
+    const ret=((yr.navEnd-yr.navStart)/yr.navStart*100).toFixed(1);
+    const ds=yr.dateStart,de=yr.dateEnd;
+    const drng=MO[+ds.slice(5,7)-1]+' '+ds.slice(0,4)+' – '+MO[+de.slice(5,7)-1]+' '+de.slice(0,4);
+    return `<tr class="drill-row" onclick="DS.yearNum=${yr.y};DS.level='month';renderDrill()">
+      <td><strong>Year ${yr.y}</strong></td>
+      <td class="dim">${drng}</td>
+      <td>${fmtN(yr.contrib)}</td>
+      <td class="dim">${fmtK(yr.navStart)}</td>
+      <td class="vg">${fmtK(yr.navEnd)}</td>
+      <td class="${+ret>=0?'vgr':'vr'}">${ret}%</td>
+      <td class="${t.mgmt?'vb':'off'}">${fmtN(yr.totMgmt,2)}</td>
+      <td class="${t.exch?'vgr':'off'}">${fmtN(yr.totExch,2)}</td>
+      <td class="${t.plt?'vor':'off'}">${fmtN(yr.totPlt,2)}</td>
+      <td class="${t.prf?'vpr':'off'}">${fmtN(yr.totPrf,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info">Click any year row to see monthly breakdown. Active Total reflects the fee toggles above.</div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderDrillMonths(r){
+  const t=getT(),ygs=getYearGroups(r.detail),yr=ygs[DS.yearNum-1];
+  if(!yr){document.getElementById('drillContent').innerHTML='<div class="drill-info">No data.</div>';return;}
+  const allRows=yr.initR?[yr.initR,...yr.months]:yr.months;
+  let cumTotal=0;
+  const head=`<tr><th>#</th><th>Month</th><th>Contribution</th><th>Portfolio NAV</th><th>Return</th>
+    <th style="color:var(--blue)">Mgmt Fee</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--orange)">Platform</th><th style="color:var(--purple)">Perf Fee</th>
+    <th style="color:var(--gold)">Active Total</th><th>Cumulative</th></tr>`;
+  const rows=allRows.map(row=>{
+    const isInit=row.m===0;
+    const at=(t.mgmt?row.mgmtFee:0)+(t.exch?row.exchFee:0)+(t.plt?row.pltFee:0)+(t.prf?row.prfFee:0);
+    cumTotal+=at;
+    const retS=row.histRet!=null?((row.histRet*100).toFixed(2)+'%'):'—';
+    const retC=row.histRet!=null?(row.histRet>=0?'vgr':'vr'):'dim';
+    const drillOnClick=isInit?'':`onclick="DS.detailIdx=${row.m};DS.level='week';renderDrill()"`;
+    return `<tr class="${isInit?'':'drill-row'}" ${drillOnClick} style="cursor:${isInit?'default':'pointer'}">
+      <td>${isInit?'<span class="dim">Init</span>':'M'+row.m}</td>
+      <td>${row.dateLabel}</td>
+      <td>${fmtN(row.contrib)}</td>
+      <td class="vg" style="font-family:monospace">${fmtK(row.freshNav)}</td>
+      <td class="${retC}">${retS}</td>
+      <td class="${t.mgmt?'vb':'off'}">${fmtN(row.mgmtFee,4)}</td>
+      <td class="${t.exch?'vgr':'off'}">${fmtN(row.exchFee,4)}</td>
+      <td class="${t.plt?'vor':'off'}">${fmtN(row.pltFee,4)}</td>
+      <td class="${t.prf?'vpr':'off'}">${fmtN(row.prfFee,4)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,4)}</td>
+      <td class="dim">${fmtN(cumTotal,2)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info">Click any monthly row (except Initial) to see the underlying weekly back-test data for that month.</div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderDrillWeeks(r){
+  const row=r.detail[DS.detailIdx];
+  if(!row){document.getElementById('drillContent').innerHTML='<div class="drill-info">No data.</div>';return;}
+  const prev=DS.detailIdx>0?r.detail[DS.detailIdx-1]:null;
+  const contrib=r.detail[1]?r.detail[1].contrib:200;
+  let calcNote='';
+  if(row.histRet!=null&&prev){
+    calcNote=`<br>Monthly return formula: <code>r = (${fmtN(row.histNavRef,2)} &minus; $${contrib}) &divide; ${fmtN(prev.histNavRef,2)} &minus; 1 = <strong>${(row.histRet*100).toFixed(4)}%</strong></code>`
+      +`<br>Applied to fresh portfolio: <code>${fmtK(prev.freshNav)} &times; (1+r) + $${contrib} = <strong>${fmtK(row.freshNav)}</strong></code>`;
+  }
+  const head=`<tr><th>Week</th><th>Date</th><th>Hist. LTH PVR NAV</th><th>Week-on-Week Δ</th><th>Note</th></tr>`;
+  const rows=row.weeks.map((w,i)=>{
+    const wRet=w.wkRet!=null?((w.wkRet*100).toFixed(2)+'%'):'—';
+    const wC=w.wkRet!=null?(w.wkRet>=0?'vgr':'vr'):'dim';
+    let note='',rowCls='';
+    if(w.isRef){note='◀ Start of this month — denominator of monthly return formula';rowCls='row-ref';}
+    if(w.isNextRef){note='▶ Start of NEXT month — numerator (nav_next) in formula';rowCls='row-nxt';}
+    return `<tr class="${rowCls}">
+      <td>${w.isNextRef?'→ Next':'W'+(i+1)}</td>
+      <td>${fmtDate(w.date)}</td>
+      <td class="${w.isRef?'vb':w.isNextRef?'vg':'dim'}" style="font-family:monospace;font-size:12px">${fmtN(w.histNav,2)}</td>
+      <td class="${wC}">${wRet}</td>
+      <td class="dim" style="font-size:10px">${note}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info"><strong>Weekly back-test data for ${row.dateLabel}</strong>${calcNote}<br>
+    <small>Hist. NAV = raw back-test portfolio for the original simulation. Blue row = month start reference; gold row = next-month endpoint.</small></div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
    MAIN CONTROLLER
 ═══════════════════════════════════════════════════════════ */
-function getP() {
-  return {
-    initial:  +document.getElementById('iInitial').value  || 2400,
-    monthly:  +document.getElementById('iMonthly').value  || 200,
-    mgmtRate: (+document.getElementById('iMgmt').value    || 1.0) / 100,
-    pltRate:  (+document.getElementById('iPlatform').value|| 0.75) / 100,
-    prfRate:  (+document.getElementById('iPerf').value    || 10)   / 100,
-    btcAlloc: +document.getElementById('iBtcAlloc').value / 100,
-    clients:  +document.getElementById('iClients').value  || 1,
-  };
-}
+let recalcTimer=null;
+function scheduleRecalc(){clearTimeout(recalcTimer);recalcTimer=setTimeout(calc,280);}
 
-function calc() {
-  document.getElementById('status').textContent = 'Calculating…';
-
-  // Ensure data loaded
-  if (!M5) {
-    if (typeof _lth5_raw === 'undefined' || typeof _lth10_raw === 'undefined') {
-      document.getElementById('status').textContent = '⚠ chart-data.js not found — ensure fee-model.html and chart-data.js are in the same folder.';
+function calc(){
+  document.getElementById('status').textContent='Calculating…';
+  if(!M5){
+    if(typeof _lth5_raw==='undefined'||typeof _lth10_raw==='undefined'){
+      document.getElementById('status').textContent='⚠ chart-data.js not found — ensure fee-model.html and chart-data.js are in the same folder.';
       return;
     }
-    M5  = sampleMonthly(_lth5_raw);
-    M10 = sampleMonthly(_lth10_raw);
+    M5=sampleMonthly(_lth5_raw);M10=sampleMonthly(_lth10_raw);
   }
-
-  const p = getP();
+  const p=getP(),t=getT();
   runAll(p);
-  renderSummary(p.clients);
+  renderSummary(p.clients,t);
   renderComparison();
   renderExchDetail(p);
-  chartNav();
-  chartCumul();
-  chartBreakdown(breakdownPeriodM);
-  chartScale();
-  chartCompare();
+  chartNav();chartCumul(t);chartBreakdown(BD_M,t);chartScale(t);chartCompare();
+  if(DS.open)renderDrill();
+  const s5=M5[0][0]+' – '+M5[M5.length-1][0]+'('+M5.length+' mo)';
+  const s10=M10[0][0]+' – '+M10[M10.length-1][0]+'('+M10.length+' mo)';
+  document.getElementById('status').textContent=
+    `Updated · 5yr: ${s5} · 10yr: ${s10} · Client: $${p.initial.toLocaleString()}+$${p.monthly}/mo · ${p.clients.toLocaleString()} client${p.clients!==1?'s':''}`;
+}
 
-  const endDate5  = M5[M5.length-1][0];
-  const endDate10 = M10[M10.length-1][0];
-  document.getElementById('status').textContent =
-    `Updated · 5yr: ${M5[0][0]} – ${endDate5} (${M5.length} months) · 10yr: ${M10[0][0]} – ${endDate10} (${M10.length} months) · Client: $${p.initial.toLocaleString()} + $${p.monthly}/mo · Clients: ${p.clients.toLocaleString()}`;
+// Re-render only tables+charts that depend on toggles or client count — no recompute of model
+function softRender(){
+  if(!RESULTS.length)return;
+  const p=getP(),t=getT();
+  renderSummary(p.clients,t);
+  chartCumul(t);chartBreakdown(BD_M,t);chartScale(t);
+  if(DS.open)renderDrill();
 }
 
 /* ═══════════════════════════════════════════════════════════
    EVENT WIRING
 ═══════════════════════════════════════════════════════════ */
-document.getElementById('btnCalc').addEventListener('click', calc);
+document.getElementById('btnCalc').addEventListener('click',calc);
 
-document.getElementById('iBtcAlloc').addEventListener('input', function() {
-  document.getElementById('oBtcAlloc').textContent = this.value + '%';
+// Numeric inputs — debounced full recalc
+['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',scheduleRecalc);
 });
-document.getElementById('iClients').addEventListener('input', function() {
-  document.getElementById('oClients').textContent = (+this.value).toLocaleString();
+
+// Range sliders — update label + debounced recalc (btcAlloc) or soft render (clients)
+document.getElementById('iBtcAlloc').addEventListener('input',function(){
+  document.getElementById('oBtcAlloc').textContent=this.value+'%';scheduleRecalc();
 });
+document.getElementById('iClients').addEventListener('input',function(){
+  document.getElementById('oClients').textContent=(+this.value).toLocaleString();softRender();
+});
+
+// Fee toggles — soft re-render only (model unchanged)
+document.querySelectorAll('.ftoggle').forEach(cb=>cb.addEventListener('change',softRender));
 
 // Period tabs for annual breakdown chart
-document.querySelectorAll('.ptab[data-m]').forEach(btn => {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('.ptab[data-m]').forEach(b => b.classList.remove('on'));
+document.querySelectorAll('.ptab[data-m]').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.ptab[data-m]').forEach(b=>b.classList.remove('on'));
     this.classList.add('on');
-    chartBreakdown(+this.dataset.m);
+    chartBreakdown(+this.dataset.m,getT());
   });
 });
 
-// Auto-run when data is available
-window.addEventListener('load', () => setTimeout(calc, 120));
+window.addEventListener('load',()=>setTimeout(calc,120));
 </script>
 </body>
 </html>
