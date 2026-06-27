@@ -295,8 +295,20 @@ Deno.serve(async (req)=>{
     if (!prices.length) {
       throw new Error(`no rows in ${pricesView} for given date range / org`);
     }
-    // Pre-compute ROC series (financial rows only; warmup uses roc=0 like simulator)
-    const rocSeries = computeRocSeries(prices, momoLen);
+    // Align with the in-memory simulator (lth_pvr_simulator.ts): ignore the view's
+    // precomputed bear_pause so decideTrade owns the bear-pause state machine using
+    // the config-driven exit sigma. The view hardcodes the exit at -1.0σ, which is
+    // only correct for the Progressive variation; stripping it makes both engines
+    // identical for ALL variations (decideTrade is seeded by the warmup pass below).
+    for (const r of warmupPrices) delete r.bear_pause;
+    for (const r of prices) delete r.bear_pause;
+    // Pre-compute ROC over the FULL warmup+financial series and index with a warmup
+    // offset, exactly like the simulator. This gives the first `momentumLength`
+    // financial days a real ROC (reaching back into warmup) instead of 0, so
+    // momentum-gated sells behave identically in both engines.
+    const allRowsForRoc = warmupPrices.concat(prices);
+    const rocSeries = computeRocSeries(allRowsForRoc, momoLen);
+    const warmupCount = warmupPrices.length;
     // LTH PVR state
     let btcBal = 0;
     let usdtBal = 0;
@@ -591,8 +603,9 @@ Deno.serve(async (req)=>{
         }
       }
       // LTH PVR decision
-      const roc5 = rocSeries[i] ?? 0;
-      // Sync precomputed bear_pause from CI view into state
+      const roc5 = rocSeries[warmupCount + i] ?? 0;
+      // bear_pause stripped from rows above so this is a no-op (matches simulator):
+      // decideTrade owns the bear-pause state machine via the config exit sigma.
       lthState = syncBearPauseFromRow(lthState, row);
       const decision = decideTrade(px, row, roc5, lthState, config);
       lthState = decision.state || lthState;

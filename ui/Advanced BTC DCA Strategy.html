@@ -1927,6 +1927,14 @@
                 <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
               </select>
             </div>
+            <div style="display:flex;align-items:center;gap:.5rem;align-self:end;height:var(--control-height);">
+              <input id="simUsdpcEnabled" type="checkbox" checked style="width:1rem;height:1rem;" />
+              <label for="simUsdpcEnabled" style="font-size:.9rem;margin:0;cursor:pointer;">Earn yield on idle cash (USDPC)</label>
+            </div>
+            <div>
+              <label for="simUsdpcApy" style="display:block;margin-bottom:.25rem;font-size:.9rem;">Yield APY (%):</label>
+              <input id="simUsdpcApy" type="number" min="0" step="0.5" value="10" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);" />
+            </div>
           </div>
           <div style="display:flex;gap:.75rem;justify-content:center;">
             <button id="runSimBtn" type="button" style="padding:.75rem 1.5rem;background:#3b82f6;color:#fff;border:none;border-radius:var(--control-radius);cursor:pointer;font:inherit;">Run Simulation</button>
@@ -14764,6 +14772,9 @@ Momentum:
         // Call simulator edge function
         const simBandSourceEl = document.getElementById('simBandSource');
         const simBandSource = (simBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const simUsdpcEnabled = !!document.getElementById('simUsdpcEnabled')?.checked;
+        const simUsdpcApyRaw = parseFloat(document.getElementById('simUsdpcApy')?.value);
+        const simUsdpcApy = Number.isFinite(simUsdpcApyRaw) ? simUsdpcApyRaw : 10;
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_run_lth_pvr_simulator`, {
           method: 'POST',
           headers: {
@@ -14776,7 +14787,9 @@ Momentum:
             upfront_usd: upfront,
             monthly_usd: monthly,
             variation_ids: [currentVariationId],
-            band_source: simBandSource
+            band_source: simBandSource,
+            usdpc_enabled: simUsdpcEnabled,
+            usdpc_apy_percent: simUsdpcApy
           })
         });
 

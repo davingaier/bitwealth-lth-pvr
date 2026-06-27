@@ -28,6 +28,11 @@ foreach ($p in $periods) {
         upfront_usd          = 2400
         monthly_usd          = 200
         variation_ids        = @($progId)
+        # USDPC ON: idle USDT earns ~10% APY (matches the public back-tester and the
+        # Commercial Fee Model's intended baseline). The conversion fee stays at its
+        # realistic default (0.1%) since fee-model.html cannot reconstruct sweep volume.
+        usdpc_enabled        = $true
+        usdpc_apy_percent    = 10
         # Zero-fee overrides: generate GROSS NAV so fee-model.html can apply its
         # own fee structure without double-counting simulator defaults (0.75%/10%).
         platform_fee_rate    = 0
