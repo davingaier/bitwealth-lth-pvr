@@ -3,11 +3,60 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-28 (v0.6.126)
+**Last updated:** 2026-06-28 (v0.6.127)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.127 – Commercial Fee Model: daily trade-level exchange rebate + CSV column reference + toggle-aware columns
+
+- **Toggle-aware CSV export.** `exportCSV()` in `docs/fee-model.html` now emits only the
+  fee columns whose toggles are switched **on** (Platform / Exchange / Mgmt / Perf). Previously
+  the file always wrote all four fee columns regardless of selection. The header and every data
+  row are built from the same filtered `feeCols` array, and `ActiveTotal` sums only the included
+  fee columns. Filename reflects mode: `lth-pvr-fee-model-{custom|periods}-{YYYY-MM-DD}.csv`.
+
+- **CSV column reference.** The export produces one row per sampled month per period (or per
+  month within the custom range). Columns:
+
+  | Column | Meaning / formula |
+  |---|---|
+  | `Period` | Period label (`1yr`, `3yr`, `5yr`, `7yr`, `10yr`, dated `… ending YYYY-MM-DD`, or `Custom Range`). |
+  | `Date` | Month sample date (`YYYY/MM/DD`) of the reconstructed monthly point. |
+  | `HistBacktestNAV` | Historical back-test NAV at that date (raw simulator NAV, rebased to the period start). |
+  | `DailyReturnPct` | Day-on-day % return within the month's day-group. **Blank on the first row of each month** (no in-group predecessor to difference against). |
+  | `ReconstructedNAV` | NAV rebuilt from the fresh-client contribution schedule compounded by `DailyReturnPct`, net of the **active** fees. |
+  | `Contribution` | Client contribution applied that month (initial contribution on the first month; recurring monthly contribution thereafter). |
+  | `PlatformFee` | Platform fee charged on the contribution day = `contribution_net × platform_rate`. *(Column present only if the Platform toggle is on.)* |
+  | `ExchangeRebate` | BitWealth's 50% share of the VALR exchange fees for that day. For the anchored product config this is the simulator's **actual per-day** total across all three fee legs — BTC/USDT trade fee (`exchange_fees_paid_btc × price`), USDPC↔USDT conversion (`usdpc_conversion_fee_usdt`), and ZAR→USDT contribution (`exchange_fees_paid_usdt`) — so it varies with the real daily order size and is 0 on HOLD days. Each period's daily rebates sum to the period total. Custom rates/ranges fall back to a per-contribution estimate `amt × (usdtZar·½ + btcAlloc·btcUsdt·½ + (1−btcAlloc)·usdpc·½)`. *(Present only if the Exchange toggle is on.)* |
+  | `MgmtFee` | Management fee charged at **month-end** (attributed to the last day of the month) = `period_AUM × annual_mgmt_rate ÷ 12`. Blank/zero in the first month (no prior AUM growth). *(Present only if the Mgmt toggle is on.)* |
+  | `PerfFee` | Performance fee charged at **month-end** on profit above the high-water mark. Zero in the first month (HWM seeded at the initial NAV). *(Present only if the Perf toggle is on.)* |
+  | `ActiveTotal` | Sum of all **included** fee columns for that row. |
+
+  **Attribution rule:** contribution-day fees (`Contribution`, `PlatformFee`, `ExchangeRebate`)
+  attach to the first row of each month; month-end fees (`MgmtFee`, `PerfFee`) attach to the last
+  row of each month. This is why a single-month period shows contribution fees on row 1 and
+  management/performance fees on the final row.
+
+- **ExchangeRebate → daily trade-level (implemented).** The `ExchangeRebate` column/row now reflects
+  the **actual daily trade legs** the simulator records in `lth_pvr_simulator.ts` → `daily[]`:
+  BTC/USDT trade fee (`exchange_fees_paid_btc × price_usd`), USDPC↔USDT conversion fee
+  (`usdpc_conversion_fee_usdt`, covering both the buy-funding conversion and the end-of-day idle-cash
+  sweep), and the ZAR→USDT contribution fee (`exchange_fees_paid_usdt`). BitWealth's rebate = 50% of
+  those; HOLD days = 0. This makes the per-day rebate vary with the real daily order size (e.g. a
+  sell-heavy month like Mar 2025 in the 10yr run shows ~$8–$9/day vs cents on quiet days) and ties out
+  exactly to each anchored period's total rebate. Scaling basis = the simulator's actual fees (per the
+  product confirmation); custom rates/ranges fall back to the per-contribution estimate.
+  - `gen-chart-js-daily.ps1` now emits a new `const _lthRebateDaily = { "<period>": [[date, rebateUsd], …] }`
+    in `docs/chart-data-daily.js`, computed from each anchor run's `daily[]`. The anchor `exchRebate`
+    figure is now derived from the same per-day summation (so it **includes the BTC/USDT trade leg**,
+    which the previous anchor formula omitted — e.g. the 10yr rebate rose from a few dollars to
+    $11,970.23, reflecting real trade activity on the matured multi-million-dollar portfolio).
+  - `fee-model.html` parses `_lthRebateDaily` into per-period `Map(date→rebate)` (`rebateDailyMap`) and
+    monthly sums (`rebateMonthMap`). `buildPortfolio` uses the monthly sums for `exchArr` when anchored;
+    `buildDetail` attaches `exchDay` to each daily row; `renderDrillWeeks` and `exportCSV` show the
+    per-day value (`realReb ? w.exchDay : month-start estimate`).
 
 ### v0.6.126 – Commercial Fee Model: 6 UX fixes and enhancements
 **Date:** 2026-06-28  

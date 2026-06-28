@@ -290,9 +290,9 @@
     <strong>Headline accuracy:</strong> When the inputs match the live product defaults ($2,400 start + $200/mo, 0.75% platform, 10% performance), the summary's <strong>Ending NAV</strong> and platform/performance/exchange figures are read straight from the simulator (<code>ef_run_lth_pvr_simulator</code>, USDPC 10% APY on) and match the public back-tester / Admin simulator <strong>exactly</strong> (✓). Change any rate or contribution and the model falls back to the monthly return-extraction estimate described next.<br>
     <strong>Portfolio model (estimate):</strong> Monthly returns extracted from the LTH PVR back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
     <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. (Hypothetical alternative structure — not part of the live product, so it is never anchored.)<br>
-    <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>).<br>
+    <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>). For the anchored product config the rebate is the simulator's <strong>actual per-day</strong> total across all three legs — every BUY converts USDPC→USDT then USDT→BTC, every SELL the converse, so the rebate varies with the real daily order size and HOLD days earn nothing. Each period's daily rebates sum exactly to the anchored period total. Custom rates/ranges fall back to a per-contribution estimate (<code>amt × ½ × rate</code> per leg).<br>
     <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
-    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). At the daily level, monthly fees are attributed to the day they are charged: <strong>platform</strong> &amp; <strong>exchange</strong> on the contribution day (month start), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
+    <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). At the daily level, fees are attributed to the day they are charged: <strong>platform</strong> on the contribution day (month start), <strong>exchange rebate</strong> on each BUY/SELL trade day (real daily order sizes, anchored config), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
     <strong>Date range:</strong> <strong>End Date</strong> re-anchors the 1/3/5/7/10-year windows to end on the chosen date (computed backwards from there). Setting both <strong>Custom Range</strong> dates replaces the standard periods with a single window covering exactly that span. Custom dates use the reconstruction estimate (the ✓ anchors apply only to the standard periods ending on the latest data date).<br>
     <strong>Export:</strong> <strong>Export CSV</strong> downloads every period's daily back-test NAV, daily return and attributed fees for analysis in Excel.<br>
     <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
@@ -360,6 +360,17 @@ function getWindow(period){
 const ANCHORS=(typeof _lthAnchors!=='undefined')?_lthAnchors:null;
 const NET5 =(typeof _lth5_daily_net !=='undefined')?sampleMonthly(_lth5_daily_net) :null;
 const NET10=(typeof _lth10_daily_net!=='undefined')?sampleMonthly(_lth10_daily_net):null;
+// Real per-day exchange rebate (50% of all three VALR legs) for each anchored period.
+// Keyed by period label; each series sums to ANCHORS[label].exchRebate.
+const REBATE_DAILY=(typeof _lthRebateDaily!=='undefined')?_lthRebateDaily:null;
+function rebateDailyMap(label){
+  if(!REBATE_DAILY||!REBATE_DAILY[label])return null;
+  const m=new Map();for(const e of REBATE_DAILY[label])m.set(e[0],e[1]);return m;
+}
+function rebateMonthMap(dailyMap){
+  if(!dailyMap)return null;
+  const m=new Map();for(const [d,v] of dailyMap){const ym=d.slice(0,7);m.set(ym,(m.get(ym)||0)+v);}return m;
+}
 const PRODUCT_DEFAULTS={initial:2400,monthly:200,pltRate:0.0075,prfRate:0.10};
 function isProductRates(p){
   return Math.abs(p.initial -PRODUCT_DEFAULTS.initial )<1e-6
@@ -379,10 +390,13 @@ function netMonthly(period){
    Fees ARE deducted from client NAV when their toggle is ON.
    Deducted fees = BitWealth revenue. Off fees = client keeps them.
 ═══════════════════════════════════════════════════════════ */
-function buildPortfolio(win,p,t){
+function buildPortfolio(win,p,t,rebMonth){
   // Initial contribution fees
   // Exchange fee = VALR's charge, always borne by client regardless of toggle (toggle is BitWealth revenue only)
-  const initExch=exchRebate(p.initial,p.btcAlloc);
+  // When a real per-day rebate series is available (anchored config) the exchange rebate is
+  // the simulator's actual monthly trade-leg total; otherwise fall back to the contribution estimate.
+  const ym0=win[0][0].slice(0,7);
+  const initExch=rebMonth?(rebMonth.get(ym0)||0):exchRebate(p.initial,p.btcAlloc);
   const initPlt=p.initial*p.pltRate;
   let nav=Math.max(0,p.initial-(t.plt?initPlt:0));
   let hwm=nav;
@@ -395,7 +409,7 @@ function buildPortfolio(win,p,t){
     const gross=Math.max(0,nav*(1+r)+p.monthly);
     // Fee amounts (stored regardless of toggle for reference)
     const mf=gross*(p.mgmtRate/12);
-    const ef=exchRebate(p.monthly,p.btcAlloc);
+    const ef=rebMonth?(rebMonth.get(win[i][0].slice(0,7))||0):exchRebate(p.monthly,p.btcAlloc);
     const pf=p.monthly*p.pltRate;
     // Apply mgmt fee first (standard practice)
     const navM=gross-(t.mgmt?mf:0);
@@ -410,7 +424,7 @@ function buildPortfolio(win,p,t){
   return{navs,rets,mgmt:mgmtArr,exch:exchArr,curr:currArr};
 }
 
-function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
+function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily){
   const winStart=win[0][0],winEnd=win[win.length-1][0];
   const raw2=rawSrc.filter(r=>r[0]>=winStart&&r[0]<=winEnd);
   const isDaily=raw2.length>win.length*2;  // daily has ~7× more entries than weekly
@@ -418,8 +432,8 @@ function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
     const ym=win[m][0].slice(0,7);
     const nextYm=m+1<win.length?win[m+1][0].slice(0,7):null;
     const thisW=raw2.filter(r=>r[0].slice(0,7)===ym);
-    const weeks=thisW.map((r,wi,arr)=>({date:r[0],histNav:r[1],wkRet:wi>0?(r[1]/arr[wi-1][1]-1):null,isRef:wi===0}));
-    if(nextYm){const nxt=raw2.find(r=>r[0].slice(0,7)===nextYm);if(nxt)weeks.push({date:nxt[0],histNav:nxt[1],wkRet:null,isNextRef:true});}
+    const weeks=thisW.map((r,wi,arr)=>({date:r[0],histNav:r[1],wkRet:wi>0?(r[1]/arr[wi-1][1]-1):null,isRef:wi===0,exchDay:rebDaily?(rebDaily.get(r[0])||0):null}));
+    if(nextYm){const nxt=raw2.find(r=>r[0].slice(0,7)===nextYm);if(nxt)weeks.push({date:nxt[0],histNav:nxt[1],wkRet:null,isNextRef:true,exchDay:null});}
     return{
       m,ym,dateLabel:MO[+ym.slice(5,7)-1]+' '+ym.slice(0,4),
       freshNav:nav,histNavRef:win[m][1],histRet:rets[m],
@@ -428,6 +442,7 @@ function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p){
       exchFee:exch[m]||0,
       pltFee:curr[m]?curr[m].plt:0,
       prfFee:curr[m]?curr[m].prf:0,
+      realReb:!!rebDaily,
       weeks,isDaily,
     };
   });
@@ -512,13 +527,16 @@ function runAll(p,t){
     // Custom range / non-default end date can reach before the 5yr series → use the 10yr daily series for drill-down
     const useTen=period.custom||!period.isDefaultEnd||period.src==='10yr';
     const rawSrc=useTen?rawSrc10:rawSrc5;
-    const{navs,rets,mgmt,exch,curr}=buildPortfolio(win,p,t);
+    // Authoritative simulator figures apply only to the standard periods ending at the latest data date.
+    const anchor=(ANCHORS&&isProductRates(p)&&!period.custom&&period.isDefaultEnd)?(ANCHORS[period.label]||null):null;
+    // Real per-day exchange rebate available only when anchored (matches the simulator run).
+    const rebDaily=anchor?rebateDailyMap(period.label):null;
+    const rebMonth=rebateMonthMap(rebDaily);
+    const{navs,rets,mgmt,exch,curr}=buildPortfolio(win,p,t,rebMonth);
     const months=navs.length-1;
     const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
-    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p);
-    // Authoritative simulator figures apply only to the standard periods ending at the latest data date.
-    const anchor=(ANCHORS&&isProductRates(p)&&!period.custom&&period.isDefaultEnd)?(ANCHORS[period.label]||null):null;
+    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily);
     return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
       totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
       invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
@@ -858,12 +876,14 @@ function renderDrillWeeks(r){
     const wRet=w.wkRet!=null?((w.wkRet*100).toFixed(2)+'%'):'—';
     const wC=w.wkRet!=null?(w.wkRet>=0?'vgr':'vr'):'dim';
     let note='',rowCls='';
-    if(w.isRef){note='◀ Month start — contribution charged (platform + exchange)';rowCls='row-ref';}
+    if(w.isRef){note=row.realReb?'◀ Month start — contribution charged (platform); exchange rebate accrues per trade':'◀ Month start — contribution charged (platform + exchange)';rowCls='row-ref';}
     else if(w.isNextRef){note='▶ Start of NEXT month';rowCls='row-nxt';}
     else if(i===lastInMonth){note='■ Month end — management + performance fee charged';}
-    // Fee attribution: contribution-day fees on the month-start row, NAV-based fees on the month-end row
+    // Fee attribution: contribution-day fees on the month-start row, NAV-based fees on the month-end row.
+    // Exchange rebate is per-trade-day when real simulator data is available, else month-start estimate.
     const onStart=w.isRef, onEnd=(i===lastInMonth)&&!w.isNextRef;
-    const cont=onStart?row.contrib:0, plt=onStart?row.pltFee:0, exf=onStart?row.exchFee:0;
+    const cont=onStart?row.contrib:0, plt=onStart?row.pltFee:0;
+    const exf=row.realReb?(w.exchDay||0):(onStart?row.exchFee:0);
     const mgf=onEnd?row.mgmtFee:0, prf=onEnd?row.prfFee:0;
     return `<tr class="${rowCls}">
       <td>${w.isNextRef?'→ Next':entryLbl+(i+1)}</td>
@@ -880,7 +900,7 @@ function renderDrillWeeks(r){
   }).join('');
   document.getElementById('drillContent').innerHTML=
     `<div class="drill-info"><strong>${isDaily?'Daily':'Weekly'} back-test data for ${row.dateLabel}</strong>${calcNote}<br>
-    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Fees are charged monthly: <span style="color:var(--orange)">platform</span> &amp; <span style="color:var(--green)">exchange</span> on the contribution day (month start), <span style="color:var(--blue)">management</span> &amp; <span style="color:var(--purple)">performance</span> at month end. Dimmed = that fee toggle is off.</small></div>`
+    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Fees are charged: <span style="color:var(--orange)">platform</span> on the contribution day (month start), <span style="color:var(--green)">exchange rebate</span> ${row.realReb?'on every BUY/SELL trade day (real daily order sizes)':'on the contribution day (month start)'}, <span style="color:var(--blue)">management</span> &amp; <span style="color:var(--purple)">performance</span> at month end. Dimmed = that fee toggle is off.</small></div>`
     +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -891,8 +911,15 @@ function csvEsc(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.re
 function exportCSV(){
   if(!RESULTS.length){alert('Nothing to export yet — run a calculation first.');return;}
   const t=getT();
-  const header=['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV',
-    'Contribution','PlatformFee','ExchangeRebate','MgmtFee','PerfFee','ActiveTotal'];
+  // Only export the fee columns whose toggle is currently ON (mirrors the on-screen Active Total selection)
+  const feeCols=[
+    {key:'plt', on:t.plt,  head:'PlatformFee',    pick:(mo,onStart,onEnd,w)=>onStart?mo.pltFee:0},
+    {key:'exch',on:t.exch, head:'ExchangeRebate', pick:(mo,onStart,onEnd,w)=>mo.realReb?(w.exchDay||0):(onStart?mo.exchFee:0)},
+    {key:'mgmt',on:t.mgmt, head:'MgmtFee',        pick:(mo,onStart,onEnd,w)=>onEnd?mo.mgmtFee:0},
+    {key:'prf', on:t.prf,  head:'PerfFee',        pick:(mo,onStart,onEnd,w)=>onEnd?mo.prfFee:0},
+  ].filter(c=>c.on);
+  const header=['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV','Contribution',
+    ...feeCols.map(c=>c.head),'ActiveTotal'];
   const lines=[header.join(',')];
   RESULTS.forEach(r=>{
     r.detail.forEach(mo=>{
@@ -900,17 +927,16 @@ function exportCSV(){
       mo.weeks.forEach((w,i)=>{
         if(w.isNextRef)return;                       // avoid duplicating the next month's first row
         const onStart=w.isRef, onEnd=(i===lastInMonth);
-        const cont=onStart?mo.contrib:0, plt=onStart?mo.pltFee:0, exf=onStart?mo.exchFee:0;
-        const mgf=onEnd?mo.mgmtFee:0, prf=onEnd?mo.prfFee:0;
-        const act=(t.mgmt?mgf:0)+(t.exch?exf:0)+(t.plt?plt:0)+(t.prf?prf:0);
+        const cont=onStart?mo.contrib:0;
+        const feeVals=feeCols.map(c=>c.pick(mo,onStart,onEnd,w));
+        const act=feeVals.reduce((a,v)=>a+v,0);      // only the selected fee streams contribute
         lines.push([
           r.period.label, w.date,
           w.histNav!=null?w.histNav.toFixed(2):'',
           w.wkRet!=null?(w.wkRet*100).toFixed(4):'',
           w.isRef?mo.freshNav.toFixed(2):'',
           cont?cont.toFixed(2):'',
-          plt?plt.toFixed(4):'', exf?exf.toFixed(4):'',
-          mgf?mgf.toFixed(4):'', prf?prf.toFixed(4):'',
+          ...feeVals.map(v=>v?v.toFixed(4):''),
           act?act.toFixed(4):''
         ].map(csvEsc).join(','));
       });

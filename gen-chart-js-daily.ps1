@@ -99,17 +99,32 @@ $anchorDefs = @(
     @{ label = "10 Years"; start = "2016-06-10" }
 )
 $anchorLines = @()
+$rebateLines = @()
 foreach ($a in $anchorDefs) {
     Write-Host "Fetching anchor: $($a.label)..." -NoNewline
     $row = Invoke-Sim -Start $a.start -Gross $false
 
-    # Full VALR exchange fee = trade + contrib conversion (+ USDPC sweep conversion).
-    # BitWealth's rebate share is 50% of that.
-    $exchFull = [double]$row.total_exchange_fees_usdt
-    if (($row.PSObject.Properties.Name -contains 'total_usdpc_conversion_fees_usdt') -and $row.total_usdpc_conversion_fees_usdt) {
-        $exchFull += [double]$row.total_usdpc_conversion_fees_usdt
+    # Per-day BitWealth exchange rebate = 50% of ALL THREE VALR fee legs for that day:
+    #   - BTC/USDT trade fee     : charged in BTC -> convert at that day's BTC price
+    #   - ZAR/USDT contribution  : exchange_fees_paid_usdt (contribution days only)
+    #   - USDPC<->USDT conversion: usdpc_conversion_fee_usdt (buy-funding + idle sweep)
+    # Summed across days = the period's total rebate, so the daily series ties EXACTLY
+    # to _lthAnchors[...].exchRebate. (Order sizes vary daily, so the rebate varies daily.)
+    $rebatePairs = @()
+    $rebateTotal = 0.0
+    foreach ($d in $row.daily) {
+        $btcFeeUsd = [double]$d.exchange_fees_paid_btc * [double]$d.price_usd
+        $usdtFee   = [double]$d.exchange_fees_paid_usdt
+        $usdpcFee  = 0.0
+        if (($d.PSObject.Properties.Name -contains 'usdpc_conversion_fee_usdt') -and $d.usdpc_conversion_fee_usdt) {
+            $usdpcFee = [double]$d.usdpc_conversion_fee_usdt
+        }
+        $reb = ($btcFeeUsd + $usdtFee + $usdpcFee) * 0.5
+        $rebateTotal += $reb
+        if ($reb -gt 0) { $rebatePairs += "['$($d.trade_date)',$([math]::Round($reb,4))]" }
     }
-    $rebate = [math]::Round($exchFull * 0.5, 2)
+    $rebate = [math]::Round($rebateTotal, 2)
+    $rebateLines += "  ""$($a.label)"": [$($rebatePairs -join ',')]"
 
     $anchorLines += @"
   "$($a.label)": {
@@ -121,9 +136,10 @@ foreach ($a in $anchorDefs) {
     days:        $($row.days)
   }
 "@
-    Write-Host " net NAV `$$([math]::Round($row.final_nav_usd,0)) - plt `$$([math]::Round($row.total_platform_fees_usdt,0)) - prf `$$([math]::Round($row.total_performance_fees_usdt,0))"
+    Write-Host " net NAV `$$([math]::Round($row.final_nav_usd,0)) - plt `$$([math]::Round($row.total_platform_fees_usdt,0)) - prf `$$([math]::Round($row.total_performance_fees_usdt,0)) - rebate `$$rebate"
 }
 $anchorsJs = $anchorLines -join ",`n"
+$rebateJs  = $rebateLines -join ",`n"
 
 $today = Get-Date -Format 'yyyy-MM-dd'
 $out = @"
@@ -146,6 +162,14 @@ const _lth10_daily_net = [$($netArrays['10yr'])];
 // Ending NAV / fee breakdown match the public back-tester EXACTLY.
 const _lthAnchors = {
 $anchorsJs
+};
+//
+// Per-day BitWealth exchange rebate (USD) for each period — 50% of all three VALR fee
+// legs (BTC/USDT trade + ZAR/USDT contribution + USDPC<->USDT conversion), reflecting the
+// REAL daily order sizes. Each period's series sums to _lthAnchors[...].exchRebate. Drives
+// the per-day Exchange Rebate in the Detail Explorer & CSV export (default product config only).
+const _lthRebateDaily = {
+$rebateJs
 };
 "@
 
