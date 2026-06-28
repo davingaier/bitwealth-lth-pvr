@@ -29,8 +29,8 @@
     .ctrl label{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;min-height:26px;display:flex;align-items:flex-end;line-height:1.25;}
     .ctrl input[type=number],.ctrl input[type=date]{width:100%;height:34px;background:var(--bg3);border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:7px 10px;color:var(--white);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;color-scheme:dark;}
     .ctrl input[type=number]:focus,.ctrl input[type=date]:focus{border-color:var(--gold);}
-    .ctrl .rw{display:flex;align-items:center;gap:8px;height:34px;}
-    .ctrl input[type=range]{flex:1;accent-color:var(--gold);height:3px;cursor:pointer;}
+    .ctrl .rw{display:flex;align-items:center;gap:8px;height:34px;min-width:0;}
+    .ctrl input[type=range]{flex:1;min-width:0;accent-color:var(--gold);height:3px;cursor:pointer;}
     .ctrl .rv{font-size:13px;font-weight:700;color:var(--gold);min-width:44px;text-align:right;}
     .ctrl-hint{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5;}
     .ctrl-hint strong{color:var(--txt2);}
@@ -236,7 +236,13 @@
       <canvas id="cBreakdown" height="240"></canvas>
     </div>
     <div class="cc">
-      <h3>Annual Revenue at Scale — active selection, annualised average</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 id="hScale" style="margin:0">Revenue at Scale — active selection, annualised average</h3>
+        <div class="ptabs">
+          <button class="ptab on" data-scale="annual">Annualised</button>
+          <button class="ptab" data-scale="cumulative">Cumulative</button>
+        </div>
+      </div>
       <canvas id="cScale" height="240"></canvas>
     </div>
   </div>
@@ -687,6 +693,7 @@ function chartCumul(t){
 }
 
 let BD_M=120;
+let SCALE_MODE='annual';
 function chartBreakdown(months,t){
   BD_M=months;kc('bd');const ctx=document.getElementById('cBreakdown').getContext('2d');
   const r=RESULTS.find(x=>x.period.months===months)||RESULTS[RESULTS.length-1];if(!r)return;
@@ -714,12 +721,17 @@ function chartBreakdown(months,t){
 
 function chartScale(t){
   kc('sc');const ctx=document.getElementById('cScale').getContext('2d');
+  const cumul=SCALE_MODE==='cumulative';
   const counts=[1,5,10,25,50,100,250,500,1000,2000];
   const datasets=RESULTS.map((r,i)=>({
-    label:r.period.label+' avg/yr',
-    data:counts.map(c=>(atot(r,t)/(r.months/12))*c),
+    label:r.period.label+(cumul?' total':' avg/yr'),
+    data:counts.map(c=>(cumul?atot(r,t):atot(r,t)/(r.months/12))*c),
     borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:2,
   }));
+  const h=document.getElementById('hScale');
+  if(h)h.textContent=cumul
+    ?'Revenue at Scale — active selection, cumulative total'
+    :'Revenue at Scale — active selection, annualised average';
   charts['sc']=new Chart(ctx,{type:'line',data:{labels:counts.map(c=>c.toLocaleString()),datasets},
     options:{...bOpts,scales:{x:{...bOpts.scales.x,title:{display:true,text:'Number of Clients',color:CG.text,font:{size:10}}},y:bOpts.scales.y}}});
 }
@@ -1097,6 +1109,16 @@ document.querySelectorAll('.ptab[data-m]').forEach(btn=>{
     document.querySelectorAll('.ptab[data-m]').forEach(b=>b.classList.remove('on'));
     this.classList.add('on');
     chartBreakdown(+this.dataset.m,getT());
+  });
+});
+
+// Scale chart — annualised vs cumulative toggle
+document.querySelectorAll('.ptab[data-scale]').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.ptab[data-scale]').forEach(b=>b.classList.remove('on'));
+    this.classList.add('on');
+    SCALE_MODE=this.dataset.scale;
+    chartScale(getT());
   });
 });
 
