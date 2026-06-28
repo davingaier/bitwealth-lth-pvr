@@ -3,11 +3,27 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-28 (v0.6.128)
+**Last updated:** 2026-06-28 (v0.6.129)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.129 – Commercial Fee Model: removed BTC Allocation slider · added High-Water-Mark column
+
+- **BTC Allocation slider removed.** The slider only fed the per-contribution *estimate* fallback in
+  `exchRebate()` (used solely for custom rates / custom date ranges) and had no effect on the standard
+  anchored periods, which use the simulator's real per-day rebate. Removed the control, its label/hint,
+  its `input` listener, and the `btcAlloc` field in `getP()`. `exchRebate(amt)` now assumes a fixed
+  `BTC_ALLOC_EST = 0.75` BTC/USDPC split (the long-run product default).
+
+- **High-Water-Mark (HWM) column added.** `buildPortfolio()` now tracks a running `hwm` array (the
+  net-NAV peak through each month — the threshold the performance fee is measured against:
+  `PerfFee_m = rate × max(0, navAfterMgmt_m − HWM_{m-1})`), surfaced on each `buildDetail` row as
+  `hwm`. It is displayed as a new **HWM** column in the monthly Detail Explorer view (next to Portfolio
+  NAV) and exported in the **Monthly Data** sheet (after `ReconstructedNAV`) and the **Daily Data**
+  sheet (on the month-end row, beside the performance fee). This makes the HWM mechanism visible — e.g.
+  a month whose NAV sits below its HWM shows a $0 performance fee.
 
 ### v0.6.128 – Commercial Fee Model: 4-tab Excel export · NAV chart per-period fix · exchange card actual rebates
 
@@ -30,6 +46,13 @@
   each month), ending exactly at that period's anchored final NAV. `netMonthly()` prefers
   `_lthNetMonthly[period.label]` (falling back to the old 5yr/10yr slice), so every anchored period now
   plots its true fresh-client curve and the chart endpoint matches the summary's Ending NAV.
+
+- **Portfolio NAV Growth chart now honours the fee toggles.** Previously `chartNav()` always plotted
+  the fixed anchored net curve, so toggling Management / Platform / Performance did nothing. It now
+  only uses the anchored curve in the **exact** live-product config (`productState(t) && isProductRates(p)`)
+  and otherwise plots the toggle-responsive reconstruction (`r.navs`), so the line visibly reshapes as
+  fees are switched. (The Exchange toggle never moves the line — VALR's fee is always borne by the
+  client; the toggle only switches BitWealth's revenue share.)
 
 - **Exchange Fee Sharing Detail card — actual per-period rebates.** `renderExchDetail()` no longer
   shows the old per-pair per-contribution estimate (tiny ~$0.18/mo rows). It now lists one row per

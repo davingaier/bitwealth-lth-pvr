@@ -148,14 +148,6 @@
       <span class="clear-link" id="clearRange">Clear custom range</span>
     </div>
     <div class="ctrl">
-      <label>BTC Allocation (of each contribution)</label>
-      <div class="rw">
-        <input type="range" id="iBtcAlloc" min="0" max="100" value="75">
-        <span class="rv" id="oBtcAlloc">75%</span>
-      </div>
-      <div class="ctrl-hint">% of each contribution used to buy BTC on the <strong>BTC/USDT</strong> pair. Remainder sweeps to <strong>USDPC/USDT</strong>. This only affects the exchange-fee rebate calculation — portfolio NAV comes from historical back-test data and is unaffected.</div>
-    </div>
-    <div class="ctrl">
       <label>Number of Clients</label>
       <div class="rw">
         <input type="range" id="iClients" min="1" max="2000" value="1">
@@ -402,12 +394,13 @@ function buildPortfolio(win,p,t,rebMonth){
   // When a real per-day rebate series is available (anchored config) the exchange rebate is
   // the simulator's actual monthly trade-leg total; otherwise fall back to the contribution estimate.
   const ym0=win[0][0].slice(0,7);
-  const initExch=rebMonth?(rebMonth.get(ym0)||0):exchRebate(p.initial,p.btcAlloc);
+  const initExch=rebMonth?(rebMonth.get(ym0)||0):exchRebate(p.initial);
   const initPlt=p.initial*p.pltRate;
   let nav=Math.max(0,p.initial-(t.plt?initPlt:0));
   let hwm=nav;
   const navs=[nav],rets=[null];
   const mgmtArr=[],exchArr=[initExch],currArr=[{plt:initPlt,prf:0}];
+  const hwmArr=[hwm];                              // running high-water mark (net NAV peak) per month
   for(let i=1;i<win.length;i++){
     const r=(win[i][1]-p.monthly)/win[i-1][1]-1;
     rets.push(r);
@@ -415,7 +408,7 @@ function buildPortfolio(win,p,t,rebMonth){
     const gross=Math.max(0,nav*(1+r)+p.monthly);
     // Fee amounts (stored regardless of toggle for reference)
     const mf=gross*(p.mgmtRate/12);
-    const ef=rebMonth?(rebMonth.get(win[i][0].slice(0,7))||0):exchRebate(p.monthly,p.btcAlloc);
+    const ef=rebMonth?(rebMonth.get(win[i][0].slice(0,7))||0):exchRebate(p.monthly);
     const pf=p.monthly*p.pltRate;
     // Apply mgmt fee first (standard practice)
     const navM=gross-(t.mgmt?mf:0);
@@ -426,11 +419,12 @@ function buildPortfolio(win,p,t,rebMonth){
     nav=Math.max(0,navM-(t.plt?pf:0)-(t.prf?prfFee:0));
     hwm=Math.max(hwm,nav);
     navs.push(nav);mgmtArr.push(mf);exchArr.push(ef);currArr.push({plt:pf,prf:prfFee});
+    hwmArr.push(hwm);
   }
-  return{navs,rets,mgmt:mgmtArr,exch:exchArr,curr:currArr};
+  return{navs,rets,mgmt:mgmtArr,exch:exchArr,curr:currArr,hwm:hwmArr};
 }
 
-function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily){
+function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily,hwm){
   const winStart=win[0][0],winEnd=win[win.length-1][0];
   const raw2=rawSrc.filter(r=>r[0]>=winStart&&r[0]<=winEnd);
   const isDaily=raw2.length>win.length*2;  // daily has ~7× more entries than weekly
@@ -443,6 +437,7 @@ function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily){
     return{
       m,ym,dateLabel:MO[+ym.slice(5,7)-1]+' '+ym.slice(0,4),
       freshNav:nav,histNavRef:win[m][1],histRet:rets[m],
+      hwm:hwm?(hwm[m]||0):0,
       contrib:m===0?p.initial:p.monthly,
       mgmtFee:m>0?(mgmt[m-1]||0):0,
       exchFee:exch[m]||0,
@@ -457,10 +452,14 @@ function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily){
 /* ═══════════════════════════════════════════════════════════
    FEE ENGINE — returns BitWealth's 50% share of VALR fees
 ═══════════════════════════════════════════════════════════ */
-function exchRebate(amt,btcAlloc){
-  return amt*VALR.usdtZar*.5                    // USDT/ZAR 18 bps maker
-        +amt*btcAlloc*VALR.btcUsdt*.5           // BTC/USDT 8 bps maker
-        +amt*(1-btcAlloc)*VALR.usdpc*.5;        // USDPC/USDT 10 bps taker
+// Fallback per-contribution estimate used ONLY for custom rates / custom date ranges (the standard
+// periods use the simulator's real per-day rebate). Assumes a fixed 75/25 BTC/USDPC contribution
+// split (the long-run product default) instead of a user-tunable slider.
+const BTC_ALLOC_EST=0.75;
+function exchRebate(amt){
+  return amt*VALR.usdtZar*.5                          // USDT/ZAR 18 bps maker
+        +amt*BTC_ALLOC_EST*VALR.btcUsdt*.5            // BTC/USDT 8 bps maker
+        +amt*(1-BTC_ALLOC_EST)*VALR.usdpc*.5;        // USDPC/USDT 10 bps taker
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -481,7 +480,6 @@ function getP(){
     mgmtRate:Math.max(0,numVal('iMgmt',0))/100,
     pltRate: Math.max(0,numVal('iPlatform',0))/100,
     prfRate: Math.max(0,numVal('iPerf',0))/100,
-    btcAlloc:numVal('iBtcAlloc',75)/100,
     clients: Math.max(1,Math.round(numVal('iClients',1))),
     endDate: document.getElementById('iEndDate')?document.getElementById('iEndDate').value:'',
     rangeStart: document.getElementById('iRangeStart')?document.getElementById('iRangeStart').value:'',
@@ -538,11 +536,11 @@ function runAll(p,t){
     // Real per-day exchange rebate available only when anchored (matches the simulator run).
     const rebDaily=anchor?rebateDailyMap(period.label):null;
     const rebMonth=rebateMonthMap(rebDaily);
-    const{navs,rets,mgmt,exch,curr}=buildPortfolio(win,p,t,rebMonth);
+    const{navs,rets,mgmt,exch,curr,hwm}=buildPortfolio(win,p,t,rebMonth);
     const months=navs.length-1;
     const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
-    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily);
+    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily,hwm);
     return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
       totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
       invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
@@ -653,13 +651,18 @@ const bOpts={
 
 function chartNav(){
   kc('nav');const ctx=document.getElementById('cNav').getContext('2d');
+  // The anchored net curve is a FIXED snapshot of the live product (platform + performance, no
+  // management). Only plot it when the toggles + inputs match that exact config; otherwise plot the
+  // reconstruction (r.navs), which responds to the fee toggles so the chart actually moves.
+  // NOTE: the Exchange toggle never moves the line — VALR's fee is always borne by the client (the
+  // toggle only switches BitWealth's revenue share), so only Mgmt/Platform/Performance reshape NAV.
+  const t=getT(),p=getP();
+  const useAnchor=productState(t)&&isProductRates(p);
   const maxM=Math.max(...RESULTS.map(r=>r.months));
   const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
   const datasets=RESULTS.map((r,i)=>{
-    // When anchored, plot the simulator's real net NAV curve (5yr/10yr) so the chart
-    // endpoint matches the summary; otherwise plot the reconstruction.
     let series=r.navs;
-    if(r.anchor){const nm=netMonthly(r.period);if(nm&&nm.length)series=nm.map(x=>x[1]);}
+    if(r.anchor&&useAnchor){const nm=netMonthly(r.period);if(nm&&nm.length)series=nm.map(x=>x[1]);}
     const d=[...series];while(d.length<maxM+1)d.push(null);
     return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
   });
@@ -828,7 +831,7 @@ function renderDrillMonths(r){
   if(!yr){document.getElementById('drillContent').innerHTML='<div class="drill-info">No data.</div>';return;}
   const allRows=yr.initR?[yr.initR,...yr.months]:yr.months;
   let cumTotal=0;
-  const head=`<tr><th>#</th><th>Month</th><th>Contribution</th><th>Portfolio NAV</th><th>Return</th>
+  const head=`<tr><th>#</th><th>Month</th><th>Contribution</th><th>Portfolio NAV</th><th>HWM</th><th>Return</th>
     <th style="color:var(--blue)">Mgmt Fee</th><th style="color:var(--green)">Exchange</th>
     <th style="color:var(--orange)">Platform</th><th style="color:var(--purple)">Perf Fee</th>
     <th style="color:var(--gold)">Active Total</th><th>Cumulative</th></tr>`;
@@ -844,6 +847,7 @@ function renderDrillMonths(r){
       <td>${row.dateLabel}</td>
       <td>${fmtN(row.contrib)}</td>
       <td class="vg" style="font-family:monospace">${fmtK(row.freshNav)}</td>
+      <td class="dim" style="font-family:monospace" title="High-water mark — perf fee is only charged on NAV above this peak">${fmtK(row.hwm)}</td>
       <td class="${retC}">${retS}</td>
       <td class="${t.mgmt?'vb':'off'}">${fmtN(row.mgmtFee,2)}</td>
       <td class="${t.exch?'vgr':'off'}">${fmtN(row.exchFee,2)}</td>
@@ -959,14 +963,14 @@ function exportXLSX(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(yrRows),'Yearly Data');
 
   /* 3 ── MONTHLY DATA ────────────────────────────────────── */
-  const moRows=[['Period','Month','ContributionUSD','ReconstructedNAV','HistBacktestNAV','MonthlyReturnPercent',
+  const moRows=[['Period','Month','ContributionUSD','ReconstructedNAV','HWM','HistBacktestNAV','MonthlyReturnPercent',
     ...feeCols.map(c=>c.head),'ActiveTotal']];
   RESULTS.forEach(r=>{
     r.detail.forEach(mo=>{
       const pick={plt:mo.pltFee,exch:mo.exchFee,mgmt:mo.mgmtFee,prf:mo.prfFee};
       const feeVals=feeCols.map(c=>pick[c.key]);
       const at=feeVals.reduce((a,v)=>a+v,0);
-      moRows.push([r.period.label,mo.dateLabel,r2(mo.contrib),r2(mo.freshNav),
+      moRows.push([r.period.label,mo.dateLabel,r2(mo.contrib),r2(mo.freshNav),r2(mo.hwm),
         mo.histNavRef!=null?r2(mo.histNavRef):'',
         mo.histRet!=null?r4(mo.histRet*100):'',
         ...feeVals.map(r2),r2(at)]);
@@ -976,7 +980,7 @@ function exportXLSX(){
 
   /* 4 ── DAILY DATA ──────────────────────────────────────── */
   const dRows=[['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV','Contribution',
-    ...feeCols.map(c=>c.head),'ActiveTotal']];
+    ...feeCols.map(c=>c.head),'HWM','ActiveTotal']];
   RESULTS.forEach(r=>{
     r.detail.forEach(mo=>{
       let lastInMonth=-1;mo.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
@@ -997,6 +1001,7 @@ function exportXLSX(){
           w.isRef?r2(mo.freshNav):'',
           cont?r2(cont):'',
           ...feeVals.map(v=>v?r4(v):0),
+          onEnd?r2(mo.hwm):'',
           r4(act)]);
       });
     });
@@ -1078,10 +1083,7 @@ if(clr)clr.addEventListener('click',()=>{
   calc();
 });
 
-// Range sliders — update label + debounced recalc (btcAlloc) or soft render (clients)
-document.getElementById('iBtcAlloc').addEventListener('input',function(){
-  document.getElementById('oBtcAlloc').textContent=this.value+'%';scheduleRecalc();
-});
+// Range sliders — update label + soft render (clients)
 document.getElementById('iClients').addEventListener('input',function(){
   document.getElementById('oClients').textContent=(+this.value).toLocaleString();softRender();
 });
