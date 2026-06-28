@@ -100,6 +100,7 @@ $anchorDefs = @(
 )
 $anchorLines = @()
 $rebateLines = @()
+$netMonthlyLines = @()
 foreach ($a in $anchorDefs) {
     Write-Host "Fetching anchor: $($a.label)..." -NoNewline
     $row = Invoke-Sim -Start $a.start -Gross $false
@@ -126,6 +127,21 @@ foreach ($a in $anchorDefs) {
     $rebate = [math]::Round($rebateTotal, 2)
     $rebateLines += "  ""$($a.label)"": [$($rebatePairs -join ',')]"
 
+    # Monthly-sampled NET NAV for THIS period (a fresh client's own curve, starting at the
+    # contribution, ending at final_nav_usd). First daily row of each calendar month. Drives the
+    # NAV-growth chart so sub-periods (1/3/7yr) plot their real fresh-client curve instead of a
+    # mis-scaled slice of the 5yr/10yr run.
+    $nmPairs = @()
+    $seenYm  = ''
+    foreach ($d in $row.daily) {
+        $ym = $d.trade_date.Substring(0,7)
+        if ($ym -ne $seenYm) {
+            $nmPairs += "['$($d.trade_date)',$([math]::Round([double]$d.nav_usd,2))]"
+            $seenYm = $ym
+        }
+    }
+    $netMonthlyLines += "  ""$($a.label)"": [$($nmPairs -join ',')]"
+
     $anchorLines += @"
   "$($a.label)": {
     invested:    $([math]::Round($row.total_contrib_gross_usdt, 2)),
@@ -140,6 +156,7 @@ foreach ($a in $anchorDefs) {
 }
 $anchorsJs = $anchorLines -join ",`n"
 $rebateJs  = $rebateLines -join ",`n"
+$netMonthlyJs = $netMonthlyLines -join ",`n"
 
 $today = Get-Date -Format 'yyyy-MM-dd'
 $out = @"
@@ -170,6 +187,13 @@ $anchorsJs
 // the per-day Exchange Rebate in the Detail Explorer & CSV export (default product config only).
 const _lthRebateDaily = {
 $rebateJs
+};
+//
+// Per-period monthly NET NAV (real product fees) — each period's OWN fresh-client curve sampled
+// monthly (first trading day of each month), ending at the anchored final NAV. Drives the
+// Portfolio NAV Growth chart so every anchored period plots correctly (default product config only).
+const _lthNetMonthly = {
+$netMonthlyJs
 };
 "@
 

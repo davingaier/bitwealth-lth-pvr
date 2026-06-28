@@ -165,7 +165,7 @@
     <div class="ctrl">
       <label>&nbsp;</label>
       <button class="recalc" id="btnCalc">Recalculate</button>
-      <button class="recalc2" id="btnExport">↓ Export CSV</button>
+      <button class="recalc2" id="btnExport">↓ Export Excel</button>
     </div>
   </div>
 
@@ -272,13 +272,13 @@
   </div>
 
   <div class="sh">Exchange Fee Sharing Detail
-    <span class="sh-note">50% of VALR trading fees · using same rates as simulator (18/8/10 bps) · BTC Allocation slider adjusts rows 2–3</span>
+    <span class="sh-note">BitWealth keeps 50% of all VALR trading fees · anchored periods show the simulator's real per-day rebate, summed (ZAR→USDT 18 bps · USDT→BTC 8 bps · USDPC↔USDT 10 bps)</span>
   </div>
   <div class="tw">
     <table>
       <thead>
         <tr>
-          <th>Pair</th><th>Rate Used</th><th>Basis</th><th>Trade Amount</th><th>VALR Fee (100%)</th><th>BitWealth Share (50%)</th><th>Annual (12×)</th>
+          <th>Period</th><th>Basis</th><th>Months</th><th>VALR Fee (100%)</th><th>BitWealth Share (50%)</th><th>Avg / Month</th>
         </tr>
       </thead>
       <tbody id="bExch"></tbody>
@@ -294,12 +294,13 @@
     <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
     <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). At the daily level, fees are attributed to the day they are charged: <strong>platform</strong> on the contribution day (month start), <strong>exchange rebate</strong> on each BUY/SELL trade day (real daily order sizes, anchored config), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
     <strong>Date range:</strong> <strong>End Date</strong> re-anchors the 1/3/5/7/10-year windows to end on the chosen date (computed backwards from there). Setting both <strong>Custom Range</strong> dates replaces the standard periods with a single window covering exactly that span. Custom dates use the reconstruction estimate (the ✓ anchors apply only to the standard periods ending on the latest data date).<br>
-    <strong>Export:</strong> <strong>Export CSV</strong> downloads every period's daily back-test NAV, daily return and attributed fees for analysis in Excel.<br>
+    <strong>Export:</strong> <strong>Export Excel</strong> downloads a four-tab <code>.xlsx</code> workbook — <strong>Summary</strong> (per-period totals), <strong>Yearly Data</strong>, <strong>Monthly Data</strong> and <strong>Daily Data</strong> (every period's daily back-test NAV, daily return and attributed fees). Only the fee columns whose toggles are ON are included.<br>
     <strong>Disclaimer:</strong> Back-test data June 2016–June 2026. Past performance does not guarantee future results.
   </div>
 
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="chart-data.js"></script>
 <!-- Optional: chart-data-daily.js enables daily drill-down. Generate with gen-chart-js-daily.ps1 -->
 <script src="chart-data-daily.js" onerror="void(0)"></script>
@@ -378,9 +379,14 @@ function isProductRates(p){
       && Math.abs(p.pltRate -PRODUCT_DEFAULTS.pltRate )<1e-9
       && Math.abs(p.prfRate -PRODUCT_DEFAULTS.prfRate )<1e-9;
 }
-// Net monthly NAV series (real fees) for the chart when anchored — 5yr/10yr only.
+// Per-period monthly NET NAV (each period's own fresh-client curve, ending at its anchored final
+// NAV). Preferred for the chart so EVERY anchored period (incl. 1/3/7yr) plots its true curve
+// instead of a mis-scaled tail of the 5yr/10yr run.
+const NET_MONTHLY=(typeof _lthNetMonthly!=='undefined')?_lthNetMonthly:null;
+// Net monthly NAV series (real fees) for the chart when anchored.
 function netMonthly(period){
-  const s=period.src==='5yr'?NET5:NET10;
+  if(NET_MONTHLY&&NET_MONTHLY[period.label])return NET_MONTHLY[period.label];
+  const s=period.src==='5yr'?NET5:NET10;          // fallback: tail of 5yr/10yr run
   if(!s)return null;
   return period.slice==='all'?s:s.slice(Math.max(0,s.length-period.months-1));
 }
@@ -602,23 +608,23 @@ function renderComparison(){
 }
 
 function renderExchDetail(p){
-  const pairs=[
-    {name:'USDT/ZAR', rate:VALR.usdtZar, basis:'Maker (limit)',  amt:p.monthly,                note:`All $${p.monthly} → ZAR→USDT conversion`},
-    {name:'BTC/USDT', rate:VALR.btcUsdt, basis:'Maker (limit)',  amt:p.monthly*p.btcAlloc,     note:`${(p.btcAlloc*100).toFixed(0)}% of $${p.monthly} → buy BTC`},
-    {name:'USDPC/USDT',rate:VALR.usdpc,  basis:'Taker (market)', amt:p.monthly*(1-p.btcAlloc), note:`${((1-p.btcAlloc)*100).toFixed(0)}% of $${p.monthly} → sweep to USDPC`},
-  ];
-  const rows=pairs.map(x=>{
-    const fee=x.amt*x.rate, share=fee*.5;
-    return `<tr><td>${x.name} <span class="dim" style="font-size:10px">(${x.note})</span></td>
-      <td>${(x.rate*100).toFixed(2)}%</td><td class="dim">${x.basis}</td>
-      <td class="dim">${fmtN(x.amt,2)}</td>
-      <td class="dim">${fmtFee(fee)}</td>
+  const t=getT();
+  const rows=RESULTS.map(r=>{
+    // The exchange rebate uses the simulator's REAL per-day data whenever that period has it
+    // (standard product window, default rates) — independent of the fee toggles. Only custom
+    // ranges / custom rates fall back to the per-contribution estimate.
+    const real=r.detail.some(mo=>mo.realReb);
+    const share=r.totExch, valr=share*2, perMo=r.months?share/r.months:0;
+    const basis=real
+      ? `<span class="vgr">actual</span> — sum of real per-day rebates`
+      : `<span class="dim">estimate</span> — per-contribution model`;
+    return `<tr><td><strong>${r.period.label}</strong></td>
+      <td class="dim">${basis}</td>
+      <td class="dim">${r.months}</td>
+      <td class="dim">${fmtFee(valr)}</td>
       <td class="vgr">${fmtFee(share)}</td>
-      <td class="vb">${fmtN(share*12,2)}</td></tr>`;
+      <td class="vb">${fmtFee(perMo)}/mo</td></tr>`;
   });
-  const initFee=exchRebate(p.initial,p.btcAlloc),monFee=exchRebate(p.monthly,p.btcAlloc);
-  rows.push(`<tr style="border-top:2px solid var(--border)"><td><strong>Initial $${p.initial.toLocaleString()} (one-off)</strong></td><td colspan="4"></td><td class="vgr">${fmtFee(initFee)}</td><td class="dim">one-off</td></tr>`);
-  rows.push(`<tr><td><strong>Monthly $${p.monthly} total (all pairs)</strong></td><td colspan="4"></td><td class="vgr">${fmtFee(monFee)}</td><td class="vb">${fmtN(monFee*12,2)}/yr</td></tr>`);
   document.getElementById('bExch').innerHTML=rows.join('');
 }
 
@@ -905,22 +911,72 @@ function renderDrillWeeks(r){
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CSV EXPORT — every period's daily back-test NAV + attributed fees
+   EXCEL EXPORT — 4 sheets: Summary · Yearly Data · Monthly Data · Daily Data
 ═══════════════════════════════════════════════════════════ */
-function csvEsc(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
-function exportCSV(){
+const r2=v=>(v==null||isNaN(v))?'':Math.round(v*100)/100;
+const r4=v=>(v==null||isNaN(v))?'':Math.round(v*10000)/10000;
+function exportXLSX(){
   if(!RESULTS.length){alert('Nothing to export yet — run a calculation first.');return;}
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load (check your connection).');return;}
   const t=getT();
   // Only export the fee columns whose toggle is currently ON (mirrors the on-screen Active Total selection)
   const feeCols=[
-    {key:'plt', on:t.plt,  head:'PlatformFee',    pick:(mo,onStart,onEnd,w)=>onStart?mo.pltFee:0},
-    {key:'exch',on:t.exch, head:'ExchangeRebate', pick:(mo,onStart,onEnd,w)=>mo.realReb?(w.exchDay||0):(onStart?mo.exchFee:0)},
-    {key:'mgmt',on:t.mgmt, head:'MgmtFee',        pick:(mo,onStart,onEnd,w)=>onEnd?mo.mgmtFee:0},
-    {key:'prf', on:t.prf,  head:'PerfFee',        pick:(mo,onStart,onEnd,w)=>onEnd?mo.prfFee:0},
+    {key:'plt', on:t.plt,  head:'PlatformFee'},
+    {key:'exch',on:t.exch, head:'ExchangeRebate'},
+    {key:'mgmt',on:t.mgmt, head:'MgmtFee'},
+    {key:'prf', on:t.prf,  head:'PerfFee'},
   ].filter(c=>c.on);
-  const header=['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV','Contribution',
-    ...feeCols.map(c=>c.head),'ActiveTotal'];
-  const lines=[header.join(',')];
+  const wb=XLSX.utils.book_new();
+
+  /* 1 ── SUMMARY ─────────────────────────────────────────── */
+  const sumRows=[['Period','InvestedUSD','EndingNAV','ROIPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal','AvgPerMonth','Basis']];
+  RESULTS.forEach(r=>{
+    const f=summaryFigures(r,t);
+    const pick={plt:f.totPlt,exch:f.totExch,mgmt:f.totMgmt,prf:f.totPrf};
+    const feeVals=feeCols.map(c=>pick[c.key]);
+    sumRows.push([r.period.label,r2(f.invested),r2(f.endNav),
+      r2(f.invested?(f.endNav-f.invested)/f.invested*100:0),
+      ...feeVals.map(r2),r2(f.active),r2(r.months?f.active/r.months:0),
+      f.anchored?'anchored (actual)':'estimate']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sumRows),'Summary');
+
+  /* 2 ── YEARLY DATA ─────────────────────────────────────── */
+  const yrRows=[['Period','Year','DateStart','DateEnd','ContributionsUSD','NAVStart','NAVEnd','ReturnPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal']];
+  RESULTS.forEach(r=>{
+    getYearGroups(r.detail).forEach(yr=>{
+      const pick={plt:yr.totPlt,exch:yr.totExch,mgmt:yr.totMgmt,prf:yr.totPrf};
+      const feeVals=feeCols.map(c=>pick[c.key]);
+      const at=feeVals.reduce((a,v)=>a+v,0);
+      yrRows.push([r.period.label,'Year '+yr.y,yr.dateStart,yr.dateEnd,
+        r2(yr.contrib),r2(yr.navStart),r2(yr.navEnd),
+        r2(yr.navStart?(yr.navEnd-yr.navStart)/yr.navStart*100:0),
+        ...feeVals.map(r2),r2(at)]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(yrRows),'Yearly Data');
+
+  /* 3 ── MONTHLY DATA ────────────────────────────────────── */
+  const moRows=[['Period','Month','ContributionUSD','ReconstructedNAV','HistBacktestNAV','MonthlyReturnPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal']];
+  RESULTS.forEach(r=>{
+    r.detail.forEach(mo=>{
+      const pick={plt:mo.pltFee,exch:mo.exchFee,mgmt:mo.mgmtFee,prf:mo.prfFee};
+      const feeVals=feeCols.map(c=>pick[c.key]);
+      const at=feeVals.reduce((a,v)=>a+v,0);
+      moRows.push([r.period.label,mo.dateLabel,r2(mo.contrib),r2(mo.freshNav),
+        mo.histNavRef!=null?r2(mo.histNavRef):'',
+        mo.histRet!=null?r4(mo.histRet*100):'',
+        ...feeVals.map(r2),r2(at)]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(moRows),'Monthly Data');
+
+  /* 4 ── DAILY DATA ──────────────────────────────────────── */
+  const dRows=[['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV','Contribution',
+    ...feeCols.map(c=>c.head),'ActiveTotal']];
   RESULTS.forEach(r=>{
     r.detail.forEach(mo=>{
       let lastInMonth=-1;mo.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
@@ -928,26 +984,27 @@ function exportCSV(){
         if(w.isNextRef)return;                       // avoid duplicating the next month's first row
         const onStart=w.isRef, onEnd=(i===lastInMonth);
         const cont=onStart?mo.contrib:0;
-        const feeVals=feeCols.map(c=>c.pick(mo,onStart,onEnd,w));
-        const act=feeVals.reduce((a,v)=>a+v,0);      // only the selected fee streams contribute
-        lines.push([
-          r.period.label, w.date,
-          w.histNav!=null?w.histNav.toFixed(2):'',
-          w.wkRet!=null?(w.wkRet*100).toFixed(4):'',
-          w.isRef?mo.freshNav.toFixed(2):'',
-          cont?cont.toFixed(2):'',
-          ...feeVals.map(v=>v?v.toFixed(4):''),
-          act?act.toFixed(4):''
-        ].map(csvEsc).join(','));
+        const feeVals=feeCols.map(c=>{
+          if(c.key==='plt') return onStart?mo.pltFee:0;
+          if(c.key==='exch')return mo.realReb?(w.exchDay||0):(onStart?mo.exchFee:0);
+          if(c.key==='mgmt')return onEnd?mo.mgmtFee:0;
+          return onEnd?mo.prfFee:0;
+        });
+        const act=feeVals.reduce((a,v)=>a+v,0);
+        dRows.push([r.period.label,w.date,
+          w.histNav!=null?r2(w.histNav):'',
+          w.wkRet!=null?r4(w.wkRet*100):'',
+          w.isRef?r2(mo.freshNav):'',
+          cont?r2(cont):'',
+          ...feeVals.map(v=>v?r4(v):0),
+          r4(act)]);
       });
     });
   });
-  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;
-  a.download=`lth-pvr-fee-model-${ACTIVE_CUSTOM?'custom':'periods'}-${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dRows),'Daily Data');
+
+  const date=(typeof latestDate==='function'&&latestDate())||new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`lth-pvr-fee-model-${ACTIVE_CUSTOM?'custom':'periods'}-${date}.xlsx`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1003,7 +1060,7 @@ function softRender(){
    EVENT WIRING
 ═══════════════════════════════════════════════════════════ */
 document.getElementById('btnCalc').addEventListener('click',calc);
-document.getElementById('btnExport').addEventListener('click',exportCSV);
+document.getElementById('btnExport').addEventListener('click',exportXLSX);
 
 // Numeric inputs — debounced full recalc
 ['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{

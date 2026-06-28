@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-28 (v0.6.127)
+**Last updated:** 2026-06-28 (v0.6.128)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.128 – Commercial Fee Model: 4-tab Excel export · NAV chart per-period fix · exchange card actual rebates
+
+- **Excel export with four worksheets.** `exportCSV()` in `docs/fee-model.html` is replaced by
+  `exportXLSX()` (button relabelled **Export Excel**), powered by the SheetJS CDN library
+  (`xlsx@0.18.5`). The workbook (`lth-pvr-fee-model-{custom|periods}-{YYYY-MM-DD}.xlsx`) has four
+  tabs: **Summary** (one row per period — Invested, EndingNAV, ROI%, fees, ActiveTotal, AvgPerMonth,
+  Basis), **Yearly Data** (per period × year via `getYearGroups()` — contributions, NAV start/end,
+  return %, fees), **Monthly Data** (per period × month from `r.detail` — contribution,
+  reconstructed/historical NAV, monthly return %, fees), and **Daily Data** (the previous CSV's
+  per-day rows — historical NAV, daily return %, reconstructed NAV, contribution, attributed fees).
+  All four sheets stay **toggle-aware** (only fee columns whose toggle is on are emitted) using the
+  same filtered `feeCols` array; `ActiveTotal` sums only included columns.
+
+- **Portfolio NAV Growth chart — correct per-period curve.** Previously, for the anchored sub-periods
+  (1/3/7 yr) `netMonthly()` returned the *tail* of the 5yr/10yr net run, so e.g. the 1-Year line
+  started at ~$43k (the matured portfolio's level in 2025) instead of a fresh client's $2,400.
+  `gen-chart-js-daily.ps1` now also emits `const _lthNetMonthly = { "<period>": [[date, navUsd], …] }`
+  in `docs/chart-data-daily.js` — each anchor run's own monthly-sampled net NAV (first trading day of
+  each month), ending exactly at that period's anchored final NAV. `netMonthly()` prefers
+  `_lthNetMonthly[period.label]` (falling back to the old 5yr/10yr slice), so every anchored period now
+  plots its true fresh-client curve and the chart endpoint matches the summary's Ending NAV.
+
+- **Exchange Fee Sharing Detail card — actual per-period rebates.** `renderExchDetail()` no longer
+  shows the old per-pair per-contribution estimate (tiny ~$0.18/mo rows). It now lists one row per
+  period: VALR Fee (100%), BitWealth Share (50% = `r.totExch`), and Avg/Month, with a Basis column
+  showing **“actual — sum of real per-day rebates”** when the period has real simulator rebate data
+  (`r.detail.some(mo => mo.realReb)`) or **“estimate”** for custom ranges/rates. Shares tie out to the
+  anchored period totals ($6.85 / $51.39 / $112.40 / $465.69 / $11,970.23). Card header/note updated
+  (removed the obsolete “BTC Allocation slider adjusts rows 2–3” text; states the 18/8/10 bps legs).
 
 ### v0.6.127 – Commercial Fee Model: daily trade-level exchange rebate + CSV column reference + toggle-aware columns
 
