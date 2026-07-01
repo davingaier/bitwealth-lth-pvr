@@ -3,11 +3,147 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-06-28 (v0.6.129)
+**Last updated:** 2026-07-01 (v0.6.132)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.132 – `ef_sync_valr_transactions`: detect stablecoin→USDT deposits; VALR transfer JSON fix; USDPC sweep retry
+**Date:** 2026-07-01  
+**Status:** ✅ DEPLOYED
+
+#### Feature – `ef_sync_valr_transactions`: stablecoin→USDT deposit detection (USDC/USDT pair)
+
+**Problem.** A customer deposited USD into a VALR subaccount; VALR automatically minted it to USDC. The customer then manually converted USDC→USDT via a `LIMIT_BUY` on the `USDT/USDC` pair. `ef_sync_valr_transactions` silently dropped the transaction because the `LIMIT_BUY` block only handled `debitCurrency === "ZAR"` (ZAR→crypto) and `debitCurrency/creditCurrency ∈ {BTC, USDT}` (BTC↔USDT trades) — a USDC debit matched neither condition and fell through to `console.warn("Skipping unexpected BUY")`. The USDC intermediate deposit (`ACCOUNT_FUNDING` type) was correctly ignored since it is not in the filter list and is not tracked in the portfolio.
+
+**Fix.** Added a new branch in the `LIMIT_BUY | MARKET_BUY | SIMPLE_BUY` block (before the fallback `else`):
+
+```
+creditCurrency === "USDT" && debitCurrency !== "ZAR" && debitCurrency !== "BTC"
+```
+
+This captures any stablecoin→USDT trade (USDC, ZUSD, etc.) and records a `kind="deposit"`, `asset="USDT"` funding event with:
+- `amount = creditValue + feeValue` (GROSS USDT, not NET) — required because `ef_post_ledger_and_balances` sets `fee_usdt` from `metadata.conversion_fee_amount` and computes `balance = prev + amount_usdt − fee_usdt`; storing GROSS ensures `prev + GROSS − fee = prev + net`. ✓
+- `metadata.conversion_fee_asset = "USDT"`, `metadata.conversion_fee_amount = feeValue` — causes the exchange fee to appear in the portal Transaction History.
+- Idempotency key `VALR_TX_{transactionId}` (single key, no split allocation needed).
+
+**File changed:** `supabase/functions/ef_sync_valr_transactions/index.ts`
+
+#### Bug fix – VALR subaccount transfer: invalid JSON payload (error code −113)
+
+**Symptom.** Platform fee transfers for subaccount-model customers began failing with VALR error `{"code":-113, "message":"Invalid JSON payload"}`. Alert fired for customer 54 (2026-06-27); this was the first attempt for that customer and the error was never seen before (last successful transfer was 2026-02-14).
+
+**Root cause.** The VALR `/v1/account/subaccounts/transfer` endpoint enforces three schema constraints that our code violated:
+
+| Field | Was sending | VALR requires |
+|---|---|---|
+| `fromId` | `"1497916665328496640"` (JSON string) | `1497916665328496640` (integer) |
+| `toId` | `"main"` (string) | `0` (integer — primary account) |
+| `allowBorrow` | *(absent)* | `false` (required boolean) |
+
+An additional risk: JavaScript's `JSON.stringify` cannot safely represent 64-bit subaccount IDs (> `Number.MAX_SAFE_INTEGER = 2⁵³ − 1 = 9,007,199,254,740,991`), so passing the ID through a JS `number` would silently corrupt the value.
+
+**Fix.** `transferToMainAccount()` in `supabase/functions/_shared/valrTransfer.ts` now builds the JSON body as a template string instead of calling `JSON.stringify`:
+
+```typescript
+// toAccount "main" → integer 0 (VALR primary account ID)
+const toId = request.toAccount === "main" ? 0 : request.toAccount;
+const bodyString = `{"fromId":${request.fromSubaccountId},"toId":${toId},` +
+  `"currencyCode":"${request.currency}","amount":"${request.amount.toString()}",` +
+  `"allowBorrow":false}`;
+```
+
+The same `bodyString` is used for both HMAC signing and the fetch body, so the signature remains valid.
+
+**Files changed:** `supabase/functions/_shared/valrTransfer.ts` — redeployed via `ef_post_ledger_and_balances` and `ef_transfer_accumulated_fees`.
+
+#### Fix – Admin UI: USDPC sweep button re-appears after market order failure
+
+**Problem.** When `ef_sweep_usdt_to_usdpc` failed (e.g. the VALR margin account rejection for customer 999), the Admin UI's Pending USDPC Sweeps panel correctly showed `⚠ Market order failed` but the **⚡ Sweep USDT→USDPC** button disappeared — `showSweepBtn` was `!row.intents_today || !row.status_today`, which is `false` when a failed intent exists.
+
+**Fix.** `showSweepBtn` now also evaluates true when `status_today` contains `'error'`:
+
+```javascript
+const _usdpcHasFailed = row.status_today &&
+  row.status_today.split(',').map(s => s.trim()).includes('error');
+const showSweepBtn = !row.intents_today || !row.status_today || _usdpcHasFailed;
+```
+
+**File changed:** `ui/Advanced BTC DCA Strategy.html`
+
+---
+
+### v0.6.131 – Customer 999: non-margin subaccount migration + ledger cleanup + fee accounting fix
+**Date:** 2026-06-27  
+**Status:** ✅ DEPLOYED / DATA FIX APPLIED
+
+#### Ops – Customer 999 migrated to non-margin VALR subaccount
+
+Customer 999's original VALR subaccount had margin trading enabled. VALR rejected USDPC/USDT market orders on margin-enabled accounts with error code **−19241** (`"Non margin pair trades not supported on margin-enabled accounts"`). A new non-margin proprietary subaccount was created on VALR; `public.exchange_accounts.subaccount_id` was updated to the new ID. No code changes required — `resolveCustomerCredentials` reads the ID dynamically.
+
+#### Bug fix – Duplicate ledger entries from subaccount transfer detection
+
+**Cause.** When VALR transferred the customer's ZAR and USDT balances from the old subaccount to the new one, `ef_sync_valr_transactions` detected the incoming `INTERNAL_TRANSFER` transactions on the new subaccount as new deposits, creating duplicate `exchange_funding_events` and `ledger_lines`.
+
+**Incorrect first attempt.** Deleting both `exchange_funding_events` rows and the associated `ledger_lines` removed idempotency protection. The next sync run re-detected the same VALR transaction IDs and re-created the funding events (with new UUIDs but the same `idempotency_key`) — because the UNIQUE constraint on `exchange_funding_events.idempotency_key` (`VALR_TX_{ext_ref}`) prevented duplicates only when the original row existed.
+
+**Correct fix — zero-not-delete pattern.** Keep `exchange_funding_events` rows intact (idempotency guards). Zero out `amount_usdt` and `amount_zar` on the duplicate `ledger_lines` rows. A zeroed ledger line costs nothing to the balance calculation and blocks re-insertion via the `funding:{funding_id}` note check in `ef_post_ledger_and_balances`.
+
+> **Rule:** When cleaning up duplicate `exchange_funding_events` / `ledger_lines` from erroneous sync detection, **always zero the ledger amounts — never delete the rows**. Deleting removes idempotency protection and the next sync will re-detect the same VALR transaction IDs.
+
+#### Bug fix – `fee_usdt` double-deduction in `ef_post_ledger_and_balances`
+
+**Cause.** For ZAR→USDT conversions where the VALR exchange fee is denominated in USDT, `creditValue` from VALR is the NET USDT (gross minus the VALR fee already deducted). The funding event was stored with `amount = creditValue` (NET). When `ef_post_ledger_and_balances` extracted the fee from `metadata.conversion_fee_asset/conversion_fee_amount` into `fee_usdt`, the balance formula `usdt = prev + amount_usdt − fee_usdt` deducted the fee a second time:
+- `prev + NET − fee = prev + (GROSS − fee) − fee = prev + GROSS − 2×fee` ✗
+
+**Fix.** Store `amount = creditValue + feeValue` (GROSS) in the funding event. The balance formula then gives `prev + GROSS − fee = prev + NET` ✓ and the exchange fee remains visible in the portal Transaction History.
+
+The June 2026 ledger entry for customer 999 (ZAR→USDT conversion, `ledger_id = 2a8f31fe…`) was corrected via SQL:
+```sql
+UPDATE lth_pvr.ledger_lines
+SET amount_usdt = 2655.32120000, fee_usdt = 4.77957816
+WHERE ledger_id = '2a8f31fe-2993-44e8-9d2a-f14cc5727879';
+
+UPDATE lth_pvr.balances_daily
+SET cost_basis_usd = 17016.4947917
+WHERE customer_id = 999 AND date = '2026-06-27';
+```
+
+**Note.** `ef_sync_valr_transactions` for ZAR→USDT conversions continues to store NET in `amount` with fee in metadata (fee asset is ZAR for ZAR→USDT, so `fee_usdt = 0` — no double-deduction). The GROSS rule applies only when `feeCurrency = "USDT"` (i.e. the new stablecoin→USDT path described in v0.6.132).
+
+---
+
+### v0.6.130 – Admin UI: ZAR conversion status dots + USDPC sweeps panel
+**Date:** 2026-06-27  
+**Status:** ✅ DEPLOYED (UI only)
+
+#### Feature – ZAR Conversion status dots (3-dot strip)
+
+The Pending ZAR Conversions card in the Administration module now displays a 3-dot status strip per customer row:
+- **① Placed** — LIMIT order placed on VALR
+- **② Polling** — order status being monitored (10-second auto-refresh while in-flight)
+- **③ Fallback** — LIMIT cancelled, MARKET fallback order placed
+
+Dot states: `not_started` (grey), `in_progress` (amber pulse), `complete` (green), `failed` (red).
+
+Implemented in `zarConvStatusDots(statusToday, intentsToday)`. Auto-refresh timer `_zarAutoTimer` activates while any row is in-flight (`ZAR_INFLIGHT_STATUSES`) and stops when all rows settle. `ZAR_POLL_INTERVAL_MS = 10_000`.
+
+#### Feature – Pending USDPC Sweeps card
+
+New **⏳ Pending USDPC Sweeps** card added to the Administration module (after the ZAR Conversions card, before the RB Token card). Displays customers with idle USDT awaiting conversion to USDPC (`lth_pvr.v_pending_usdpc_conversions` view).
+
+- **2-dot status strip:** ① Placed ② Filled (market orders only — no LIMIT/fallback)
+- **⚡ Sweep USDT→USDPC** button visible when no sweep intent exists today *or* after a failure (retry)
+- Auto-refresh (`USDPC_POLL_MS = 10_000`) while any row is in-flight
+- Calls `ef_sweep_usdt_to_usdpc` with `{ customer_id, force: true }`
+- `escapeHtml(s)` defined locally inside the IIFE (not globally)
+
+Columns displayed per row: customer name, account model badge, status dots, status message, idle USDT, USDPC balance @ price, last sweep timestamp.
+
+**File changed:** `ui/Advanced BTC DCA Strategy.html`
+
+---
 
 ### v0.6.129 – Commercial Fee Model: removed BTC Allocation slider · added High-Water-Mark column
 

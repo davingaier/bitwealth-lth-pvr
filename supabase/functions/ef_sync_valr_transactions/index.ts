@@ -758,6 +758,89 @@ Deno.serve(async (req) => {
                 // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)
                 console.log(`  Skipping BTC↔USDT trade (already tracked): ${transactionId}`);
                 continue;
+              } else if (creditCurrency === "USDT" && debitCurrency !== "ZAR" && debitCurrency !== "BTC") {
+                // ============================================================
+                // STABLECOIN → USDT (e.g. USDC → USDT)
+                // USDC is intermediate and not tracked in the portfolio.
+                // Record only the USDT credit as a deposit.
+                //
+                // Fee is in USDT — store GROSS (net + fee) so that
+                // ef_post_ledger_and_balances sets fee_usdt correctly and
+                // balance = prev + GROSS − fee_usdt = prev + net. ✓
+                // ============================================================
+                console.log(`  💱 ${debitCurrency}→USDT conversion: ${creditValue} USDT net, fee ${tx.feeValue || 0} ${tx.feeCurrency || ""}`);
+
+                const stableIdempKey = `VALR_TX_${transactionId}`;
+                const { data: existingStable, error: stableChkErr } = await supabase
+                  .from("exchange_funding_events")
+                  .select("funding_id")
+                  .eq("idempotency_key", stableIdempKey)
+                  .maybeSingle();
+
+                if (stableChkErr) {
+                  console.error(`  Error checking idempotency for ${debitCurrency}→USDT:`, stableChkErr);
+                  throw stableChkErr;
+                }
+
+                if (existingStable) {
+                  console.log(`  ⏭️  Skipping already processed ${debitCurrency}→USDT conversion: ${transactionId}`);
+                  continue;
+                }
+
+                const stableFeeUsdt = parseFloat(tx.feeValue || "0");
+                const stableGrossUsdt = creditValue + stableFeeUsdt;
+
+                const { error: stableInsertErr } = await supabase
+                  .from("exchange_funding_events")
+                  .insert({
+                    org_id: orgId,
+                    customer_id: customerId,
+                    exchange_account_id: account.exchange_account_id,
+                    kind: "deposit",
+                    asset: "USDT",
+                    amount: stableGrossUsdt,   // GROSS so fee shows on portal
+                    ext_ref: transactionId,
+                    occurred_at: new Date(timestamp).toISOString(),
+                    idempotency_key: stableIdempKey,
+                    metadata: {
+                      conversion_from: debitCurrency,
+                      debit_amount: debitValue,
+                      usdt_gross: stableGrossUsdt,
+                      usdt_net: creditValue,
+                      conversion_rate: debitValue / stableGrossUsdt,
+                      conversion_fee_asset: tx.feeCurrency || "USDT",
+                      conversion_fee_amount: stableFeeUsdt,
+                    },
+                  });
+
+                if (stableInsertErr) {
+                  console.error(`  Error creating ${debitCurrency}→USDT deposit event:`, stableInsertErr);
+                  results.errors++;
+                } else {
+                  console.log(`  ✅ ${debitCurrency}→USDT deposit: ${stableGrossUsdt} USDT gross (${creditValue} net, fee ${stableFeeUsdt} USDT)`);
+                  newTransactions++;
+
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "info",
+                    `${debitCurrency}→USDT deposit: ${customerName} converted ${debitValue} ${debitCurrency} to ${creditValue} USDT (net)`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      debit_amount: debitValue,
+                      debit_currency: debitCurrency,
+                      usdt_net: creditValue,
+                      usdt_gross: stableGrossUsdt,
+                      fee_usdt: stableFeeUsdt,
+                      transaction_id: transactionId,
+                      occurred_at: transactedAt,
+                    },
+                    orgId,
+                    customerId,
+                  );
+                }
+                continue;
               } else {
                 console.warn(`  Skipping unexpected BUY transaction:`, tx);
                 continue;
