@@ -102,8 +102,11 @@
     .status{font-size:10px;color:var(--txt3);text-align:right;margin-bottom:10px;min-height:14px;}
     code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;}
     @media print{
-      @page{size:A4 portrait;margin:12mm;}
-      body{background:#fff;color:#000;}
+      @page{size:A4 portrait;margin:0;}
+      html,body{background:var(--bg) !important;color:var(--white);}
+      body{padding:12mm;}
+      /* Preserve the dark theme + all fill/background colours in the printout */
+      *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
       .controls,.status,.ptabs,#btnPrint,#btnExport,#btnCalc{display:none !important;}
       .container{max-width:none;}
       .cc,.assum,.sh,table{break-inside:avoid;}
