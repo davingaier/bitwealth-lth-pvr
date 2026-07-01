@@ -274,7 +274,9 @@
   <div class="cg">
     <div class="cc full">
       <h3>Fee Revenue Comparison — all periods, per single client (note: perf fee dominates in sustained bull markets)</h3>
-      <canvas id="cCompare" height="180"></canvas>
+      <div style="position:relative;height:300px">
+        <canvas id="cCompare"></canvas>
+      </div>
     </div>
   </div>
 
@@ -754,7 +756,7 @@ function chartCompare(){
       {label:'New — Mgmt Fee',           data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA',borderColor:'#3B82F6',borderWidth:1},
       {label:'New — Perf+Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
     ]},
-    options:{...bOpts,plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
+    options:{...bOpts,maintainAspectRatio:false,plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
 }
 
 /* ═══════════════════════════════════════════════════════════
