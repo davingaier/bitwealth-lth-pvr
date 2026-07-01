@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Year 1 Marketing Proposal — BitWealth LTH PVR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0A0F1E;
+      --bg2:     #151B2E;
+      --bg3:     #1A2138;
+      --gold:    #FFB400;
+      --gold-lt: #FFC933;
+      --navy:    #003F5C;
+      --blue:    #0A4A6E;
+      --white:   #FFFFFF;
+      --txt2:    #A8B2D1;
+      --txt3:    #6B7896;
+      --green:   #10B981;
+      --red:     #EF4444;
+      --border:  rgba(255,180,0,0.15);
+    }
+
+    html, body {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--white);
+      background: var(--bg);
+    }
+
+    @media print {
+      body { background: #fff !important; color: #111 !important; font-size: 11px; }
+      .screen-wrap { display: block; padding: 0; gap: 0; background: transparent; }
+      .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm; max-width: none; box-shadow: none !important; margin: 0; }
+      .page-1 { break-after: page; }
+      .page-2 { break-after: page; }
+      .no-print { display: none !important; }
+      .hero, .page-header, .channel-card, .budget-table, .footer, .funnel-row, .timeline-row { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      flex-shrink: 0;
+      padding: 14mm 16mm 12mm;
+      background: var(--bg);
+      box-shadow: 0 0 60px rgba(0,0,0,0.8);
+    }
+
+    .screen-wrap {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 28px;
+      padding: 28px;
+      background: #060a12;
+      min-height: 100vh;
+      overflow-x: auto;
+    }
+
+    /* ─── Print button ─── */
+    .print-btn {
+      position: fixed; top: 20px; right: 20px;
+      background: var(--gold); color: #000;
+      border: none; border-radius: 8px;
+      padding: 10px 20px; font-family: inherit;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      z-index: 999; box-shadow: 0 4px 16px rgba(255,180,0,0.4);
+    }
+    .print-btn:hover { background: var(--gold-lt); }
+
+    /* ─── Hero ─── */
+    .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--gold);
+      margin-bottom: 18px;
+      gap: 16px;
+    }
+    .hero-logo img { height: 52px; border-radius: 8px; background: #fff; padding: 4px; }
+    .hero-text { flex: 1; text-align: right; }
+    .hero-text h1 { font-size: 22px; font-weight: 800; color: var(--gold); letter-spacing: -0.5px; line-height: 1.1; }
+    .hero-text .tagline { font-size: 12px; color: var(--txt2); margin-top: 3px; }
+    .hero-text .meta { font-size: 10px; color: var(--txt3); margin-top: 2px; }
+
+    /* ─── Page 2 header ─── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 11px;
+      border-bottom: 2px solid var(--gold);
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .page-header img { height: 36px; border-radius: 6px; background: #fff; padding: 3px; }
+    .page-header .ph-title { flex: 1; text-align: right; }
+    .page-header .ph-title h2 { font-size: 17px; font-weight: 800; color: var(--gold); letter-spacing: -0.3px; line-height: 1.1; }
+    .page-header .ph-title .ph-sub { font-size: 10px; color: var(--txt3); margin-top: 2px; }
+
+    /* ─── Section headings ─── */
+    .section-heading {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-heading::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ─── Utility ─── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    p { color: var(--txt2); font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+    p strong { color: var(--white); font-weight: 600; }
+    ul { list-style: none; padding: 0; margin: 0 0 6px; }
+    ul li { color: var(--txt2); font-size: 12px; padding-left: 14px; position: relative; margin-bottom: 3px; line-height: 1.5; }
+    ul li::before { content: '▸'; color: var(--gold); position: absolute; left: 0; font-size: 10px; top: 2px; }
+
+    /* ─── Objective / KPI bar ─── */
+    .kpi-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--gold);
+      border-radius: 8px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .kpi-val { font-size: 22px; font-weight: 800; color: var(--gold); line-height: 1; margin-bottom: 2px; }
+    .kpi-val.green { color: var(--green); }
+    .kpi-label { font-size: 9px; color: var(--txt3); text-transform: uppercase; letter-spacing: 0.08em; }
+    .kpi-sub { font-size: 10px; color: var(--txt2); margin-top: 2px; }
+
+    /* ─── Persona card ─── */
+    .persona-card {
+      background: linear-gradient(135deg, #0A4A6E 0%, #003F5C 100%);
+      border: 1px solid rgba(255,180,0,0.4);
+      border-radius: 10px;
+      padding: 13px 15px;
+    }
+    .persona-title { font-size: 13px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
+    .persona-badge {
+      display: inline-block; font-size: 9px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(255,180,0,0.15); color: var(--gold);
+      border: 1px solid rgba(255,180,0,0.4);
+      margin-bottom: 8px; letter-spacing: 0.05em;
+    }
+
+    /* ─── Channel cards ─── */
+    .channels-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .channel-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 10px 8px;
+      display: flex; flex-direction: column;
+    }
+    .channel-card.primary {
+      border-color: rgba(255,180,0,0.5);
+      background: linear-gradient(180deg, rgba(10,74,110,0.4) 0%, var(--bg2) 100%);
+    }
+    .channel-icon { font-size: 20px; margin-bottom: 4px; }
+    .channel-num {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--gold); margin-bottom: 2px;
+    }
+    .channel-name { font-size: 12px; font-weight: 700; color: var(--white); line-height: 1.2; margin-bottom: 4px; }
+    .channel-budget {
+      font-size: 14px; font-weight: 800; color: var(--gold);
+      margin-top: auto; padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+    .channel-budget-label { font-size: 8px; color: var(--txt3); font-weight: 400; display: block; }
+    .channel-desc { font-size: 10px; color: var(--txt2); line-height: 1.4; flex: 1; }
+    .channel-expect { font-size: 10px; color: var(--green); margin-top: 4px; font-weight: 600; }
+
+    /* ─── Budget table ─── */
+    .budget-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .budget-table { width: 100%; border-collapse: collapse; }
+    .budget-table th {
+      background: var(--bg3); color: var(--txt3);
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 7px 10px; text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .budget-table th.r { text-align: right; }
+    .budget-table td {
+      padding: 6px 10px; font-size: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: var(--txt2);
+    }
+    .budget-table td.r { text-align: right; }
+    .budget-table tr:last-child td { border-bottom: none; }
+    .budget-table .total-row td {
+      background: var(--bg3);
+      border-top: 1px solid var(--border);
+      font-weight: 700; color: var(--white);
+    }
+    .budget-table .total-row td.r { color: var(--gold); font-size: 14px; }
+    .budget-pct-bar {
+      height: 5px; border-radius: 3px;
+      background: rgba(255,180,0,0.2);
+      overflow: hidden; margin-top: 3px; min-width: 60px;
+    }
+    .budget-pct-fill { height: 100%; border-radius: 3px; background: var(--gold); }
+
+    /* ─── Funnel ─── */
+    .funnel-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .funnel-row {
+      display: grid;
+      grid-template-columns: 130px 1fr 80px;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .funnel-label { font-size: 11px; color: var(--txt2); font-weight: 600; }
+    .funnel-bar-wrap { background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; height: 14px; }
+    .funnel-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 6px; font-size: 9px; font-weight: 700; color: rgba(0,0,0,0.7); }
+    .funnel-val { font-size: 12px; font-weight: 700; text-align: right; color: var(--white); }
+
+    /* ─── Timeline ─── */
+    .timeline-wrap { margin-bottom: 14px; }
+    .timeline-phases {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .timeline-phase {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .phase-label {
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--txt3); margin-bottom: 2px;
+    }
+    .phase-name { font-size: 13px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
+    .phase-months { font-size: 10px; color: var(--txt3); margin-bottom: 6px; font-style: italic; }
+    .timeline-phase ul li { font-size: 10.5px; margin-bottom: 2px; }
+
+    /* ─── Revenue projection ─── */
+    .rev-table-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .rev-table { width: 100%; border-collapse: collapse; }
+    .rev-table th {
+      background: var(--bg3); color: var(--txt3);
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 7px 10px; text-align: right;
+      border-bottom: 1px solid var(--border);
+    }
+    .rev-table th:first-child { text-align: left; }
+    .rev-table td { padding: 6px 10px; font-size: 12px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--txt2); }
+    .rev-table td:first-child { text-align: left; font-weight: 600; color: var(--white); }
+    .rev-table tr:last-child td { border-bottom: none; }
+    .rev-table .highlight td { color: var(--gold); font-weight: 700; }
+    .rev-table .highlight td:first-child { color: var(--gold); }
+    .green-val { color: var(--green); font-weight: 600; }
+    .muted-val { color: var(--txt3); font-style: italic; }
+    .table-note { font-size: 9.5px; color: var(--txt3); padding: 6px 10px 8px; font-style: italic; }
+
+    /* ─── Investor ask box ─── */
+    .ask-box {
+      background: linear-gradient(135deg, #0A4A6E 0%, #003F5C 100%);
+      border: 1px solid rgba(255,180,0,0.5);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .ask-title { font-size: 14px; font-weight: 800; color: var(--gold); margin-bottom: 4px; }
+    .ask-amount { font-size: 32px; font-weight: 800; color: var(--white); line-height: 1; margin-bottom: 2px; }
+    .ask-period { font-size: 11px; color: var(--txt3); }
+    .ask-right ul li { font-size: 11.5px; margin-bottom: 4px; }
+
+    /* ─── Footer ─── */
+    .footer {
+      background: linear-gradient(90deg, #003F5C 0%, #0A4A6E 100%);
+      border-radius: 10px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border: 1px solid rgba(255,180,0,0.3);
+    }
+    .footer-left .cta-title { font-size: 14px; font-weight: 700; color: var(--gold); margin-bottom: 2px; }
+    .footer-left .cta-sub { font-size: 11px; color: var(--txt2); }
+    .footer-right { text-align: right; }
+    .footer-right .contact-item { font-size: 11px; color: var(--txt2); margin-bottom: 2px; }
+    .footer-right .contact-item strong { color: var(--white); }
+    .footer-right .disclaimer { font-size: 9px; color: var(--txt3); margin-top: 5px; max-width: 280px; line-height: 1.4; }
+
+    /* ─── highlight pill ─── */
+    .pill {
+      display: inline-block; font-size: 9px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; letter-spacing: 0.05em;
+    }
+    .pill-gold { background: rgba(255,180,0,0.15); color: var(--gold); border: 1px solid rgba(255,180,0,0.4); }
+    .pill-green { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .pill-grey  { background: rgba(107,120,150,0.12); color: #8892A4; border: 1px dashed rgba(107,120,150,0.3); }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+
+  <div class="screen-wrap">
+
+    <!-- ═══════════════════════════════════════
+         PAGE 1 — CAMPAIGN OVERVIEW
+    ═══════════════════════════════════════ -->
+    <div class="page page-1">
+
+      <!-- HERO -->
+      <div class="hero">
+        <div class="hero-logo">
+          <img src="data:image/png;base64,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" alt="BitWealth Logo" />
+        </div>
+        <div class="hero-text">
+          <h1>Year 1 Marketing Proposal</h1>
+          <div class="tagline">Acquiring 50 High-Net-Worth Bitcoin DCA Clients across South Africa's Major Metros</div>
+          <div class="meta">BitWealth LTH PVR · Confidential Working Capital Proposal · July 2026</div>
+        </div>
+      </div>
+
+      <!-- CAMPAIGN OBJECTIVE KPIs -->
+      <div class="section-heading">Campaign Objective — Year 1 Targets</div>
+      <div class="kpi-bar">
+        <div class="kpi-card">
+          <div class="kpi-val">50</div>
+          <div class="kpi-label">Paying Clients</div>
+          <div class="kpi-sub">by end of Year 1</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-val">R10M</div>
+          <div class="kpi-label">AUM Target</div>
+          <div class="kpi-sub">avg R200k / client</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-val green">R1M</div>
+          <div class="kpi-label">Marketing Budget</div>
+          <div class="kpi-sub">12-month campaign</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-val">4</div>
+          <div class="kpi-label">Metro Markets</div>
+          <div class="kpi-sub">JHB · PTA · CPT · DBN</div>
+        </div>
+      </div>
+
+      <!-- TARGET CLIENT PERSONA -->
+      <div class="section-heading">Target Client</div>
+      <div class="two-col" style="margin-bottom:16px;">
+        <div class="persona-card">
+          <div class="persona-title">The Bitcoin-Curious South African Professional</div>
+          <div class="persona-badge">PRIMARY PERSONA &nbsp;·&nbsp; R1M – R5M INVESTABLE ASSETS</div>
+          <ul>
+            <li><strong>Age 35–55</strong> — entrepreneur, senior professional, business owner</li>
+            <li>Already has unit trust / offshore exposure; frustrated by rand depreciation</li>
+            <li>Bitcoin-aware but hasn't acted — lacks structure, time, and expertise to self-manage</li>
+            <li>Values <strong>automation, data, and transparency</strong> over speculative tips</li>
+            <li>Comfortable with digital onboarding and monthly contribution structures</li>
+            <li>Minimum entry: <strong>R50,000 lump sum</strong> or <strong>R5,000 / month</strong> DCA</li>
+          </ul>
+        </div>
+        <div>
+          <p><strong>Why now?</strong> South African HNW investors face a structural problem: rand weakness, low real returns on local assets, and limited access to credible, structured crypto exposure. The LTH PVR strategy fills this gap — offering <strong>fully-automated, on-chain-signal-driven Bitcoin accumulation</strong> via a regulated South African exchange (VALR), with auditable sub-account segregation and no self-custody risk.</p>
+          <p>The target segment — R1M to R5M investable assets — represents <strong>approximately 450,000 South African individuals</strong> (ASISA/FNB wealth reports). Even capturing 0.01% of this segment exceeds the Year 1 target.</p>
+          <p>The product is accessible (R5k/month entry), differentiated (on-chain signal, not price speculation), and the 3–10 year back-test results provide compelling, auditable evidence of out-performance versus both standard DCA and buy-and-hold.</p>
+        </div>
+      </div>
+
+      <!-- FIVE-CHANNEL MIX -->
+      <div class="section-heading">5-Channel Marketing Mix</div>
+      <div class="channels-grid">
+
+        <div class="channel-card primary">
+          <div class="channel-icon">✉️</div>
+          <div class="channel-num">Channel 1 — Primary</div>
+          <div class="channel-name">Direct Personal Outreach</div>
+          <div class="channel-desc">Curated prospect list of 500 HNW contacts. Premium personalised letters + ABC strategy brief + private session invitation. Dedicated outreach coordinator.</div>
+          <div class="channel-expect">Target: 20 clients</div>
+          <div class="channel-budget">R250,000<span class="channel-budget-label">25% of budget</span></div>
+        </div>
+
+        <div class="channel-card">
+          <div class="channel-icon">🥂</div>
+          <div class="channel-num">Channel 2</div>
+          <div class="channel-name">Private Investor Events</div>
+          <div class="channel-desc">4 intimate dinner briefings (JHB ×2, CPT ×1, DBN ×1). 15–20 prospects per event. Live strategy demo + Q&amp;A with founding team.</div>
+          <div class="channel-expect">Target: 15 clients</div>
+          <div class="channel-budget">R220,000<span class="channel-budget-label">22% of budget</span></div>
+        </div>
+
+        <div class="channel-card">
+          <div class="channel-icon">🤝</div>
+          <div class="channel-num">Channel 3</div>
+          <div class="channel-name">IFA / Broker Partner Network</div>
+          <div class="channel-desc">Partner with 10–15 independent financial advisors across metros. Referral fee structure. IFA roadshow workshops + co-branded materials.</div>
+          <div class="channel-expect">Target: 10 clients</div>
+          <div class="channel-budget">R150,000<span class="channel-budget-label">15% of budget</span></div>
+        </div>
+
+        <div class="channel-card">
+          <div class="channel-icon">💼</div>
+          <div class="channel-num">Channel 4</div>
+          <div class="channel-name">LinkedIn Personal Brand + Paid</div>
+          <div class="channel-desc">Founder thought-leadership content (weekly). Sponsored posts targeting SA professionals and entrepreneurs. Retargeting warm audience.</div>
+          <div class="channel-expect">Target: 5 clients</div>
+          <div class="channel-budget">R180,000<span class="channel-budget-label">18% of budget</span></div>
+        </div>
+
+        <div class="channel-card">
+          <div class="channel-icon">📰</div>
+          <div class="channel-num">Channel 5</div>
+          <div class="channel-name">PR &amp; Financial Media</div>
+          <div class="channel-desc">Moneyweb, BusinessTech, Daily Maverick editorial placements. SA Bitcoin podcast appearances. Press releases on back-test results and live performance.</div>
+          <div class="channel-expect">Brand credibility lift</div>
+          <div class="channel-budget">R150,000<span class="channel-budget-label">15% of budget</span></div>
+        </div>
+
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:10px;color:var(--txt3);">
+        <span style="color:var(--gold);">+ Contingency / Ops: R50,000 (5%)</span>
+        &nbsp;|&nbsp; All channels are trackable with UTM parameters, CRM tagging, and attributed client codes
+      </div>
+
+      <!-- FOOTER -->
+      <div class="footer">
+        <div class="footer-left">
+          <div class="cta-title">Working Capital Request: R1,000,000</div>
+          <div class="cta-sub">12-month deployment · All-metro coverage · 50 clients / R10M AUM target</div>
+        </div>
+        <div class="footer-right">
+          <div class="contact-item"><strong>BitWealth</strong></div>
+          <div class="contact-item">bitwealth.co.za &nbsp;·&nbsp; info@bitwealth.co.za</div>
+          <div class="disclaimer">Confidential. For investor review only. Does not constitute financial advice or an offer to invest.</div>
+        </div>
+      </div>
+
+    </div><!-- /.page-1 -->
+
+
+    <!-- ═══════════════════════════════════════
+         PAGE 2 — BUDGET, TIMELINE & ROI
+    ═══════════════════════════════════════ -->
+    <div class="page page-2">
+
+      <!-- HEADER -->
+      <div class="page-header">
+        <img src="data:image/png;base64,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" alt="BitWealth Logo" />
+        <div class="ph-title">
+          <h2>Budget Breakdown, Conversion Funnel &amp; Revenue Projection</h2>
+          <div class="ph-sub">Year 1 Marketing Proposal · BitWealth LTH PVR · July 2026 · Page 2 of 2</div>
+        </div>
+      </div>
+
+      <!-- BUDGET BREAKDOWN -->
+      <div class="section-heading">Detailed Budget Allocation</div>
+      <div class="budget-wrap">
+        <table class="budget-table">
+          <thead>
+            <tr>
+              <th style="width:28%">Channel</th>
+              <th>What the Budget Covers</th>
+              <th class="r" style="width:12%">Budget (R)</th>
+              <th class="r" style="width:8%">% Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color:var(--gold);">Direct Personal Outreach</strong></td>
+              <td>Prospect list acquisition &amp; research (R30k) · Premium print &amp; postage (R40k) · CRM software (R15k) · Outreach coordinator 12 months part-time (R100k) · Meeting expenses &amp; travel (R65k)</td>
+              <td class="r"><strong style="color:var(--white);">R250,000</strong></td>
+              <td class="r">25%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:100%"></div></div></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--white);">Private Investor Events</strong></td>
+              <td>4 venue hires × R15k (R60k) · Catering 4 × 20 pax (R40k) · AV &amp; presentation setup (R20k) · Event invitations &amp; design (R20k) · Delegate gifts &amp; follow-up packs (R40k) · Photography &amp; video highlight reels (R40k)</td>
+              <td class="r"><strong style="color:var(--white);">R220,000</strong></td>
+              <td class="r">22%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:88%"></div></div></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--white);">IFA / Broker Network</strong></td>
+              <td>2 metro IFA roadshow workshops (R30k) · Co-branded marketing materials (R20k) · Referral incentive pool — 10 clients × R3k (R30k) · Legal &amp; compliance review of referral structure (R20k) · Ongoing IFA relationship management (R50k)</td>
+              <td class="r"><strong style="color:var(--white);">R150,000</strong></td>
+              <td class="r">15%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:60%"></div></div></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--white);">LinkedIn &amp; Digital</strong></td>
+              <td>LinkedIn ad spend (R80k) · Content creation 12 months (R40k) · Design &amp; short-form video production (R30k) · Analytics tools &amp; CRM integration (R15k) · Landing page optimisation (R15k)</td>
+              <td class="r"><strong style="color:var(--white);">R180,000</strong></td>
+              <td class="r">18%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:72%"></div></div></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--white);">PR &amp; Financial Media</strong></td>
+              <td>PR agency retainer 6 months (R80k) · Sponsored editorial — Moneyweb / BusinessTech (R30k) · Podcast production &amp; appearances (R20k) · Press releases on back-test results &amp; live performance (R20k)</td>
+              <td class="r"><strong style="color:var(--white);">R150,000</strong></td>
+              <td class="r">15%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:60%"></div></div></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--txt2);">Contingency &amp; Operations</strong></td>
+              <td>Unplanned channel top-ups, compliance costs, accelerated spend if conversion rate exceeds target</td>
+              <td class="r"><strong style="color:var(--white);">R50,000</strong></td>
+              <td class="r">5%<div class="budget-pct-bar"><div class="budget-pct-fill" style="width:20%"></div></div></td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="2"><strong>Total Marketing Budget</strong></td>
+              <td class="r">R1,000,000</td>
+              <td class="r">100%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CONVERSION FUNNEL + TIMELINE (two-col) -->
+      <div class="two-col" style="margin-bottom:14px;">
+
+        <!-- CONVERSION FUNNEL -->
+        <div>
+          <div class="section-heading" style="margin-bottom:8px;">Conversion Funnel</div>
+          <div class="funnel-wrap" style="margin-bottom:0;">
+            <div class="funnel-row">
+              <div class="funnel-label">Total Prospects Reached</div>
+              <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:100%;background:rgba(255,180,0,0.35);">700 contacts</div></div>
+              <div class="funnel-val" style="color:var(--gold);">700</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">Qualified Responses</div>
+              <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:72%;background:rgba(255,180,0,0.5);">~21%</div></div>
+              <div class="funnel-val">150</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">Discovery Meetings</div>
+              <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:50%;background:rgba(255,180,0,0.65);">~14%</div></div>
+              <div class="funnel-val">100</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">Proposals Issued</div>
+              <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:36%;background:rgba(255,180,0,0.8);">~10%</div></div>
+              <div class="funnel-val">70</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label" style="color:var(--green);font-weight:700;">Paying Clients</div>
+              <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:25%;background:#10B981;">~7%</div></div>
+              <div class="funnel-val" style="color:var(--green);">50 ✓</div>
+            </div>
+          </div>
+          <div style="font-size:9.5px;color:var(--txt3);margin-top:5px;font-style:italic;">Assumes direct + event + IFA channels combined. Industry benchmark conversion for managed investment products: 5–10% of qualified pipeline.</div>
+        </div>
+
+        <!-- 12-MONTH TIMELINE -->
+        <div>
+          <div class="section-heading" style="margin-bottom:8px;">12-Month Phased Timeline</div>
+          <div class="timeline-phases" style="grid-template-columns:1fr;gap:8px;">
+
+            <div class="timeline-phase">
+              <div class="phase-label">Phase 1 &nbsp;·&nbsp; Foundation</div>
+              <div class="phase-name">Build &amp; Launch</div>
+              <div class="phase-months">Months 1 – 3 &nbsp;·&nbsp; R280,000 deployed</div>
+              <ul>
+                <li>Prospect database build (500 contacts curated)</li>
+                <li>CRM and tracking infrastructure setup</li>
+                <li>Direct outreach campaign — Wave 1</li>
+                <li>IFA partnership outreach &amp; signing</li>
+                <li>Event 1 (Johannesburg) — Month 2</li>
+              </ul>
+            </div>
+
+            <div class="timeline-phase">
+              <div class="phase-label">Phase 2 &nbsp;·&nbsp; Acceleration</div>
+              <div class="phase-name">Scale &amp; Amplify</div>
+              <div class="phase-months">Months 4 – 8 &nbsp;·&nbsp; R450,000 deployed</div>
+              <ul>
+                <li>LinkedIn sponsored campaign running at full budget</li>
+                <li>PR placements — Moneyweb, BusinessTech</li>
+                <li>Events 2 &amp; 3 (Cape Town, Durban)</li>
+                <li>IFA referral pipeline activating (Month 5+)</li>
+                <li>Re-engagement of warm but unconverted prospects</li>
+              </ul>
+            </div>
+
+            <div class="timeline-phase">
+              <div class="phase-label">Phase 3 &nbsp;·&nbsp; Conversion</div>
+              <div class="phase-name">Close &amp; Retain</div>
+              <div class="phase-months">Months 9 – 12 &nbsp;·&nbsp; R270,000 deployed</div>
+              <ul>
+                <li>Event 4 (Johannesburg — final showcase)</li>
+                <li>Live client performance available to share with prospects</li>
+                <li>Referral programme launch — first clients invite peers</li>
+                <li>50th client target by end of Month 12</li>
+              </ul>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- REVENUE PROJECTION -->
+      <div class="section-heading">Revenue Projection &amp; Investor Return Case</div>
+      <div class="rev-table-wrap">
+        <table class="rev-table">
+          <thead>
+            <tr>
+              <th style="text-align:left;">Metric</th>
+              <th>Year 1</th>
+              <th>Year 2</th>
+              <th>Year 3</th>
+              <th>Year 5</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Active Clients</td>
+              <td>50</td>
+              <td>120</td>
+              <td>250</td>
+              <td>500</td>
+            </tr>
+            <tr>
+              <td>AUM (estimate)</td>
+              <td>R10M</td>
+              <td>R28M</td>
+              <td>R65M</td>
+              <td>R160M</td>
+            </tr>
+            <tr>
+              <td>Platform Fee (0.75% p.a.)</td>
+              <td class="muted-val">R75,000</td>
+              <td class="green-val">R210,000</td>
+              <td class="green-val">R488,000</td>
+              <td class="green-val">R1,200,000</td>
+            </tr>
+            <tr>
+              <td>Performance Fee (est. 10% of profit)</td>
+              <td class="muted-val">R80,000 ±</td>
+              <td class="green-val">R250,000 ±</td>
+              <td class="green-val">R600,000 ±</td>
+              <td class="green-val">R1,500,000 ±</td>
+            </tr>
+            <tr class="highlight">
+              <td>Estimated Total Revenue</td>
+              <td>~R155,000</td>
+              <td>~R460,000</td>
+              <td>~R1,088,000</td>
+              <td>~R2,700,000</td>
+            </tr>
+            <tr>
+              <td>Marketing Cost (this proposal)</td>
+              <td class="muted-val">R1,000,000</td>
+              <td class="muted-val">R400,000 est.</td>
+              <td class="muted-val">R250,000 est.</td>
+              <td class="muted-val">R200,000 est.</td>
+            </tr>
+            <tr>
+              <td>Cumulative Net (Revenue – Marketing)</td>
+              <td class="muted-val" style="color:var(--red);">−R845,000</td>
+              <td class="muted-val">−R785,000</td>
+              <td class="green-val">+R303,000</td>
+              <td class="green-val">+R2,803,000</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="table-note">Performance fee is market-dependent and assumes BTC appreciates in years 2–5. Platform fee on AUM is the predictable base revenue. Client lifetime value (5-year) estimated at R12,000–R40,000 per client including performance fees on a favourable BTC cycle. Year 2+ marketing costs are indicative retention and referral spend only — major acquisition cost is Year 1. AUM growth assumes organic referral acceleration from Year 2 in addition to ongoing channel activity.</div>
+      </div>
+
+      <!-- INVESTOR ASK -->
+      <div class="section-heading">Working Capital Ask</div>
+      <div class="ask-box">
+        <div>
+          <div class="ask-title">Total Capital Requested</div>
+          <div class="ask-amount">R1,000,000</div>
+          <div class="ask-period">12-month deployment · July 2026 – June 2027</div>
+          <div style="font-size:11px;color:var(--txt2);margin-top:8px;">Deployed in three tranches aligned to campaign phases, with milestone-based release and monthly reporting on client acquisition metrics.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px;">Proposed Investor Terms (open to discussion)</div>
+          <ul>
+            <li><strong>Option A — Revenue share:</strong> 15% of gross platform + performance fees until 2× capital returned, then reducing to 5% in perpetuity</li>
+            <li><strong>Option B — Equity:</strong> Minority stake (10–15%) in BitWealth operating entity, priced at pre-money valuation to be agreed</li>
+            <li><strong>Option C — Convertible loan:</strong> 18% p.a. interest, convertible to equity at investor's option at 12-month mark</li>
+            <li>Monthly performance reporting · Auditable AUM and client metrics · VALR sub-account verification available</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="footer">
+        <div class="footer-left">
+          <div class="cta-title">Breakeven: Year 3 · 5-Year Net: R2.8M+</div>
+          <div class="cta-sub">Capital is being deployed into a product that is already live, backed by 10 years of back-tested data, and operating on a regulated SA exchange.</div>
+        </div>
+        <div class="footer-right">
+          <div class="contact-item"><strong>BitWealth</strong></div>
+          <div class="contact-item">bitwealth.co.za &nbsp;·&nbsp; info@bitwealth.co.za</div>
+          <div class="disclaimer">Confidential. Revenue projections are illustrative estimates based on back-tested strategy performance and industry referencing. They are not a guarantee of returns. Bitcoin is a high-risk asset class.</div>
+        </div>
+      </div>
+
+    </div><!-- /.page-2 -->
+
+  </div><!-- /.screen-wrap -->
+</body>
+</html>
