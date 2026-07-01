@@ -100,6 +100,14 @@
     .assum strong{color:var(--txt2);}
     .status{font-size:10px;color:var(--txt3);text-align:right;margin-bottom:10px;min-height:14px;}
     code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;}
+    @media print{
+      @page{size:A4 portrait;margin:12mm;}
+      body{background:#fff;color:#000;}
+      .controls,.status,.ptabs,#btnPrint,#btnExport,#btnCalc{display:none !important;}
+      .container{max-width:none;}
+      .cc,.assum,.sh,table{break-inside:avoid;}
+      canvas{max-height:240px;}
+    }
   </style>
 </head>
 <body>
@@ -158,6 +166,7 @@
       <label>&nbsp;</label>
       <button class="recalc" id="btnCalc">Recalculate</button>
       <button class="recalc2" id="btnExport">↓ Export Excel</button>
+      <button class="recalc2" id="btnPrint">🖨 Print / Save PDF</button>
     </div>
   </div>
 
@@ -1078,6 +1087,7 @@ function softRender(){
 ═══════════════════════════════════════════════════════════ */
 document.getElementById('btnCalc').addEventListener('click',calc);
 document.getElementById('btnExport').addEventListener('click',exportXLSX);
+document.getElementById('btnPrint').addEventListener('click',()=>window.print());
 
 // Numeric inputs — debounced full recalc
 ['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{
