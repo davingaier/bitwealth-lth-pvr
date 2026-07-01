@@ -101,6 +101,7 @@
     .assum strong{color:var(--txt2);}
     .status{font-size:10px;color:var(--txt3);text-align:right;margin-bottom:10px;min-height:14px;}
     code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;}
+    .print-summary{display:none;}
     @media print{
       @page{size:A4 portrait;margin:0;}
       html,body{background:var(--bg) !important;color:var(--white);}
@@ -111,6 +112,14 @@
       .container{max-width:none;}
       .cc,.assum,.sh,table{break-inside:avoid;}
       canvas{max-height:240px;}
+      .print-summary{display:block !important;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:18px;break-inside:avoid;}
+      .print-summary h2{font-size:13px;font-weight:700;color:var(--gold);margin:0 0 4px;}
+      .print-summary .ps-date{font-size:10px;color:var(--txt3);margin-bottom:10px;}
+      .print-summary .ps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 22px;}
+      .print-summary .ps-item{display:flex;flex-direction:column;gap:1px;}
+      .print-summary .ps-k{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);}
+      .print-summary .ps-v{font-size:13px;font-weight:700;color:var(--white);}
+      .print-summary .ps-note{margin-top:10px;font-size:9.5px;color:var(--txt3);line-height:1.6;}
     }
   </style>
 </head>
@@ -124,6 +133,9 @@
     </div>
     <div class="badge">BitWealth · June 2026</div>
   </div>
+
+  <!-- Print-only: snapshot of the inputs the figures are based on (populated on Print click) -->
+  <div class="print-summary" id="printSummary" aria-hidden="true"></div>
 
   <div class="controls">
     <div class="ctrl">
@@ -1094,12 +1106,48 @@ function softRender(){
   renderSummary(p.clients,t);
 }
 
+// Build the print-only input snapshot shown at the top of the PDF, so investors can
+// see the assumptions the figures are based on. Populated fresh on each Print click.
+function buildPrintSummary(){
+  const box=document.getElementById('printSummary');if(!box)return;
+  const p=getP(),t=getT();
+  const pct=v=>(v*100).toFixed(2).replace(/\.00$/,'')+'%';
+  let dateBasis;
+  if(ACTIVE_CUSTOM){dateBasis=`${p.rangeStart||'—'} → ${p.rangeEnd||'—'} (custom range)`;}
+  else if(p.endDate){dateBasis=`Periods ending ${fmtDate(p.endDate)}`;}
+  else{dateBasis=`Latest data (${fmtDate(latestDate())})`;}
+  const streams=[
+    t.mgmt?'Management fee':null,
+    t.exch?'Exchange rebate':null,
+    t.plt?'Platform fee':null,
+    t.prf?'Performance fee':null,
+  ].filter(Boolean);
+  const items=[
+    ['Initial contribution','$'+p.initial.toLocaleString()],
+    ['Monthly contribution','$'+p.monthly.toLocaleString()],
+    ['Number of clients',p.clients.toLocaleString()],
+    ['Management fee (p.a.)',pct(p.mgmtRate)],
+    ['Platform fee (on contributions)',pct(p.pltRate)],
+    ['Performance fee (above HWM)',pct(p.prfRate)],
+    ['Date basis',dateBasis],
+    ['Active fee streams',streams.length?streams.join(', '):'none'],
+    ['Exchange rebate','50% of VALR trading/conversion fees'],
+  ];
+  box.innerHTML=
+    `<h2>Model Inputs</h2>`+
+    `<div class="ps-date">Generated ${fmtDate(new Date().toISOString().slice(0,10))} · figures shown per single client unless a client multiplier is indicated</div>`+
+    `<div class="ps-grid">`+
+      items.map(([k,v])=>`<div class="ps-item"><span class="ps-k">${k}</span><span class="ps-v">${v}</span></div>`).join('')+
+    `</div>`+
+    `<div class="ps-note">Projections use the historical LTH PVR back-test trajectory applied to a fresh client contribution schedule. Performance-fee figures are market-dependent and assume the historical BTC cycle repeats; they are illustrative, not guaranteed.</div>`;
+}
+
 /* ═══════════════════════════════════════════════════════════
    EVENT WIRING
 ═══════════════════════════════════════════════════════════ */
 document.getElementById('btnCalc').addEventListener('click',calc);
 document.getElementById('btnExport').addEventListener('click',exportXLSX);
-document.getElementById('btnPrint').addEventListener('click',()=>window.print());
+document.getElementById('btnPrint').addEventListener('click',()=>{buildPrintSummary();window.print();});
 
 // Numeric inputs — debounced full recalc
 ['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{
