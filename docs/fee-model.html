@@ -557,7 +557,7 @@ function runAll(p,t){
     const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
     const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily,hwm);
     return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
-      totCurr:totPlt+totPrf,totNew:totMgmt+totExch,
+      totCurr:totPlt+totPrf,totNew:totPrf+totMgmt+totExch,
       invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
   }).filter(Boolean);
 }
@@ -607,12 +607,12 @@ function renderComparison(){
     {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>aPlt(r)+aPrf(r),bold:true},
     {label:'New — Management Fee',                 cls:'vb',  key:r=>r.totMgmt},
     {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:aExch},
-    {label:'New — Mgmt + Exchange Rebate',          cls:'vgr', key:r=>r.totMgmt+aExch(r), bold:true},
+    {label:'New — Perf + Mgmt + Exchange Rebate',   cls:'vgr', key:r=>aPrf(r)+r.totMgmt+aExch(r), bold:true},
     {label:'Δ New vs Current (full)',               cls:'',    diff:true},
   ];
   const html=rows.map(row=>{
     const cells=RESULTS.map(r=>{
-      if(row.diff){const d=(r.totMgmt+aExch(r))-(aPlt(r)+aPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
+      if(row.diff){const d=(aPrf(r)+r.totMgmt+aExch(r))-(aPlt(r)+aPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
       return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(row.key(r),2)}</td>`;
     }).join('');
     return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
@@ -752,7 +752,7 @@ function chartCompare(){
       {label:'Current — Platform Only', data:RESULTS.map(r=>r.totPlt),backgroundColor:'#6B789644',borderColor:'#6B7896',borderWidth:1},
       {label:'Current — Full (Plt+Perf)',data:RESULTS.map(r=>r.totCurr),backgroundColor:'#F59E0BAA',borderColor:'#F59E0B',borderWidth:1},
       {label:'New — Mgmt Fee',           data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA',borderColor:'#3B82F6',borderWidth:1},
-      {label:'New — Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
+      {label:'New — Perf+Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
     ]},
     options:{...bOpts,plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
 }
