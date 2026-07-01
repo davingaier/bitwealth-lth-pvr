@@ -32,6 +32,7 @@
     .ctrl .rw{display:flex;align-items:center;gap:8px;height:34px;min-width:0;}
     .ctrl input[type=range]{flex:1;min-width:0;accent-color:var(--gold);height:3px;cursor:pointer;}
     .ctrl .rv{font-size:13px;font-weight:700;color:var(--gold);min-width:44px;text-align:right;}
+    .ctrl input[type=number].rv-num{width:72px;flex:0 0 72px;height:30px;padding:4px 6px;font-weight:700;color:var(--gold);text-align:right;}
     .ctrl-hint{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5;}
     .ctrl-hint strong{color:var(--txt2);}
     .recalc{width:100%;background:var(--gold);color:#000;border:none;border-radius:6px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
@@ -159,7 +160,7 @@
       <label>Number of Clients</label>
       <div class="rw">
         <input type="range" id="iClients" min="1" max="2000" value="1">
-        <span class="rv" id="oClients">1</span>
+        <input type="number" id="nClients" class="rv-num" min="1" max="2000" step="1" value="1">
       </div>
     </div>
     <div class="ctrl">
@@ -756,7 +757,13 @@ function chartCompare(){
       {label:'New — Mgmt Fee',           data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA',borderColor:'#3B82F6',borderWidth:1},
       {label:'New — Perf+Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
     ]},
-    options:{...bOpts,maintainAspectRatio:false,plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
+    options:{...bOpts,maintainAspectRatio:false,
+      scales:{x:{...bOpts.scales.x,offset:true},y:bOpts.scales.y},
+      plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
+  // Full-width responsive canvas can be laid out before the container reaches its final
+  // width, leaving bar x-positions computed for a wider area (rightmost group clips off the
+  // edge). Re-measure on the next frame so bar geometry matches the final chart width.
+  requestAnimationFrame(()=>{if(charts['cmp'])charts['cmp'].resize();});
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1107,9 +1114,24 @@ if(clr)clr.addEventListener('click',()=>{
   calc();
 });
 
-// Range sliders — update label + soft render (clients)
-document.getElementById('iClients').addEventListener('input',function(){
-  document.getElementById('oClients').textContent=(+this.value).toLocaleString();softRender();
+// Number of Clients — slider and type-in box stay in sync (either can drive)
+const _iClients=document.getElementById('iClients');
+const _nClients=document.getElementById('nClients');
+const _clientsMin=+_iClients.min,_clientsMax=+_iClients.max;
+_iClients.addEventListener('input',function(){
+  _nClients.value=this.value;softRender();
+});
+_nClients.addEventListener('input',function(){
+  const raw=parseInt(this.value,10);
+  if(!Number.isFinite(raw))return;                 // let the box be empty mid-edit
+  const v=Math.min(_clientsMax,Math.max(_clientsMin,raw));
+  _iClients.value=v;softRender();
+});
+_nClients.addEventListener('change',function(){    // clamp + tidy once editing ends
+  let v=parseInt(this.value,10);
+  if(!Number.isFinite(v))v=_clientsMin;
+  v=Math.min(_clientsMax,Math.max(_clientsMin,v));
+  this.value=v;_iClients.value=v;softRender();
 });
 
 // Fee toggles — fees affect NAV so a full recompute is needed
