@@ -44,29 +44,49 @@ export async function computeAnchoredBalance(
   dateStr: string,
 ): Promise<AnchoredBalance | null> {
   // 1) Resolve the customer's anchor (lazily seeding one for customers onboarded
-  //    after the seed migration — their earliest balances_daily row is a clean
-  //    opening balance, so cumulative-since-anchor is exact).
+  //    after the seed migration).
   let anchor = await fetchAnchor(sb, org_id, customer_id);
   if (!anchor) {
-    const { data: firstRow } = await sb
-      .from("balances_daily")
-      .select("date, btc_balance, usdt_balance, usdpc_balance, zar_balance, cost_basis_usd")
-      .eq("org_id", org_id)
-      .eq("customer_id", customer_id)
-      .order("date", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (!firstRow) return null; // nothing to anchor to yet
+    // Seed from the latest CLOSED day (date < dateStr) so same-day activity is
+    // always captured by the delta window (trade_date > anchor_date). An anchor
+    // dated ON dateStr would exclude that day's own ledger lines. Fall back to
+    // the earliest row only for brand-new customers whose sole history is the
+    // current date.
+    let seedRow: SeedRow | null = null;
+    {
+      const { data } = await sb
+        .from("balances_daily")
+        .select("date, btc_balance, usdt_balance, usdpc_balance, zar_balance, cost_basis_usd")
+        .eq("org_id", org_id)
+        .eq("customer_id", customer_id)
+        .lt("date", dateStr)
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      seedRow = (data as SeedRow) ?? null;
+    }
+    if (!seedRow) {
+      const { data } = await sb
+        .from("balances_daily")
+        .select("date, btc_balance, usdt_balance, usdpc_balance, zar_balance, cost_basis_usd")
+        .eq("org_id", org_id)
+        .eq("customer_id", customer_id)
+        .order("date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      seedRow = (data as SeedRow) ?? null;
+    }
+    if (!seedRow) return null; // nothing to anchor to yet
 
     const seed = {
       org_id,
       customer_id,
-      anchor_date: firstRow.date as string,
-      btc_balance: Number(firstRow.btc_balance ?? 0),
-      usdt_balance: Number(firstRow.usdt_balance ?? 0),
-      usdpc_balance: Number(firstRow.usdpc_balance ?? 0),
-      zar_balance: Number(firstRow.zar_balance ?? 0),
-      cost_basis_usd: Number(firstRow.cost_basis_usd ?? 0),
+      anchor_date: seedRow.date,
+      btc_balance: Number(seedRow.btc_balance ?? 0),
+      usdt_balance: Number(seedRow.usdt_balance ?? 0),
+      usdpc_balance: Number(seedRow.usdpc_balance ?? 0),
+      zar_balance: Number(seedRow.zar_balance ?? 0),
+      cost_basis_usd: Number(seedRow.cost_basis_usd ?? 0),
     };
     await sb.from("balance_anchors").upsert(seed, { onConflict: "org_id,customer_id" });
     anchor = seed;
@@ -114,6 +134,15 @@ export async function computeAnchoredBalance(
 
 interface AnchorRow {
   anchor_date: string;
+  btc_balance: number;
+  usdt_balance: number;
+  usdpc_balance: number;
+  zar_balance: number;
+  cost_basis_usd: number;
+}
+
+interface SeedRow {
+  date: string;
   btc_balance: number;
   usdt_balance: number;
   usdpc_balance: number;

@@ -1243,7 +1243,12 @@
                     document.getElementById('navValue').textContent = `$${nav.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     document.getElementById('btcValue').textContent = `${btc.toFixed(8)}`;
                     document.getElementById('btcUsd').textContent = btcPrice > 0 ? `@ $${btcPrice.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}` : '--';
-                    document.getElementById('usdtValue').textContent = `$${usdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    // Floor USDT to 2dp to match VALR's available-balance display
+                    // convention (VALR truncates; toLocaleString rounds half-up, which
+                    // would show 1 cent MORE than the exchange for a balance like
+                    // 6192.63867639 → 6192.64 vs VALR's 6192.63).
+                    const usdtFloored = Math.floor(usdt * 100) / 100;
+                    document.getElementById('usdtValue').textContent = `$${usdtFloored.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
                     // USDPC (yield) tile — only shown when the portfolio holds yield-bearing
                     // USDPC. The headline shows the USDPC quantity held; today's unit

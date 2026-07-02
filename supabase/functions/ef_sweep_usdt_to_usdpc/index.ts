@@ -190,7 +190,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      const sweepUsdt = +effectiveUsdt.toFixed(2);
+      const sweepUsdt = Math.floor(effectiveUsdt * 100) / 100;
+      // NOTE: floor (not round) to 2 decimals. `effectiveUsdt` is the live VALR
+      // available USDT; rounding half-up (.toFixed(2)) can produce a quote amount
+      // GREATER than the real balance (e.g. 6192.63867639 → 6192.64), and the
+      // market BUY then fails with VALR "Insufficient Balance". Flooring leaves
+      // sub-cent dust as USDT and guarantees quote ≤ available.
       // VALR caps a single USDPC BUY at ~10 000 USDT (quote). Split larger
       // sweeps into multiple intents, each its own market order.
       const chunks = splitConversionAmount(sweepUsdt, cfg.maxQuoteUsdt, 2);

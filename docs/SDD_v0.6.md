@@ -3,11 +3,97 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-02 (v0.6.133)
+**Last updated:** 2026-07-02 (v0.6.135)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.135 – Customer 999 USDT reconciled to live VALR + portal USDT display floored
+**Date:** 2026-07-02  
+**Status:** ✅ DEPLOYED (data reconciliation + portal display)
+
+After the v0.6.134 fix, customer 999's portal showed `6192.65 USDT` vs VALR's
+`6192.63` — a `~0.02` gap with two independent causes:
+
+1. **~0.01 phantom residual (real).** The 07-01 anchor carried `usdt = 0.02328944`,
+   but the sweep recon alerts showed the customer's true live VALR USDT was
+   `0.01329134` — a `0.00999810` phantom accumulated from sub-cent rounding drift
+   across prior conversions (the ledger recorded fractionally more USDT than VALR
+   actually credited each time). **Fix:** reconciled the anchor (and the 07-01
+   `balances_daily` row) to the true VALR residual `0.01329134`. Today's balance now
+   recomputes to exactly `6192.63867639` = VALR's actual balance.
+
+2. **~0.01 display convention (cosmetic).** The portal formatted USDT with
+   `toLocaleString({maximumFractionDigits: 2})`, which **rounds half-up**
+   (`6192.63867639 → 6192.64`), while VALR **floors/truncates** available balances
+   (`→ 6192.63`). **Fix:** `website/customer-portal.html` now floors the USDT stat
+   to 2dp before formatting (`Math.floor(usdt * 100) / 100`), matching VALR's
+   convention exactly.
+
+Net result: underlying balance equals VALR's actual holding to full precision, and
+the displayed figure matches VALR's shown value (`$6,192.63`).
+
+> **General note.** This kind of sub-cent ledger↔VALR drift is expected to
+> accumulate slowly across conversions. The anchor is the reconciliation point:
+> re-pointing an anchor to a live-VALR-verified balance (as done here) snaps the
+> drift back to zero. USDPC sweeps also flush idle USDT to ~0, bounding the residual.
+
+**Files changed:**
+- `lth_pvr.balance_anchors` + `lth_pvr.balances_daily` (customer 999 USDT reconciled)
+- `website/customer-portal.html` (USDT stat floored to match VALR) — **requires website redeploy**
+- `docs/SDD_v0.6.md` — this entry
+
+---
+
+### v0.6.134 – Anchor must not be dated "today"; USDPC sweep quote rounding fix
+**Date:** 2026-07-02  
+**Status:** ✅ DEPLOYED (data re-point + shared helper + `ef_sweep_usdt_to_usdpc`)
+
+#### Bug – anchor seeded on the current date hid same-day activity
+
+The v0.6.133 migration seeded `balance_anchors` from each customer's **latest**
+`balances_daily` row — which for actively-trading customers is **today**.
+`computeAnchoredBalance` sums ledger deltas with `trade_date > anchor_date`
+(strictly after), so when the anchor date equals today, *today's own* ledger lines
+are excluded. Customer 999 deposited more ZAR and converted it to USDT (correctly
+booked as a GROSS topup, `amount_usdt = 6214.38`, `fee = 21.75`, net `6192.63`),
+but the portal still showed `$0.02` and no pending USDPC sweep, because the anchor
+sat on 2026-07-02 and the new topup (also 2026-07-02) fell outside the delta window.
+
+**Fix:**
+- **Data:** re-pointed every anchor to the latest `balances_daily` row with
+  `date < CURRENT_DATE` (the most recent *closed* day). Anchors stay fixed in the
+  past thereafter, so same-day activity is always captured by the delta window and
+  no ongoing maintenance is needed.
+- **Code (`_shared/balance_anchor.ts`):** the lazy-seed path now seeds from the
+  latest row with `date < dateStr` (falling back to the earliest row only for
+  brand-new customers whose sole history is the current date), so an anchor is
+  never auto-created on the computation date.
+
+After re-pointing customer 999's anchor to 2026-07-01 and re-running
+`ef_post_ledger_and_balances`, the balance correctly resolved to
+`6192.65 USDT` (anchor `0.02328944` + today's net topup), matching VALR.
+
+#### Bug – USDPC sweep quote amount rounded up → "Insufficient Balance"
+
+`ef_sweep_usdt_to_usdpc` sized the sweep as `+effectiveUsdt.toFixed(2)`, which
+rounds **half-up**: a live VALR balance of `6192.63867639` became a `6192.64`
+quote amount. The USDPC market BUY then tried to spend more USDT than the account
+held and VALR rejected it with `Insufficient Balance` (order `orderStatusType:
+Failed`), leaving the sweep intent in `error`.
+
+**Fix:** compute `sweepUsdt = Math.floor(effectiveUsdt * 100) / 100` — flooring to
+2 decimals guarantees the quote never exceeds the real balance (sub-cent dust
+stays as USDT). Deployed `ef_sweep_usdt_to_usdpc`.
+
+**Files changed:**
+- `supabase/functions/_shared/balance_anchor.ts` (lazy-seed uses `date < dateStr`)
+- `supabase/functions/ef_sweep_usdt_to_usdpc/index.ts` (floor the sweep quote)
+- `lth_pvr.balance_anchors` (re-pointed all anchors to latest closed day)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.133 – USDT-fee conversion double-count fix + anchor-based balance reconciliation (drift-proofing)
 **Date:** 2026-07-02  
