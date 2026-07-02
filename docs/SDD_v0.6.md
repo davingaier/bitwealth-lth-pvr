@@ -3,11 +3,64 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-02 (v0.6.135)
+**Last updated:** 2026-07-02 (v0.6.136)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.136 – Performance-fee threshold now tracks new deposits (frozen `hwm_contrib_net_cum` fix)
+**Date:** 2026-07-02  
+**Status:** ✅ DEPLOYED (2 DB functions + state resync)
+
+#### Bug – fresh capital taxed as profit
+
+Customer 49 (annual, never-fee'd) showed an **accrued performance fee of $309.42**
+on a profit of only **$224.17** — impossible at a 2.5% rate (max ≈ $5.60). Root
+cause: the performance-fee threshold for never-fee'd customers is
+`hwm_contrib_net_cum`, but `lth_pvr.ensure_hwm_initialised` **carried that value
+forward frozen** (`v_net_contrib := v_prev_contrib`) and never added new
+deposits. After the customer deposited R200k (~$12,152, raising `cost_basis` from
+$42,071.95 → $54,224.39), the threshold stayed at $42,071.95, so:
+`0.025 × (54,448.56 − 42,071.95) = $309.42` — the new capital was taxed as gain.
+
+This is distinct from the v0.6.124 fix (which addressed a `DEFAULT 0` seeding bug);
+this one is that the baseline never *rises* on subsequent deposits.
+
+#### Fix – drive the never-fee'd threshold from `cost_basis_usd`
+
+`cost_basis_usd` (cumulative net contributions in `balances_daily`, now
+anchor-maintained) is the authoritative, always-current contribution figure. For
+never-fee'd customers the performance-fee threshold *is* total contributions, so:
+
+- **`public.get_customer_accrued_fees`** (display RPC): the never-fee'd branch now
+  uses `threshold = cost_basis_usd` (fetched alongside NAV from the latest
+  `balances_daily` row) instead of the frozen `hwm_contrib_net_cum`. Immediately and
+  permanently correct regardless of cron timing.
+- **`lth_pvr.ensure_hwm_initialised`**: for never-fee'd customers it now **syncs**
+  `hwm_contrib_net_cum` to the live `cost_basis_usd` every run (so statements and the
+  annual billing event, which read stored state, are also correct). Post-fee
+  customers are untouched — the fee functions own their HWM/contrib baseline after
+  the first fee.
+- Resynced all live customers via `ensure_hwm_initialised_all()`; customer 49's
+  stored `hwm_contrib_net_cum` → `54224.39`, accrued performance fee → **$5.60**.
+
+#### Known follow-up (post-fee customers)
+
+Post-fee customers' `hwm_contrib_net_cum` (contributions *since the last fee*) is
+still carried forward frozen — a deposit between annual fee events would not raise
+their threshold. No live customer has hit an annual anniversary yet (only test
+accounts 48/54 are post-fee). Fixing this permanently requires snapshotting
+`cost_basis_at_last_fee` in `ef_collect_annual_fees` so the threshold can be
+computed as `HWM + (cost_basis_now − cost_basis_at_last_fee)`. Deferred until
+annual fees go live.
+
+**Files changed:**
+- `public.get_customer_accrued_fees` (migration `fix_accrued_perf_fee_use_cost_basis`)
+- `lth_pvr.ensure_hwm_initialised` (migration `ensure_hwm_sync_contrib_to_cost_basis`)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.135 – Customer 999 USDT reconciled to live VALR + portal USDT display floored
 **Date:** 2026-07-02  
