@@ -519,12 +519,27 @@ async function updateHWMAfterAnnualFee(
   const newNAV = nav - feeAmount;
   const newHWM = newNAV - state.hwm_contrib_net_cum;
 
+  // Snapshot cost_basis at the moment of fee collection so that future
+  // get_customer_accrued_fees calls can compute contributions SINCE this fee
+  // (= cost_basis_now − cost_basis_at_last_fee) to correctly raise the threshold.
+  const { data: costRow } = await sb
+    .from("balances_daily")
+    .select("cost_basis_usd")
+    .eq("org_id", orgId)
+    .eq("customer_id", customerId)
+    .lte("date", yearEnd)
+    .order("date", { ascending: false })
+    .limit(1)
+    .single();
+  const costBasisSnapshot = Number(costRow?.cost_basis_usd ?? 0);
+
   const { error: updateErr } = await sb
     .from("customer_state_daily")
     .update({
       date: yearEnd,
       high_water_mark_usd: newHWM,
-      last_perf_fee_month: `${yearEnd.substring(0, 4)}-12-01`, // Mark annual calc done (YYYY-MM-DD)
+      last_perf_fee_month: `${yearEnd.substring(0, 4)}-12-01`,
+      cost_basis_at_last_fee: costBasisSnapshot,
     })
     .eq("state_id", state.state_id);
 

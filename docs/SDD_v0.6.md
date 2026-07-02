@@ -3,11 +3,57 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-02 (v0.6.136)
+**Last updated:** 2026-07-02 (v0.6.137)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.137 – Post-fee performance threshold tracks deposits via `cost_basis_at_last_fee` snapshot
+**Date:** 2026-07-02  
+**Status:** ✅ DEPLOYED (migration + DB fn update + EF deploy)
+
+Implements the permanent fix deferred in v0.6.136 for customers who have already
+had at least one annual performance fee collected.
+
+#### Problem (post-fee customers)
+
+For customers with `last_perf_fee_month IS NOT NULL`, `get_customer_accrued_fees`
+computed the threshold as `high_water_mark_usd + hwm_contrib_net_cum`. After a fee
+event, `hwm_contrib_net_cum` is frozen at the value present when `ensure_hwm_initialised`
+last ran — it never grows. A subsequent deposit between fee anniversaries would not
+raise the threshold, so the new capital would be taxed as profit in the display
+(though the actual billing function `calculateAnnualPerformanceFee` was already correct
+because it queries the ledger directly).
+
+#### Solution — `cost_basis_at_last_fee` column
+
+When `ef_collect_annual_fees` collects a performance fee, it now snapshots the
+customer's `cost_basis_usd` at that moment into a new
+`lth_pvr.customer_state_daily.cost_basis_at_last_fee` column.
+
+The display RPC can then compute:
+
+```
+contributions_since_last_fee = MAX(0, cost_basis_now − cost_basis_at_last_fee)
+threshold = (HWM + hwm_contrib) + contributions_since_last_fee
+          = post-fee-NAV + new-deposits-since-fee  ✓
+```
+
+- **Migration `add_cost_basis_at_last_fee`:** adds nullable `cost_basis_at_last_fee NUMERIC` to `customer_state_daily`.
+- **`ef_collect_annual_fees`:** `updateHWMAfterAnnualFee` now queries `cost_basis_usd` and saves it into `cost_basis_at_last_fee` on the same UPDATE that resets the HWM.
+- **`public.get_customer_accrued_fees`** (migration `fix_post_fee_threshold_uses_cost_basis_delta`): post-fee branch updated. When `cost_basis_at_last_fee IS NULL` (pre-migration rows), falls back to `COALESCE(v_cost_basis_at_last_fee, v_cost_basis, 0)` which resolves to cost_basis (= threshold = post-fee NAV, same as before — no regression).
+- **`lth_pvr.ensure_hwm_initialised`** (same migration): the post-fee carry-forward path now also carries `cost_basis_at_last_fee` to the new state row so the snapshot is never lost across daily row creations.
+
+**No data remediation needed.** Existing post-fee customers have `cost_basis_at_last_fee = NULL`; the fallback formula activates and their display behaviour is unchanged. The snapshot will be set correctly the next time `ef_collect_annual_fees` fires for each customer.
+
+**Files changed:**
+- `supabase/migrations/…add_cost_basis_at_last_fee` (new column)
+- `supabase/migrations/…fix_post_fee_threshold_uses_cost_basis_delta` (`get_customer_accrued_fees` + `ensure_hwm_initialised`)
+- `supabase/functions/ef_collect_annual_fees/index.ts` (snapshot `cost_basis_at_last_fee`)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.136 – Performance-fee threshold now tracks new deposits (frozen `hwm_contrib_net_cum` fix)
 **Date:** 2026-07-02  
