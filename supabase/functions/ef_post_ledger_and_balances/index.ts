@@ -3,6 +3,7 @@ import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource, normaliseBandSource, readBandSourceFromBody, BandSource } from "../_shared/band_source.ts";
+import { computeAnchoredBalance } from "../_shared/balance_anchor.ts";
 import Decimal from "npm:decimal.js@10.4.3";
 
 // Minimal shapes we care about from v_fills_with_customer and exchange_funding_events
@@ -1288,22 +1289,43 @@ Deno.serve(async (req: Request) => {
           // prior balance row + today's net contribution. Matches the one-time
           // backfill in 20260602_usdpc_carry_forward_daily_balances.sql.
           const costBasis = Math.max(0, Number((prev as any).cost_basis_usd ?? 0) + dContribUsd);
+          // ── Anchor reconciliation (drift-proofing) ───────────────────────────
+          // The incremental (prev + today's delta) figures above are drift-prone:
+          // cron races / re-runs and a historical exchange-fee bug inflated some
+          // balances (phantom idle USDT). When an anchor exists, recompute the
+          // authoritative balances as anchor + Σ(ledger deltas since anchor_date)
+          // — deterministic and idempotent — and use those instead. Falls back to
+          // the incremental figures when no anchor is available (should not happen
+          // post-migration). See _shared/balance_anchor.ts.
+          let btcFinal = btc, usdtFinal = usdt, usdpcFinal = usdpc, zarFinal = zar, costBasisFinal = costBasis;
+          try {
+            const anchored = await computeAnchoredBalance(sb, org_id, customer_id, dateStr);
+            if (anchored) {
+              btcFinal = anchored.btc;
+              usdtFinal = anchored.usdt;
+              usdpcFinal = anchored.usdpc;
+              zarFinal = anchored.zar;
+              costBasisFinal = anchored.costBasis;
+            }
+          } catch (e) {
+            console.error(`[ef_post_ledger_and_balances] anchor recompute failed for customer ${customer_id} on ${dateStr}; using incremental figures:`, (e as Error).message);
+          }
           // ZAR is tracked separately from nav_usd to avoid needing a daily USDT/ZAR rate.
           // Reporting layers can convert ZAR → USD on demand if a unified NAV is required.
-          const nav = btc * px + usdt + usdpc * usdpcPx;
+          const nav = btcFinal * px + usdtFinal + usdpcFinal * usdpcPx;
 
           const { error: upErr } = await sb.from("balances_daily").upsert(
             {
               org_id,
               customer_id,
               date: dateStr,
-              btc_balance: btc,
-              usdt_balance: usdt,
-              usdpc_balance: usdpc,
+              btc_balance: btcFinal,
+              usdt_balance: usdtFinal,
+              usdpc_balance: usdpcFinal,
               usdpc_price_usd: usdpcPx,
-              zar_balance: zar,
+              zar_balance: zarFinal,
               nav_usd: nav,
-              cost_basis_usd: costBasis,
+              cost_basis_usd: costBasisFinal,
             },
             { onConflict: "org_id,customer_id,date" },
           );

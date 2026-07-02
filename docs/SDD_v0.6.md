@@ -3,11 +3,105 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-01 (v0.6.132)
+**Last updated:** 2026-07-02 (v0.6.133)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.133 – USDT-fee conversion double-count fix + anchor-based balance reconciliation (drift-proofing)
+**Date:** 2026-07-02  
+**Status:** ✅ DEPLOYED (migration + 3 EFs + shared helper)
+
+#### Root cause – VALR now charges the ZAR→USDT exchange fee in USDT
+
+VALR changed the ZAR→USDT conversion so the exchange fee is billed in **USDT** (it
+was historically billed in ZAR). `ef_sync_valr_transactions` stored the **net**
+USDT credit while `ef_post_ledger_and_balances`' balance formula
+`usdt = prev + amount_usdt − fee_usdt` then subtracted the fee a **second** time.
+Symptoms differed by account:
+- **Customer 49** (R200k deposited → converted → fully swept to USDPC): `prev + net − fee`
+  went **negative** (−$30.37 = the two USDT fees 0.34 + 30.04).
+- **Customer 999**: the incremental `balances_daily` derivation drifted **up** by the
+  fee one day after each conversion (+4.78 on 06-28, +6.78 on 07-02 = phantom $11.58
+  idle USDT), triggering false pending USDPC sweeps and recurring recon alerts —
+  while the authoritative cumulative ledger correctly showed ~$0.023.
+
+#### Fix 1 – `ef_sync_valr_transactions`: store GROSS for USDT-denominated conversion fees
+
+The ZAR→USDT smart-allocation branch now inflates the credited USDT to GROSS
+(`creditValue + feeValue`) when `tx.feeCurrency === "USDT"`, so ef_post's
+`prev + amount_usdt − fee_usdt` nets back to the real landed amount and the
+exchange fee stays visible in the portal. For ZAR-denominated fees `creditValue`
+is already the full USDT and no adjustment is applied. Mirrors the stablecoin→USDT
+rule (v0.6.132).
+
+#### Fix 2 – Anchor-based balance reconciliation (permanent drift-proofing)
+
+`balances_daily` was derived incrementally (`prev_day + today's delta`) and, on
+some days, manually patched — so it could drift from a pure cumulative ledger sum
+under cron races / re-runs. A pure "recompute from cumulative ledger" was **not**
+viable because legacy ledgers do not reconcile from inception (customer 49's
+all-time ledger sums ~$400 off the real balance; even anchored at April it is ~$94
+off — early history predates the ledger and balances were manually patched).
+
+**Solution — anchor model.** Each customer is anchored at a known-good balance/date;
+the daily balance is always recomputed as:
+
+```
+balance(date) = anchor + Σ(ledger deltas WHERE trade_date > anchor_date AND <= date)
+```
+
+Deterministic, idempotent and order-independent — re-runs and cron races can never
+accumulate error, and inconsistent pre-anchor history is never trusted.
+
+- **Migration `add_balance_anchors`:** new table `lth_pvr.balance_anchors`
+  (`org_id, customer_id, anchor_date, btc/usdt/usdpc/zar_balance, cost_basis_usd`,
+  PK `(org_id, customer_id)`), seeded from each customer's latest (corrected)
+  `balances_daily` row.
+- **`supabase/functions/_shared/balance_anchor.ts`:** `computeAnchoredBalance(sb, org_id, customer_id, dateStr)`
+  resolves (or lazily seeds, from the earliest balances_daily row, for customers
+  onboarded after the migration) the anchor and returns
+  `{ btc, usdt, usdpc, zar, costBasis }`. Returns `null` (→ caller falls back to
+  legacy incremental) when no anchor exists or `dateStr < anchor_date`.
+- **`ef_post_ledger_and_balances`:** after computing the incremental figures, calls
+  `computeAnchoredBalance`; when an anchor exists, the anchored balances/cost-basis
+  are used for the `balances_daily` upsert instead. On any helper error it logs and
+  falls back to the incremental figures.
+- **`ef_revalue_usdpc_nav`:** replaced blind carry-forward of the most recent row
+  with an anchored recompute (falls back to carry-forward on error). Only writes
+  `cost_basis_usd` when the anchor path supplies it, so it never clobbers a
+  ledger-written cost basis.
+
+> **Note on anchor semantics.** The anchor holds the balance at END of
+> `anchor_date`; only deltas with `trade_date > anchor_date` are applied. A
+> late-arriving ledger line dated on/before an anchor date would not be picked up —
+> anchors are therefore seeded at the latest processed date. Anchors can be
+> re-pointed by updating `balance_anchors` (as was done during this remediation).
+
+#### Data remediation
+
+- **Customer 49** (07-02): corrected the two ZAR→USDT topups to GROSS (`136.28970000`,
+  `12016.15050000`), set `usdt_balance = 0.01417611`, `cost_basis_usd = 54224.39119761`,
+  `nav_usd = 54448.56`, and re-pointed the anchor to match.
+  *(An initial attempt mistakenly used the `funding_id` as the `ledger_id` WHERE key —
+  a no-op — and a cron re-derived −30.37 from the still-net ledger; fixed with the
+  real `ledger_id`s.)*
+- **Customer 999** (06-28 → 07-02): corrected the fee-inflated `usdt_balance` back to
+  the true carried-forward values (`0.01796254` then `0.02328944`), matching the
+  cumulative ledger and live VALR (~$0.01). False pending sweep and recon alerts
+  cleared.
+- Resolved the stale `ef_sweep_usdt_to_usdpc` recon alerts for customers 49 and 999.
+
+**Files changed:**
+- `supabase/migrations/…add_balance_anchors` (new table + seed)
+- `supabase/functions/_shared/balance_anchor.ts` (new)
+- `supabase/functions/ef_sync_valr_transactions/index.ts` (GROSS for USDT fees)
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` (anchor recompute)
+- `supabase/functions/ef_revalue_usdpc_nav/index.ts` (anchor recompute)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.132 – `ef_sync_valr_transactions`: detect stablecoin→USDT deposits; VALR transfer JSON fix; USDPC sweep retry
 **Date:** 2026-07-01  

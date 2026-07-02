@@ -18,6 +18,7 @@
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource } from "../_shared/band_source.ts";
+import { computeAnchoredBalance } from "../_shared/balance_anchor.ts";
 
 Deno.serve(async () => {
   const sb = getServiceClient();
@@ -88,13 +89,38 @@ Deno.serve(async () => {
       const b = balRows?.[0];
       if (!b) continue; // nothing to carry forward
 
-      const btc = Number(b.btc_balance ?? 0);
-      const usdt = Number(b.usdt_balance ?? 0);
-      const usdpc = Number(b.usdpc_balance ?? 0);
-      const zar = Number(b.zar_balance ?? 0);
+      // Carry-forward figures from the most recent balances_daily row.
+      let btc = Number(b.btc_balance ?? 0);
+      let usdt = Number(b.usdt_balance ?? 0);
+      let usdpc = Number(b.usdpc_balance ?? 0);
+      let zar = Number(b.zar_balance ?? 0);
+      let costBasis: number | null = null;
+
+      // ── Anchor reconciliation (drift-proofing) ──────────────────────────────
+      // Blindly carrying the most recent row forward can propagate drift baked
+      // into that row (a historical exchange-fee bug re-added the fee the day
+      // after a conversion, inflating idle USDT and triggering phantom sweeps).
+      // Re-derive the balances authoritatively from the customer's anchor +
+      // cumulative ledger deltas since the anchor date — deterministic and
+      // idempotent. Falls back to carry-forward when no anchor exists.
+      try {
+        const anchored = await computeAnchoredBalance(sb, org_id, customer_id, todayStr);
+        if (anchored) {
+          btc = anchored.btc;
+          usdt = anchored.usdt;
+          usdpc = anchored.usdpc;
+          zar = anchored.zar;
+          costBasis = anchored.costBasis;
+        }
+      } catch (e) {
+        await logAlert(sb, "ef_revalue_usdpc_nav", "warn",
+          `Anchor recompute failed for customer ${customer_id}; carried balances forward: ${(e as Error).message}`,
+          { customer_id, error: (e as Error).message }, org_id, customer_id);
+      }
+
       const nav = btc * btcPx + usdt + usdpc * usdpcPx;
 
-      const { error: upErr } = await sb.from("balances_daily").upsert({
+      const upsertRow: Record<string, unknown> = {
         org_id,
         customer_id,
         date: todayStr,
@@ -104,7 +130,15 @@ Deno.serve(async () => {
         usdpc_price_usd: usdpcPx,
         zar_balance: zar,
         nav_usd: nav,
-      }, { onConflict: "org_id,customer_id,date" });
+      };
+      // Only write cost_basis_usd when the anchor path supplied it, so we never
+      // clobber a ledger-written cost basis with a stale/absent value.
+      if (costBasis !== null) upsertRow.cost_basis_usd = costBasis;
+
+      const { error: upErr } = await sb.from("balances_daily").upsert(
+        upsertRow,
+        { onConflict: "org_id,customer_id,date" },
+      );
       if (upErr) {
         await logAlert(sb, "ef_revalue_usdpc_nav", "error",
           `balances_daily upsert failed for customer ${customer_id}: ${upErr.message}`,

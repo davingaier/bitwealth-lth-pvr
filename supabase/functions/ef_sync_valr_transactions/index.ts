@@ -597,7 +597,18 @@ Deno.serve(async (req) => {
 
                 // SMART ALLOCATION: Distribute ZAR conversion across pendings with overflow
                 const totalZar = debitValue;
-                const totalUsdt = creditValue;
+                // VALR now charges the ZAR→USDT exchange fee in USDT (historically
+                // it was charged in ZAR). When the fee is USDT-denominated,
+                // `creditValue` is the NET USDT that actually landed. Store GROSS
+                // (net + fee) so ef_post_ledger_and_balances' balance formula
+                // `usdt = prev + amount_usdt − fee_usdt` nets back to the real
+                // landed amount instead of double-subtracting the fee (which drove
+                // customer 49 negative and customer 999's phantom idle USDT).
+                // The exchange fee also becomes visible in the portal. For
+                // ZAR-denominated fees, creditValue is already the full USDT and
+                // no adjustment is applied. Mirrors the stablecoin→USDT path (v0.6.132).
+                const feeUsdtTotal = tx.feeCurrency === "USDT" ? parseFloat(tx.feeValue || "0") : 0;
+                const totalUsdt = creditValue + feeUsdtTotal;
                 let remainingZar = totalZar;
                 let remainingUsdt = totalUsdt;
                 const allocations = [];
