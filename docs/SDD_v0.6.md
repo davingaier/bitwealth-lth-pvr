@@ -113,10 +113,52 @@ settled (usually sub-second for a MARKET order) and is more robust under VALR la
 fixed sleep — VALR's summary endpoint returns HTTP 400 for a still-working order, which is
 treated as "not settled yet" and keeps polling.
 
-#### Reported but NOT changed (lower priority / risk)
-- `fn_usdt_available_for_trading` is described as "reserve-aware" but does not subtract
-  reserves (e.g. USDT locked in a resting LIMIT). Low risk given the current flow; left as a
-  documented follow-up.
+#### Future enhancement — `fn_usdt_available_for_trading` reserve-awareness
+
+`fn_usdt_available_for_trading` returns `usdt_balance + usdpc_balance × price` from
+`balances_daily` but does **not** subtract USDT that is currently locked in a resting LIMIT
+order on VALR. In the current flow this is low-risk because:
+
+- BTC buy LIMIT orders are sized from yesterday's `balances_daily` balance (the same source
+  as this function), so the reserved amount is already implicit in the intent size; and
+- The USDPC prebuy-convert runs first in `ef_execute_orders`, raising idle USDT before the
+  BTC buy is placed, so the window in which a resting BTC LIMIT could prevent the buy from
+  being funded is short.
+
+However, a customer with a large resting LIMIT *and* low idle USDT could, in theory, have
+`ef_create_order_intents` size a new buy intent that relies on USDT that is not actually
+free to spend. The correct fix would be for `fn_usdt_available_for_trading` to subtract the
+aggregate `qty × limit_price` of all `exchange_orders` rows in `status = 'submitted'` for
+that customer, capped to the current `usdt_balance`.
+
+**Proposed implementation:**
+```sql
+CREATE OR REPLACE FUNCTION lth_pvr.fn_usdt_available_for_trading(p_org uuid, p_customer bigint)
+RETURNS numeric LANGUAGE plpgsql AS $$
+DECLARE
+  -- ... existing variable declarations ...
+  v_reserved numeric := 0;
+BEGIN
+  -- ... existing balance/usdpc/price logic ...
+  SELECT COALESCE(SUM(
+    CASE WHEN oi.side = 'BUY'
+    THEN LEAST(oi.amount * oi.limit_price, v_usdt)  -- USDT reserved for resting BUY LIMITs
+    ELSE 0 END
+  ), 0)
+  INTO v_reserved
+  FROM lth_pvr.exchange_orders eo
+  JOIN lth_pvr.order_intents oi ON oi.intent_id = eo.intent_id
+  WHERE eo.org_id = p_org AND oi.customer_id = p_customer
+    AND eo.status = 'submitted'
+    AND oi.limit_price IS NOT NULL;
+
+  RETURN GREATEST(0, COALESCE(v_usdt, 0) + COALESCE(v_usdpc, 0) * v_price - v_reserved);
+END;
+$$;
+```
+
+Not implemented today (requires schema join verification and care around the anchor-based
+balance model). Tracked here for a future maintenance window.
 
 **Files/objects changed:**
 - `supabase/functions/ef_post_ledger_and_balances/index.ts` — Fix 1 + Fix 2 (deployed)
