@@ -3,11 +3,70 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-02 (v0.6.137)
+**Last updated:** 2026-07-03 (v0.6.138)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.138 – Today's balance row self-heals: `ef_revalue_usdpc_nav` rescheduled to every 30 min
+**Date:** 2026-07-03  
+**Status:** ✅ DEPLOYED (cron reschedule + balance reconciliation)
+
+#### Problem – stale "today" row drove false pending USDPC sweeps (recurrence)
+
+Customers 49 and 999 again showed pending USDPC sweeps (DB 30.40 / 33.33 USDT) while
+their real VALR balances were ~$0.01. Root cause is **structural**, not a new bug:
+
+- **`ef_post_ledger_and_balances`** runs every 30 min but only recomputes `balances_daily`
+  rows for dates that have **ledger activity**. A no-activity day — such as *today* before
+  any trade posts — is never touched by it. (Verified: seeding a sentinel `999.99` into
+  today's row and running ef_post left it untouched.)
+- **`ef_revalue_usdpc_nav`** is the *only* function that anchor-recomputes today's
+  no-activity row — but it was scheduled **once daily at 17:30 UTC**.
+
+So any wrong/stale value written to today's row (e.g. a transient from the prior day's
+anchor-migration transition) survived for hours, and the Pending USDPC Sweeps panel
+(which reads `balances_daily`) showed a false entry the entire time, firing repeated
+`ef_sweep_usdt_to_usdpc` recon-warn alerts. (The sweep itself sizes off *live* VALR, so
+it never executed a bad trade — the harm was the false panel + alerts.)
+
+Note: the current deployed anchor code computes today correctly (re-running ef_revalue
+immediately healed both customers); the stale value did not match any current code path
+(it equalled `anchor + Σamount − 0` with the fee omitted), so it was a leftover artifact
+from the v0.6.133–135 transition rather than an ongoing corruptor.
+
+#### Fix – run the today-healer every 30 minutes
+
+`ef_revalue_usdpc_nav` re-derives today's balance authoritatively from the anchor
+(`anchor + Σledger-deltas-since-anchor`) and makes **no VALR API calls** (pure DB + price
+math), so it is cheap to run often. Rescheduled from `30 17 * * *` → **`15,45 * * * *`**
+(every 30 min, offset from ef_post's `5,35`). Today's row now self-heals within ≤30 min
+of any drift, so the sweep panel and recon alerts can no longer persist on a stale value.
+
+```sql
+SELECT cron.alter_job(
+  (SELECT jobid FROM cron.job WHERE jobname = 'ef_revalue_usdpc_nav_daily'),
+  schedule => '15,45 * * * *');
+```
+
+- Reconciled customers 49 (→ `0.01417611`) and 999 (→ `0.01064739`) to their anchor-derived
+  balances; both dropped off `v_pending_usdpc_conversions`.
+- Resolved the stale `ef_sweep_usdt_to_usdpc` recon alerts.
+
+#### Follow-up (optional hardening)
+
+`ef_revalue_usdpc_nav` only covers USDPC-enabled customers (exactly the set that has sweep
+panels, so sufficient here). A fuller structural fix would have `ef_post_ledger_and_balances`
+also recompute `toDate` for every anchored customer each run (covering non-USDPC customers
+too), but that touches the core balance loop and was deferred to avoid risk.
+
+**Files/objects changed:**
+- `cron.job` `ef_revalue_usdpc_nav_daily` schedule → `15,45 * * * *`
+- `lth_pvr.balances_daily` (customers 49, 999 reconciled)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.137 – Post-fee performance threshold tracks deposits via `cost_basis_at_last_fee` snapshot
 **Date:** 2026-07-02  
