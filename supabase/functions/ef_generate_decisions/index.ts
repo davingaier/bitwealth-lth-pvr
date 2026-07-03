@@ -220,8 +220,14 @@ Deno.serve(async (req: Request)=>{
       retraceBase: Number(defaultVariation.retrace_base ?? 3),
     };
     
-    // Compute bear pause state (used for all customers since they share same variation)
+    // Compute bear pause state for the default variation. Used both as a
+    // fallback and to pre-seed the per-variation cache below. Each variation
+    // can have a different bearPauseExitSigma, so a customer with no prior
+    // state must be seeded against that customer's OWN variation config — not
+    // the default — otherwise a non-default variation would be mis-seeded.
     const pauseNow = await computeBearPauseAt(sb, org_id, signalStr, defaultConfig, bandsTable);
+    const pauseByVariation = new Map<string, boolean>();
+    pauseByVariation.set(String(defaultCustomer.strategy_variation_id), pauseNow);
     
     let wrote = 0;
     for (const c of custs ?? []){
@@ -259,20 +265,41 @@ Deno.serve(async (req: Request)=>{
           ascending: false
         }).limit(1);
         if (pErr) throw new Error(`customer_state_daily query failed: ${pErr.message}`);
-        const prev = prevs?.[0] ? {
-          bear_pause: !!prevs[0].bear_pause,
-          was_above_p1: !!prevs[0].was_above_p1,
-          was_above_p15: !!prevs[0].was_above_p15,
-          r1_armed: !!prevs[0].r1_armed,
-          r15_armed: !!prevs[0].r15_armed
-        } : {
-          // No previous state: seed from historical pause computation
-          bear_pause: !!pauseNow,
-          was_above_p1: false,
-          was_above_p15: false,
-          r1_armed: true,
-          r15_armed: true
-        };
+        let prev;
+        if (prevs?.[0]) {
+          prev = {
+            bear_pause: !!prevs[0].bear_pause,
+            was_above_p1: !!prevs[0].was_above_p1,
+            was_above_p15: !!prevs[0].was_above_p15,
+            r1_armed: !!prevs[0].r1_armed,
+            r15_armed: !!prevs[0].r15_armed
+          };
+        } else {
+          // No previous state: seed bear_pause from a historical pause replay
+          // computed with THIS customer's OWN variation config (variations
+          // differ in bearPauseExitSigma, so the shared default would mis-seed
+          // a non-default variation). Cached per variation id to avoid
+          // recomputing the full history replay for customers that share one.
+          const vId = String(c.strategy_variation_id);
+          let seedPause = pauseByVariation.get(vId);
+          if (seedPause === undefined) {
+            try {
+              seedPause = await computeBearPauseAt(sb, org_id, signalStr, config, bandsTable);
+            } catch (e) {
+              console.error(`computeBearPauseAt failed for variation ${vId}; using default seed`, e);
+              seedPause = pauseNow;
+            }
+            pauseByVariation.set(vId, seedPause);
+          }
+          prev = {
+            // No previous state: seed from historical pause computation
+            bear_pause: !!seedPause,
+            was_above_p1: false,
+            was_above_p15: false,
+            r1_armed: true,
+            r15_armed: true
+          };
+        }
         const { action, pct, rule, note, state } = decideTrade(px, ci, roc5, prev, config);
         const band_bucket = bucketLabel(px, ci);
         // decisions upsert

@@ -1,8 +1,49 @@
 import { getServiceClient } from "./client.ts";
-import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances } from "./valrClient.ts";
+import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { USDPC_PAIR } from "../_shared/usdpc.ts";
+
+// Poll just-placed USDPC conversion MARKET order(s) until they reach a FINAL
+// state (Filled/Cancelled/Failed), so the USDT they raise is actually settled
+// and available before the dependent BTC buy is sized/placed. This replaces a
+// blind fixed sleep: it returns as soon as the conversions settle (usually well
+// under a second for a MARKET order) and is bounded by `maxMs`. VALR's
+// order-summary endpoint returns HTTP 400 for a still-working order, so a throw
+// is treated as "not settled yet" and we keep polling.
+async function waitForConversionsSettled(
+  convs: { intentId: string; subaccountId: string | null; credentials: { apiKey: string; apiSecret: string } | null }[],
+  maxMs = 12000,
+): Promise<void> {
+  if (convs.length === 0) return;
+  const deadline = Date.now() + maxMs;
+  const pending = new Set(convs.map((_, idx) => idx));
+  // Brief initial delay so the first status query usually sees a final state.
+  await new Promise((r) => setTimeout(r, 500));
+  while (pending.size > 0 && Date.now() < deadline) {
+    for (const idx of [...pending]) {
+      const c = convs[idx];
+      try {
+        const summary = await getOrderSummaryByCustomerOrderId(
+          c.intentId,
+          USDPC_PAIR,
+          c.subaccountId,
+          c.credentials,
+        );
+        const last = Array.isArray(summary) ? summary[0] : summary;
+        const st = String(last?.orderStatusType ?? last?.orderStatus ?? last?.status ?? "");
+        if (st === "Filled" || st === "Cancelled" || st === "Failed") {
+          pending.delete(idx);
+        }
+      } catch (_e) {
+        // HTTP 400 / order not final yet — keep polling.
+      }
+    }
+    if (pending.size > 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 700));
+    }
+  }
+}
 
 Deno.serve(async ()=>{
   const sb = getServiceClient();
@@ -34,6 +75,9 @@ Deno.serve(async ()=>{
     String(row.pair ?? "").replace("/", "").toUpperCase() === USDPC_PAIR.replace("/", "").toUpperCase();
   intents.sort((a, b) => (isUsdpcConversion(b) ? 1 : 0) - (isUsdpcConversion(a) ? 1 : 0));
   let convertedThisRun = false;
+  // USDPC conversion orders placed in this run, awaiting settlement before the
+  // first BTC buy is sized/placed.
+  const pendingConversions: { intentId: string; subaccountId: string | null; credentials: { apiKey: string; apiSecret: string } | null }[] = [];
 
   let successCount = 0;
   let errorCount = 0;
@@ -126,6 +170,7 @@ Deno.serve(async ()=>{
           });
           await sb.from("order_intents").update({ status: "executed" }).eq("intent_id", i.intent_id);
           convertedThisRun = true;
+          pendingConversions.push({ intentId: i.intent_id, subaccountId, credentials });
           successCount++;
         } catch (convErr) {
           const cm = convErr instanceof Error ? convErr.message : String(convErr);
@@ -145,9 +190,12 @@ Deno.serve(async ()=>{
         continue;
       }
       // Give a just-placed conversion a moment to settle into available USDT
-      // before the first BTC buy is sized/placed in this run.
+      // before the first BTC buy is sized/placed in this run. Polls the
+      // conversion order status (bounded) rather than sleeping a fixed interval,
+      // so it proceeds as soon as the USDT is actually settled.
       if (convertedThisRun) {
-        await new Promise((r) => setTimeout(r, 2500));
+        await waitForConversionsSettled(pendingConversions);
+        pendingConversions.length = 0;
         convertedThisRun = false;
       }
       // --- DETERMINE ORDER TYPE & EXECUTE ---

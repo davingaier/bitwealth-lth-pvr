@@ -243,8 +243,19 @@ Deno.serve(async (req: Request) => {
           kind: isBuy ? "buy" : "sell",
           amount_btc: amountBtc,
           amount_usdt: amountUsdt,
+          // amount_usdpc / fee_usdpc MUST be set explicitly (both NOT NULL
+          // DEFAULT 0). A single bulk .insert([...]) computes the UNION of keys
+          // across all rows and writes NULL — not the column DEFAULT — for any
+          // key present on a sibling row but omitted here. When this batch mixes
+          // a USDPC conversion fill (which sets amount_usdpc/fee_usdpc) with a
+          // BTC buy/sell fill (this branch), omitting them would insert NULL and
+          // fail the WHOLE batch on the NOT NULL constraint — booking no fills at
+          // all. This is exactly the Day-1 shape (USDPC prebuy convert + BTC buy
+          // land in the same post_ledger run for a USDPC-enabled customer).
+          amount_usdpc: 0,
           fee_btc: feeBtc,
           fee_usdt: feeUsdt,
+          fee_usdpc: 0,
           ref_intent_id: raw.intent_id ?? null,
           ref_order_id: raw.exchange_order_id,
           ref_fill_id: raw.fill_id,
@@ -634,6 +645,32 @@ Deno.serve(async (req: Request) => {
                 console.log(
                   `[ef_post_ledger_and_balances] BTC fee ${feeBtc} transferred successfully, triggering conversion to USDT`,
                 );
+
+                // Book the balance-reducing ledger line for the fee that just
+                // left the customer's account. The deposit was recorded GROSS
+                // (amount_btc = full deposit) so without this the customer's
+                // balances_daily BTC would be overstated by the platform fee.
+                // This mirrors the USDT immediate-fee path and the BTC batch
+                // path, both of which insert a kind='transfer' negative line;
+                // only this direct-BTC branch was missing it. The downstream
+                // ef_convert_platform_fee_btc runs in BitWealth's main account,
+                // so it must NOT book a customer-side line (verified: it writes
+                // no ledger_lines), hence this is the sole reduction.
+                await sb.from("ledger_lines").insert({
+                  org_id,
+                  customer_id: customerId,
+                  trade_date: yyyymmdd(new Date()),
+                  kind: "transfer",
+                  amount_btc: -feeBtc,
+                  amount_usdt: 0,
+                  note: `Platform fee transfer: ${transferResult.transferId}`,
+                }).then(({ error: feeLedgerErr }) => {
+                  if (feeLedgerErr) {
+                    console.error(
+                      `[ef_post_ledger_and_balances] Failed to book BTC fee transfer ledger line: ${feeLedgerErr.message}`,
+                    );
+                  }
+                });
 
                 try {
                   const conversionResponse = await fetch(

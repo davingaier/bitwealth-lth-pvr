@@ -255,6 +255,82 @@ Deno.serve(async (_req: Request)=>{
         const remainingQty = originalQty - executedQty;
 
         if (remainingQty > 0) {
+          // 2.0 ATOMIC CLAIM — make the market fallback idempotent under
+          // concurrency. A single conditional UPDATE flips the row out of
+          // 'submitted'; PostgreSQL guarantees only ONE caller can match a
+          // still-'submitted' row, so if multiple fallback workers run in the
+          // same window (the six 10s-offset poll crons) exactly one proceeds
+          // and the rest get 0 rows back and skip. This is what lets us run the
+          // fallback at high cadence without ever double-converting an order.
+          // We claim into 'cancelled_for_market' (an existing allowed status,
+          // already excluded from the 'submitted' queries) so no schema change
+          // is needed; the row settles to 'cancelled' on success or reverts to
+          // 'submitted' on failure.
+          const { data: claimRows, error: claimErr } = await supabase
+            .from("exchange_orders")
+            .update({ status: "cancelled_for_market", last_polled_at: new Date().toISOString() })
+            .eq("exchange_order_id", o.exchange_order_id)
+            .eq("status", "submitted")
+            .select("exchange_order_id");
+          if (claimErr) {
+            console.error(`ef_poll_orders: fallback claim failed for ${o.exchange_order_id}`, claimErr);
+            continue;
+          }
+          if (!claimRows || claimRows.length === 0) {
+            // Another worker already claimed this order for fallback — skip.
+            continue;
+          }
+
+          // 2.0b BOOK THE ALREADY-EXECUTED (PARTIAL) FILL before cancelling.
+          // The fallback MARKET order below only covers `remainingQty`, so any
+          // portion of the LIMIT that already filled (executedQty > 0) would be
+          // lost from the ledger and understate the customer's balance if we
+          // simply cancel it. Book the executed portion here, keyed/idempotent
+          // on exchange_order_id exactly like the normal fill path (§4). VALR's
+          // totalFee reflects only the executed portion, so it is the correct
+          // fee for the partial.
+          if (executedQty > 0) {
+            const { data: existingPartial } = await supabase
+              .from("order_fills")
+              .select("fill_id")
+              .eq("exchange_order_id", o.exchange_order_id);
+            if (!existingPartial || existingPartial.length === 0) {
+              const partialPrice = Number(last.averagePrice || last.price || o.price);
+              const partialFee = Number(last.totalFee || 0);
+              const partialFeeCcy = last.feeCurrency || (side === "BUY" ? "BTC" : "USDT");
+              const partialTs = last.orderUpdatedAt || last.orderCreatedAt || new Date().toISOString();
+              const { error: partialErr } = await supabase.from("order_fills").insert({
+                org_id: o.org_id,
+                exchange_order_id: o.exchange_order_id,
+                trade_ts: partialTs,
+                price: partialPrice,
+                qty: executedQty,
+                fee_asset: partialFeeCcy,
+                fee_qty: partialFee,
+                raw: last,
+              });
+              if (partialErr) {
+                console.error(`ef_poll_orders: failed to book partial fill for ${o.exchange_order_id}`, partialErr);
+                await logAlert(
+                  supabase,
+                  "ef_poll_orders",
+                  "error",
+                  `Failed to book partial fill before market fallback`,
+                  {
+                    intent_id: o.intent_id,
+                    exchange_order_id: o.exchange_order_id,
+                    executed_qty: executedQty,
+                    price: partialPrice,
+                    error: partialErr.message,
+                  },
+                  org_id,
+                );
+              } else {
+                console.log(`ef_poll_orders: booked partial fill ${executedQty} @ ${partialPrice} for ${o.exchange_order_id} before fallback`);
+              }
+            }
+          }
+
           // 2.a Cancel the stale LIMIT order on VALR
           try {
             await cancelOrderById(last.id, pair, subaccountId, credentials);
@@ -309,6 +385,14 @@ Deno.serve(async (_req: Request)=>{
               console.error("ef_poll_orders: failed to insert fallback market order", insertError);
             }
           } catch (err) {
+            // Placement failed after we already claimed (and cancelled) the
+            // LIMIT. Revert the claim to 'submitted' so a later pass retries —
+            // the LIMIT is already cancelled on VALR so the funds are freed and
+            // the retry re-places the MARKET cleanly. Without this the order
+            // would strand in 'cancelling' and never convert.
+            await supabase.from("exchange_orders")
+              .update({ status: "submitted", last_polled_at: new Date().toISOString() })
+              .eq("exchange_order_id", o.exchange_order_id);
             console.error("ef_poll_orders: failed to place fallback market order", err);
             await logAlert(
               supabase,

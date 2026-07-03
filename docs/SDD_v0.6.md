@@ -3,11 +3,132 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-03 (v0.6.138)
+**Last updated:** 2026-07-03 (v0.6.139)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.139 – Day-1 pipeline robustness audit: USDPC ledger batch guard, single-authority order fallback, partial-fill booking
+**Date:** 2026-07-03  
+**Status:** ✅ DEPLOYED (2× edge-function deploys + cron consolidation migration)
+
+Full robustness audit of the live LTH PVR trading pipeline ahead of the first fully
+automated buy when the bear-market pause releases (price < −1.0σ ≈ $47,170; all live
+customers are currently `bear_pause = true` / HOLD at −0.50σ). Live active LTH_PVR
+customers on Day 1: **31, 49, 54, 999** (customers 12/44/45/47/48 are `live_enabled`
+but `registration_status='inactive'`, so `ef_generate_decisions` excludes them; 999 is
+fully included — its `is_test=true` flag only affects FIC screening in `ef_tfs_screen`,
+never trading). Customers 31, 49 and 999 are USDPC-enabled.
+
+#### Fix 1 (CRITICAL) — USDPC + BTC fills no longer fail the whole ledger batch
+
+`ef_post_ledger_and_balances` books all new fills for a run in a single
+`.insert(toInsert)`. The USDPC-conversion fill object set `amount_usdpc`/`fee_usdpc`
+while the BTC buy/sell fill object **omitted** them. Both columns are `NOT NULL DEFAULT 0`,
+and PostgREST bulk-insert writes the **union** of keys across all rows — inserting `NULL`
+(not the DEFAULT) for any key present on a sibling row but missing here. So whenever a
+USDPC-enabled customer had both a conversion fill and a BTC fill in the same run (exactly
+the Day-1 shape: USDPC prebuy-convert + BTC buy), the entire fills batch failed the
+NOT-NULL constraint and **no fills were booked at all** — balances and fees silently
+froze. This had never fired live only because USDPC customers have been in HOLD; the
+identical pattern already failed in the back-tester on 2026-06-02 (`bt_ledger.amount_usdpc`),
+which was patched there but not on the live path.
+
+**Fix:** the BTC fill push now sets `amount_usdpc: 0, fee_usdpc: 0` explicitly (mirrors the
+existing `amount_zar: 0` guard on funding rows), making the batch key-set homogeneous.
+
+#### Fix 2 (MED) — direct BTC platform-fee transfer now reduces the balance
+
+Deposits are booked GROSS with the platform fee transferred out. The USDT immediate-fee
+path and the BTC accumulate→batch path both book a compensating `kind='transfer'` negative
+ledger line, but the **direct BTC immediate-fee path** (`feeBtc >= minBtc`) did not, so
+`balances_daily` BTC was overstated by the fee for direct BTC deposits by immediate-schedule
+customers. Added the missing `kind='transfer', amount_btc: -feeBtc` line. (`ef_convert_platform_fee_btc`
+runs in BitWealth's main account and writes no customer ledger line — verified — so there is
+no double-count. The naive alternative of subtracting `platform_fee_*` in the balance calc
+would be wrong: it would double-count the USDT/batch paths that already book transfer lines.)
+
+#### Fix 3 (HIGH) — single-authority, race-proof order fallback
+
+Two independent jobs converted stale LIMIT orders to MARKET every minute in the trade
+window: `poll-orders-1min` (`ef_poll_orders`, fires at :00) and six `lth_market_fallback_*`
+jobs (`ef_market_fallback`, `pg_sleep` offsets at :00/:10/…/:50 for a 10s cadence). At :00
+both fired simultaneously and could place **two** market orders for the same order (distinct
+`customerOrderId`s, so VALR would not dedupe). `ef_market_fallback` also had two correctness
+gaps: it **skipped API-model customers** (no `subaccount_id` → e.g. customer 49) and placed a
+MARKET order for the **full** `order.qty`, ignoring already-filled quantity (over-execution
+risk on a partial fill).
+
+**Fix — consolidated onto `ef_poll_orders` as the sole fallback authority:**
+- Added an **atomic claim** in `ef_poll_orders`: a single conditional
+  `UPDATE … SET status='cancelled_for_market' WHERE exchange_order_id=? AND status='submitted'`
+  before cancelling. PostgreSQL guarantees only one caller matches a still-`submitted` row,
+  so overlapping workers can never double-convert; on a market-placement failure the claim
+  reverts to `submitted` for retry (the LIMIT is already cancelled on VALR, freeing funds).
+  (`'cancelled_for_market'` is used as the claim marker because it is already in the
+  `exchange_orders.status` CHECK constraint and already excluded from the `submitted`
+  queries — no schema change.)
+- Migration `20260703_consolidate_order_fallback_poll_orders`: unscheduled the six
+  `lth_market_fallback_*` crons **and** `poll-orders-1min`; scheduled six new
+  `lth_poll_orders_00s…50s` crons (same `pg_sleep` offset trick) pointing at `ef_poll_orders`.
+  `ef_poll_orders` handles both account models, subtracts filled qty, and records fills, so it
+  is the strictly-more-correct authority. `ef_market_fallback` remains **deployed but
+  unscheduled** — re-enabling the old crons is the one-step rollback.
+
+Note on the historical 6-cron design: the constraint was pg_cron's 1-minute granularity
+(worked around with `pg_sleep` offsets), **not** an edge-function runtime limit. The old
+`ef_poll_orders` failure came from an internal 10s-interval loop running ~5 min per
+invocation (the orphaned `POLL_INTERVAL_MS` constant); the current single-pass function is
+safe to run 6×/min.
+
+#### Fix 4 (MED) — partial fills are booked before market fallback
+
+When a LIMIT order partially filled and the remainder was converted to MARKET,
+`ef_poll_orders` marked the original `cancelled` without booking the already-executed
+portion (the fill-record path only runs for fully `filled` orders). The partial was lost
+from the ledger, understating the balance. `ef_poll_orders` now books the executed portion
+(`executedQty` @ `averagePrice`, with VALR's `totalFee` for the partial) into `order_fills`
+before cancelling — idempotent on `exchange_order_id`, exactly like the normal fill path.
+The fallback MARKET order then covers only `remainingQty`, so partial + remainder = original.
+
+#### Fix 5 (LOW) — `bear_pause` seed uses each customer's own variation config
+
+When a customer has no prior `customer_state_daily` row, `ef_generate_decisions` seeds
+`bear_pause` from a historical pause replay. It previously used the *default* variation's
+config for every customer, so a customer on a non-Progressive variation (different
+`bearPauseExitSigma`) could be seeded wrong on their first-ever day. The seed is now
+computed with **that customer's own variation config**, cached per `strategy_variation_id`
+(pre-seeded with the default variation's result to avoid a redundant history replay for the
+common case). No live impact today — all live customers share the Progressive variation and
+already have prior state — but it removes a latent onboarding-day correctness gap.
+
+#### Fix 6 (LOW) — USDPC conversion settle is polled, not slept
+
+`ef_execute_orders` previously waited a blind `2500 ms` after placing a USDPC→USDT
+conversion before sizing/placing the dependent BTC buy. It now polls the conversion order's
+status (via `getOrderSummaryByCustomerOrderId`) until it reaches a FINAL state
+(Filled/Cancelled/Failed), bounded at 12 s. This proceeds as soon as the USDT is actually
+settled (usually sub-second for a MARKET order) and is more robust under VALR latency than a
+fixed sleep — VALR's summary endpoint returns HTTP 400 for a still-working order, which is
+treated as "not settled yet" and keeps polling.
+
+#### Reported but NOT changed (lower priority / risk)
+- `fn_usdt_available_for_trading` is described as "reserve-aware" but does not subtract
+  reserves (e.g. USDT locked in a resting LIMIT). Low risk given the current flow; left as a
+  documented follow-up.
+
+**Files/objects changed:**
+- `supabase/functions/ef_post_ledger_and_balances/index.ts` — Fix 1 + Fix 2 (deployed)
+- `supabase/functions/ef_poll_orders/index.ts` — Fix 3 atomic claim + Fix 4 partial-fill booking (deployed)
+- `supabase/functions/ef_generate_decisions/index.ts` — Fix 5 per-variation `bear_pause` seed (deployed)
+- `supabase/functions/ef_execute_orders/index.ts` — Fix 6 poll USDPC conversion settlement (deployed)
+- `supabase/migrations/20260703_consolidate_order_fallback_poll_orders.sql` — cron consolidation (applied)
+- `cron.job` — unscheduled `lth_market_fallback_00s…50s` + `poll-orders-1min`; added `lth_poll_orders_00s…50s`
+- `ef_market_fallback` — retired (deployed but unscheduled; rollback only)
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.138 – Today's balance row self-heals: `ef_revalue_usdpc_nav` rescheduled to every 30 min
 **Date:** 2026-07-03  
