@@ -3,11 +3,43 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-03 (v0.6.139)
+**Last updated:** 2026-07-04 (v0.6.140)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.140 – On-Chain Charts module: STH/LTH Profit-to-Volatility Ratio (PVR)
+**Date:** 2026-07-04  
+**Status:** ✅ DEPLOYED (migration + new edge function + backfill + cron + UI module)
+
+**Motivation.** Recreate the Research Bitcoin “STH/LTH Profit-to-Volatility Ratio” chart inside the Admin UI, extending the existing LTH on-chain data pipeline to also cover Short-Term Holders (STH, <155 days).
+
+**PVR methodology.** For each holder cohort, PVR = unrealised profit normalised by the expanding-window volatility of that cohort's market cap — algebraically identical to the validated LTH band formula (`price_at_X = (pvr·std + rc)/supply`):
+
+```
+mc  = supply × price                 (market cap)
+rc  = supply × realized_price        (realised cap)
+pvr = (mc - rc) / expanding_std(mc)  (Welford online std, ddof=1)
+```
+
+Derived series: `pvr_ratio = sth_pvr / lth_pvr`, `pvr_divergence = sth_pvr - lth_pvr`.
+
+**Data source.** Research Bitcoin, five daily endpoints (STH pair added):
+- `price/price`
+- `supply_distribution/supply_sth` **(new)** and `supply_distribution/supply_lth`
+- `realizedprice/realized_price_sth` **(new)** and `realizedprice/realized_price_lth`
+
+**Changes:**
+- **Migration `create_onchain_pvr`:** new tables `lth_pvr.onchain_pvr_daily` (date, btc_price, per-cohort supply/realized-price, `sth_pvr`, `lth_pvr`, `pvr_ratio`, `pvr_divergence`) and `lth_pvr.onchain_pvr_state` (Welford running stats per cohort). New read RPC `public.get_onchain_pvr_series(p_from, p_to)` (SECURITY DEFINER, granted to `anon`/`authenticated`, org fixed to live org — same convention as `get_pipeline_status`).
+- **Migration `enable_rls_onchain_pvr`:** RLS enabled (no policies) on both new tables — direct anon/authenticated access denied; the SECURITY DEFINER RPC and service-role writes bypass RLS.
+- **New edge function `ef_fetch_onchain_pvr`:** modes `{ backfill: true, from }` (full-history recompute) and `{}` (daily incremental append from `last_date+1`). Reads the RB token from `lth_pvr.rb_api_token`. Backfilled **5,676 rows** covering **2010-12-19 → 2026-07-03**.
+- **Cron `lthpvr_onchain_pvr_daily`:** `25 0 * * *` (00:25 UTC, after RB bands) → `ef_fetch_onchain_pvr` daily append.
+- **Admin UI:** new top-nav tab **On-Chain Charts** (`#onchain-charts-module`) with a Chart.js dual-axis chart — left axis (clipped ±6) for STH PVR / LTH PVR / ratio / divergence + Zero and Ratio=1 reference lines; right axis (log) for BTC price. Range presets 1Y/3Y/5Y/All, drag-to-zoom. Reads via `get_onchain_pvr_series`.
+
+**Note.** The expanding std here is computed from full history independently of the CI-seeded `rb_bands_state` used by live trading, so early-history (2011–2014) PVR values are large and clip on the fixed ±6 axis — matching the Research Bitcoin chart's own clipping.
+
+---
 
 ### v0.6.139 – Day-1 pipeline robustness audit: USDPC ledger batch guard, single-authority order fallback, partial-fill booking
 **Date:** 2026-07-03  
