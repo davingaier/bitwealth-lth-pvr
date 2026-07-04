@@ -32,10 +32,11 @@ Derived series: `pvr_ratio = sth_pvr / lth_pvr`, `pvr_divergence = sth_pvr - lth
 
 **Changes:**
 - **Migration `create_onchain_pvr`:** new tables `lth_pvr.onchain_pvr_daily` (date, btc_price, per-cohort supply/realized-price, `sth_pvr`, `lth_pvr`, `pvr_ratio`, `pvr_divergence`) and `lth_pvr.onchain_pvr_state` (Welford running stats per cohort). New read RPC `public.get_onchain_pvr_series(p_from, p_to)` (SECURITY DEFINER, granted to `anon`/`authenticated`, org fixed to live org — same convention as `get_pipeline_status`).
-- **Migration `enable_rls_onchain_pvr`:** RLS enabled (no policies) on both new tables — direct anon/authenticated access denied; the SECURITY DEFINER RPC and service-role writes bypass RLS.
+- **Migration `onchain_pvr_series_json`:** JSON reader `public.get_onchain_pvr_series_json(p_from, p_to)` returning a single `jsonb` array. PostgREST caps set-returning results at `db-max-rows` (1000), which truncated the full history to 2010–2013; a single-row jsonb value bypasses the cap and delivers all 5,600+ days. The UI uses this variant.
+- **Migration `enable_rls_onchain_pvr`:** RLS enabled (no policies) on both new tables — direct anon/authenticated access denied; the SECURITY DEFINER RPCs and service-role writes bypass RLS.
 - **New edge function `ef_fetch_onchain_pvr`:** modes `{ backfill: true, from }` (full-history recompute) and `{}` (daily incremental append from `last_date+1`). Reads the RB token from `lth_pvr.rb_api_token`. Backfilled **5,676 rows** covering **2010-12-19 → 2026-07-03**.
 - **Cron `lthpvr_onchain_pvr_daily`:** `25 0 * * *` (00:25 UTC, after RB bands) → `ef_fetch_onchain_pvr` daily append.
-- **Admin UI:** new top-nav tab **On-Chain Charts** (`#onchain-charts-module`) with a Chart.js dual-axis chart — left axis (clipped ±6) for STH PVR / LTH PVR / ratio / divergence + Zero and Ratio=1 reference lines; right axis (log) for BTC price. Range presets 1Y/3Y/5Y/All, drag-to-zoom. Reads via `get_onchain_pvr_series`.
+- **Admin UI:** new top-nav tab **On-Chain Charts** (`#onchain-charts-module`) with a Chart.js dual-axis chart — left axis (clipped ±6) for STH PVR / LTH PVR / ratio / divergence + Zero and Ratio=1 reference lines; right axis (log) for BTC price. **PVR Divergence renders as a shaded area filled to the zero baseline** (drawn behind the PVR lines). Range presets 1Y/3Y/5Y/All, drag-to-zoom. Reads via `get_onchain_pvr_series_json`.
 
 **Note.** The expanding std here is computed from full history independently of the CI-seeded `rb_bands_state` used by live trading, so early-history (2011–2014) PVR values are large and clip on the fixed ±6 axis — matching the Research Bitcoin chart's own clipping.
 

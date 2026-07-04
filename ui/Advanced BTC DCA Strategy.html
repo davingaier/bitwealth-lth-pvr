@@ -5358,7 +5358,7 @@
         { key: 'sth_pvr',        label: 'STH PVR',            color: '#f59e0b', axis: 'y' },
         { key: 'lth_pvr',        label: 'LTH PVR',            color: '#16a34a', axis: 'y' },
         { key: 'pvr_ratio',      label: 'STH/LTH PVR Ratio',  color: '#7c3aed', axis: 'y' },
-        { key: 'pvr_divergence', label: 'PVR Divergence',     color: '#2563eb', axis: 'y' },
+        { key: 'pvr_divergence', label: 'PVR Divergence',     color: '#2563eb', axis: 'y', fill: 'origin', fillColor: 'rgba(37,99,235,0.18)', order: -1 },
       ];
       const PRICE_COLOR = '#f8fafc';
 
@@ -5377,11 +5377,13 @@
           label: s.label,
           data: rows.map(r => (r[s.key] == null ? null : Number(r[s.key]))),
           borderColor: s.color,
-          backgroundColor: s.color,
+          backgroundColor: s.fill ? s.fillColor : s.color,
           borderWidth: 1.2,
           pointRadius: 0,
           tension: 0,
           spanGaps: true,
+          fill: s.fill || false,
+          order: (s.order != null ? s.order : 0),
           yAxisID: s.axis,
         }));
         // Reference lines (match RB legend: "Zero Line" and "Ratio = 1").
@@ -5525,9 +5527,9 @@
         loading = true;
         metaEl.textContent = 'Loading on-chain PVR series…';
         try {
-          const { data, error } = await window.supabaseClient.rpc('get_onchain_pvr_series', {});
+          const { data, error } = await window.supabaseClient.rpc('get_onchain_pvr_series_json', {});
           if (error) { metaEl.textContent = `Error: ${error.message}`; loading = false; return; }
-          const rows = data || [];
+          const rows = Array.isArray(data) ? data : (data || []);
           if (!rows.length) { metaEl.textContent = 'No PVR data available yet.'; loading = false; return; }
           renderChart(rows);
           applyPreset('ALL');
