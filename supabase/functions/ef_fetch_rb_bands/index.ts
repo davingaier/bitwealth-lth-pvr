@@ -63,6 +63,35 @@ async function triggerResumePipeline(signalDate: string, orgId: string): Promise
   }
 }
 
+// ---------------------------------------------------------------------------
+// On-Chain Charts chain helper (added 2026-07-10)
+// ---------------------------------------------------------------------------
+// ef_fetch_onchain_pvr shares the same RB API data source as ef_fetch_rb_bands,
+// so the data for a given signal_date becomes available at the same time.
+// Chaining from here (instead of a fixed cron) ensures the PVR series is
+// always appended exactly when the underlying data lands — even on days with
+// extended RB API lag (e.g., 34.5 h). Fire-and-forget.
+async function triggerOnchainPvr(orgId: string): Promise<void> {
+  const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!baseUrl || !key) return;
+  try {
+    const resp = await fetch(`${baseUrl}/functions/v1/ef_fetch_onchain_pvr`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+      },
+      body: JSON.stringify({ org_id: orgId }),
+    });
+    console.info(`ef_fetch_rb_bands: onchain_pvr trigger -> HTTP ${resp.status}`);
+  } catch (e) {
+    console.warn(
+      `ef_fetch_rb_bands: onchain_pvr trigger failed (non-fatal): ${String((e as Error)?.message ?? e)}`,
+    );
+  }
+}
+
 // Band sigma multipliers — must stay in sync with ci_bands_daily column suffixes
 const BAND_MULTIPLIERS: Record<string, number> = {
   m100: -1.00,
@@ -385,9 +414,10 @@ Deno.serve(async (req: Request) => {
 
   console.info("ef_fetch_rb_bands: complete for", signalDate);
 
-  // Day 4 of CI->RB migration: chain the daily LTH PVR pipeline now that
-  // today's RB bands are persisted. Fire-and-forget.
+  // Chain downstream functions now that today's RB data is confirmed available.
+  // Both are fire-and-forget; failures surface through their own alert_events.
   await triggerResumePipeline(signalDate, org_id);
+  await triggerOnchainPvr(org_id);
 
   return new Response(
     JSON.stringify({
