@@ -3,11 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-04 (v0.6.140)
+**Last updated:** 2026-07-10 (v0.6.141)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.141 – On-Chain PVR scheduling fix: chain from ef_fetch_rb_bands + safety-net cron
+**Date:** 2026-07-10  
+**Status:** ✅ DEPLOYED (1× edge-function deploy + 1× cron reschedule)
+
+**Issue.** `ef_fetch_onchain_pvr` cron at 00:25 UTC fired before RB API published daily data (typically available ~00:30). The function received empty CSVs, returned `rows_written: 0`, and `onchain_pvr_state.last_date` stalled (July 9 missing).
+
+**Root cause.** RB API publishes with variable lag (up to 1.5h on some days). The fixed cron was too aggressive; `ef_fetch_rb_bands` already has guard retry logic to wait until data lands.
+
+**Fix:**
+- **Chain trigger:** `ef_fetch_onchain_pvr` is now triggered (fire-and-forget) by `ef_fetch_rb_bands` right after RB bands are persisted, exactly when data is confirmed available. Added `triggerOnchainPvr()` helper alongside existing `triggerResumePipeline()`.
+- **Cron rescheduled:** `lthpvr_onchain_pvr_daily` moved from 00:25 UTC to **02:00 UTC** (safety net only, fires well after data is normally available).
+- **Backfill:** July 9 row (1 day backfilled by manual trigger).
+- **Deploy:** `ef_fetch_rb_bands` redeployed with chain call.
+
+**Impact.** On-Chain Charts tab now always current; no further manual backfills needed.
+
+---
 
 ### v0.6.140 – On-Chain Charts module: STH/LTH Profit-to-Volatility Ratio (PVR)
 **Date:** 2026-07-04  
@@ -34,8 +52,8 @@ Derived series: `pvr_ratio = sth_pvr / lth_pvr`, `pvr_divergence = sth_pvr - lth
 - **Migration `create_onchain_pvr`:** new tables `lth_pvr.onchain_pvr_daily` (date, btc_price, per-cohort supply/realized-price, `sth_pvr`, `lth_pvr`, `pvr_ratio`, `pvr_divergence`) and `lth_pvr.onchain_pvr_state` (Welford running stats per cohort). New read RPC `public.get_onchain_pvr_series(p_from, p_to)` (SECURITY DEFINER, granted to `anon`/`authenticated`, org fixed to live org — same convention as `get_pipeline_status`).
 - **Migration `onchain_pvr_series_json`:** JSON reader `public.get_onchain_pvr_series_json(p_from, p_to)` returning a single `jsonb` array. PostgREST caps set-returning results at `db-max-rows` (1000), which truncated the full history to 2010–2013; a single-row jsonb value bypasses the cap and delivers all 5,600+ days. The UI uses this variant.
 - **Migration `enable_rls_onchain_pvr`:** RLS enabled (no policies) on both new tables — direct anon/authenticated access denied; the SECURITY DEFINER RPCs and service-role writes bypass RLS.
-- **New edge function `ef_fetch_onchain_pvr`:** modes `{ backfill: true, from }` (full-history recompute) and `{}` (daily incremental append from `last_date+1`). Reads the RB token from `lth_pvr.rb_api_token`. Backfilled **5,676 rows** covering **2010-12-19 → 2026-07-03**.
-- **Cron `lthpvr_onchain_pvr_daily`:** `25 0 * * *` (00:25 UTC, after RB bands) → `ef_fetch_onchain_pvr` daily append.
+- **New edge function `ef_fetch_onchain_pvr`:** modes `{ backfill: true, from }` (full-history recompute) and `{}` (daily incremental append from `last_date+1`). Reads the RB token from `lth_pvr.rb_api_token`. Backfilled **5,676 rows** covering **2010-12-19 → 2026-07-03**. **v0.6.141 (2026-07-10):** now chained from `ef_fetch_rb_bands` after RB bands persist, ensuring PVR data appends exactly when RB data lands (handles API lag).
+- **Cron `lthpvr_onchain_pvr_daily`:** **v0.6.141 rescheduled to `0 2 * * *` (02:00 UTC safety net only)** — primary trigger is the chain from `ef_fetch_rb_bands`. Cron fires well after data is normally available.
 - **Admin UI:** new top-nav tab **On-Chain Charts** (`#onchain-charts-module`) with a Chart.js dual-axis chart — left axis (clipped ±6) for STH PVR / LTH PVR / ratio / divergence + Zero and Ratio=1 reference lines; right axis (log) for BTC price. **PVR Divergence renders as a shaded area filled to the zero baseline** (drawn behind the PVR lines). Range presets 1Y/3Y/5Y/All, drag-to-zoom. Reads via `get_onchain_pvr_series_json`.
 
 **Note.** The expanding std here is computed from full history independently of the CI-seeded `rb_bands_state` used by live trading, so early-history (2011–2014) PVR values are large and clip on the fixed ±6 axis — matching the Research Bitcoin chart's own clipping.
@@ -13523,6 +13541,9 @@ Manual recovery:
   UI "Resume Pipeline" button → POST ef_resume_pipeline
   ef_resume_pipeline checks get_pipeline_status() and runs only incomplete steps
 ```
+
+**Additional jobs (not shown in diagram above):**
+- **`lthpvr_onchain_pvr_daily`** (`0 2 * * *`, 02:00 UTC) — Safety-net cron for on-chain PVR data. Primary trigger is **chain from `ef_fetch_rb_bands`** (fires after RB bands persist, ensuring data is available). Cron at 02:00 UTC serves as fallback only, firing well after RB API's normal publication window (~00:30 UTC). **v0.6.141 update (2026-07-10):** moved from 00:25 UTC to 02:00 UTC to eliminate race condition with RB API lag.
 
 ### 11.5 Common Gotchas
 
