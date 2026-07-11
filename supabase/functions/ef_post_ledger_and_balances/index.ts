@@ -331,7 +331,7 @@ Deno.serve(async (req: Request) => {
       const { data: customerStrategies, error: stratErr } = await sb
         .schema("public")
         .from("customer_strategies")
-        .select("customer_id, platform_fee_rate, platform_fee_schedule")
+        .select("customer_id, platform_fee_rate, platform_fee_schedule, fee_plan")
         .in("customer_id", customerIds);
 
       if (stratErr) {
@@ -342,11 +342,16 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Create lookup maps for platform fee rates and schedules
+      // Create lookup maps for platform fee rates and schedules.
+      // Fee-plan gate (fee-plan choice migration): customers on the MANAGEMENT
+      // plan pay NO platform fee (they are charged a monthly NAV-based management
+      // fee by ef_calculate_management_fees instead). Forcing the rate to 0 here
+      // disables the platform fee at every downstream computation site.
       const feeRateMap = new Map<number, number>();
       const feeScheduleMap = new Map<number, string>();
       for (const strat of customerStrategies ?? []) {
-        const rate = parseFloat(strat.platform_fee_rate ?? "0.0075");
+        const isManagementPlan = (strat.fee_plan ?? "platform") === "management";
+        const rate = isManagementPlan ? 0 : parseFloat(strat.platform_fee_rate ?? "0.0075");
         feeRateMap.set(strat.customer_id, rate);
         feeScheduleMap.set(strat.customer_id, strat.platform_fee_schedule ?? "immediate");
       }

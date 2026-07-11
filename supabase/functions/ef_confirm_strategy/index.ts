@@ -63,11 +63,11 @@ Deno.serve(async (req) => {
     // ─── Fee-schedule cadence rule ─────────────────────────────────────────
     // Mirrors public.fee_schedule_rank() / customer_strategies_fee_cadence_check.
     // Platform fee schedule must be at least as frequent as performance.
-    // Ranks: immediate=1 (most frequent), monthly=2, annual=3 (least).
+    // Ranks: immediate=1 (most frequent), monthly=2, quarterly=3, annual=4 (least).
     const rank = (s?: string) =>
-      s === "immediate" ? 1 : s === "monthly" ? 2 : s === "annual" ? 3 : null;
-    const allowedPlat = ["immediate", "monthly", "annual"];
-    const allowedPerf = ["monthly", "annual"];
+      s === "immediate" ? 1 : s === "monthly" ? 2 : s === "quarterly" ? 3 : s === "annual" ? 4 : null;
+    const allowedPlat = ["immediate", "monthly", "quarterly", "annual"];
+    const allowedPerf = ["monthly", "quarterly", "annual"];
     if (platform_fee_schedule && !allowedPlat.includes(platform_fee_schedule)) {
       return new Response(
         JSON.stringify({

@@ -1584,13 +1584,13 @@
                 <label><span class="label-line">Platform fee rate</span><input name="platform_fee_rate" type="number" step="0.0025" min="0" max="0.10" /></label>
                 <label><span class="label-line">Platform fee schedule</span>
                   <select name="platform_fee_schedule" data-cadence-platform>
-                    <option value="immediate">Immediate</option><option value="monthly">Monthly</option><option value="annual">Annual</option>
+                    <option value="immediate">Immediate</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
                   </select>
                 </label>
                 <label><span class="label-line">Performance fee rate</span><input name="performance_fee_rate" type="number" step="0.005" min="0" max="0.5" /></label>
                 <label><span class="label-line">Performance fee schedule</span>
                   <select name="performance_fee_schedule" data-cadence-performance>
-                    <option value="monthly">Monthly</option><option value="annual">Annual</option>
+                    <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
                   </select>
                 </label>
               </div>
@@ -1733,6 +1733,7 @@
                 <select id="strategyModalPlatformSchedule" data-cadence-platform style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
                   <option value="immediate">Immediate</option>
                   <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
                   <option value="annual" selected>Annual</option>
                 </select>
               </div>
@@ -1744,6 +1745,7 @@
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Perf. Fee Schedule</label>
                 <select id="strategyModalPerfSchedule" data-cadence-performance style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
                   <option value="monthly">Monthly</option>
+                  <option value="quarterly">Quarterly</option>
                   <option value="annual" selected>Annual</option>
                 </select>
               </div>
@@ -1857,15 +1859,18 @@
                 <th style="min-width:80px;">ID</th>
                 <th style="min-width:150px;">Name</th>
                 <th style="min-width:200px;">Email</th>
+                <th style="min-width:130px;">Fee Plan</th>
                 <th style="min-width:120px;">Performance Fee</th>
                 <th style="min-width:110px;">Perf. Schedule</th>
                 <th style="min-width:120px;">Platform Fee</th>
                 <th style="min-width:110px;">Plat. Schedule</th>
+                <th style="min-width:120px;">Management Fee</th>
+                <th style="min-width:110px;">Mgmt. Schedule</th>
                 <th style="min-width:180px;"></th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="8" class="muted">Loading customers...</td></tr>
+              <tr><td colspan="11" class="muted">Loading customers...</td></tr>
             </tbody>
           </table>
         </div>
@@ -3424,7 +3429,7 @@
     // nearest common ancestor (form / fieldset / modal). Exposed globally so
     // newly rendered selects (modals, table editors) can re-run wiring.
     window.feeScheduleRank = function (s) {
-      return ({ immediate: 1, monthly: 2, annual: 3 })[s] ?? null;
+      return ({ immediate: 1, monthly: 2, quarterly: 3, annual: 4 })[s] ?? null;
     };
     window.applyFeeCadenceGuards = function (root) {
       const scope = root || document;
@@ -12891,6 +12896,7 @@
                   <select id="setupModal_perfSched" data-cadence-performance
                           style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                     <option value="monthly"${perfSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                    <option value="quarterly"${perfSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
                     <option value="annual"${perfSched === 'annual' ? ' selected' : ''}>Annual</option>
                   </select>
                 </div>
@@ -12907,6 +12913,7 @@
                           style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                     <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
                     <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                    <option value="quarterly"${platSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
                     <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
                   </select>
                 </div>
@@ -13562,12 +13569,15 @@
             performance_fee_rate: fc.performance_fee_rate ?? 0.10,
             platform_fee_rate: fc.platform_fee_rate ?? 0.0075,
             performance_fee_schedule: fc.performance_fee_schedule ?? 'monthly',
-            platform_fee_schedule: fc.platform_fee_schedule ?? 'immediate'
+            platform_fee_schedule: fc.platform_fee_schedule ?? 'immediate',
+            fee_plan: fc.fee_plan ?? 'platform',
+            management_fee_rate: fc.management_fee_rate ?? 0.01,
+            management_fee_schedule: fc.management_fee_schedule ?? 'monthly'
           });
         });
 
         allCustomers = customers.map(c => {
-          const fees = feeMap.get(c.customer_id) || { performance_fee_rate: 0.10, platform_fee_rate: 0.0075, performance_fee_schedule: 'monthly', platform_fee_schedule: 'immediate' };
+          const fees = feeMap.get(c.customer_id) || { performance_fee_rate: 0.10, platform_fee_rate: 0.0075, performance_fee_schedule: 'monthly', platform_fee_schedule: 'immediate', fee_plan: 'platform', management_fee_rate: 0.01, management_fee_schedule: 'monthly' };
           return {
             customer_id: c.customer_id,
             name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '—',
@@ -13576,35 +13586,47 @@
             performance_fee_rate: fees.performance_fee_rate,
             platform_fee_rate: fees.platform_fee_rate,
             performance_fee_schedule: fees.performance_fee_schedule,
-            platform_fee_schedule: fees.platform_fee_schedule
+            platform_fee_schedule: fees.platform_fee_schedule,
+            fee_plan: fees.fee_plan,
+            management_fee_rate: fees.management_fee_rate,
+            management_fee_schedule: fees.management_fee_schedule
           };
         });
 
         renderCustomers(allCustomers);
       } catch (err) {
         console.error('loadCustomerFees error:', err);
-        tableBody.innerHTML = `<tr><td colspan="8" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="11" class="error">Failed to load customers: ${escapeHtml(err.message)}</td></tr>`;
       }
     }
 
     function renderCustomers(customers) {
       if (!customers || customers.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="8" class="muted">No customers found.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="11" class="muted">No customers found.</td></tr>';
         return;
       }
 
-      const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val;
+      const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val === 'quarterly' ? 'Quarterly' : val;
 
       const rowsHtml = customers.map(c => {
         const perfPercent = (c.performance_fee_rate * 100).toFixed(2);
         const platPercent = (c.platform_fee_rate * 100).toFixed(3);
         const perfSched = c.performance_fee_schedule || 'monthly';
         const platSched = c.platform_fee_schedule || 'immediate';
+        const mgmtPercent = ((c.management_fee_rate ?? 0.01) * 100).toFixed(2);
+        const mgmtSched = c.management_fee_schedule || 'monthly';
+        const feePlan = c.fee_plan || 'platform';
         return `
           <tr data-customer-id="${c.customer_id}">
             <td>${escapeHtml(c.customer_id)}</td>
             <td>${escapeHtml(c.name)}</td>
             <td>${escapeHtml(c.email)}</td>
+            <td class="fee-plan-cell">
+              <select class="js-plan-select" data-customer-id="${c.customer_id}" style="padding:4px;" title="Switching takes effect on the 1st of next month">
+                <option value="platform"${feePlan === 'platform' ? ' selected' : ''}>Platform</option>
+                <option value="management"${feePlan === 'management' ? ' selected' : ''}>Management</option>
+              </select>
+            </td>
             <td class="performance-fee-cell">
               <span class="fee-display">${perfPercent}%</span>
               <input type="number" class="fee-input" value="${perfPercent}" min="0" max="100" step="0.01" style="display:none;width:80px;padding:4px;">
@@ -13613,6 +13635,7 @@
               <span class="schedule-display">${scheduleLabel(perfSched)}</span>
               <select class="schedule-input" data-cadence-performance style="display:none;padding:4px;">
                 <option value="monthly"${perfSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                <option value="quarterly"${perfSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
                 <option value="annual"${perfSched === 'annual' ? ' selected' : ''}>Annual</option>
               </select>
             </td>
@@ -13625,7 +13648,20 @@
               <select class="schedule-input" data-cadence-platform style="display:none;padding:4px;">
                 <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
                 <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                <option value="quarterly"${platSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
                 <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
+              </select>
+            </td>
+            <td class="management-fee-cell">
+              <span class="fee-display">${mgmtPercent}%</span>
+              <input type="number" class="fee-input" value="${mgmtPercent}" min="0" max="10" step="0.01" style="display:none;width:80px;padding:4px;">
+            </td>
+            <td class="mgmt-schedule-cell">
+              <span class="schedule-display">${scheduleLabel(mgmtSched)}</span>
+              <select class="schedule-input" style="display:none;padding:4px;">
+                <option value="monthly"${mgmtSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                <option value="quarterly"${mgmtSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
+                <option value="annual"${mgmtSched === 'annual' ? ' selected' : ''}>Annual</option>
               </select>
             </td>
             <td>
@@ -13668,10 +13704,16 @@
       const platCell = tr.querySelector('.platform-fee-cell');
       const perfSchedCell = tr.querySelector('.perf-schedule-cell');
       const platSchedCell = tr.querySelector('.plat-schedule-cell');
+      const mgmtCell = tr.querySelector('.management-fee-cell');
+      const mgmtSchedCell = tr.querySelector('.mgmt-schedule-cell');
       const perfDisplay = perfCell.querySelector('.fee-display');
       const perfInput = perfCell.querySelector('.fee-input');
       const platDisplay = platCell.querySelector('.fee-display');
       const platInput = platCell.querySelector('.fee-input');
+      const mgmtDisplay = mgmtCell.querySelector('.fee-display');
+      const mgmtInput = mgmtCell.querySelector('.fee-input');
+      const mgmtSchedDisplay = mgmtSchedCell.querySelector('.schedule-display');
+      const mgmtSchedInput = mgmtSchedCell.querySelector('.schedule-input');
       const perfSchedDisplay = perfSchedCell.querySelector('.schedule-display');
       const perfSchedInput = perfSchedCell.querySelector('.schedule-input');
       const platSchedDisplay = platSchedCell.querySelector('.schedule-display');
@@ -13690,6 +13732,10 @@
         perfSchedInput.style.display = 'inline-block';
         platSchedDisplay.style.display = 'none';
         platSchedInput.style.display = 'inline-block';
+        mgmtDisplay.style.display = 'none';
+        mgmtInput.style.display = 'inline-block';
+        mgmtSchedDisplay.style.display = 'none';
+        mgmtSchedInput.style.display = 'inline-block';
         perfInput.focus();
         editBtn.style.display = 'none';
         saveBtn.style.display = 'inline-block';
@@ -13701,13 +13747,16 @@
       if (target.classList.contains('js-cancel-fee')) {
         const origPerf = perfDisplay.textContent.replace('%', '');
         const origPlat = platDisplay.textContent.replace('%', '');
+        const origMgmt = mgmtDisplay.textContent.replace('%', '');
         perfInput.value = origPerf;
         platInput.value = origPlat;
+        mgmtInput.value = origMgmt;
         // Reset schedule selects
         const customer = allCustomers.find(c => c.customer_id == customerId);
         if (customer) {
           perfSchedInput.value = customer.performance_fee_schedule || 'monthly';
           platSchedInput.value = customer.platform_fee_schedule || 'immediate';
+          mgmtSchedInput.value = customer.management_fee_schedule || 'monthly';
         }
         perfDisplay.style.display = 'inline-block';
         perfInput.style.display = 'none';
@@ -13717,6 +13766,10 @@
         perfSchedInput.style.display = 'none';
         platSchedDisplay.style.display = 'inline-block';
         platSchedInput.style.display = 'none';
+        mgmtDisplay.style.display = 'inline-block';
+        mgmtInput.style.display = 'none';
+        mgmtSchedDisplay.style.display = 'inline-block';
+        mgmtSchedInput.style.display = 'none';
         editBtn.style.display = 'inline-block';
         saveBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
@@ -13729,6 +13782,8 @@
         const newPlatPercent = parseFloat(platInput.value);
         const newPerfSchedule = perfSchedInput.value;
         const newPlatSchedule = platSchedInput.value;
+        const newMgmtPercent = parseFloat(mgmtInput.value);
+        const newMgmtSchedule = mgmtSchedInput.value;
         
         if (isNaN(newPerfPercent) || newPerfPercent < 0 || newPerfPercent > 100) {
           showMessage('Performance fee rate must be between 0% and 100%', 'error');
@@ -13740,8 +13795,14 @@
           return;
         }
 
+        if (isNaN(newMgmtPercent) || newMgmtPercent < 0 || newMgmtPercent > 10) {
+          showMessage('Management fee rate must be between 0% and 10%', 'error');
+          return;
+        }
+
         const newPerfRate = newPerfPercent / 100;
         const newPlatRate = newPlatPercent / 100;
+        const newMgmtRate = newMgmtPercent / 100;
 
         saveBtn.setAttribute('disabled', 'true');
         saveBtn.textContent = 'Saving…';
@@ -13752,18 +13813,22 @@
             p_performance_fee_rate: newPerfRate,
             p_platform_fee_rate: newPlatRate,
             p_performance_fee_schedule: newPerfSchedule,
-            p_platform_fee_schedule: newPlatSchedule
+            p_platform_fee_schedule: newPlatSchedule,
+            p_management_fee_rate: newMgmtRate,
+            p_management_fee_schedule: newMgmtSchedule
           });
 
           if (error) throw error;
 
-          const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val;
+          const scheduleLabel = (val) => val === 'annual' ? 'Annual' : val === 'immediate' ? 'Immediate' : val === 'monthly' ? 'Monthly' : val === 'quarterly' ? 'Quarterly' : val;
 
           // Update UI
           perfDisplay.textContent = `${newPerfPercent.toFixed(2)}%`;
           platDisplay.textContent = `${newPlatPercent.toFixed(3)}%`;
+          mgmtDisplay.textContent = `${newMgmtPercent.toFixed(2)}%`;
           perfSchedDisplay.textContent = scheduleLabel(newPerfSchedule);
           platSchedDisplay.textContent = scheduleLabel(newPlatSchedule);
+          mgmtSchedDisplay.textContent = scheduleLabel(newMgmtSchedule);
           perfDisplay.style.display = 'inline-block';
           perfInput.style.display = 'none';
           platDisplay.style.display = 'inline-block';
@@ -13772,6 +13837,10 @@
           perfSchedInput.style.display = 'none';
           platSchedDisplay.style.display = 'inline-block';
           platSchedInput.style.display = 'none';
+          mgmtDisplay.style.display = 'inline-block';
+          mgmtInput.style.display = 'none';
+          mgmtSchedDisplay.style.display = 'inline-block';
+          mgmtSchedInput.style.display = 'none';
           editBtn.style.display = 'inline-block';
           saveBtn.style.display = 'none';
           cancelBtn.style.display = 'none';
@@ -13783,12 +13852,15 @@
             customer.platform_fee_rate = newPlatRate;
             customer.performance_fee_schedule = newPerfSchedule;
             customer.platform_fee_schedule = newPlatSchedule;
+            customer.management_fee_rate = newMgmtRate;
+            customer.management_fee_schedule = newMgmtSchedule;
           }
 
           showMessage(
             `Fees updated for customer ${customerId}. ` +
             `Perf: ${(data.previous_performance_fee_rate * 100).toFixed(2)}% → ${(data.new_performance_fee_rate * 100).toFixed(2)}% (${data.new_performance_fee_schedule}), ` +
-            `Platform: ${(data.previous_platform_fee_rate * 100).toFixed(3)}% → ${(data.new_platform_fee_rate * 100).toFixed(3)}% (${data.new_platform_fee_schedule})`,
+            `Platform: ${(data.previous_platform_fee_rate * 100).toFixed(3)}% → ${(data.new_platform_fee_rate * 100).toFixed(3)}% (${data.new_platform_fee_schedule}), ` +
+            `Mgmt: ${(data.new_management_fee_rate * 100).toFixed(2)}% (${data.new_management_fee_schedule})`,
             'success'
           );
         } catch (err) {
@@ -13804,6 +13876,39 @@
     refreshBtn.addEventListener('click', loadCustomerFees);
     searchInput.addEventListener('input', filterCustomers);
     tableBody.addEventListener('click', handleFeeActions);
+
+    // Fee-plan switch (Platform <-> Management). Effective 1st of next calendar month.
+    tableBody.addEventListener('change', async (ev) => {
+      const sel = ev.target;
+      if (!(sel instanceof HTMLElement) || !sel.classList.contains('js-plan-select')) return;
+      const cid = sel.getAttribute('data-customer-id');
+      const newPlan = sel.value;
+      const cust = allCustomers.find(c => c.customer_id == cid);
+      const prevPlan = cust ? (cust.fee_plan || 'platform') : 'platform';
+      if (newPlan === prevPlan) return;
+      if (!confirm(`Switch customer ${cid} to the "${newPlan}" fee plan?\n\nThis takes effect on the 1st of next calendar month. The current plan stays in force until then.`)) {
+        sel.value = prevPlan;
+        return;
+      }
+      sel.setAttribute('disabled', 'true');
+      try {
+        const { data, error } = await supabaseClient.rpc('set_customer_fee_plan', {
+          p_customer_id: parseInt(cid),
+          p_fee_plan: newPlan
+        });
+        if (error) throw error;
+        if (data && data.success === false) throw new Error(data.error || 'Plan switch failed');
+        // Note: customer_strategies.fee_plan (and this dropdown on reload) stays on the
+        // current in-force plan until the switch date; the history row records the change.
+        showMessage(`Customer ${cid}: ${data.message || ('plan switch to ' + newPlan + ' scheduled')}.`, 'success');
+      } catch (err) {
+        console.error('set_customer_fee_plan error:', err);
+        sel.value = prevPlan;
+        showMessage(`Failed to switch plan: ${err.message}`, 'error');
+      } finally {
+        sel.removeAttribute('disabled');
+      }
+    });
 
     // Load fees when authenticated
     document.addEventListener('DOMContentLoaded', () => {
