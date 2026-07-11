@@ -187,21 +187,21 @@
   </div>
 
   <div class="fee-row">
-    <span class="fl">Include in Active Total:</span>
-    <label><input type="checkbox" class="ftoggle" id="tMgmt" checked>
-      <span class="mgmt-col">Management Fee</span></label>
-    <label><input type="checkbox" class="ftoggle" id="tExch" checked>
-      <span class="exch-col">Exchange Rebate (50% VALR)</span></label>
-    <label><input type="checkbox" class="ftoggle" id="tPlt">
-      <span class="plt-col">Platform Fee</span></label>
-    <label><input type="checkbox" class="ftoggle" id="tPrf">
-      <span class="prf-col">Performance Fee (HWM)</span></label>
+    <span class="fl">Fee Plan (choose one):</span>
+    <label><input type="radio" name="feePlan" class="planToggle" id="planMgmt" value="management" checked>
+      <span class="mgmt-col">Management Fee (1% p.a. on NAV)</span></label>
+    <label><input type="radio" name="feePlan" class="planToggle" id="planPlt" value="platform">
+      <span class="plt-col">Platform Fee (0.75% on contributions)</span></label>
+    <span class="fl" style="margin-left:18px">Always included:</span>
+    <span class="prf-col" style="font-weight:600">Performance Fee (10% HWM)</span>
+    <span style="color:var(--txt3)">+</span>
+    <span class="exch-col" style="font-weight:600">Exchange Rebate (50% VALR)</span>
   </div>
 
   <div class="status" id="status">Loading…</div>
 
   <div class="sh">Revenue Summary
-    <span class="sh-note">active total reflects toggled fee streams · click Detail to drill down into years, months, and daily back-test data</span>
+    <span class="sh-note">active total reflects the selected fee plan (+ performance &amp; exchange) · click Detail to drill down into years, months, and daily back-test data</span>
     <span id="anchorNote" style="display:none;font-size:11px;font-weight:600;color:var(--green);margin-left:8px">✓ matched to back-tester</span>
   </div>
   <div class="tw">
@@ -519,7 +519,12 @@ function getP(){
     rangeEnd: document.getElementById('iRangeEnd')?document.getElementById('iRangeEnd').value:'',
   };
 }
-function getT(){return{mgmt:document.getElementById('tMgmt').checked,exch:document.getElementById('tExch').checked,plt:document.getElementById('tPlt').checked,prf:document.getElementById('tPrf').checked};}
+function getT(){
+  const sel=document.querySelector('input[name="feePlan"]:checked');
+  const plan=sel?sel.value:'management';
+  // Performance fee + exchange rebate apply to BOTH plans; the plan picks mgmt XOR platform.
+  return{mgmt:plan==='management',exch:true,plt:plan==='platform',prf:true,plan};
+}
 function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totPlt:0)+(t.prf?r.totPrf:0);}
 
 // The live product = platform + performance, no management fee. Only in that exact
@@ -1126,6 +1131,7 @@ function buildPrintSummary(){
     ['Initial contribution','$'+p.initial.toLocaleString()],
     ['Monthly contribution','$'+p.monthly.toLocaleString()],
     ['Number of clients',p.clients.toLocaleString()],
+    ['Fee plan',t.plan==='management'?'Management (1% p.a. on NAV)':'Platform (0.75% on contributions)'],
     ['Management fee (p.a.)',pct(p.mgmtRate)],
     ['Platform fee (on contributions)',pct(p.pltRate)],
     ['Performance fee (above HWM)',pct(p.prfRate)],
@@ -1186,7 +1192,7 @@ _nClients.addEventListener('change',function(){    // clamp + tidy once editing 
 });
 
 // Fee toggles — fees affect NAV so a full recompute is needed
-document.querySelectorAll('.ftoggle').forEach(cb=>cb.addEventListener('change',scheduleRecalc));
+document.querySelectorAll('.planToggle').forEach(cb=>cb.addEventListener('change',scheduleRecalc));
 
 // Period tabs for annual breakdown chart
 document.querySelectorAll('.ptab[data-m]').forEach(btn=>{

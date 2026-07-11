@@ -101,6 +101,9 @@ serve(async (_req) => {
         performance_fee_schedule,
         platform_fee_rate,
         platform_fee_schedule,
+        fee_plan,
+        management_fee_rate,
+        management_fee_schedule,
         customer_details!inner(
           customer_id,
           first_names,
@@ -146,6 +149,9 @@ serve(async (_req) => {
       const platRate = Number(strategy.platform_fee_rate ?? 0.0075);
       const perfSchedule = String(strategy.performance_fee_schedule ?? "monthly");
       const platSchedule = String(strategy.platform_fee_schedule ?? "immediate");
+      const feePlan = String(strategy.fee_plan ?? "platform");
+      const mgmtRate = Number(strategy.management_fee_rate ?? 0.01);
+      const mgmtSchedule = String(strategy.management_fee_schedule ?? "monthly");
 
       try {
         console.log(`[ef_monthly_statement_generator] Processing customer ${customerId}`);
@@ -271,7 +277,7 @@ serve(async (_req) => {
         const { data: feeLines } = await supabase
           .schema("lth_pvr")
           .from("ledger_lines")
-          .select("performance_fee_usdt,platform_fee_usdt,platform_fee_btc")
+          .select("performance_fee_usdt,platform_fee_usdt,platform_fee_btc,management_fee_usdt")
           .eq("org_id", ORG_ID)
           .eq("customer_id", customerId)
           .gte("trade_date", startDate)
@@ -280,10 +286,12 @@ serve(async (_req) => {
         let perfFeeUsd = 0;
         let platFeeUsdtSum = 0;
         let platFeeBtcSum = 0;
+        let mgmtFeeUsd = 0;
         for (const fl of feeLines ?? []) {
           perfFeeUsd += Number(fl.performance_fee_usdt ?? 0);
           platFeeUsdtSum += Number(fl.platform_fee_usdt ?? 0);
           platFeeBtcSum += Number(fl.platform_fee_btc ?? 0);
+          mgmtFeeUsd += Number(fl.management_fee_usdt ?? 0);
         }
         const platFeeUsd = platFeeUsdtSum + (platFeeBtcSum * currentBtcPriceUsd);
 
@@ -311,6 +319,10 @@ serve(async (_req) => {
           platform_fee_amount: fmtUsd(platFeeUsd),
           platform_fee_status_text: buildFeeStatusText(platSchedule),
           platform_fee_note: buildPlatformFeeNote(platRate, platSchedule),
+          fee_plan: feePlan,
+          management_fee_rate: fmtPct(mgmtRate),
+          management_fee_amount: fmtUsd(mgmtFeeUsd),
+          management_fee_status_text: buildFeeStatusText(mgmtSchedule),
           portal_url: PORTAL_URL,
           website_url: WEBSITE_URL,
           download_url: statementData.downloadUrl ?? "",

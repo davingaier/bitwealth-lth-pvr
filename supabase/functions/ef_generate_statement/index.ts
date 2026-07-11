@@ -186,6 +186,9 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const platRate = Number(strategy.platform_fee_rate ?? 0.0075);
   const perfSchedule = String(strategy.performance_fee_schedule ?? "monthly");
   const platSchedule = String(strategy.platform_fee_schedule ?? "immediate");
+  const feePlan = String(strategy.fee_plan ?? "platform");
+  const mgmtRate = Number(strategy.management_fee_rate ?? 0.01);
+  const mgmtSchedule = String(strategy.management_fee_schedule ?? "monthly");
   // Inception = the date the customer's account became active. We prefer the
   // human-curated `customer_details.trade_start_date` and fall back to the
   // strategy creation timestamp only when no activation date has been recorded.
@@ -249,7 +252,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: txRows, error: txRowsErr } = await supabase
     .schema("lth_pvr")
     .from("ledger_lines")
-    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, note")
+    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, management_fee_usdt, note")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .gte("trade_date", startStr)
@@ -311,6 +314,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   let platformFeeUsdtSum = 0;
   let platformFeeBtcSum = 0;
   let performanceFeeUsdtSum = 0;
+  let managementFeeUsdtSum = 0;
   let totalBtc = 0;
   let totalUsdt = 0;
   let totalZar = 0;
@@ -332,6 +336,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     platformFeeUsdtSum += platFeeUsdt;
     platformFeeBtcSum += platFeeBtc;
     performanceFeeUsdtSum += perfFeeUsdt;
+    managementFeeUsdtSum += Number(t.management_fee_usdt ?? 0);
 
     const kind = String(t.kind ?? "").toLowerCase();
     if (kind === "deposit" || kind === "topup") contributionsUsd += amtUsdt;
@@ -479,12 +484,19 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
   const totalFeesDeductedUsd = exchangeFeesUsd
     + (platSchedule === "immediate" ? platformFeeUsdSum : 0)
+    + (mgmtSchedule === "monthly" ? managementFeeUsdtSum : 0)
     + (perfSchedule !== "annual" ? performanceFeeUsdtSum : 0);
 
   if (platSchedule === "immediate" && platformFeeUsdSum > 0) {
     deductedFees.push({
       label: `Platform fee (${(platRate * 100).toFixed(2).replace(/\.?0+$/, "")}% of net contributions)`,
       amount_usd: fmtUsd(platformFeeUsdSum),
+    });
+  }
+  if (feePlan === "management" && mgmtSchedule === "monthly" && managementFeeUsdtSum > 0) {
+    deductedFees.push({
+      label: `Management fee (${(mgmtRate * 100).toFixed(2).replace(/\.?0+$/, "")}% p.a. on NAV)`,
+      amount_usd: fmtUsd(managementFeeUsdtSum),
     });
   }
   if (perfSchedule !== "annual" && performanceFeeUsdtSum > 0) {
@@ -522,12 +534,13 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     ? hwmContribCum                                          // first-time: threshold = total contributions
     : hwmUsd + Math.max(0, costBasisUsd - hwmContribCum);  // previously fee'd: HWM profit + new contrib
 
-  // ── Annual accrual lookup (if either fee is on annual schedule) ──
-  if (platSchedule === "annual" || perfSchedule === "annual") {
+  // ── Annual accrual lookup (if any fee is on quarterly/annual schedule) ──
+  const mgmtAccrues = feePlan === "management" && (mgmtSchedule === "quarterly" || mgmtSchedule === "annual");
+  if (platSchedule === "annual" || perfSchedule === "annual" || mgmtAccrues) {
     const { data: accrualRows } = await supabase
       .schema("lth_pvr")
       .from("annual_fee_accrual")
-      .select("accrual_year, accrued_platform_fee_btc, accrued_platform_fee_usdt, accrued_performance_fee_usdt, settled_at")
+      .select("accrual_year, accrued_platform_fee_btc, accrued_platform_fee_usdt, accrued_performance_fee_usdt, accrued_management_fee_usdt, settled_at")
       .eq("org_id", orgId)
       .eq("customer_id", customerId)
       .order("accrual_year", { ascending: false });
@@ -561,6 +574,20 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
       accruedYtdPerformanceUsd +=
         Number(latestAccrual?.accrued_performance_fee_usdt ?? 0) ||
         interimMonthlyPerfUsd;  // fall back when accrual table not yet seeded
+    }
+
+    if (mgmtAccrues) {
+      // This month's management-fee slice (NAV x rate / 12), accrued and
+      // settled at the calendar quarter/year end.
+      const interimMonthlyMgmtUsd = Math.max(0, closingNav * mgmtRate / 12);
+      if (interimMonthlyMgmtUsd > 0) {
+        accruedFees.push({
+          label: `Management fee \u2014 ${MONTH_NAMES[monthIdx]} ${year} (accrued, ${mgmtSchedule})`,
+          amount_usd: fmtUsd(interimMonthlyMgmtUsd),
+        });
+      }
+      accruedYtdPlatformUsd +=
+        Number(latestAccrual?.accrued_management_fee_usdt ?? 0) || interimMonthlyMgmtUsd;
     }
 
     // Anniversary = next yearly anniversary of inception after today.
