@@ -68,6 +68,312 @@
             color: var(--text-tertiary);
             margin-top: 20px;
         }
+
+        /* ===== Reduce gap between hero CTA and How-It-Works card ===== */
+        .hero {
+            min-height: auto;
+            padding-top: 120px;
+            padding-bottom: 40px;
+        }
+        .hero-cta {
+            margin-bottom: 0;
+        }
+        .how-section {
+            padding-top: 56px;
+        }
+
+        /* ===== Three Pillars (ported from ABC One-Pager) ===== */
+        .section-heading {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-align: center;
+            margin: 8px 0 22px;
+        }
+        .pillars-diagram {
+            display: grid;
+            grid-template-columns: 1fr 32px 1fr 32px 1fr;
+            align-items: stretch;
+            gap: 0;
+            margin-bottom: 24px;
+        }
+        .pillar-box {
+            background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-darker) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--gold);
+            border-radius: 10px;
+            padding: 20px 16px;
+            text-align: center;
+        }
+        .pillar-box .pillar-num {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            border-radius: 50%;
+            background: var(--gold);
+            color: var(--bg-darker);
+            font-size: 15px;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+        .pillar-box .pillar-name {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--gold);
+            line-height: 1.2;
+        }
+        .pillar-box .pillar-tag {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .pillar-arrow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gold);
+            font-size: 28px;
+            font-weight: 700;
+            opacity: 0.6;
+        }
+        .pillars-combine {
+            font-size: 15px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin: 0 auto 32px;
+            max-width: 940px;
+            line-height: 1.65;
+        }
+        .pillars-combine strong {
+            color: var(--gold);
+        }
+        .pillar-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .pillar-col {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+        }
+        .pillar-col h3 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--gold);
+            margin-bottom: 4px;
+        }
+        .pillar-col .pillar-sub {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 14px;
+        }
+        .pillar-col p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .pillar-col p strong {
+            color: var(--text-primary);
+        }
+        .pillar-col .adv-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 8px;
+            margin-bottom: 10px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 180, 0, 0.15);
+        }
+        .pillar-col ul.adv-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .pillar-col ul.adv-list li {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            padding-left: 18px;
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .pillar-col ul.adv-list li::before {
+            content: "\25B8";
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: var(--gold);
+        }
+
+        /* ===== Static vs Dynamic Grid SVG illustration ===== */
+        .grid-illustration {
+            background: var(--bg-darker);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+        .grid-illustration .gi-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .grid-illustration .gi-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            align-items: center;
+        }
+        .grid-illustration .gi-caption {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-align: center;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        .grid-illustration .gi-foot {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 16px;
+            line-height: 1.6;
+        }
+
+        /* ===== Optional Fourth Pillar (USDPC yield) ===== */
+        .pillar-four {
+            background: linear-gradient(180deg, rgba(16, 185, 129, 0.07), var(--bg-card) 60%);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 12px;
+            padding: 32px;
+            margin-top: 8px;
+        }
+        .pillar-four .p4-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #10B981;
+            border: 1px solid rgba(16, 185, 129, 0.45);
+            border-radius: 999px;
+            padding: 4px 12px;
+            margin-bottom: 14px;
+        }
+        .pillar-four h3 {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .pillar-four h3 .p4-num {
+            color: #10B981;
+        }
+        .pillar-four .pillar-sub {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 18px;
+        }
+        .pillar-four p {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .pillar-four p strong {
+            color: var(--text-primary);
+        }
+        .pillar-four .p4-yield {
+            color: #10B981;
+            font-weight: 700;
+        }
+        .pillar-four .adv-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 8px 0 10px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .pillar-four ul.adv-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .pillar-four ul.adv-list li {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            padding-left: 18px;
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .pillar-four ul.adv-list li::before {
+            content: "\25B8";
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: #10B981;
+        }
+        .p4-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 32px;
+            align-items: center;
+        }
+        .p4-disclaimer {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            line-height: 1.6;
+            margin-top: 14px;
+        }
+        .p4-disclaimer a {
+            color: #10B981;
+            text-decoration: none;
+        }
+        .p4-disclaimer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 900px) {
+            .pillars-diagram {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            .pillar-arrow {
+                transform: rotate(90deg);
+                padding: 4px 0;
+            }
+            .pillar-cols {
+                grid-template-columns: 1fr;
+            }
+            .grid-illustration .gi-row {
+                grid-template-columns: 1fr;
+            }
+            .p4-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
     <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
@@ -129,50 +435,205 @@
         <div class="container">
             <div class="feature-card" style="padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
                 <h2 style="margin-bottom: 24px;">How LTH PVR Works</h2>
-                <p class="section-subtitle" style="margin-bottom: 48px;">Four-step process that removes emotion from Bitcoin investing</p>
-                
-                <div class="how-grid">
-                <div class="how-card">
-                    <div class="how-icon">📊</div>
-                    <h3>On-Chain Intelligence</h3>
-                    <p style="margin-bottom: 16px;">
-                        We monitor <strong>Long-Term Holder Profit to Volatility Ratio (LTH PVR)</strong> — 
-                        a metric showing when long-term BTC holders are historically overextended (sell signal) 
-                        or risk-averse (buy signal).
+                <p class="section-subtitle" style="margin-bottom: 40px;">Three core pillars &mdash; plus an optional fourth &mdash; combined into one fully-automated Bitcoin allocation engine</p>
+
+                <!-- ═══════════ TOP DIAGRAM ═══════════ -->
+                <div class="section-heading">How the Components Combine</div>
+                <div class="pillars-diagram">
+                    <div class="pillar-box">
+                        <div class="pillar-num">1</div>
+                        <div class="pillar-name">On-Chain Signal</div>
+                        <div class="pillar-tag">LTH PVR Metric</div>
+                    </div>
+                    <div class="pillar-arrow">&rarr;</div>
+                    <div class="pillar-box">
+                        <div class="pillar-num">2</div>
+                        <div class="pillar-name">Disciplined Accumulation</div>
+                        <div class="pillar-tag">Dollar-Cost Averaging</div>
+                    </div>
+                    <div class="pillar-arrow">&rarr;</div>
+                    <div class="pillar-box">
+                        <div class="pillar-num">3</div>
+                        <div class="pillar-name">Adaptive Execution</div>
+                        <div class="pillar-tag">Dynamic Grid Logic</div>
+                    </div>
+                </div>
+                <p class="pillars-combine">
+                    The on-chain <strong>LTH PVR signal</strong> defines what is statistically cheap or expensive on any given day.
+                    <strong>DCA</strong> provides the patient, automated cadence that removes emotion from execution. The
+                    <strong>dynamic grid</strong> overlay decides <em>how much</em> to buy or sell at each level &mdash; scaling order
+                    size to conviction. Together they form a single, fully-automated Bitcoin allocation engine.
+                </p>
+
+                <!-- ═══════════ THREE NARRATIVE COLUMNS ═══════════ -->
+                <div class="pillar-cols">
+
+                    <!-- Pillar 1: LTH PVR -->
+                    <div class="pillar-col">
+                        <h3>1 &middot; LTH PVR On-Chain Metric</h3>
+                        <div class="pillar-sub">The signal layer</div>
+                        <p>The <strong>Long-Term Holder Profit-to-Volatility Ratio</strong> measures the spot BTC price against the average cost basis of investors who have held their coins for more than 155 days &mdash; the &ldquo;<strong>smart money</strong>&rdquo; cohort representing over 70% of circulating supply. The deviation is normalised by the rolling volatility of that cohort and expressed in <strong>standard deviations (&sigma;)</strong> from its mean.</p>
+                        <p>Because LTH realised price is computed directly from blockchain UTXO data, the signal reflects <em>actual conviction of capital</em>, not derivative positioning, sentiment, or technical patterns &mdash; and it cannot be manipulated by short-term flows.</p>
+                        <div class="adv-label">Advantages</div>
+                        <ul class="adv-list">
+                            <li>Cycle-aware: historically the most accurate leading indicator of BTC macro turning points</li>
+                            <li>Manipulation-resistant &mdash; on-chain accumulation cannot be faked</li>
+                            <li>Independent of price-only technicals; orthogonal to most quant signals</li>
+                            <li>Generates one decision per day &mdash; low frequency, low noise, low churn</li>
+                            <li>Proprietary smoothing layer: not replicable from public price feeds alone</li>
+                        </ul>
+                    </div>
+
+                    <!-- Pillar 2: DCA -->
+                    <div class="pillar-col">
+                        <h3>2 &middot; Dollar-Cost Averaging</h3>
+                        <div class="pillar-sub">The accumulation framework</div>
+                        <p><strong>DCA</strong> commits a fixed contribution to BTC at a regular cadence regardless of market conditions. By spreading entries through time it removes the single largest risk in volatile assets: <em>the timing of the lump sum</em>. Average cost converges to the mean traded price over the contribution window rather than to whatever price prevailed on any one day.</p>
+                        <p>For investors with a multi-year horizon, DCA provides a behavioural anchor that survives drawdowns and extended sideways markets &mdash; the two regimes in which discretionary investors most often capitulate.</p>
+                        <div class="adv-label">Advantages</div>
+                        <ul class="adv-list">
+                            <li>Eliminates entry-point risk &mdash; no single day defines the cost basis</li>
+                            <li>Removes emotion: contributions execute on schedule, not on conviction</li>
+                            <li>Fully automated &mdash; participants do not need to monitor the market</li>
+                            <li>Predictable cash-flow profile suitable for treasury and personal-balance-sheet planning</li>
+                            <li>Compounds the volatility of BTC into accumulation rather than damage</li>
+                        </ul>
+                    </div>
+
+                    <!-- Pillar 3: Dynamic Grid -->
+                    <div class="pillar-col">
+                        <h3>3 &middot; Dynamic Grid Trading</h3>
+                        <div class="pillar-sub">The sizing engine</div>
+                        <p>A traditional <strong>grid bot</strong> places buy orders at fixed price intervals below a reference and sell orders above &mdash; <em>buying more as price falls, selling more as it rises</em>. Mechanically this is exactly what a sound DCA enhancement should do, but the grid lines themselves are static and quickly fall out of alignment with a trending market.</p>
+                        <p>LTH PVR replaces those static grid lines with <strong>dynamic ones</strong>: each tier of the grid is a sigma band drawn around the daily LTH PVR mean. As the on-chain mean drifts, the entire grid drifts with it &mdash; orders are always sized relative to <em>where the market is now</em>, not where it was when the grid was set.</p>
+                        <div class="adv-label">Advantages</div>
+                        <ul class="adv-list">
+                            <li>Grid lines self-recalibrate daily &mdash; never stale, never stranded</li>
+                            <li>Order size scales to statistical conviction, not arbitrary fixed intervals</li>
+                            <li>Buys are aggressive in oversold zones, sells aggressive in overheated ones</li>
+                            <li>Bear Market Pause + momentum filter prevent grid-bot wipe-outs in trending regimes</li>
+                            <li>Combines mean-reversion harvesting with directional accumulation in one engine</li>
+                        </ul>
+                    </div>
+
+                </div>
+
+                <!-- ═══════════ STATIC vs DYNAMIC GRID ILLUSTRATION ═══════════ -->
+                <div class="grid-illustration">
+                    <div class="gi-title">Static Grid vs Dynamic Sigma-Band Grid</div>
+                    <div class="gi-row">
+
+                        <!-- LEFT: Static Grid -->
+                        <div>
+                            <svg viewBox="0 0 320 140" width="100%" height="180" preserveAspectRatio="xMidYMid meet" aria-label="Static grid bot illustration">
+                                <line x1="20" y1="20"  x2="310" y2="20"  stroke="rgba(168,85,247,0.45)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <line x1="20" y1="45"  x2="310" y2="45"  stroke="rgba(168,85,247,0.45)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <line x1="20" y1="70"  x2="310" y2="70"  stroke="rgba(168,85,247,0.7)"  stroke-width="1.4"/>
+                                <line x1="20" y1="95"  x2="310" y2="95"  stroke="rgba(168,85,247,0.45)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <line x1="20" y1="120" x2="310" y2="120" stroke="rgba(168,85,247,0.45)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <polyline points="20,110 60,98 100,87 150,72 210,48 270,22 310,12"
+                                      fill="none" stroke="#FFB400" stroke-width="2"/>
+                                <circle cx="60"  cy="98"  r="3"   fill="#10B981"/>
+                                <circle cx="100" cy="87"  r="2.5" fill="#10B981"/>
+                                <circle cx="150" cy="72"  r="2.5" fill="#EF4444"/>
+                                <circle cx="210" cy="48"  r="4"   fill="#EF4444"/>
+                                <text x="245" y="14" font-size="9" fill="#EF4444" font-weight="600">grid exhausted</text>
+                                <line x1="245" y1="16" x2="275" y2="22" stroke="#EF4444" stroke-width="0.8" opacity="0.7"/>
+                                <text x="20"  y="135" font-size="8" fill="#6B7896">time &rarr;</text>
+                                <text x="260" y="135" font-size="8" fill="#6B7896">price escapes range</text>
+                            </svg>
+                            <div class="gi-caption">Static grid &mdash; fixed price levels become stranded as the market trends</div>
+                        </div>
+
+                        <!-- RIGHT: Dynamic Sigma-Band Grid -->
+                        <div>
+                            <svg viewBox="0 0 320 140" width="100%" height="180" preserveAspectRatio="xMidYMid meet" aria-label="Dynamic sigma-band grid illustration">
+                                <path d="M20,30 Q90,25 160,18 T310,5"  fill="none" stroke="rgba(255,180,0,0.35)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <path d="M20,55 Q90,50 160,42 T310,28" fill="none" stroke="rgba(255,180,0,0.5)"  stroke-width="1" stroke-dasharray="3,3"/>
+                                <path d="M20,80 Q90,75 160,66 T310,52" fill="none" stroke="rgba(255,180,0,0.95)" stroke-width="1.6"/>
+                                <path d="M20,105 Q90,100 160,92 T310,78" fill="none" stroke="rgba(255,180,0,0.5)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <path d="M20,130 Q90,125 160,118 T310,104" fill="none" stroke="rgba(255,180,0,0.35)" stroke-width="1" stroke-dasharray="3,3"/>
+                                <polyline points="20,110 55,125 115,70 140,42 200,80 260,15 310,55"
+                                      fill="none" stroke="#FFFFFF" stroke-width="2"/>
+                                <circle cx="20"  cy="110" r="3"   fill="#10B981"/>
+                                <circle cx="55"  cy="125" r="5"   fill="#10B981"/>
+                                <circle cx="200" cy="80"  r="3"   fill="#10B981"/>
+                                <circle cx="140" cy="42"  r="4"   fill="#EF4444"/>
+                                <circle cx="260" cy="15"  r="5"   fill="#EF4444"/>
+                                <text x="232" y="54" font-size="8" fill="#FFB400" font-weight="600">LTH PVR mean</text>
+                                <text x="20" y="135" font-size="8" fill="#6B7896">time &rarr;</text>
+                                <text x="240" y="135" font-size="8" fill="#6B7896">grid follows mean</text>
+                            </svg>
+                            <div class="gi-caption">Dynamic grid &mdash; sigma bands re-centre on the on-chain mean every day, so orders always fire</div>
+                        </div>
+                    </div>
+                    <div class="gi-foot">
+                        <span style="color:#10B981;">&#9679; buy</span> &nbsp;
+                        <span style="color:#EF4444;">&#9679; sell</span> &nbsp;&middot;&nbsp;
+                        Order size scales with the sigma tier: largest at &plusmn;2&sigma;, smallest near the mean &mdash; the eleven-band confidence-interval framework at the heart of the strategy.
+                    </div>
+                </div>
+
+                <!-- ═══════════ OPTIONAL FOURTH PILLAR: USDPC YIELD ═══════════ -->
+                <div class="pillar-four">
+                    <span class="p4-badge">Optional 4th pillar</span>
+                    <h3><span class="p4-num">4 &middot;</span> Idle-Cash Yield with USDPC</h3>
+                    <div class="pillar-sub">The capital-efficiency layer &mdash; earn while you wait</div>
+                    <div class="p4-grid">
+                        <div>
+                            <p>Between Bitcoin positions &mdash; during HOLD periods and the bear-market pause &mdash; your portfolio can hold a meaningful balance of idle USDT. Rather than let that cash sit dormant, BitWealth can <strong>automatically sweep it into USDPC</strong>, the on-chain <strong>USD Private Credit Token</strong> issued by RainFin and backed by the Garrington Private Credit Strategy &mdash; a portfolio of senior secured, asset-backed loans with a 10-year track record.</p>
+                            <p>USDPC targets a consistent net USD return of roughly <span class="p4-yield">8&ndash;10% per year</span> with low volatility and low correlation to Bitcoin. The sweep is <strong>fully automated and never delays a trade</strong>: the instant the LTH PVR engine signals a buy, any USDPC is converted back to USDT first (a polled, sub-second settlement) so your Bitcoin order fires on time. Your available buying power always counts the USDPC balance at its current value, and conversions cost only about 0.1% per sweep.</p>
+                            <div class="adv-label">Advantages</div>
+                            <ul class="adv-list">
+                                <li>Idle cash earns ~10% APR instead of sitting dormant between trades</li>
+                                <li>Fully automatic &mdash; swept in when idle, converted back the moment a buy fires</li>
+                                <li>USD-denominated, low-volatility, low correlation to Bitcoin</li>
+                                <li>Backed by senior secured loans (Garrington, 10-year track record)</li>
+                                <li>Optional &mdash; enable or disable on a per-portfolio basis</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <svg viewBox="0 0 560 250" width="100%" height="250" preserveAspectRatio="xMidYMid meet" aria-label="Idle USDT is automatically swept into USDPC to earn yield, then converted back to buy Bitcoin when a signal fires">
+                                <defs>
+                                    <marker id="p4Green" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#10B981"/></marker>
+                                    <marker id="p4Gold" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#FFB400"/></marker>
+                                </defs>
+
+                                <!-- Idle USDT box -->
+                                <rect x="40" y="40" width="170" height="64" rx="10" fill="rgba(107,120,150,0.14)" stroke="#6B7896" stroke-width="1.5"/>
+                                <text x="125" y="68" text-anchor="middle" font-size="16" font-weight="700" fill="#A8B2D1">Idle USDT</text>
+                                <text x="125" y="88" text-anchor="middle" font-size="10.5" fill="#6B7896">uninvested cash</text>
+
+                                <!-- USDPC box -->
+                                <rect x="340" y="30" width="180" height="84" rx="10" fill="rgba(16,185,129,0.10)" stroke="#10B981" stroke-width="1.5"/>
+                                <text x="430" y="60" text-anchor="middle" font-size="17" font-weight="800" fill="#10B981">USDPC</text>
+                                <text x="430" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#A8B2D1">&#8776; 10% APR</text>
+                                <text x="430" y="100" text-anchor="middle" font-size="9.5" fill="#6B7896">USD Private Credit Token</text>
+
+                                <!-- Sweep arrow (USDT -> USDPC) -->
+                                <line x1="212" y1="58" x2="336" y2="58" stroke="#10B981" stroke-width="2" marker-end="url(#p4Green)"/>
+                                <text x="274" y="49" text-anchor="middle" font-size="11" font-weight="600" fill="#10B981">auto-sweep</text>
+
+                                <!-- Convert-back arrow (USDPC -> USDT) -->
+                                <line x1="336" y1="90" x2="212" y2="90" stroke="#FFB400" stroke-width="2" marker-end="url(#p4Gold)"/>
+                                <text x="274" y="106" text-anchor="middle" font-size="11" font-weight="600" fill="#FFB400">convert on buy signal</text>
+
+                                <!-- Down arrow to BTC -->
+                                <line x1="125" y1="104" x2="125" y2="172" stroke="#FFB400" stroke-width="2" marker-end="url(#p4Gold)"/>
+                                <text x="140" y="145" text-anchor="start" font-size="11" font-weight="600" fill="#FFB400">deploy to BTC</text>
+
+                                <!-- BTC box -->
+                                <rect x="40" y="176" width="170" height="60" rx="10" fill="rgba(255,180,0,0.10)" stroke="#FFB400" stroke-width="1.5"/>
+                                <text x="125" y="202" text-anchor="middle" font-size="16" font-weight="800" fill="#FFB400">Buy Bitcoin</text>
+                                <text x="125" y="221" text-anchor="middle" font-size="10" fill="#6B7896">when LTH PVR signals</text>
+                            </svg>
+                            <div class="gi-caption">Idle USDT is parked in yield-bearing USDPC and converted back the moment a buy signal fires</div>
+                        </div>
+                    </div>
+                    <p class="p4-disclaimer">
+                        USDPC is an optional, third-party product issued by RainFin (Pty) Ltd and backed by the Garrington Private Credit Strategy. It is not a bank deposit, is not guaranteed, and carries its own credit, liquidity and smart-contract risk. The 8&ndash;10% figure is a target net return, not a guarantee, and yields may vary. Learn more at <a href="https://www.rainfin.com/usd-pc-token" target="_blank" rel="noopener">rainfin.com</a>.
                     </p>
                 </div>
-                
-                <div class="how-card">
-                    <div class="how-icon">📈</div>
-                    <h3>Confidence Interval Bands</h3>
-                    <p style="margin-bottom: 16px;">
-                        LTH PVR data is analyzed using statistical confidence intervals divided into <strong>11 bands</strong>. 
-                        Each band has its own position size weighting. When BTC trades <strong>above the median band</strong> 
-                        (euphoria), we reduce exposure with incrementally larger trigger sells. When <strong>below median band</strong> 
-                        (fear), we accumulate more aggressively with larger position sizes.
-                    </p>
-                </div>
-                
-                <div class="how-card">
-                    <div class="how-icon">🤖</div>
-                    <h3>Automated Daily Decisions</h3>
-                    <p style="margin-bottom: 16px;">
-                        Every trading day at 03:00 UTC, our system fetches the latest LTH PVR data from our 
-                        BTC blockchain node, compares current BTC price to bands, generates buy/sell/hold decision, 
-                        calculates optimal position size, and places orders on VALR exchange.
-                    </p>
-                </div>
-                
-                <div class="how-card">
-                    <div class="how-icon">✅</div>
-                    <h3>Transparent Execution</h3>
-                    <p style="margin-bottom: 16px;">
-                        All trades executed on VALR (South African exchange). Your customer portal shows 
-                        daily decisions and reasoning, order execution details, portfolio balances (BTC + USDT), 
-                        performance vs benchmarks, and fee calculations.
-                    </p>
-                </div>
-            </div>
             </div>
         </div>
     </section>
@@ -181,27 +642,31 @@
     <section class="features-section">
         <div class="container">
             <div class="feature-card" style="padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;">
-                <h2 style="margin-bottom: 24px;">Historical Performance (2020-2026)</h2>
-                <p class="section-subtitle" style="margin-bottom: 48px;">How LTH PVR compares to Standard DCA and HODL across 6.5 years of live Bitcoin history</p>
-                
+                <h2 style="margin-bottom: 24px;">Historical Performance <span id="perfPeriod">(Last 5 Years)</span></h2>
+                <p class="section-subtitle" style="margin-bottom: 48px;">How LTH PVR compares to Standard DCA and HODL over the last five years of live Bitcoin history &mdash; refreshed automatically on the 1st of every month</p>
+
+                <div id="perfStatus" style="display:none; text-align:center; color: var(--text-tertiary); margin-bottom: 24px;"></div>
+
                 <div class="assumptions-box">
                 <h4>📊 Back-Test Parameters</h4>
                 <ul>
-                    <li>• <strong>Start Date:</strong> 2020-01-01</li>
-                    <li>• <strong>End Date:</strong> 2026-05-18</li>
-                    <li>• <strong>Upfront Investment:</strong> $10,000</li>
-                    <li>• <strong>Monthly Contribution:</strong> $1,000</li>
+                    <li>• <strong>Start Date:</strong> <span id="bpStart">—</span></li>
+                    <li>• <strong>End Date:</strong> <span id="bpEnd">—</span></li>
+                    <li>• <strong>Upfront Investment:</strong> <span id="bpUpfront">$2,400</span></li>
+                    <li>• <strong>Monthly Contribution:</strong> <span id="bpMonthly">$200</span></li>
+                    <li>• <strong>Idle-cash yield:</strong> USDT swept to USDPC (<span id="bpUsdpc">~10% APY, 0.1% per sweep</span>)</li>
                     <li>• <strong>Band source:</strong> RB (Research Bitcoin on-chain LTH PVR)</li>
-                    <li>• <strong>Exchange:</strong> VALR (BTC/USDT)</li>
+                    <li>• <strong>Exchange:</strong> VALR (BTC/USDT) — 8bps trade, 18bps conversion</li>
                     <li>• <strong>Performance Fee:</strong> 10% (high-water mark)</li>
                     <li>• <strong>Platform Fee:</strong> 0.75% on contributions</li>
                 </ul>
                 <p style="margin-top: 16px; color: var(--text-tertiary); font-size: 14px; line-height: 1.6;">
                     The <strong>HODL benchmark</strong> represents an investor who commits the <em>entire</em>
-                    six-and-a-half-year stake (upfront + every scheduled monthly contribution — 
-                    a total of $76,000 in cash) on day one and never trades again. Very few real-world
-                    investors can deploy that much capital up front — it is included purely as a theoretical
-                    upper bound for a perfectly-timed buy-and-hold strategy.
+                    five-year stake (upfront + every scheduled monthly contribution &mdash;
+                    a total of <span id="hodlTotal">$14,600</span> in cash) on day one and never trades again. Very few real-world
+                    investors can deploy that much capital up front &mdash; it is included purely as a theoretical
+                    upper bound for a perfectly-timed buy-and-hold strategy. Std DCA &amp; HODL bear exchange fees only
+                    (no platform, performance or USDPC fees).
                 </p>
             </div>
             
@@ -222,19 +687,18 @@
             <div class="feature-card" style="margin-bottom: 32px; padding: 32px;">
                 <h3 style="margin-bottom: 16px;">What the numbers say</h3>
                 <p style="line-height: 1.7; color: var(--text-secondary);">
-                    Over the full 6.5-year window, LTH PVR turned $76,000 of dollar-cost-averaged contributions
-                    into roughly <strong>$742,600</strong> — versus <strong>$316,000</strong> for vanilla
-                    monthly DCA and <strong>$896,400</strong> for the theoretical HODL benchmark (which
+                    Over the trailing five-year window (<span id="nStart">—</span> &rarr; <span id="nEnd">—</span>), LTH PVR turned <span id="nInvested">—</span> of dollar-cost-averaged contributions
+                    into roughly <strong id="nLth">—</strong> — versus <strong id="nStd">—</strong> for vanilla
+                    monthly DCA and <strong id="nHodl">—</strong> for the theoretical HODL benchmark (which
                     requires committing the entire stake up front).
                 </p>
                 <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
-                    HODL produces the highest absolute number in this particular window, but it does so only because
-                    BTC happened to rally from sub-$10k to $100k+ over the period and the investor was lucky enough
-                    to deploy <em>$76,000 of capital they didn't have yet</em>. Along the way HODL also endured
-                    multiple drawdowns of <strong>70&ndash;83%</strong> — levels at which most investors
-                    capitulate. LTH PVR delivered the best <strong>risk-adjusted</strong> result every
-                    time: the highest Sharpe ratio and the smallest drawdowns, while still meaningfully
-                    out-performing standard DCA in every period we tested (1-year through 10-year).
+                    HODL can produce a large absolute number when BTC trends strongly, but only because the investor
+                    is assumed to deploy the full multi-year stake <em>they didn't have yet</em> on day one. Along the way it
+                    endured a maximum drawdown of <strong id="nHodlDd">—</strong>, and standard DCA <strong id="nStdDd">—</strong> —
+                    levels at which most investors capitulate. LTH PVR delivered the best <strong>risk-adjusted</strong> result:
+                    its worst drawdown was just <strong id="nLthDd">—</strong>, while still meaningfully
+                    out-performing standard DCA over the period.
                 </p>
                 <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
                     In short: LTH PVR is the strategy you can actually live with — month after month, drawdown after
@@ -287,7 +751,7 @@
                         <li>No withdrawal fees (beyond exchange costs)</li>
                         <li>No inactivity fees</li>
                         <li>Full fee transparency in customer portal</li>
-                        <li>Detailed monthly statements and invoices</li>
+                        <li>Detailed monthly statements</li>
                     </ul>
                 </div>
             </div>
@@ -369,265 +833,127 @@
 
     <script src="js/main.js"></script>
     <script>
-        // Real back-test data: $10K upfront + $1K monthly, 2020-01-01 → 2026-05-18, RB band source.
-        // Source: bt_run afdbe312-cd29-40fd-92d2-9482571f1b90 — quarterly snapshots from
-        // lth_pvr_bt.bt_results_daily (LTH PVR), bt_std_dca_balances (Std DCA), bt_hodl_balances (HODL).
-        const historicalData = {
-            labels: ['2020-01','2020-04','2020-07','2020-10','2021-01','2021-04','2021-07','2021-10','2022-01','2022-04','2022-07','2022-10','2023-01','2023-04','2023-07','2023-10','2024-01','2024-04','2024-07','2024-10','2025-01','2025-04','2025-07','2025-10','2026-01','2026-05'],
-            lthPvr: {
-                roi: [-20.18, 9.13, 21.14, 194.81, 359.14, 309.90, 281.82, 256.64, 234.95, 216.48, 193.22, 138.20, 287.14, 289.07, 228.91, 383.18, 627.01, 520.47, 512.61, 745.85, 675.95, 840.59, 848.18, 804.15, 767.66, 753.63],
-                nav: [10377, 17460, 23017, 64859, 114785, 114772, 118365, 121257, 123932, 126593, 126083, 109571, 189700, 202316, 180902, 280246, 443475, 397100, 410452, 592097, 566447, 714848, 749063, 741400, 737509, 742660]
+        // ── Live 5-year back-test data ───────────────────────────────────────────
+        // Charts + narrative are populated from public.get_lth_pvr_marketing_chart(),
+        // refreshed automatically on the 1st of each month by ef_refresh_marketing_charts
+        // (trailing 5 years, $2,400 upfront + $200/month, USDPC swept at ~10% APY).
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs';
+
+        const fmtUsd = (v) => '$' + Math.round(Number(v) || 0).toLocaleString('en-US');
+        const fmtDd  = (v) => (Number(v) || 0).toFixed(1) + '%';
+        function fmtMonthLabel(iso) {
+            const d = new Date(iso + 'T00:00:00Z');
+            if (isNaN(d)) return iso;
+            return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+        }
+        function fmtFullDate(iso) {
+            const d = new Date(iso + 'T00:00:00Z');
+            if (isNaN(d)) return iso;
+            return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        }
+
+        const baseOptions = (yFormatter, tooltipFormatter, beginAtZero) => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top',
+                    labels: { usePointStyle: true, padding: 20, color: '#A8B2D1', font: { size: 14, weight: '600' } } },
+                tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.9)', padding: 12,
+                    titleFont: { size: 14, weight: '600' }, bodyFont: { size: 13 },
+                    callbacks: { label: (ctx) => (ctx.dataset.label ? ctx.dataset.label + ': ' : '') +
+                        (ctx.parsed.y !== null ? tooltipFormatter(ctx.parsed.y) : '') } }
             },
-            stdDca: {
-                roi: [-16.24, 17.64, 32.41, 236.19, 520.92, 237.60, 292.52, 284.41, 256.44, 48.17, 40.99, 17.93, 99.16, 106.75, 78.45, 171.74, 342.91, 275.64, 267.03, 423.78, 347.39, 462.41, 479.66, 331.67, 223.34, 263.17],
-                nav: [10889, 18822, 25157, 73961, 155230, 94529, 121682, 130699, 131882, 59267, 60626, 54246, 97588, 107511, 98149, 157607, 270176, 240410, 245907, 366645, 326596, 427435, 457928, 353968, 274842, 315959]
-            },
-            hodl: {
-                roi: [-13.93, 22.67, 44.56, 288.45, 689.36, 369.76, 488.31, 519.73, 510.42, 166.86, 160.37, 121.67, 281.98, 308.00, 261.74, 466.92, 856.02, 740.45, 748.93, 1152.52, 1006.66, 1336.92, 1428.94, 1073.35, 802.28, 930.34],
-                nav: [74884, 106722, 125763, 337949, 686746, 408692, 511833, 539166, 531067, 232166, 226522, 192854, 332326, 354957, 314717, 493223, 831734, 731195, 738569, 1089691, 962797, 1250121, 1330174, 1020817, 784983, 896396]
-            }
-        };
-        
-        // ROI Chart
-        const roiCtx = document.getElementById('roiChart').getContext('2d');
-        new Chart(roiCtx, {
-            type: 'line',
-            data: {
-                labels: historicalData.labels,
-                datasets: [
-                    {
-                        label: 'LTH PVR Strategy',
-                        data: historicalData.lthPvr.roi,
-                        borderColor: '#FFB400',
-                        backgroundColor: 'rgba(255, 180, 0, 0.1)',
-                        borderWidth: 3,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {
-                        label: 'Standard DCA',
-                        data: historicalData.stdDca.roi,
-                        borderColor: '#6B7896',
-                        backgroundColor: 'rgba(107, 120, 150, 0.1)',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {
-                        label: 'HODL (lump-sum day 1)',
-                        data: historicalData.hodl.roi,
-                        borderColor: '#A855F7',
-                        backgroundColor: 'transparent',
-                        borderWidth: 1.5,
-                        borderDash: [4, 3],
-                        pointRadius: 2,
-                        pointHoverRadius: 5,
-                        tension: 0.4,
-                        fill: false
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            color: '#A8B2D1',
-                            font: {
-                                size: 14,
-                                weight: '600'
-                            }
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                        padding: 12,
-                        titleFont: {
-                            size: 14,
-                            weight: '600'
-                        },
-                        bodyFont: {
-                            size: 13
-                        },
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    const value = context.parsed.y;
-                                    label += (value >= 0 ? '+' : '') + value + '%';
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            display: false,
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: '#A8B2D1',
-                            font: {
-                                size: 12
-                            }
-                        }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: '#A8B2D1',
-                            callback: function(value) {
-                                return (value >= 0 ? '+' : '') + value + '%';
-                            },
-                            font: {
-                                size: 12
-                            }
-                        }
-                    }
-                }
+            scales: {
+                x: { grid: { display: false, color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#A8B2D1', font: { size: 12 }, maxTicksLimit: 12, autoSkip: true } },
+                y: { beginAtZero: beginAtZero, grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#A8B2D1', font: { size: 12 }, callback: yFormatter } }
             }
         });
-        
-        // NAV Chart
-        const navCtx = document.getElementById('navChart').getContext('2d');
-        new Chart(navCtx, {
-            type: 'line',
-            data: {
-                labels: historicalData.labels,
-                datasets: [
-                    {
-                        label: 'LTH PVR Strategy',
-                        data: historicalData.lthPvr.nav,
-                        borderColor: '#FFB400',
-                        backgroundColor: 'rgba(255, 180, 0, 0.1)',
-                        borderWidth: 3,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {
-                        label: 'Standard DCA',
-                        data: historicalData.stdDca.nav,
-                        borderColor: '#6B7896',
-                        backgroundColor: 'rgba(107, 120, 150, 0.1)',
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {
-                        label: 'HODL (lump-sum day 1)',
-                        data: historicalData.hodl.nav,
-                        borderColor: '#A855F7',
-                        backgroundColor: 'transparent',
-                        borderWidth: 1.5,
-                        borderDash: [4, 3],
-                        pointRadius: 2,
-                        pointHoverRadius: 5,
-                        tension: 0.4,
-                        fill: false
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            color: '#A8B2D1',
-                            font: {
-                                size: 14,
-                                weight: '600'
-                            }
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                        padding: 12,
-                        titleFont: {
-                            size: 14,
-                            weight: '600'
-                        },
-                        bodyFont: {
-                            size: 13
-                        },
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed.y !== null) {
-                                    label += '$' + context.parsed.y.toLocaleString();
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            display: false,
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: '#A8B2D1',
-                            font: {
-                                size: 12
-                            }
-                        }
-                    },
-                    y: {
-                        beginAtZero: false,
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: '#A8B2D1',
-                            callback: function(value) {
-                                return '$' + (value / 1000).toFixed(0) + 'k';
-                            },
-                            font: {
-                                size: 12
-                            }
-                        }
-                    }
-                }
+
+        function buildDatasets(series, key) {
+            return [
+                { label: 'LTH PVR Strategy', data: series.lthPvr[key], borderColor: '#FFB400',
+                  backgroundColor: 'rgba(255, 180, 0, 0.1)', borderWidth: 3, pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: true },
+                { label: 'Standard DCA', data: series.stdDca[key], borderColor: '#6B7896',
+                  backgroundColor: 'rgba(107, 120, 150, 0.1)', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: true },
+                { label: 'HODL (lump-sum day 1)', data: series.hodl[key], borderColor: '#A855F7',
+                  backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: false }
+            ];
+        }
+
+        function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+        function renderCharts(data) {
+            const p = data.payload;
+            const monthLabels = p.labels.map(fmtMonthLabel);
+
+            new Chart(document.getElementById('roiChart').getContext('2d'), {
+                type: 'line',
+                data: { labels: monthLabels, datasets: buildDatasets(p.series, 'roi') },
+                options: baseOptions((v) => (v >= 0 ? '+' : '') + v + '%', (v) => (v >= 0 ? '+' : '') + v + '%', true)
+            });
+            new Chart(document.getElementById('navChart').getContext('2d'), {
+                type: 'line',
+                data: { labels: monthLabels, datasets: buildDatasets(p.series, 'nav') },
+                options: baseOptions((v) => '$' + (v / 1000).toFixed(0) + 'k', (v) => '$' + Number(v).toLocaleString('en-US'), false)
+            });
+
+            // Templated parameters + narrative figures
+            setText('bpStart', fmtFullDate(data.window_start));
+            setText('bpEnd', fmtFullDate(data.window_end));
+            setText('bpUpfront', fmtUsd(data.params.upfront_usdt));
+            setText('bpMonthly', fmtUsd(data.params.monthly_usdt));
+            setText('bpUsdpc', '~' + data.params.usdpc_apy_percent + '% APY, ' + data.params.usdpc_conversion_fee_percent + '% per sweep');
+            setText('hodlTotal', fmtUsd(p.summary.hodl.contrib_gross));
+
+            setText('nStart', fmtMonthLabel(data.window_start));
+            setText('nEnd', fmtMonthLabel(data.window_end));
+            setText('nInvested', fmtUsd(p.summary.lthPvr.contrib_gross));
+            setText('nLth', fmtUsd(p.summary.lthPvr.final_nav));
+            setText('nStd', fmtUsd(p.summary.stdDca.final_nav));
+            setText('nHodl', fmtUsd(p.summary.hodl.final_nav));
+            setText('nLthDd', fmtDd(p.summary.lthPvr.max_drawdown));
+            setText('nStdDd', fmtDd(p.summary.stdDca.max_drawdown));
+            setText('nHodlDd', fmtDd(p.summary.hodl.max_drawdown));
+
+            const status = document.getElementById('perfStatus');
+            if (status && data.generated_at) {
+                status.style.display = 'block';
+                status.style.color = 'var(--text-tertiary)';
+                status.textContent = 'Last refreshed ' + fmtFullDate(String(data.generated_at).split('T')[0]) +
+                    ' · updates automatically on the 1st of each month';
             }
-        });
+        }
+
+        function showChartError(msg) {
+            const status = document.getElementById('perfStatus');
+            if (status) { status.style.display = 'block'; status.textContent = msg; }
+        }
+
+        async function loadMarketingChart() {
+            try {
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_lth_pvr_marketing_chart`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+                    body: '{}'
+                });
+                const raw = await res.json();
+                const data = raw && raw.get_lth_pvr_marketing_chart ? raw.get_lth_pvr_marketing_chart : raw;
+                if (!data || data.status !== 'ready' || !data.payload) {
+                    showChartError('Performance data is being prepared — please check back shortly.');
+                    return;
+                }
+                renderCharts(data);
+            } catch (e) {
+                console.error('Failed to load marketing chart:', e);
+                showChartError('Unable to load performance data right now. Please try again later.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadMarketingChart);
     </script>
 </body>
 </html>
