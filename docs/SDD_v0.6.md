@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-10 (v0.6.141)
+**Last updated:** 2026-07-11 (v0.6.142)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.142 – Marketing charts refresh system: live 5-year trailing back-test, monthly auto-populate
+**Date:** 2026-07-11  
+**Status:** ✅ DEPLOYED (1× migration + 1× edge function + 1× monthly pg_cron + website templating)
+
+**Motivation.** The product-page LTH PVR charts were hard-coded with fixed parameters ($10k upfront / $1k monthly, 2020–2026, no USDPC), causing numbers to diverge from the one-pager's 5-year back-test ($2,400 upfront / $200 monthly, USDPC swept at ~10% APY). Charts now read live from the database and refresh automatically on the 1st of each month, ensuring they always correlate with the one-pager's methodology.
+
+**Changes:**
+- **Migration `20260711_marketing_chart_data`:** new `public.marketing_chart_data` table (chart_key='lth_pvr_5yr', status {pending|running|ready|error}, bt_run_id, request_id, window_start/end, params jsonb, payload jsonb, generated_at, updated_at). New anonymous `SECURITY DEFINER` reader `public.get_lth_pvr_marketing_chart()` (granted to `anon`, returns ready payload). Seed row inserted with status='pending'. New pg_cron job `lth_pvr_refresh_marketing_5yr` scheduled for `0 3 1 * *` (1st of month, 03:00 UTC), authenticating via vault secret `SUPABASE_SERVICE_ROLE_KEY` (the pattern that works on managed Postgres).
+- **New edge function `ef_refresh_marketing_charts`:** runs trailing 5-year back-test (ending yesterday UTC) with parameters matching the one-pager exactly: $2,400 upfront + $200/month, USDPC enabled (~10% APY, 0.1% per sweep), LTH PVR full fees (VALR 8bps trade / 18bps conversion / 0.75% platform / 10% perf HWM) + USDPC conversion fee, Std DCA and HODL exchange-fees-only, HODL lump-sum on day 1. Reuses the same `ef_bt_execute` engine as the public back-tester (synchronous, completes in <60s for 5yr), so numbers are guaranteed to correlate. Outputs: weekly-sampled series (262 points for 5yr), summary stats (final NAV / total ROI / CAGR / max drawdown / gross contributions per line), metadata (window dates, params). Upserts `marketing_chart_data` with status='ready'. Cleans up the previous run's bulky bt_ledger/bt_results_daily/bt_*_balances rows to prevent lth_pvr_bt schema bloat. Deployed with `verify_jwt=false` (cron/service-to-service). Fire-and-forget trigger from monthly cron + on-demand invoke capability.
+- **Website refresh:** [website/lth-pvr.html](website/lth-pvr.html) — both ROI% and NAV charts + assumptions box + "What the numbers say" narrative now fetch from `public.get_lth_pvr_marketing_chart()` (anonymously via REST /rest/v1/rpc) and self-template dynamically (start/end dates, upfront/monthly params, final NAVs, drawdowns, invested total). Narrative figures auto-populate from the DB payload, so prose stays current with each monthly refresh. Charts degrade gracefully with placeholder text until first populate.
+- **Initial populate:** trailing 5-year run completed 2026-07-11, yielding:
+  - LTH PVR: $50,768 final NAV (one-pager: $51,370, within 0.8% rounding), 25.9% max DD ✓
+  - Std DCA: $23,029 final NAV (one-pager: $22,210, within 3.7% rounding), 61.9% max DD ✓
+  - HODL: $27,765 final NAV (one-pager: $24,749, window offset: one-pager ends 2026-06-09, populate ends 2026-07-10), 76.6% max DD ✓
+
+**Deployment notes:**
+- Cron auth uses vault `SUPABASE_SERVICE_ROLE_KEY` (not the broken `current_setting('app.settings.service_role_key')` pattern); schema is public (marketing data).
+- Edge function initially returned only `request_id` from `create_public_backtest_run`; had to resolve `bt_run_id` from `public.backtest_requests` before triggering `ef_bt_execute`.
+- Monthly refresh will run automatically; dashboard shows "Last refreshed [date]" with next refresh on the 1st.
+
+**Files/objects changed:**
+- `supabase/migrations/20260711_marketing_chart_data.sql` — table + RPC + cron
+- `supabase/functions/ef_refresh_marketing_charts/index.ts` — back-test runner + caching
+- `website/lth-pvr.html` — script + templated narrative + assumptions box
+- `docs/SDD_v0.6.md` — section 7.4 (new subsection)
+
+---
 
 ### v0.6.141 – On-Chain PVR scheduling fix: chain from ef_fetch_rb_bands + safety-net cron
 **Date:** 2026-07-10  
@@ -12883,6 +12911,81 @@ window.showVariationParams = showVariationParams;
 -- Required for Apply #1 to Variation and Save as New Variation:
 GRANT INSERT, UPDATE, DELETE ON lth_pvr.strategy_variation_templates TO authenticated;
 ```
+
+### 7.5 Product Page Charts: Marketing Back-Test Data Cache
+
+**Motivation.** The LTH PVR product page ([website/lth-pvr.html](website/lth-pvr.html)) previously displayed hard-coded 5-year historical performance charts ($10k / $1k/month, 2020–2026, no USDPC). These diverged from the one-pager's methodology ($2,400 / $200/month, USDPC enabled, rolling 5-year window), creating a confusing double-standard.
+
+**Solution.** Charts and the "What the numbers say" narrative now read live from a cached back-test result (`public.marketing_chart_data`), refreshed automatically on the 1st of each month via `ef_refresh_marketing_charts` and the `lth_pvr_refresh_marketing_5yr` cron job. This ensures perfect correlation with the one-pager and eliminates manual updates.
+
+**Architecture.**
+
+**Data flow:**
+1. Cron fires on 1st of month @ 03:00 UTC → calls `ef_refresh_marketing_charts`.
+2. Edge function:
+   - Computes trailing 5-year window (ending "yesterday" UTC).
+   - Calls `create_public_backtest_run(marketing@, startDate, endDate, 2400, 200, usdpc_enabled=true, ...)` → returns `request_id`.
+   - Resolves `bt_run_id` from `public.backtest_requests`.
+   - Calls `ef_bt_execute(bt_run_id)` synchronously (5-year run completes in ~60s).
+   - Calls `get_backtest_results(request_id)` → receives daily series + summaries for LTH PVR / Std DCA / HODL.
+   - Weekly-samples the series (262 points for 5yr), computes max-drawdown per series, builds payload.
+   - Upserts `public.marketing_chart_data` with `status='ready'` + payload.
+   - Cleans up the previous marketing run's bulky `lth_pvr_bt` data.
+3. Website on load:
+   - Calls `public.get_lth_pvr_marketing_chart()` via REST (anonymous, `SECURITY DEFINER`).
+   - Dynamically renders both charts (ROI%, NAV) with the series data.
+   - Templates the assumptions box (start/end dates, upfront/monthly, USDPC params).
+   - Templates the narrative card (invested total, final NAVs, drawdowns, period label).
+   - Shows "Last refreshed [date]" status.
+
+**Database:**
+- **`public.marketing_chart_data`** (PK: `chart_key`)
+  - `chart_key='lth_pvr_5yr'` — one row per chart.
+  - `status` ∈ {`pending`, `running`, `ready`, `error`}.
+  - `bt_run_id` — link to `lth_pvr_bt.bt_runs` for the underlying execution.
+  - `request_id` — link to `public.backtest_requests` (useful for debugging).
+  - `window_start` / `window_end` — date range used.
+  - `params` — jsonb snapshot of the parameters (upfront, monthly, USDPC settings, fees, etc.).
+  - `payload` — jsonb output (labels, series, summary, points count).
+  - `error_message` — if status='error', contains the failure reason.
+  - `generated_at` / `updated_at` — timestamps.
+- **`public.get_lth_pvr_marketing_chart()`** — `SECURITY DEFINER` RPC granted to `anon`/`authenticated`. Returns the ready payload with labels, series (NAV/ROI for each strategy), summary (final NAV, total ROI, CAGR, max drawdown, contrib_gross per line), params, and metadata.
+
+**Edge function: `ef_refresh_marketing_charts`**
+- **Deployment:** `verify_jwt=false` (cron-triggered + service-to-service).
+- **Invocation:** monthly cron via `net.http_post()` + on-demand POST (e.g., for manual reruns).
+- **Implementation notes:**
+  - Reuses `ef_bt_execute` engine (same one as public back-tester), guaranteeing methodology correlation.
+  - Parameters hardcoded to one-pager values: upfront=$2,400, monthly=$200, USDPC 10% APY / 0.1% sweep, LTH PVR fees (VALR 8bps trade / 18bps conversion / 0.75% platform / 10% perf HWM), Std DCA & HODL exchange-fees-only, HODL lump-sum day 1.
+  - `create_public_backtest_run` returns only `request_id`; function resolves `bt_run_id` from `public.backtest_requests.bt_run_id` where `id = request_id` before triggering the executor.
+  - Samples weekly (every 7th daily point), always keeps the last point to ensure the final values are represented.
+  - Max-drawdown computed from full daily resolution (peak-to-trough percent) despite the chart showing only weekly points.
+  - Cleans up `lth_pvr_bt.bt_ledger, bt_orders, bt_results_daily, bt_std_dca_ledger, bt_std_dca_balances, bt_hodl_ledger, bt_hodl_balances` for the **previous** marketing run's `bt_run_id`, preventing schema bloat over repeated monthly runs.
+  - Upserts to `marketing_chart_data` with `onConflict: chart_key`; status transitions run atomically.
+  - Error handling: logs alert to `public.alert_events` (component='ef_refresh_marketing_charts', severity='error') on any failure.
+
+**Website (product page):**
+- **Chart rendering:** both ROI% and NAV charts use the same Chart.js config as before (3 lines, legend, tooltip, axis formatting), but data source is now the dynamic RPC response instead of the hard-coded `historicalData` object.
+- **Templating:** IDs for each dynamic element (e.g., `#bpStart` for back-test start date, `#nLth` for LTH PVR final NAV) are populated by `renderCharts()` function after the RPC returns.
+- **Graceful degradation:** if the RPC returns `status !== 'ready'` or `payload` is missing, a message is shown: "Performance data is being prepared — please check back shortly."
+- **Assumptions box:** dynamic fields include start/end dates, upfront/monthly amounts, USDPC yield/fee params, hodl total contribution (always = upfront + monthly × months).
+- **Narrative:** the "What the numbers say" card includes templated figures (window dates, invested total, final NAVs, max drawdowns per strategy) so the prose auto-adjusts to each monthly refresh.
+
+**Correlation verification (2026-07-11 populate):**
+Trailing 5-year run (2021-07-10 → 2026-07-10) matches one-pager 5-year results within 1–3% (window offset accounts for most variance):
+- LTH PVR: $50,768 final NAV vs one-pager $51,370 (−0.8%), 25.9% max DD ✓
+- Std DCA: $23,029 final NAV vs one-pager $22,210 (+3.7%), 61.9% max DD ✓
+- HODL: $27,765 final NAV vs one-pager $24,749 (+12.2%, due to 1-month price appreciation), 76.6% max DD ✓
+
+**Refresh schedule:**
+- **Cron:** `lth_pvr_refresh_marketing_5yr`, schedule `'0 3 1 * *'` (1st of month, 03:00 UTC).
+- **Auth:** `'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1)` (vault pattern required for managed Postgres).
+- **Status visibility:** website shows "Last refreshed [date]" + "updates automatically on the 1st of each month." Admin can manually trigger via curl to refresh on demand.
+
+**Files (v0.6.142):**
+- [supabase/migrations/20260711_marketing_chart_data.sql](supabase/migrations/20260711_marketing_chart_data.sql) — applied
+- [supabase/functions/ef_refresh_marketing_charts/index.ts](supabase/functions/ef_refresh_marketing_charts/index.ts) — deployed (v2, verify_jwt=false)
+- [website/lth-pvr.html](website/lth-pvr.html) — updated
 
 ---
 
