@@ -34,6 +34,7 @@ FOUNDER      = "Davin Harald Gaier"
 FOUNDER_ID   = "8405025239081"
 PARTNER      = "Simon Henry Newbold Hobday"
 PARTNER_ID   = "6806175080088"
+COMPANY_NAME = "BitWealth Asset Managers (Pty) Ltd"
 COMPANY_REG  = "2026 / 090346 / 07"
 FSP_NO       = "21095"
 SIGN_DATE    = "July 2026"
@@ -215,14 +216,14 @@ for section in doc.sections:
 # ══════════════════════════════════════════════════════════════════════════
 doc_header(
     doc,
-    "BITWEALTH (PTY) LTD",
+    COMPANY_NAME.upper(),
     "Part A — Cap Table Model & Earn-In Schedule (v3)",
     DOC_DATE,
 )
 
 add_heading(doc, "1.  Background & IP Foundation")
 add_paragraph(doc,
-    "BitWealth (Pty) Ltd ('the Company', Registration No. " + COMPANY_REG + ") operates a "
+    COMPANY_NAME + " ('the Company', Registration No. " + COMPANY_REG + ") operates a "
     "Bitcoin Dollar-Cost Averaging (DCA) investment management platform regulated under the "
     "Financial Advisory and Intermediary Services Act, 37 of 2002 (FAIS Act). The Company "
     "will be appointed as a Juristic Representative (JR) under the FSP licence of Finova "
@@ -365,6 +366,62 @@ for r_idx, row in enumerate(ml_rows, 1):
                   align=WD_ALIGN_PARAGRAPH.CENTER)
         set_cell_bg(ml.cell(r_idx, c_idx), bg)
 
+add_paragraph(doc,
+    "Rolling deadlines: the trigger dates above assume each milestone is met on time. If a "
+    "tranche qualifies for a 6-month extension under the near-miss rule (Part B, Clause 7), "
+    "that tranche's deadline AND the deadlines of all subsequent tranches push out by the "
+    "length of the extension, because milestones must be achieved in sequence. Example: a "
+    "6-month extension on Tranche 1 moves Tranche 2 from ~July 2030 to ~January 2031 and "
+    "Tranche 3 from ~July 2032 to ~January 2033.",
+    italic=True, color=GREY, size=9, sb=4)
+
+hr(doc)
+
+# Section 5 — Investor capital & dilution of Simon's earn-in
+add_heading(doc, "5.  Investor Capital & Impact on Simon's Earn-In", level=2, gold=False)
+add_paragraph(doc,
+    "A marketing investor is being introduced to provide Year-1 working capital in exchange "
+    "for equity of 10%–15%. By agreement between Davin and Simon, this investor equity is "
+    "carved OUT OF SIMON'S 30% EARN-IN POOL — not out of Davin's 60%, and not out of Simon's "
+    "founding 10% — because the marketing budget is precisely what enables Simon to reach his "
+    "AUM milestones.", sa=4)
+add_paragraph(doc,
+    "Mechanics: the AUM milestone targets (R50m / R100m / R200m) do NOT change. Only the equity "
+    "reward attaching to each tranche reduces pro-rata, so Simon's total earn-in falls from 30% "
+    "to (30% − investor%). Davin's 60% and Simon's founding 10% are unaffected.", sa=4)
+
+inv = doc.add_table(rows=6, cols=4)
+inv.style = "Table Grid"; inv.alignment = WD_TABLE_ALIGNMENT.CENTER
+inv_h = ["At full earn-in", "No investor", "Investor 10%", "Investor 15%"]
+inv_w = [Cm(5.0), Cm(3.6), Cm(3.6), Cm(3.6)]
+for i, col in enumerate(inv.columns):
+    for cell in col.cells:
+        cell.width = inv_w[i]
+for i, h in enumerate(inv_h):
+    cell_text(inv.cell(0, i), h, bold=True, size=9, color=WHITE, align=WD_ALIGN_PARAGRAPH.CENTER)
+    set_cell_bg(inv.cell(0, i), TEAL_HEX)
+inv_rows = [
+    ["Davin (Founder)", "60%", "60%", "60%"],
+    ["Simon — founding", "10%", "10%", "10%"],
+    ["Simon — earn-in", "30%", "20%", "15%"],
+    ["Simon — TOTAL", "40%", "30%", "25%"],
+    ["Investor", "0%", "10%", "15%"],
+]
+for r, row in enumerate(inv_rows, 1):
+    bg = L_GOLD_HEX if row[0] == "Simon — TOTAL" else (LGREY_HEX if r % 2 == 0 else "FFFFFF")
+    for c, val in enumerate(row):
+        cell_text(inv.cell(r, c), val, size=10, bold=(row[0] == "Simon — TOTAL" or c == 0),
+                  align=(WD_ALIGN_PARAGRAPH.LEFT if c == 0 else WD_ALIGN_PARAGRAPH.CENTER))
+        set_cell_bg(inv.cell(r, c), bg)
+
+add_paragraph(doc,
+    "Per-tranche effect: with a 15% investor, each 10% tranche becomes 5% (Simon reaches 25% "
+    "at full earn-in); with a 10% investor, each tranche becomes ≈6.67% (Simon reaches 30%). "
+    "The near-miss pro-rata rule (Clause 7) then applies to the REDUCED tranche size. The "
+    "investor's equity crystallises per the investor agreement; the corresponding reduction is "
+    "applied to Simon's earn-in tranches from the date that agreement is signed.",
+    italic=True, color=GREY, size=9, sb=4)
+
 doc.add_page_break()
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -372,14 +429,14 @@ doc.add_page_break()
 # ══════════════════════════════════════════════════════════════════════════
 doc_header(
     doc,
-    "BITWEALTH (PTY) LTD",
+    COMPANY_NAME.upper(),
     "Part B — Non-Binding Heads of Terms — Business Development Equity Participation (v3)",
     DOC_DATE,
 )
 add_paragraph(doc,
     "This term sheet sets out the proposed principal terms of an equity participation "
-    "arrangement between " + FOUNDER + " and " + PARTNER + " in respect of BitWealth (Pty) "
-    "Ltd. It is non-binding, subject to contract, and for discussion purposes only. Final "
+    "arrangement between " + FOUNDER + " and " + PARTNER + " in respect of " + COMPANY_NAME +
+    ". It is non-binding, subject to contract, and for discussion purposes only. Final "
     "terms will be recorded in a Shareholders' Agreement and Equity Participation Agreement "
     "drafted by the Company's attorneys.")
 
@@ -396,7 +453,7 @@ hr(doc)
 ts_section(doc, "1.  Parties", [
     ("Founder", FOUNDER + ", ID " + FOUNDER_ID + ", Republic of South Africa ('Davin')."),
     ("Partner", PARTNER + ", ID " + PARTNER_ID + ", Republic of South Africa ('Simon')."),
-    ("Company", "BitWealth (Pty) Ltd (Registration No. " + COMPANY_REG + "), a private company "
+    ("Company", COMPANY_NAME + " (Registration No. " + COMPANY_REG + "), a private company "
                 "incorporated in the Republic of South Africa."),
     ("FSP", "Finova Capital (Pty) Ltd (FSP No. " + FSP_NO + ") — BitWealth to be appointed a "
             "Juristic Representative under Finova's FSP licence in terms of the FAIS Act, 2002."),
@@ -404,7 +461,10 @@ ts_section(doc, "1.  Parties", [
 
 ts_section(doc, "2.  Company & IP Foundation", [
     ("Business", "Bitcoin DCA investment management for retail and HNWI clients, using the "
-                 "Company's proprietary LTH PVR algorithm executed via the VALR exchange."),
+                 "Company's proprietary LTH PVR algorithm. The algorithm is currently executed "
+                 "via the VALR exchange (South Africa) and is designed to be extended to "
+                 "additional exchanges globally, to serve clients in other jurisdictions and to "
+                 "accommodate different exchange, custody, and currency preferences."),
     ("IP Asset", "The BitWealth LTH PVR platform, transferred to the Company by " + FOUNDER +
                  " under a signed IP Transfer Agreement; recorded on the balance sheet at an "
                  "agreed value of R2,500,000."),
@@ -434,7 +494,10 @@ ts_section(doc, "3.  Simon's Role & Contribution", [
     ("Support & Budget", "The Company will provide reasonable sales, marketing, and "
                          "compliance/admin support and an annual marketing budget approved by "
                          "the Board. Obligations on both sides are defined, not open-ended."),
-    ("Time Commitment", "An agreed minimum monthly time commitment, recorded in the engagement letter."),
+    ("Time Commitment", "No minimum time commitment is required. Simon's focus is solely the "
+                       "achievement of the AUM milestones. Once the Company is sufficiently "
+                       "profitable, the parties may explore formal employment options that "
+                       "include a defined time commitment."),
     ("FAIS Accreditation", "Simon will use reasonable endeavours to obtain and maintain the FAIS "
                           "accreditation required for his role. Delays caused by the FSCA, Finova, "
                           "paperwork, or the Company are excluded. Only a wilful or negligent "
@@ -484,22 +547,27 @@ ts_section(doc, "6.  Earn-In Milestones (Additional 30%)", [
                                    "within 10 business days, the milestone is deemed achieved."),
     ("Sequence", "Milestones are achieved in sequence; a later tranche cannot vest before the "
                  "earlier tranche is earned (or its shortfall resolved under Clause 7)."),
-    ("Maximum / Minimum", "Full earn-in: Davin 60%, Simon 40%. Simon retains his founding 10% "
-                          "regardless of milestone outcome (subject to Clause 9)."),
+    ("Maximum / Minimum", "Full earn-in (before any investor dilution — see Part A §5): Davin "
+                          "60%, Simon 40%. Simon retains his founding 10% regardless of milestone "
+                          "outcome (subject to Clause 10)."),
 ])
 
 ts_section(doc, "7.  Milestone Shortfall — Near-Miss Vesting", [
     ("Replaces v2 options", "This unified mechanism replaces the four options in v2 and applies "
                             "equally to all three tranches."),
-    ("Step 1 — Extension", "If AUM reaches at least 80% of the target by the deadline, Simon "
-                          "automatically receives a single 6-month extension for that tranche."),
-    ("Step 2 — Pro-rata vesting", "If, at the end of the extension, AUM is still below target but "
-                                 "at least 80% of it, Simon vests a pro-rata portion of that "
+    ("Step 1 — Extension eligibility", "Measured AT THE DEADLINE: if AUM is at least 80% of the "
+                          "target, Simon automatically receives a single 6-month extension for "
+                          "that tranche. If AUM is below 80% at the deadline, the tranche lapses "
+                          "immediately and no extension is granted."),
+    ("Step 2 — Full vesting", "If AUM reaches 100% of the target at any point during the 6-month "
+                             "extension, the full 10% tranche vests."),
+    ("Step 3 — Pro-rata vesting", "If, AT THE END OF THE EXTENSION, AUM is at least 80% but below "
+                                 "100% of the target, Simon vests a pro-rata portion of that "
                                  "tranche = (AUM achieved ÷ target) × 10%. Example: R45m of R50m "
                                  "(90%) → Simon vests 9%; the residual 1% remains with Davin."),
-    ("Step 3 — Lapse", "If AUM is below 80% of target at the end of the extension, the tranche "
-                       "lapses in full and the shares remain with Davin. Simon retains all "
-                       "previously-earned tranches and his founding 10%."),
+    ("Step 4 — Lapse", "If, at the end of the extension, AUM has fallen below 80% of the target, "
+                       "the tranche lapses in full and the shares remain with Davin. Simon "
+                       "retains all previously-earned tranches and his founding 10%."),
 ])
 
 doc.add_page_break()
@@ -525,14 +593,19 @@ add_paragraph(doc,
 ts_section(doc, "8.1  Default Rule — New Ventures go into a NewCo", [
     ("Default rule", "Any materially new product, business line, or revenue stream that is "
                      "separable from the core BitWealth AUM business is developed in a NEW "
-                     "company ('NewCo'), with a fresh shareholding structure negotiated "
-                     "specifically for that venture."),
-    ("No automatic entitlement", "Simon has NO automatic right to equity or revenue in any NewCo "
-                                 "by virtue of his BitWealth shareholding. Each NewCo is "
-                                 "negotiated on its own merits (who originates, funds, builds, runs)."),
-    ("Right to negotiate", "Where Simon materially originates a NewCo concept, he has a "
-                          "good-faith right of first opportunity to negotiate participation — on "
-                          "fresh terms, not his BitWealth terms."),
+                     "company ('NewCo')."),
+    ("Simon's automatic entitlement", "In each NewCo, Simon has an automatic right to 20% "
+                                      "founding equity, and may earn up to a total of 45% through "
+                                      "an AUM- (or revenue-) based milestone vesting schedule "
+                                      "structured similarly to his BitWealth earn-in (staged "
+                                      "tranches against agreed targets for that venture). The "
+                                      "specific targets are set per venture to reflect its "
+                                      "economics."),
+    ("Right to negotiate the balance", "The remaining equity and the specific milestone targets "
+                                       "for each NewCo are negotiated in good faith per venture, "
+                                       "reflecting who originates, funds, builds, and runs it. "
+                                       "Simon's 20% floor and 45% ceiling are fixed parameters; "
+                                       "everything else is negotiated fresh."),
     ("Who decides", "The Board (with Davin's control vote) decides whether a new idea is pursued "
                    "inside BitWealth or via a NewCo."),
 ])
@@ -540,19 +613,28 @@ ts_section(doc, "8.1  Default Rule — New Ventures go into a NewCo", [
 ts_section(doc, "8.2  Exception — Simon-originated non-AUM revenue kept inside BitWealth", [
     ("When this applies", "Only where ALL of the following are true:\n"
                           "(a) Simon personally originates a genuinely new, NON-AUM revenue "
-                          "stream (not performance, platform, or exchange fees on managed assets);\n"
+                          "stream (not performance, platform, management, or exchange fees on managed assets);\n"
                           "(b) the Board decides to keep it inside BitWealth; and\n"
-                          "(c) Simon actively leads the delivery of that stream."),
+                          "(c) Simon actively leads the delivery of that stream (as defined below)."),
+    ("Meaning of 'actively leads'", "'Actively leading the delivery' means Simon drives the "
+                                    "COMMERCIAL and BUSINESS-DEVELOPMENT side of the stream — "
+                                    "concept origination, client and partner relationships, "
+                                    "go-to-market, sales, and revenue growth. It does NOT require "
+                                    "Simon to perform IT development, engineering, product build, "
+                                    "or technical operations, which remain the Company's "
+                                    "responsibility. If Simon ceases to actively lead in this "
+                                    "sense, the Innovation Revenue Share stops (subject to any "
+                                    "agreed tail)."),
     ("Innovation Revenue Share", "Simon receives a ring-fenced share of the NET revenue of THAT "
                                 "specific stream only:\n"
-                                "(a) a negotiated rate (see options in 8.3) of net stream revenue;\n"
+                                "(a) a 10% rate of net stream revenue (the agreed inside-BitWealth rate — see 8.4);\n"
                                 "(b) for a fixed period (suggested 48 months from first revenue);\n"
                                 "(c) payable only while Simon actively leads the stream;\n"
                                 "(d) the stream is separately accounted so the ring-fence is auditable."),
     ("Ring-fence — key protection", "The Innovation Revenue Share attaches ONLY to the new "
                                     "non-AUM stream Simon creates. It NEVER touches AUM-based "
-                                    "revenue (performance, platform, or exchange fees) from any "
-                                    "client — including clients Davin or others introduce."),
+                                    "revenue (performance, platform, management, or exchange fees) "
+                                    "from any client — including clients Davin or others introduce."),
     ("IP ownership", "All IP in the new stream vests in the Company (or NewCo), not in Simon "
                      "personally, regardless of the revenue share."),
     ("Exclusions", "Does NOT apply to enhancements or extensions of the core AUM business (new "
@@ -570,12 +652,12 @@ add_paragraph(doc,
     "that flows to all shareholders by their equity %.", sa=4)
 add_paragraph(doc,
     "Worked example. Assume the new stream produces R1,000,000 net revenue in a year, Simon "
-    "holds 40% equity (full earn-in), a 15% Innovation Revenue Share, and no other costs, all "
+    "holds 40% equity (full earn-in), a 10% Innovation Revenue Share, and no other costs, all "
     "residual profit distributed as dividends:", sa=4, bold=True)
 
 we = doc.add_table(rows=5, cols=5)
 we.style = "Table Grid"; we.alignment = WD_TABLE_ALIGNMENT.CENTER
-we_h = ["Simon's equity", "Innovation share (15%)", "Equity share of residual 85%",
+we_h = ["Simon's equity", "Innovation share (10%)", "Equity share of residual 90%",
         "Simon's total from stream", "Effective %"]
 we_w = [Cm(2.6), Cm(3.2), Cm(3.6), Cm(3.4), Cm(2.2)]
 for i, col in enumerate(we.columns):
@@ -584,12 +666,12 @@ for i, col in enumerate(we.columns):
 for i, h in enumerate(we_h):
     cell_text(we.cell(0, i), h, bold=True, size=8.5, color=WHITE, align=WD_ALIGN_PARAGRAPH.CENTER)
     set_cell_bg(we.cell(0, i), TEAL_HEX)
-# net = 1,000,000; innovation = 150,000; residual = 850,000
+# net = 1,000,000; innovation = 100,000; residual = 900,000
 we_rows = [
-    ["10%", "R150,000", "R85,000",  "R235,000", "23.5%"],
-    ["20%", "R150,000", "R170,000", "R320,000", "32.0%"],
-    ["30%", "R150,000", "R255,000", "R405,000", "40.5%"],
-    ["40%", "R150,000", "R340,000", "R490,000", "49.0%"],
+    ["10%", "R100,000", "R90,000",  "R190,000", "19.0%"],
+    ["20%", "R100,000", "R180,000", "R280,000", "28.0%"],
+    ["30%", "R100,000", "R270,000", "R370,000", "37.0%"],
+    ["40%", "R100,000", "R360,000", "R460,000", "46.0%"],
 ]
 for r, row in enumerate(we_rows, 1):
     bg = L_GOLD_HEX if r == len(we_rows) else (LGREY_HEX if r % 2 == 0 else "FFFFFF")
@@ -599,33 +681,34 @@ for r, row in enumerate(we_rows, 1):
         set_cell_bg(we.cell(r, c), bg)
 
 add_paragraph(doc,
-    "Reading the last row: at 40% equity, Simon receives R150,000 (the 15% innovation share) "
-    "PLUS R340,000 (his 40% equity share of the remaining R850,000) = R490,000, or 49% of the "
-    "whole R1,000,000 stream. Davin receives the other R510,000 (51%). The formula is: "
+    "Reading the last row: at 40% equity, Simon receives R100,000 (the 10% innovation share) "
+    "PLUS R360,000 (his 40% equity share of the remaining R900,000) = R460,000, or 46% of the "
+    "whole R1,000,000 stream. Davin receives the other R540,000 (54%). The formula is: "
     "Simon's effective share = innovation% + equity% × (1 − innovation%).", sa=4, italic=True, color=GREY, size=9)
 
 add_paragraph(doc, "Three ways to structure this — choose one when negotiating:", bold=True, sa=4)
 
 ts_section(doc, "8.4  Structural Options for the Inside-BitWealth Case", [
-    ("Structure A — Stacked (as illustrated above)",
-     "Simon gets the 15% innovation share PLUS equity dividend on the residual. His effective "
-     "share of the stream rises with his equity (23.5% at 10% → 49% at 40%).\n"
-     "ADVANTAGE: simple; strongly rewards Simon's origination and effort.\n"
-     "DISADVANTAGE: Simon captures more than his equity % of that stream; most generous to Simon."),
-    ("Structure B — Lower rate, eyes open",
-     "Keep stacking but set a LOWER innovation rate (e.g., 5–10%) precisely because Simon also "
-     "enjoys equity upside. At 10% equity + 5% innovation, effective share ≈ 14.5%; at 40% "
-     "equity + 5% innovation ≈ 43%.\n"
-     "ADVANTAGE: keeps Simon closer to his equity %; still rewards origination.\n"
-     "DISADVANTAGE: less upside for Simon; still stacks."),
-    ("Structure C — NewCo (Davin's default preference)",
-     "Put the new stream in a NewCo and negotiate a single, clean split (e.g., Simon 50% / "
-     "Davin 50%) that IS his whole entitlement. No stacking, no ring-fence accounting.\n"
+    ("Structure A — Stacked at 10% (the agreed inside-BitWealth rate)",
+     "Simon gets a 10% innovation share PLUS equity dividend on the residual 90%. His effective "
+     "share of the stream rises with his equity (19% at 10% equity → 46% at 40% equity), per the "
+     "worked example in 8.3.\n"
+     "ADVANTAGE: simple; rewards Simon's origination and effort.\n"
+     "DISADVANTAGE: Simon captures more than his equity % of that stream."),
+    ("Structure B — A different rate (only if renegotiated)",
+     "The parties could agree a different innovation rate for a particular stream. Any departure "
+     "from the default 10% must be agreed in writing before the stream launches.\n"
+     "ADVANTAGE: flexibility per stream.\n"
+     "DISADVANTAGE: renegotiation each time; still stacks on equity."),
+    ("Structure C — NewCo (default preference)",
+     "Put the new stream in a NewCo and negotiate a single, clean split that IS Simon's whole "
+     "entitlement (see Clause 8.1 — 20% floor, 45% ceiling). No stacking, no ring-fence accounting.\n"
      "ADVANTAGE: cleanest; avoids all double-benefit ambiguity; each venture stands alone.\n"
      "DISADVANTAGE: administrative cost of a second company."),
-    ("Recommended", "Default to Structure C (NewCo) for anything separable. If a non-AUM stream "
-                    "must live inside BitWealth, use Structure B (a modest 5–10% innovation rate) "
-                    "and negotiate with full awareness that it stacks on Simon's equity dividend."),
+    ("Recommended — AGREED APPROACH", "Default to Structure C (NewCo) for anything separable. If "
+                    "a non-AUM stream must live inside BitWealth, apply a fixed 10% innovation "
+                    "rate (Structure A), with both parties acknowledging that it stacks on "
+                    "Simon's equity dividend (per the worked example in 8.3)."),
 ])
 
 ts_section(doc, "8.5  Reciprocity & Anti-Circumvention", [
@@ -740,7 +823,7 @@ for row in sig.rows:
     row.cells[0].width = Cm(8.2)
     row.cells[1].width = Cm(8.2)
 sig_rows = [
-    ("FOR AND ON BEHALF OF BITWEALTH (PTY) LTD\nand in his personal capacity as Founder",
+    ("FOR AND ON BEHALF OF " + COMPANY_NAME.upper() + "\nand in his personal capacity as Founder",
      "AGREED TO BY " + PARTNER.upper() + "\nin his personal capacity"),
     ("Signature: _____________________________", "Signature: _____________________________"),
     ("Full Name:  " + FOUNDER, "Full Name:  " + PARTNER),
