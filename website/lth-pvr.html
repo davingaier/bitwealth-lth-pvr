@@ -671,14 +671,14 @@
             </div>
             
             <div class="feature-card" style="margin-bottom: 32px;">
-                <h3>ROI % Comparison: LTH PVR vs Standard DCA vs HODL</h3>
+                <h3 style="text-align:center;">ROI % Comparison: LTH PVR vs Standard DCA vs HODL</h3>
                 <div class="chart-container">
                     <canvas id="roiChart"></canvas>
                 </div>
             </div>
             
             <div class="feature-card" style="margin-bottom: 32px;">
-                <h3>Portfolio Value (NAV) Comparison: LTH PVR vs Standard DCA vs HODL</h3>
+                <h3 style="text-align:center;">Portfolio Value (NAV) Comparison: LTH PVR vs Standard DCA vs HODL</h3>
                 <div class="chart-container">
                     <canvas id="navChart"></canvas>
                 </div>
@@ -873,14 +873,39 @@
             }
         });
 
+        /**
+         * Returns the indices of the first weekly sample falling in each new calendar
+         * quarter (Jan / Apr / Jul / Oct). Filtering the dataset to these ~20 points
+         * lets Chart.js interpolate a smooth bezier between them instead of zigzagging
+         * through 260+ weekly waypoints.
+         */
+        function quarterlyIndices(isoLabels) {
+            let lastQKey = -1;
+            return isoLabels.reduce((out, iso, i) => {
+                const d = new Date(iso + 'T00:00:00Z');
+                const key = d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3);
+                if (key !== lastQKey) { lastQKey = key; out.push(i); }
+                return out;
+            }, []);
+        }
+
         function buildDatasets(series, key) {
             return [
                 { label: 'LTH PVR Strategy', data: series.lthPvr[key], borderColor: '#FFB400',
-                  backgroundColor: 'rgba(255, 180, 0, 0.1)', borderWidth: 3, pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: true },
+                  backgroundColor: 'rgba(255, 180, 0, 0.1)', borderWidth: 3,
+                  pointRadius: 4, pointHoverRadius: 6,
+                  pointBackgroundColor: 'transparent', pointBorderColor: '#FFB400', pointBorderWidth: 2,
+                  tension: 0.4, fill: true },
                 { label: 'Standard DCA', data: series.stdDca[key], borderColor: '#6B7896',
-                  backgroundColor: 'rgba(107, 120, 150, 0.1)', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: true },
+                  backgroundColor: 'rgba(107, 120, 150, 0.1)', borderWidth: 2,
+                  pointRadius: 3, pointHoverRadius: 5,
+                  pointBackgroundColor: 'transparent', pointBorderColor: '#6B7896', pointBorderWidth: 2,
+                  tension: 0.4, fill: true },
                 { label: 'HODL (lump-sum day 1)', data: series.hodl[key], borderColor: '#A855F7',
-                  backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3], pointRadius: 0, pointHoverRadius: 5, tension: 0.3, fill: false }
+                  backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3],
+                  pointRadius: 2, pointHoverRadius: 5,
+                  pointBackgroundColor: 'transparent', pointBorderColor: '#A855F7', pointBorderWidth: 2,
+                  tension: 0.4, fill: false }
             ];
         }
 
@@ -888,16 +913,24 @@
 
         function renderCharts(data) {
             const p = data.payload;
-            const monthLabels = p.labels.map(fmtMonthLabel);
+
+            // Reduce to one data point per quarter so the bezier curves are smooth
+            const qi = quarterlyIndices(p.labels);
+            const qLabels = qi.map(i => fmtMonthLabel(p.labels[i]));
+            const qSeries = {
+                lthPvr: { nav: qi.map(i => p.series.lthPvr.nav[i]), roi: qi.map(i => p.series.lthPvr.roi[i]) },
+                stdDca: { nav: qi.map(i => p.series.stdDca.nav[i]), roi: qi.map(i => p.series.stdDca.roi[i]) },
+                hodl:   { nav: qi.map(i => p.series.hodl.nav[i]),   roi: qi.map(i => p.series.hodl.roi[i]) }
+            };
 
             new Chart(document.getElementById('roiChart').getContext('2d'), {
                 type: 'line',
-                data: { labels: monthLabels, datasets: buildDatasets(p.series, 'roi') },
+                data: { labels: qLabels, datasets: buildDatasets(qSeries, 'roi') },
                 options: baseOptions((v) => (v >= 0 ? '+' : '') + v + '%', (v) => (v >= 0 ? '+' : '') + v + '%', true)
             });
             new Chart(document.getElementById('navChart').getContext('2d'), {
                 type: 'line',
-                data: { labels: monthLabels, datasets: buildDatasets(p.series, 'nav') },
+                data: { labels: qLabels, datasets: buildDatasets(qSeries, 'nav') },
                 options: baseOptions((v) => '$' + (v / 1000).toFixed(0) + 'k', (v) => '$' + Number(v).toLocaleString('en-US'), false)
             });
 
