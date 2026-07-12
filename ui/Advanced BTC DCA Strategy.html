@@ -4504,6 +4504,19 @@
           <label for="btPerformanceFeePct"><strong>BitWealth Performance Fee (%):</strong></label>
           <input id="btPerformanceFeePct" type="number" min="0" max="100" step="1" value="10" title="10% - BitWealth performance fee on monthly profits (high-water mark)">
 
+          <!-- USDPC idle-cash yield (matches the public back-tester) -->
+          <label for="btUsdpcEnabled"><strong>Earn yield on idle cash (USDPC):</strong></label>
+          <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
+            <input id="btUsdpcEnabled" type="checkbox" checked title="Idle USDT is swept to USDPC (yield-bearing) and converted back just-in-time on buys.">
+            <span>Enabled</span>
+          </label>
+
+          <label for="btUsdpcApy"><strong>USDPC Yield APY (%):</strong></label>
+          <input id="btUsdpcApy" type="number" min="0" step="0.1" value="10" title="Annual yield on idle USDPC (default 10%)">
+
+          <label for="btUsdpcConvFee"><strong>USDPC Conversion Fee (%):</strong></label>
+          <input id="btUsdpcConvFee" type="number" min="0" step="0.01" value="0.1" title="Conversion fee applied on each USDT↔USDPC sweep (default 0.1%)">
+
           <!-- Chart type -->
           <label for="btReportTypeSelect"><strong>Chart type:</strong></label>
           <select id="btReportTypeSelect">
@@ -6527,6 +6540,9 @@
         const performanceFeePct = parseFloat(document.getElementById('btPerformanceFeePct')?.value || 10) / 100;
         const feePlan = document.getElementById('btFeePlan')?.value || 'management';
         const managementFeePct = parseFloat(document.getElementById('btManagementFeePct')?.value || 1.0) / 100;
+        const usdpcEnabled = document.getElementById('btUsdpcEnabled')?.checked ?? true;
+        const usdpcApyPercent = parseFloat(document.getElementById('btUsdpcApy')?.value || 10);
+        const usdpcConvFeePercent = parseFloat(document.getElementById('btUsdpcConvFee')?.value || 0.1);
         
         const { error: paramsErr } = await btDb
           .from('bt_params')
@@ -6541,7 +6557,10 @@
           platform_fee_pct:      platformFeePct,      // BitWealth platform fee (0.75% default)
           performance_fee_pct:   performanceFeePct,   // BitWealth performance fee (10% default)
           fee_plan:              feePlan,             // 'management' (default) | 'platform'
-          management_fee_pct:    managementFeePct     // 1% p.a. on NAV (management plan)
+          management_fee_pct:    managementFeePct,    // 1% p.a. on NAV (management plan)
+          usdpc_enabled:                usdpcEnabled,          // idle-cash yield (matches public back-tester)
+          usdpc_apy_percent:            usdpcApyPercent,       // default 10% APY
+          usdpc_conversion_fee_percent: usdpcConvFeePercent    // default 0.1% per sweep
           // B1–B11 + momentum / gating stay on DB defaults for now (aligned with EF / Python)
         });
 
