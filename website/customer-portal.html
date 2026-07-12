@@ -2444,26 +2444,54 @@
                     usdpcBalance  = parseFloat(wb[0].usdpc_balance   || 0);  // USDPC tokens held
                     usdpcValueUsd = parseFloat(wb[0].usdpc_value_usd || 0);  // their USD value (net of conversion fee)
                 }
+                // Accrued fees (fetched first — Available to Withdraw = Current − accrued fees)
+                let feePlatUsdt = 0, feePlatBtc = 0, feePerfUsdt = 0, feeMgmtUsdt = 0;
+                try {
+                    const { data: fees } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
+                    if (fees && fees.length > 0) {
+                        feePlatUsdt = parseFloat(fees[0].platform_fee_usdt || 0);
+                        feePlatBtc  = parseFloat(fees[0].platform_fee_btc  || 0);
+                        feePerfUsdt = parseFloat(fees[0].performance_fee_usdt || 0);
+                        feeMgmtUsdt = parseFloat(fees[0].management_fee_usdt || 0);
+                    }
+                } catch (fe) { console.error('accrued fees (withdraw card):', fe); }
+
+                const usdpcFmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                // Deduct accrued fees (paid in USDT) from the USD-denominated cash — USDT
+                // first, then USDPC — and the BTC-denominated platform fee from BTC, so that
+                // "Available to Withdraw" always equals "Current Balance" minus accrued fees.
+                const feeUsd = feePlatUsdt + feePerfUsdt + feeMgmtUsdt;
+                const availUsdt      = Math.max(0, grossUsdt - feeUsd);
+                const feeRemainder   = Math.max(0, feeUsd - grossUsdt);
+                const availUsdpcUsd  = Math.max(0, usdpcValueUsd - feeRemainder);
+                const availUsdpcTok  = usdpcValueUsd > 0 ? usdpcBalance * (availUsdpcUsd / usdpcValueUsd) : 0;
+                const availBtc       = Math.max(0, grossBtc - feePlatBtc);
+                const availZar       = grossZar;
+
+                // Form capacity also excludes accrued fees (a client cannot withdraw funds
+                // owed as fees). USDPC auto-converts to USDT on withdrawal, so USDT capacity
+                // = post-fee raw USDT + post-fee USDPC value.
+                withdrawableBalance.btc  = availBtc;
+                withdrawableBalance.usdt = availUsdt + availUsdpcUsd;
+                withdrawableBalance.zar  = availZar;
+
+                // ── Available to Withdraw (after fees) ──
                 const btcEl = document.getElementById('wdBtcBalance');
                 const usdtEl = document.getElementById('wdUsdtBalance');
                 const zarEl  = document.getElementById('wdZarBalance');
-                // USDPC is a separate asset; the raw USDT shown excludes it. (It still
-                // auto-converts to USDT on withdrawal, so the USDT withdrawal capacity in
-                // withdrawableBalance.usdt below keeps the combined figure.)
-                const availUsdtRaw = Math.max(0, withdrawableBalance.usdt - usdpcValueUsd);
-                const usdpcFmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                if (btcEl)  btcEl.textContent  = withdrawableBalance.btc.toFixed(8);
-                if (usdtEl) usdtEl.textContent = availUsdtRaw.toFixed(2);
-                if (zarEl)  zarEl.textContent  = withdrawableBalance.zar.toFixed(2);
+                if (btcEl)  btcEl.textContent  = availBtc.toFixed(8);
+                if (usdtEl) usdtEl.textContent = availUsdt.toFixed(2);
+                if (zarEl)  zarEl.textContent  = availZar.toFixed(2);
                 if (usdpcBalance > 0 || usdpcValueUsd > 0) {
                     const uBal = document.getElementById('wdUsdpcBalance');
                     const uUsd = document.getElementById('wdUsdpcUsd');
                     const uWrap = document.getElementById('wdUsdpcWrap');
-                    if (uBal) uBal.textContent = usdpcFmt(usdpcBalance);
-                    if (uUsd) uUsd.textContent = '\u2248 $' + usdpcFmt(usdpcValueUsd) + ' (auto-converts to USDT)';
+                    if (uBal) uBal.textContent = usdpcFmt(availUsdpcTok);
+                    if (uUsd) uUsd.textContent = '\u2248 $' + usdpcFmt(availUsdpcUsd) + ' (auto-converts to USDT)';
                     if (uWrap) uWrap.style.display = '';
                 }
-                // Current balance (gross, before fees)
+                // ── Current Balance (before fees) ──
                 const gBtcEl = document.getElementById('wdGrossBtc');
                 const gUsdtEl = document.getElementById('wdGrossUsdt');
                 const gZarEl  = document.getElementById('wdGrossZar');
@@ -2478,18 +2506,6 @@
                     if (gUu) gUu.textContent = '\u2248 $' + usdpcFmt(usdpcValueUsd);
                     if (gWrap) gWrap.style.display = '';
                 }
-
-                // Accrued fees breakdown (platform / performance / management as applicable)
-                let feePlatUsdt = 0, feePlatBtc = 0, feePerfUsdt = 0, feeMgmtUsdt = 0;
-                try {
-                    const { data: fees } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
-                    if (fees && fees.length > 0) {
-                        feePlatUsdt = parseFloat(fees[0].platform_fee_usdt || 0);
-                        feePlatBtc  = parseFloat(fees[0].platform_fee_btc  || 0);
-                        feePerfUsdt = parseFloat(fees[0].performance_fee_usdt || 0);
-                        feeMgmtUsdt = parseFloat(fees[0].management_fee_usdt || 0);
-                    }
-                } catch (fe) { console.error('accrued fees (withdraw card):', fe); }
 
                 // Fetch live USDTZAR + BTCZAR for total ZAR-equivalent display (CoinGecko — CORS safe).
                 // ZAR withdrawals can sell from USDT first and then from BTC direct (BTCZAR),
