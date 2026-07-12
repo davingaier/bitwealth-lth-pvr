@@ -471,6 +471,7 @@
                                         <th id="txFeeUsdpcHead" style="display: none; padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="VALR exchange trading fees on USDPC conversions">Exchange Fee (USDPC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (BTC)</th>
                                         <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth platform fee (0.75%)">Platform Fee (USDT)</th>
+                                        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;" title="BitWealth management fee (1% p.a. on NAV)">Management Fee (USDT)</th>
                                         <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Note</th>
                                     </tr>
                                 </thead>
@@ -556,15 +557,34 @@
                         <h2>💸 Withdraw Funds</h2>
                     </div>
                     <div style="padding: 20px;">
-                        <!-- Withdrawable balance -->
-                        <div style="background: rgba(16,185,129,0.1); border-left: 4px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600;">Withdrawable Balance (excludes accrued platform and performance fees)</div>
-                            <div style="display: flex; gap: 30px; flex-wrap: wrap; align-items: baseline;">
-                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdBtcBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">BTC</span></div>
-                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">$</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdtBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
-                                <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">R</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdZarBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">ZAR</span></div>
-                                <div><span style="font-size: 17px; color: var(--text-secondary);">≈ R</span><span style="font-size: 17px; font-weight: 600; color: var(--text-secondary);" id="wdZarEquiv">--</span> <span style="font-size: 12px; color: var(--text-secondary);">total ZAR equiv.</span></div>
-                                <div style="margin-left: auto; font-size: 12px; color: var(--text-secondary); align-self: flex-end; padding-bottom: 2px;">Rate: <span style="color: #93c5fd; font-weight: 600;" id="wdLiveRate">--</span> <span style="opacity:0.7;">USDT/ZAR (live)</span></div>
+                        <!-- Balance breakdown: Current → Accrued fees → Available to withdraw -->
+                        <div style="margin-bottom: 20px; border: 1px solid var(--card-border, rgba(255,255,255,0.08)); border-radius: 8px; overflow: hidden;">
+                            <!-- Current balance (before fees) -->
+                            <div style="background: rgba(148,163,184,0.08); padding: 14px 16px;">
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing:.04em;">Current Balance <span style="font-weight:400; text-transform:none;">(before fees)</span></div>
+                                <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: baseline;">
+                                    <div><span style="font-size: 18px; font-weight: 700;" id="wdGrossBtc">--</span> <span style="font-size: 12px; color: var(--text-secondary);">BTC</span></div>
+                                    <div><span style="font-size: 18px; font-weight: 700;">$</span><span style="font-size: 18px; font-weight: 700;" id="wdGrossUsdt">--</span> <span style="font-size: 12px; color: var(--text-secondary);">USDT</span></div>
+                                    <div><span style="font-size: 18px; font-weight: 700;">R</span><span style="font-size: 18px; font-weight: 700;" id="wdGrossZar">--</span> <span style="font-size: 12px; color: var(--text-secondary);">ZAR</span></div>
+                                    <div style="margin-left: auto;"><span style="font-size: 14px; color: var(--text-secondary);">≈ R</span><span style="font-size: 14px; font-weight: 600;" id="wdGrossZarEquiv">--</span> <span style="font-size: 11px; color: var(--text-secondary);">total</span></div>
+                                </div>
+                            </div>
+                            <!-- Accrued fees -->
+                            <div id="wdFeesBlock" style="background: rgba(251,191,36,0.08); padding: 12px 16px; border-top: 1px solid var(--card-border, rgba(255,255,255,0.08)); border-bottom: 1px solid var(--card-border, rgba(255,255,255,0.08));">
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing:.04em;">Less: Accrued Fees</div>
+                                <div id="wdFeesRows" style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary);">
+                                    <div style="opacity:0.7;">No fees accrued.</div>
+                                </div>
+                            </div>
+                            <!-- Available to withdraw (after fees) -->
+                            <div style="background: rgba(16,185,129,0.12); padding: 14px 16px;">
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing:.04em;">Available to Withdraw <span style="font-weight:400; text-transform:none;">(after fees)</span></div>
+                                <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: baseline;">
+                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdBtcBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">BTC</span></div>
+                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">$</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdtBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
+                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">R</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdZarBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">ZAR</span></div>
+                                    <div style="margin-left: auto; align-self: flex-end; font-size: 12px; color: var(--text-secondary);"><span style="font-size: 17px;">≈ R</span><span style="font-size: 17px; font-weight: 600;" id="wdZarEquiv">--</span> total · Rate: <span style="color: #93c5fd; font-weight: 600;" id="wdLiveRate">--</span> <span style="opacity:0.7;">USDT/ZAR</span></div>
+                                </div>
                             </div>
                         </div>
                         <!-- Warning -->
@@ -1859,12 +1879,14 @@
                     // Format platform fees
                     const platformFeeBtc = parseFloat(tx.platform_fee_btc || 0).toFixed(8);
                     const platformFeeUsdt = parseFloat(tx.platform_fee_usdt || 0).toFixed(2);
+                    const managementFeeUsdt = parseFloat(tx.management_fee_usdt || 0).toFixed(2);
                     
                     // Color code fees: gray for $0.00, orange for charges
                     const feeBtcColor = parseFloat(tx.fee_btc || 0) > 0 ? '#f59e0b' : '#64748b';
                     const feeUsdtColor = parseFloat(tx.fee_usdt || 0) > 0 ? '#f59e0b' : '#64748b';
                     const platformFeeBtcColor = parseFloat(tx.platform_fee_btc || 0) > 0 ? '#f59e0b' : '#64748b';
                     const platformFeeUsdtColor = parseFloat(tx.platform_fee_usdt || 0) > 0 ? '#f59e0b' : '#64748b';
+                    const managementFeeUsdtColor = parseFloat(tx.management_fee_usdt || 0) > 0 ? '#f59e0b' : '#64748b';
                     
                     // Note display (truncate long notes)
                     const note = tx.note || '-';
@@ -1887,6 +1909,7 @@
                             ${feeUsdpcCell}
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeBtcColor};">${platformFeeBtc}</td>
                             <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${platformFeeUsdtColor};">${platformFeeUsdt}</td>
+                            <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: ${managementFeeUsdtColor};">${managementFeeUsdt}</td>
                             <td style="padding: 12px; font-size: 13px; color: #64748b;" title="${note}">${noteDisplay}</td>
                         </tr>
                     `;
@@ -2400,12 +2423,16 @@
         async function loadWithdrawals(customerId) {
             if (!customerId) return;
             try {
-                // Load withdrawable balance
+                // Load withdrawable balance (recorded gross + net withdrawable)
+                let grossBtc = 0, grossUsdt = 0, grossZar = 0;
                 const { data: wb } = await sb.schema('lth_pvr').rpc('get_withdrawable_balance', { p_customer_id: customerId });
                 if (wb && wb.length > 0) {
                     withdrawableBalance.btc  = parseFloat(wb[0].withdrawable_btc  || 0);
                     withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
                     withdrawableBalance.zar  = parseFloat(wb[0].withdrawable_zar  || 0);
+                    grossBtc  = parseFloat(wb[0].recorded_btc  ?? withdrawableBalance.btc);
+                    grossUsdt = parseFloat(wb[0].recorded_usdt ?? withdrawableBalance.usdt);
+                    grossZar  = parseFloat(wb[0].recorded_zar  ?? withdrawableBalance.zar);
                 }
                 const btcEl = document.getElementById('wdBtcBalance');
                 const usdtEl = document.getElementById('wdUsdtBalance');
@@ -2413,6 +2440,25 @@
                 if (btcEl)  btcEl.textContent  = withdrawableBalance.btc.toFixed(8);
                 if (usdtEl) usdtEl.textContent = withdrawableBalance.usdt.toFixed(2);
                 if (zarEl)  zarEl.textContent  = withdrawableBalance.zar.toFixed(2);
+                // Current balance (gross, before fees)
+                const gBtcEl = document.getElementById('wdGrossBtc');
+                const gUsdtEl = document.getElementById('wdGrossUsdt');
+                const gZarEl  = document.getElementById('wdGrossZar');
+                if (gBtcEl)  gBtcEl.textContent  = grossBtc.toFixed(8);
+                if (gUsdtEl) gUsdtEl.textContent = grossUsdt.toFixed(2);
+                if (gZarEl)  gZarEl.textContent  = grossZar.toFixed(2);
+
+                // Accrued fees breakdown (platform / performance / management as applicable)
+                let feePlatUsdt = 0, feePlatBtc = 0, feePerfUsdt = 0, feeMgmtUsdt = 0;
+                try {
+                    const { data: fees } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
+                    if (fees && fees.length > 0) {
+                        feePlatUsdt = parseFloat(fees[0].platform_fee_usdt || 0);
+                        feePlatBtc  = parseFloat(fees[0].platform_fee_btc  || 0);
+                        feePerfUsdt = parseFloat(fees[0].performance_fee_usdt || 0);
+                        feeMgmtUsdt = parseFloat(fees[0].management_fee_usdt || 0);
+                    }
+                } catch (fe) { console.error('accrued fees (withdraw card):', fe); }
 
                 // Fetch live USDTZAR + BTCZAR for total ZAR-equivalent display (CoinGecko — CORS safe).
                 // ZAR withdrawals can sell from USDT first and then from BTC direct (BTCZAR),
@@ -2429,11 +2475,31 @@
                             if (rateEl) rateEl.textContent = usdtRate.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         }
                         if (btcRate > 0) liveBtcZarRate = btcRate;
-                        const totalZar = withdrawableBalance.zar
-                                       + (withdrawableBalance.usdt * (usdtRate || 0))
-                                       + (withdrawableBalance.btc  * (btcRate  || 0));
-                        const zarEl = document.getElementById('wdZarEquiv');
-                        if (zarEl && totalZar > 0) zarEl.textContent = totalZar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const zarFmt = (v) => v.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const usdFmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const zEq = (usdt, btc) => (usdt * (usdtRate || 0)) + (btc * (btcRate || 0));
+                        // Net (available to withdraw) ZAR equivalent
+                        const totalZar = withdrawableBalance.zar + zEq(withdrawableBalance.usdt, withdrawableBalance.btc);
+                        const eqEl = document.getElementById('wdZarEquiv');
+                        if (eqEl && totalZar > 0) eqEl.textContent = zarFmt(totalZar);
+                        // Gross (before fees) ZAR equivalent
+                        const grossZarEquiv = grossZar + zEq(grossUsdt, grossBtc);
+                        const gEqEl = document.getElementById('wdGrossZarEquiv');
+                        if (gEqEl && grossZarEquiv > 0) gEqEl.textContent = zarFmt(grossZarEquiv);
+                        // Fee rows (only show applicable, non-zero fees)
+                        const feeRows = [];
+                        const addFeeRow = (label, usdt, btc) => {
+                            if ((usdt || 0) + (btc || 0) <= 0) return;
+                            const parts = [];
+                            if (usdt > 0) parts.push('$' + usdFmt(usdt) + ' USDT');
+                            if (btc > 0)  parts.push(btc.toFixed(8) + ' BTC');
+                            feeRows.push(`<div style="display:flex; justify-content:space-between; gap:12px;"><span>${label}</span><span style="color: var(--gold); font-weight:600; text-align:right;">− ${parts.join(' + ')} <span style="opacity:0.7; font-weight:400;">(≈ R${zarFmt(zEq(usdt, btc))})</span></span></div>`);
+                        };
+                        addFeeRow('Platform fee', feePlatUsdt, feePlatBtc);
+                        addFeeRow('Performance fee', feePerfUsdt, 0);
+                        addFeeRow('Management fee', feeMgmtUsdt, 0);
+                        const feesRowsEl = document.getElementById('wdFeesRows');
+                        if (feesRowsEl) feesRowsEl.innerHTML = feeRows.length ? feeRows.join('') : '<div style="opacity:0.7;">No fees accrued.</div>';
                     }
                 } catch { /* non-critical */ }
 

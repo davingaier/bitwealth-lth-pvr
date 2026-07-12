@@ -7931,10 +7931,16 @@
 
     const hexToRGBA=(hex,a)=>{const c=hex.replace('#','');const r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);return`rgba(${r},${g},${b},${a})`;};
     function legendWithFading(){
-      const base=cssVar('--ink')||'#111827';
       return {
         position:'top',
-        labels:{color:(ctx)=>{const ch=ctx.chart,i=ctx.datasetIndex;return ch.isDatasetVisible(i)?base:'rgba(17,24,39,0.35)';},
+        labels:{color:(ctx)=>{
+                  // Re-read the theme colour on every render so the legend stays
+                  // readable after a light/dark toggle (do NOT freeze it at build time).
+                  const base=cssVar('--ink')||'#111827';
+                  const faded=cssVar('--muted')||'rgba(148,163,184,0.55)';
+                  const ch=ctx.chart,i=ctx.datasetIndex;
+                  return ch.isDatasetVisible(i)?base:faded;
+                },
                 boxWidth:24,boxHeight:2,useBorderRadius:true,borderRadius:2,padding:14},
         onClick:(e,item,leg)=>{const ch=leg.chart,i=item.datasetIndex;ch.setDatasetVisibility(i,!ch.isDatasetVisible(i));ch.update();rebuildFooterForChart(ch);}
       };
