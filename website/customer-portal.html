@@ -572,7 +572,10 @@
                                     <div><span style="font-size: 18px; font-weight: 700;">$</span><span style="font-size: 18px; font-weight: 700;" id="wdGrossUsdt">--</span> <span style="font-size: 12px; color: var(--text-secondary);">USDT</span></div>
                                     <div id="wdGrossUsdpcWrap" style="display: none;"><span style="font-size: 18px; font-weight: 700;" id="wdGrossUsdpc">--</span> <span style="font-size: 12px; color: var(--text-secondary);">USDPC</span> <span style="font-size: 11px; color: var(--text-secondary);" id="wdGrossUsdpcUsd">≈ $--</span></div>
                                     <div><span style="font-size: 18px; font-weight: 700;">R</span><span style="font-size: 18px; font-weight: 700;" id="wdGrossZar">--</span> <span style="font-size: 12px; color: var(--text-secondary);">ZAR</span></div>
-                                    <div style="margin-left: auto;"><span style="font-size: 14px; color: var(--text-secondary);">≈ R</span><span style="font-size: 14px; font-weight: 600;" id="wdGrossZarEquiv">--</span> <span style="font-size: 11px; color: var(--text-secondary);">total</span></div>
+                                    <div style="margin-left: auto; text-align: right;">
+                                        <div><span style="font-size: 14px; color: var(--text-secondary);">≈ $</span><span style="font-size: 16px; font-weight: 700;" id="wdGrossUsdEquiv">--</span> <span style="font-size: 11px; color: var(--text-secondary);">USDT total</span></div>
+                                        <div><span style="font-size: 14px; color: var(--text-secondary);">≈ R</span><span style="font-size: 16px; font-weight: 700;" id="wdGrossZarEquiv">--</span> <span style="font-size: 11px; color: var(--text-secondary);">ZAR total</span></div>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Accrued fees -->
@@ -582,16 +585,14 @@
                                     <div style="opacity:0.7;">No fees accrued.</div>
                                 </div>
                             </div>
-                            <!-- Available to withdraw (after fees) -->
+                            <!-- Available to withdraw (after fees) — the client just needs the total available, regardless of asset -->
                             <div style="background: rgba(16,185,129,0.12); padding: 14px 16px;">
                                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing:.04em;">Available to Withdraw <span style="font-weight:400; text-transform:none;">(after fees)</span></div>
-                                <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: baseline;">
-                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdBtcBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">BTC</span></div>
-                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">$</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdtBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
-                                    <div id="wdUsdpcWrap" style="display: none;"><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdUsdpcBalance">--</span> <span style="font-size: 13px; color: var(--text-secondary);">USDPC</span> <span style="font-size: 11px; color: var(--text-secondary);" id="wdUsdpcUsd">≈ $--</span></div>
-                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">R</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdZarBalance">...</span> <span style="font-size: 13px; color: var(--text-secondary);">ZAR</span></div>
-                                    <div style="margin-left: auto; align-self: flex-end; font-size: 12px; color: var(--text-secondary);"><span style="font-size: 17px;">≈ R</span><span style="font-size: 17px; font-weight: 600;" id="wdZarEquiv">--</span> total</div>
+                                <div style="display: flex; gap: 32px; flex-wrap: wrap; align-items: baseline;">
+                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">≈ $</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdAvailUsd">--</span> <span style="font-size: 13px; color: var(--text-secondary);">USDT</span></div>
+                                    <div><span style="font-size: 22px; font-weight: 700; color: #10b981;">≈ R</span><span style="font-size: 22px; font-weight: 700; color: #10b981;" id="wdZarEquiv">--</span> <span style="font-size: 13px; color: var(--text-secondary);">ZAR</span></div>
                                 </div>
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; opacity: 0.85;">Your total across BTC, USDT, USDPC and ZAR, converted for withdrawal.</div>
                             </div>
                         </div>
                         <!-- Warning -->
@@ -2430,21 +2431,20 @@
         async function loadWithdrawals(customerId) {
             if (!customerId) return;
             try {
-                // Load withdrawable balance (recorded gross + net withdrawable)
+                // Load withdrawable balance (recorded gross + USDPC + NAV)
                 let grossBtc = 0, grossUsdt = 0, grossZar = 0;
-                let usdpcBalance = 0, usdpcValueUsd = 0;
+                let usdpcBalance = 0, usdpcPrice = 1, usdpcGrossUsd = 0, navUsd = 0;
                 const { data: wb } = await sb.schema('lth_pvr').rpc('get_withdrawable_balance', { p_customer_id: customerId });
                 if (wb && wb.length > 0) {
-                    withdrawableBalance.btc  = parseFloat(wb[0].withdrawable_btc  || 0);
-                    withdrawableBalance.usdt = parseFloat(wb[0].withdrawable_usdt || 0);
-                    withdrawableBalance.zar  = parseFloat(wb[0].withdrawable_zar  || 0);
-                    grossBtc  = parseFloat(wb[0].recorded_btc  ?? withdrawableBalance.btc);
-                    grossUsdt = parseFloat(wb[0].recorded_usdt ?? withdrawableBalance.usdt);
-                    grossZar  = parseFloat(wb[0].recorded_zar  ?? withdrawableBalance.zar);
-                    usdpcBalance  = parseFloat(wb[0].usdpc_balance   || 0);  // USDPC tokens held
-                    usdpcValueUsd = parseFloat(wb[0].usdpc_value_usd || 0);  // their USD value (net of conversion fee)
+                    grossBtc  = parseFloat(wb[0].recorded_btc  || 0);
+                    grossUsdt = parseFloat(wb[0].recorded_usdt || 0);
+                    grossZar  = parseFloat(wb[0].recorded_zar  || 0);
+                    usdpcBalance  = parseFloat(wb[0].usdpc_balance   || 0);
+                    usdpcPrice    = parseFloat(wb[0].usdpc_price_usd || 1);
+                    usdpcGrossUsd = usdpcBalance * usdpcPrice;                 // GROSS USDPC value — matches dashboard USDPC/NAV card
+                    navUsd        = parseFloat(wb[0].total_usd || 0);          // gross NAV (BTC+USDT+USDPC) — matches dashboard NAV card
                 }
-                // Accrued fees (fetched first — Available to Withdraw = Current − accrued fees)
+                // Accrued fees (BitWealth platform / performance / management, as applicable)
                 let feePlatUsdt = 0, feePlatBtc = 0, feePerfUsdt = 0, feeMgmtUsdt = 0;
                 try {
                     const { data: fees } = await sb.rpc('get_customer_accrued_fees', { p_customer_id: customerId });
@@ -2458,54 +2458,28 @@
 
                 const usdpcFmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                // Deduct accrued fees (paid in USDT) from the USD-denominated cash — USDT
-                // first, then USDPC — and the BTC-denominated platform fee from BTC, so that
-                // "Available to Withdraw" always equals "Current Balance" minus accrued fees.
-                const feeUsd = feePlatUsdt + feePerfUsdt + feeMgmtUsdt;
-                const availUsdt      = Math.max(0, grossUsdt - feeUsd);
-                const feeRemainder   = Math.max(0, feeUsd - grossUsdt);
-                const availUsdpcUsd  = Math.max(0, usdpcValueUsd - feeRemainder);
-                const availUsdpcTok  = usdpcValueUsd > 0 ? usdpcBalance * (availUsdpcUsd / usdpcValueUsd) : 0;
-                const availBtc       = Math.max(0, grossBtc - feePlatBtc);
-                const availZar       = grossZar;
-
-                // Form capacity also excludes accrued fees (a client cannot withdraw funds
-                // owed as fees). USDPC auto-converts to USDT on withdrawal, so USDT capacity
-                // = post-fee raw USDT + post-fee USDPC value.
-                withdrawableBalance.btc  = availBtc;
-                withdrawableBalance.usdt = availUsdt + availUsdpcUsd;
-                withdrawableBalance.zar  = availZar;
-
-                // ── Available to Withdraw (after fees) ──
-                const btcEl = document.getElementById('wdBtcBalance');
-                const usdtEl = document.getElementById('wdUsdtBalance');
-                const zarEl  = document.getElementById('wdZarBalance');
-                if (btcEl)  btcEl.textContent  = availBtc.toFixed(8);
-                if (usdtEl) usdtEl.textContent = availUsdt.toFixed(2);
-                if (zarEl)  zarEl.textContent  = availZar.toFixed(2);
-                if (usdpcBalance > 0 || usdpcValueUsd > 0) {
-                    const uBal = document.getElementById('wdUsdpcBalance');
-                    const uUsd = document.getElementById('wdUsdpcUsd');
-                    const uWrap = document.getElementById('wdUsdpcWrap');
-                    if (uBal) uBal.textContent = usdpcFmt(availUsdpcTok);
-                    if (uUsd) uUsd.textContent = '\u2248 $' + usdpcFmt(availUsdpcUsd) + ' (auto-converts to USDT)';
-                    if (uWrap) uWrap.style.display = '';
-                }
-                // ── Current Balance (before fees) ──
+                // ── Current Balance (before fees): per-asset holdings; totals roll up to NAV (rate block) ──
                 const gBtcEl = document.getElementById('wdGrossBtc');
                 const gUsdtEl = document.getElementById('wdGrossUsdt');
                 const gZarEl  = document.getElementById('wdGrossZar');
                 if (gBtcEl)  gBtcEl.textContent  = grossBtc.toFixed(8);
                 if (gUsdtEl) gUsdtEl.textContent = grossUsdt.toFixed(2);
                 if (gZarEl)  gZarEl.textContent  = grossZar.toFixed(2);
-                if (usdpcBalance > 0 || usdpcValueUsd > 0) {
+                if (usdpcBalance > 0) {
                     const gU = document.getElementById('wdGrossUsdpc');
                     const gUu = document.getElementById('wdGrossUsdpcUsd');
                     const gWrap = document.getElementById('wdGrossUsdpcWrap');
                     if (gU) gU.textContent = usdpcFmt(usdpcBalance);
-                    if (gUu) gUu.textContent = '\u2248 $' + usdpcFmt(usdpcValueUsd);
+                    if (gUu) gUu.textContent = '\u2248 $' + usdpcFmt(usdpcGrossUsd);
                     if (gWrap) gWrap.style.display = '';
                 }
+
+                // Withdrawal-form capacity (per currency) excludes accrued fees. USDPC auto-converts
+                // to USDT, so USDT cash capacity = (USDT + gross USDPC) − USD-denominated fees.
+                const feeUsdCash = feePlatUsdt + feePerfUsdt + feeMgmtUsdt;
+                withdrawableBalance.btc  = Math.max(0, grossBtc - feePlatBtc);
+                withdrawableBalance.usdt = Math.max(0, (grossUsdt + usdpcGrossUsd) - feeUsdCash);
+                withdrawableBalance.zar  = grossZar;
 
                 // Fetch live USDTZAR + BTCZAR for total ZAR-equivalent display (CoinGecko — CORS safe).
                 // ZAR withdrawals can sell from USDT first and then from BTC direct (BTCZAR),
@@ -2525,14 +2499,25 @@
                         const zarFmt = (v) => v.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         const usdFmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         const zEq = (usdt, btc) => (usdt * (usdtRate || 0)) + (btc * (btcRate || 0));
-                        // Net (available to withdraw) ZAR equivalent
-                        const totalZar = withdrawableBalance.zar + zEq(withdrawableBalance.usdt, withdrawableBalance.btc);
-                        const eqEl = document.getElementById('wdZarEquiv');
-                        if (eqEl && totalZar > 0) eqEl.textContent = zarFmt(totalZar);
-                        // Gross (before fees) ZAR equivalent — includes USDPC value
-                        const grossZarEquiv = grossZar + zEq(grossUsdt + usdpcValueUsd, grossBtc);
-                        const gEqEl = document.getElementById('wdGrossZarEquiv');
-                        if (gEqEl && grossZarEquiv > 0) gEqEl.textContent = zarFmt(grossZarEquiv);
+                        const btcPriceUsd = usdtRate > 0 ? (btcRate / usdtRate) : 0;
+                        // Current total = gross NAV (BTC+USDT+USDPC, matches dashboard) + ZAR converted to USD.
+                        const zarInUsd = usdtRate > 0 ? grossZar / usdtRate : 0;
+                        const currentTotalUsd = navUsd + zarInUsd;
+                        const currentTotalZar = currentTotalUsd * (usdtRate || 0);
+                        // Accrued fees in USD (BTC-denominated fee valued at the live price).
+                        const feeUsdTotal = feePlatUsdt + feePerfUsdt + feeMgmtUsdt + (feePlatBtc * btcPriceUsd);
+                        const availTotalUsd = Math.max(0, currentTotalUsd - feeUsdTotal);
+                        const availTotalZar = availTotalUsd * (usdtRate || 0);
+                        // Current Balance totals (roll up to NAV)
+                        const gUsdEl = document.getElementById('wdGrossUsdEquiv');
+                        const gEqEl  = document.getElementById('wdGrossZarEquiv');
+                        if (gUsdEl) gUsdEl.textContent = usdFmt(currentTotalUsd);
+                        if (gEqEl)  gEqEl.textContent  = zarFmt(currentTotalZar);
+                        // Available to Withdraw totals (NAV − fees)
+                        const aUsdEl = document.getElementById('wdAvailUsd');
+                        const eqEl   = document.getElementById('wdZarEquiv');
+                        if (aUsdEl) aUsdEl.textContent = usdFmt(availTotalUsd);
+                        if (eqEl)   eqEl.textContent   = zarFmt(availTotalZar);
                         // Fee rows (only show applicable, non-zero fees)
                         const feeRows = [];
                         const addFeeRow = (label, usdt, btc) => {
