@@ -9861,6 +9861,16 @@
     .report-table{ table-layout: fixed; width:96%; max-width:1280px; }
     .report-table th, .report-table td{ word-wrap: break-word; white-space: normal; }
 
+    /* Dark-mode overrides — the hardcoded light zebra/header above render as
+       near-white bands with invisible light text under [data-theme="dark"]. */
+    [data-theme="dark"] .report-table th,
+    [data-theme="dark"] .report-table td{ border-color:var(--border); color:var(--ink); }
+    [data-theme="dark"] .report-table thead th{ background:var(--bg-table-head); color:var(--ink); }
+    [data-theme="dark"] .report-table tbody tr:nth-child(odd) td{ background:var(--bg-soft); }
+    [data-theme="dark"] .report-table tbody tr:nth-child(even) td{ background:var(--bg-elev); }
+    [data-theme="dark"] .report-table td.metric-cell{ color:var(--ink); }
+    [data-theme="dark"] .report-table td.metric-muted{ color:var(--muted); }
+
     /* Hide old CBM Allocate + Convert controls, but keep Scan visible */
     #balance-maintenance-module #bmAllocBtn,
     #balance-maintenance-module #bmConvertBtn,
