@@ -1723,6 +1723,14 @@
           <!-- Fee Configuration -->
           <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
             <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Fee Configuration</legend>
+            <div style="margin-bottom:.75rem;">
+              <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Fee Plan</label>
+              <select id="strategyModalFeePlan" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;" title="Management is the business default; Platform is by-request only. Platform Fee applies only on the Platform plan; Management Fee (1% p.a.) applies only on the Management plan.">
+                <option value="management" selected>Management (1% p.a. on NAV)</option>
+                <option value="platform">Platform (0.75% on contributions)</option>
+              </select>
+              <input id="strategyModalMgmtRate" type="hidden" value="0.01">
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
               <div>
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Rate</label>
@@ -4481,8 +4489,17 @@
           <input id="btContribFeePct" type="number" min="0" step="0.01" value="18" title="18 bps = 0.18% - VALR exchange fee for USDT/ZAR conversions (charged in USDT)">
 
           <!-- BitWealth Fees -->
+          <label for="btFeePlan"><strong>Fee Plan:</strong></label>
+          <select id="btFeePlan" title="Management = 1% p.a. on NAV (business default); Platform = 0.75% on contributions">
+            <option value="management" selected>Management (1% p.a. on NAV)</option>
+            <option value="platform">Platform (0.75% on contributions)</option>
+          </select>
+
+          <label for="btManagementFeePct"><strong>Management Fee (% p.a.):</strong></label>
+          <input id="btManagementFeePct" type="number" min="0" max="100" step="0.01" value="1.0" title="1% p.a. on NAV, charged monthly (management plan)">
+
           <label for="btPlatformFeePct"><strong>BitWealth Platform Fee (%):</strong></label>
-          <input id="btPlatformFeePct" type="number" min="0" max="100" step="0.01" value="0.75" title="0.75% - BitWealth platform fee on all contributions">
+          <input id="btPlatformFeePct" type="number" min="0" max="100" step="0.01" value="0.75" title="0.75% - BitWealth platform fee on all contributions (platform plan only)">
 
           <label for="btPerformanceFeePct"><strong>BitWealth Performance Fee (%):</strong></label>
           <input id="btPerformanceFeePct" type="number" min="0" max="100" step="1" value="10" title="10% - BitWealth performance fee on monthly profits (high-water mark)">
@@ -6508,6 +6525,8 @@
         // 2) Create bt_params row for this run (in lth_pvr_bt schema)
         const platformFeePct = parseFloat(document.getElementById('btPlatformFeePct')?.value || 0.75) / 100;
         const performanceFeePct = parseFloat(document.getElementById('btPerformanceFeePct')?.value || 10) / 100;
+        const feePlan = document.getElementById('btFeePlan')?.value || 'management';
+        const managementFeePct = parseFloat(document.getElementById('btManagementFeePct')?.value || 1.0) / 100;
         
         const { error: paramsErr } = await btDb
           .from('bt_params')
@@ -6520,7 +6539,9 @@
           maker_bps_trade,
           maker_bps_contrib,
           platform_fee_pct:      platformFeePct,      // BitWealth platform fee (0.75% default)
-          performance_fee_pct:   performanceFeePct    // BitWealth performance fee (10% default)
+          performance_fee_pct:   performanceFeePct,   // BitWealth performance fee (10% default)
+          fee_plan:              feePlan,             // 'management' (default) | 'platform'
+          management_fee_pct:    managementFeePct     // 1% p.a. on NAV (management plan)
           // B1–B11 + momentum / gating stay on DB defaults for now (aligned with EF / Python)
         });
 
@@ -12244,6 +12265,8 @@
       const platformFeeSchedule = document.getElementById('strategyModalPlatformSchedule').value;
       const performanceFeeRate = parseFloat(document.getElementById('strategyModalPerfRate').value);
       const performanceFeeSchedule = document.getElementById('strategyModalPerfSchedule').value;
+      const feePlan = document.getElementById('strategyModalFeePlan')?.value || 'management';
+      const managementFeeRate = parseFloat(document.getElementById('strategyModalMgmtRate')?.value || 0.01);
 
       const strategyName = allStrategies.find(s => s.strategy_code === strategyCode)?.name || strategyCode;
       const variationName = allVariations.find(v => v.id === variationId)?.display_name;
@@ -12251,6 +12274,7 @@
       const confirmMsg = `Confirm strategy setup for customer ${modalCustomerId}?\n\n` +
         `Strategy: ${strategyName}\n` +
         (variationName ? `Variation: ${variationName}\n` : '') +
+        `Fee Plan: ${feePlan === 'management' ? 'Management (1% p.a. on NAV)' : 'Platform (0.75% on contributions)'}\n` +
         `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n` +
         `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
         `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
@@ -12278,6 +12302,8 @@
             platform_fee_schedule: platformFeeSchedule,
             performance_fee_rate: performanceFeeRate,
             performance_fee_schedule: performanceFeeSchedule,
+            fee_plan: feePlan,
+            management_fee_rate: managementFeeRate,
             admin_email: adminEmail
           })
         });

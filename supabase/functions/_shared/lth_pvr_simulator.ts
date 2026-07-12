@@ -50,6 +50,12 @@ export interface SimulationParams {
   
   /** Performance fee rate (0.10 = 10%) */
   performance_fee_rate?: number;
+
+  /** Fee plan: 'platform' (0.75% on contributions) or 'management' (1% p.a. on NAV). Default 'platform'. */
+  fee_plan?: string;
+
+  /** Management fee rate p.a. (0.01 = 1%). Applied as NAV x rate / 12 monthly when fee_plan='management'. */
+  management_fee_rate?: number;
   
   /** Exchange contribution fee rate (0.0018 = 18 bps) */
   contrib_fee_rate?: number;
@@ -131,6 +137,7 @@ export interface DailyResult {
   total_roi_percent: number;
   cagr_percent: number;
   platform_fees_paid_usdt: number;
+  management_fees_paid_usdt: number;
   performance_fees_paid_usdt: number;
   exchange_fees_paid_btc: number;
   exchange_fees_paid_usdt: number;
@@ -168,6 +175,7 @@ export interface SimulationResult {
   total_contrib_gross_usdt: number;
   total_contrib_net_usdt: number;
   total_platform_fees_usdt: number;
+  total_management_fees_usdt: number;
   total_performance_fees_usdt: number;
   total_exchange_fees_btc: number;
   total_exchange_fees_usdt: number;
@@ -325,6 +333,8 @@ export function runSimulation(
   const tradeFeeRate = params.trade_fee_rate ?? 0.0008; // 8 bps
   const performanceFeeRate = params.performance_fee_rate ?? 0.10; // 10%
   const contribFeeRate = params.contrib_fee_rate ?? 0.0018; // 18 bps
+  const feePlan = (params.fee_plan ?? "platform").toLowerCase(); // 'platform' | 'management'
+  const managementFeeRate = params.management_fee_rate ?? 0.01; // 1% p.a.
 
   // USDPC yield-stablecoin modelling (LTH PVR only; benchmarks stay plain cash).
   const usdpcEnabled = !!params.usdpc_enabled;
@@ -374,6 +384,7 @@ export function runSimulation(
   let contribFeeCum = 0;
   let contribNetCum = 0;
   let platformFeesCum = 0;
+  let managementFeesCum = 0;
   let performanceFeesCum = 0;
   let highWaterMark = 0;
   let hwmContribNetCum = 0;
@@ -436,6 +447,7 @@ export function runSimulation(
     
     // Reset daily fee trackers
     let platformFeeToday = 0;
+    let managementFeeToday = 0;
     let performanceFeeToday = 0;
     let exchangeFeeBtcToday = 0;
     let exchangeFeeUsdtToday = 0;
@@ -527,8 +539,9 @@ export function runSimulation(
       const exchangeFee = grossContribToday * contribFeeRate;
       const afterExchangeFee = grossContribToday - exchangeFee;
       
-      // Step 2: Deduct BitWealth platform fee (0.75%)
-      const platformFee = afterExchangeFee * platformFeeRate;
+      // Step 2: Deduct BitWealth platform fee (0.75%) — ONLY on the platform plan.
+      // Management-plan customers pay a monthly NAV-based fee instead (see below).
+      const platformFee = feePlan === "platform" ? afterExchangeFee * platformFeeRate : 0;
       const net = afterExchangeFee - platformFee;
       
       usdtBal += net;
@@ -744,6 +757,37 @@ export function runSimulation(
         highWaterMark = navForPerfFee;
         hwmContribNetCum = contribNetCum;
       }
+
+      // Monthly management fee (plan = management): NAV x rate / 12, charged every
+      // month regardless of the high-water mark. Deducted after any performance fee.
+      if (feePlan === "management" && managementFeeRate > 0) {
+        const navForMgmt = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
+        managementFeeToday = Math.max(0, navForMgmt * managementFeeRate / 12);
+        if (managementFeeToday > 0) {
+          ensureUsdtSim(managementFeeToday);
+          usdtBal -= managementFeeToday;
+          managementFeesCum += managementFeeToday;
+          ledger.push({
+            trade_date: tradeDate, close_date: closeDate, kind: "fee",
+            amount_btc: 0, amount_usdt: 0, fee_btc: 0, fee_usdt: managementFeeToday,
+            note: "BitWealth management fee (NAV x rate / 12)"
+          });
+          // USDT floor guard: sell BTC to cover a shortfall (mirrors live behaviour).
+          if (usdtBal < 0 && btcBal > 0 && px > 0) {
+            const shortfall = -usdtBal;
+            const btcToSell = shortfall / (px * (1 - tradeFeeRate));
+            const btcSold = Math.min(btcBal, btcToSell);
+            const feeBtc = btcSold * tradeFeeRate;
+            const usdtReceived = (btcSold - feeBtc) * px;
+            btcBal -= btcSold; usdtBal += usdtReceived; exchangeFeesBtcCum += feeBtc;
+            ledger.push({
+              trade_date: tradeDate, close_date: closeDate, kind: "fee",
+              amount_btc: -btcSold, amount_usdt: usdtReceived, fee_btc: feeBtc, fee_usdt: 0,
+              note: "BTC→USDT conversion to cover management fee shortfall"
+            });
+          }
+        }
+      }
     }
     lastMonthForPerfFee = monthKey;
     
@@ -781,6 +825,7 @@ export function runSimulation(
       total_roi_percent: totalRoi,
       cagr_percent: cagr,
       platform_fees_paid_usdt: platformFeeToday,
+      management_fees_paid_usdt: managementFeeToday,
       performance_fees_paid_usdt: performanceFeeToday,
       exchange_fees_paid_btc: exchangeFeeBtcToday,
       exchange_fees_paid_usdt: exchangeFeeUsdtToday,
@@ -877,6 +922,7 @@ export function runSimulation(
     total_contrib_gross_usdt: contribGrossCum,
     total_contrib_net_usdt: contribNetCum,
     total_platform_fees_usdt: platformFeesCum,
+    total_management_fees_usdt: managementFeesCum,
     total_performance_fees_usdt: performanceFeesCum,
     total_exchange_fees_btc: exchangeFeesBtcCum,
     total_exchange_fees_usdt: exchangeFeesUsdtCum,

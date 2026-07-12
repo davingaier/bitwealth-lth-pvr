@@ -3,11 +3,35 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-11 (v0.6.142)
+**Last updated:** 2026-07-12 (v0.6.143)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.143 – Fee-plan choice: Management fee (1% p.a.) OR Platform fee (0.75%)
+**Date:** 2026-07-12  
+**Status:** ✅ DEPLOYED (3× migrations + DB RPCs/crons + 7 edge functions + admin UI + sales tool + simulators + website)
+
+**Motivation.** The commercial model now offers clients a choice of exactly ONE BitWealth fee plan — a **1% p.a. management fee** (charged monthly on NAV) OR the legacy **0.75% platform fee** (on contributions). Performance fee (10% HWM) and the VALR exchange rebate apply to both. New clients default to **management**; the ~17 existing clients were grandfathered to **platform**. Clients may switch (effective the 1st of the next calendar month). Management fee supports **monthly** (deduct) / **quarterly** / **annual** (accrue+settle at calendar period end) schedules; `quarterly` was also added to the platform and performance fee schedules.
+
+**Data model (Phase 0 — `20260711_fee_plan_phase0_schema`).** `public.customer_strategies` +`fee_plan` (default 'management', existing rows backfilled 'platform'), +`management_fee_rate` (0.01), +`management_fee_schedule`. `fee_schedule_rank()` renumbered to include quarterly (immediate1/monthly2/quarterly3/annual4); platform+performance schedule CHECKs extended. `lth_pvr.ledger_lines` +`management_fee_usdt` + kinds `management_fee`/`management_fee_reversal`. `lth_pvr.customer_state_daily` +`last_management_fee_period`. New effective-dated `public.customer_fee_plan_history` (one open row per customer). `annual_fee_accrual` +`accrued_management_fee_usdt`; `fee_invoices` + management accumulation/transfer cols. `bt_params` +`fee_plan`/`management_fee_pct`.
+
+**RPCs & scheduling (Phase 1 — `20260711_fee_plan_phase1_rpcs` + `_crons`).** `get_customer_fee_rates` returns plan+management; consolidated `update_customer_fee_rates` (rates/schedules/mgmt, writes history); `set_customer_fee_plan` (switch effective 1st of next month); `get_customer_fee_rates_asof(cust,date)` (fee-calc resolver); `apply_pending_fee_plans()` (flips in-force plan). Crons: `apply_pending_fee_plans_monthly` (00:01 on 1st), `monthly-management-fees` (00:07 on 1st).
+
+**Accounting (deployed + tested on customer 31).** New **`ef_calculate_management_fees`** (NAV×rate/12; monthly deduct, quarterly/annual accrue+settle at calendar period end; resolves the plan as-of the charged month; independent of HWM; collects via `withdrawFeeFromCustomerAccount`). `ef_post_ledger_and_balances` forces the platform fee to 0 for management-plan customers. `ef_calculate_interim_performance_fee` analogue: `ef_request_withdrawal` now also charges a pro-rated **interim management fee** (rate/12 × elapsed-days on the withdrawn amount), netted from the payout and stored on `withdrawal_requests.interim_management_fee_usdt`. `ef_confirm_strategy` accepts `quarterly`.
+
+**Statements (Phase 2).** `ef_generate_statement` + `ef_monthly_statement_generator` show the management fee (deducted for monthly; accrued for quarterly/annual).
+
+**Admin UI (Phase 3).** Finance fee-edit table gained a **Fee Plan** selector (Platform⇄Management → `set_customer_fee_plan`), Management Fee %/schedule columns, and `quarterly` in all schedule dropdowns.
+
+**Tools (Phase 4).** `docs/fee-model.html` → mutually-exclusive plan selector (Performance+Exchange always on). Shared `lth_pvr_simulator.ts` + `ef_bt_execute` + `ef_run_lth_pvr_simulator` gained a management-fee mode (verified: platform vs management diverge correctly).
+
+**Website (Phase 5).** Plan toggle is **Admin-only**; the public back-tester models the **management** plan (business default — all clients opt into management; platform is by-request only). `create_public_backtest_run` sets `fee_plan='management'`; public back-tester fee line relabelled "Management Fee (1% p.a.)"; strategy page + Terms of Service §6 updated (management standard / platform alternative / performance both).
+
+**Files/objects changed:** `supabase/migrations/20260711_fee_plan_phase0_schema.sql`, `_phase1_rpcs.sql`, `_phase1_crons.sql`; `ef_calculate_management_fees`, `ef_post_ledger_and_balances`, `ef_request_withdrawal`, `ef_confirm_strategy`, `ef_generate_statement`, `ef_monthly_statement_generator`, `ef_run_lth_pvr_simulator`, `ef_bt_execute`, `_shared/lth_pvr_simulator.ts`; `ui/Advanced BTC DCA Strategy.html`; `docs/fee-model.html`; `website/lth-pvr-backtest.html`, `website/lth-pvr.html`, `website/legal/terms-of-service.html`; `create_public_backtest_run` RPC.
+
+---
 
 ### v0.6.142 – Marketing charts refresh system: live 5-year trailing back-test, monthly auto-populate
 **Date:** 2026-07-11  

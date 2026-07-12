@@ -119,6 +119,8 @@ interface FeeCalcResult {
   preHwm: number;
   preContribNet: number;
   preNav: number;
+  feePlan: string;
+  managementFeeRate: number;
 }
 
 async function calcInterimFee(
@@ -134,13 +136,15 @@ async function calcInterimFee(
   const { data: strat } = await sb
     .schema("public")
     .from("customer_strategies")
-    .select("performance_fee_rate")
+    .select("performance_fee_rate, fee_plan, management_fee_rate")
     .eq("customer_id", customerId)
     .eq("org_id", ORG_ID)
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
   const feeRate = Number(strat?.performance_fee_rate ?? 0.10);
+  const feePlan = String(strat?.fee_plan ?? "platform");
+  const managementFeeRate = Number(strat?.management_fee_rate ?? 0.01);
 
   // ── 2. Current HWM state ──────────────────────────────────────────────────
   const { data: stateRows } = await sb
@@ -208,7 +212,7 @@ async function calcInterimFee(
     }
   }
 
-  return { performanceFeeUsdt, feeSettledUsdt, feeShortfallBtc, btcSpotPrice, newHwm, preHwm, preContribNet, preNav };
+  return { performanceFeeUsdt, feeSettledUsdt, feeShortfallBtc, btcSpotPrice, newHwm, preHwm, preContribNet, preNav, feePlan, managementFeeRate };
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -377,6 +381,24 @@ Deno.serve(async (req) => {
   // ── Step 10: Calculate interim performance fee (HWM) ─────────────────────
   const feeCalc = await calcInterimFee(customerId, portfolioId, currentNav, btcBalance, usdtBalance);
 
+  // ── Step 10b: Interim management fee (management-plan customers only) ─────
+  // Mirrors the interim performance fee: pro-rate this month's management fee
+  // (rate/12) on the withdrawn amount for the days elapsed so far this month,
+  // so a mid-month withdrawal still bears its share. Netted from the payout.
+  let interimMgmtFeeUsdt = 0;
+  if (feeCalc.feePlan === "management" && feeCalc.managementFeeRate > 0) {
+    const nowD = new Date();
+    const daysInMonth = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth() + 1, 0)).getUTCDate();
+    const dayOfMonth = nowD.getUTCDate();
+    const btcPx = feeCalc.btcSpotPrice > 0 ? feeCalc.btcSpotPrice : (btcBalance > 0 ? currentNav / btcBalance : 0);
+    const withdrawnUsdtEquiv =
+      currency === "USDT" ? amount
+      : currency === "BTC" ? amount * btcPx
+      : currency === "ZAR" ? (usdtzarRate > 0 ? amount / usdtzarRate : 0)
+      : amount;
+    interimMgmtFeeUsdt = Math.round(Math.max(0, withdrawnUsdtEquiv * (feeCalc.managementFeeRate / 12) * (dayOfMonth / daysInMonth)) * 100) / 100;
+  }
+
   // ── Step 11: VALR fees (ZAR path only) ────────────────────────────────────
   let valrWithdrawalFeeZar = 0;
   let valrConvFeeRate = 0;
@@ -397,13 +419,13 @@ Deno.serve(async (req) => {
   // ── Step 12: Net amount shown to customer ─────────────────────────────────
   let netAmount = amount;
   if (currency === "USDT") {
-    netAmount = amount - feeCalc.performanceFeeUsdt;
+    netAmount = amount - feeCalc.performanceFeeUsdt - interimMgmtFeeUsdt;
   } else if (currency === "BTC") {
     const btcPrice = feeCalc.btcSpotPrice > 0 ? feeCalc.btcSpotPrice : 50000;
-    const feeBtcEquiv = feeCalc.performanceFeeUsdt / btcPrice;
+    const feeBtcEquiv = (feeCalc.performanceFeeUsdt + interimMgmtFeeUsdt) / btcPrice;
     netAmount = amount - feeBtcEquiv;
   } else if (currency === "ZAR") {
-    netAmount = amount - valrWithdrawalFeeZar; // Approx — conversion fee baked into rate
+    netAmount = amount - valrWithdrawalFeeZar - (interimMgmtFeeUsdt * usdtzarRate); // Approx — conversion fee baked into rate
   }
 
   // ── Step 13: Insert withdrawal_requests ───────────────────────────────────
@@ -422,6 +444,7 @@ Deno.serve(async (req) => {
       interim_performance_fee_usdt: feeCalc.performanceFeeUsdt,
       interim_fee_settled_usdt: feeCalc.feeSettledUsdt,
       interim_fee_settled_btc: feeCalc.feeShortfallBtc,
+      interim_management_fee_usdt: interimMgmtFeeUsdt,
       interim_fee_btc_price: feeCalc.btcSpotPrice > 0 ? feeCalc.btcSpotPrice : null,
       net_amount: netAmount,
       source_asset: currency === "ZAR" ? null : currency, // queue processor will set BTC/USDT/BTC+USDT once it knows the conversion split
@@ -496,6 +519,7 @@ Deno.serve(async (req) => {
     amount,
     net_amount: netAmount,
     interim_performance_fee_usdt: feeCalc.performanceFeeUsdt,
+    interim_management_fee_usdt: interimMgmtFeeUsdt,
     message: "Withdrawal queued for processing. You will receive an email when it completes.",
   });
 });

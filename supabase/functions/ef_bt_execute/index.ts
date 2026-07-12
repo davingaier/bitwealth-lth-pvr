@@ -142,6 +142,8 @@ Deno.serve(async (req)=>{
     const contribFeeRate = toNum(params.maker_bps_contrib, 0) / 10000;  // VALR USDT/ZAR exchange fee (18 bps, charged in USDT)
     const platformFeeRate = toNum(params.platform_fee_pct, 0);  // BitWealth platform fee (0.75%, charged on contributions)
     const performanceFeeRate = toNum(params.performance_fee_pct, 0);  // BitWealth performance fee (10%, high-water mark)
+    const feePlan = String(params.fee_plan ?? "platform").toLowerCase();  // 'platform' | 'management'
+    const managementFeeRate = toNum(params.management_fee_pct, 0);  // BitWealth management fee p.a. (charged NAV x rate / 12 monthly)
     const upfront = toNum(params.upfront_contrib_usdt, 0);
     const monthly = toNum(params.monthly_contrib_usdt, 0);
     const momoLen = Math.max(1, Math.trunc(toNum(params.momo_len, 5)));
@@ -437,7 +439,7 @@ Deno.serve(async (req)=>{
       const exchangeFee = gross * contribFeeRate;
       const afterExchangeFee = gross - exchangeFee;
       // Step 2: Deduct BitWealth platform fee (0.75% of remaining)
-      const platformFee = afterExchangeFee * platformFeeRate;
+      const platformFee = feePlan === "platform" ? afterExchangeFee * platformFeeRate : 0;
       const net = afterExchangeFee - platformFee;
       
       usdtBal += net;
@@ -784,6 +786,39 @@ Deno.serve(async (req)=>{
           hwmContribNetCum = contribNetCum;
         }
         // If navForPerfFee <= highWaterMark, don't update (still below peak)
+
+        // Monthly management fee (plan = management): NAV x rate / 12, every month,
+        // independent of the high-water mark. Folded into the platform-fee bucket for
+        // reporting (platform fee is 0 on the management plan), so bt_results_daily is unchanged.
+        if (feePlan === "management" && managementFeeRate > 0) {
+          const navForMgmt = usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
+          const mgmtFee = Math.max(0, navForMgmt * managementFeeRate / 12);
+          if (mgmtFee > 0) {
+            ensureUsdtBT(mgmtFee, tradeDate, closeDate);
+            usdtBal -= mgmtFee;
+            platformFeesCum += mgmtFee;
+            platformFeeToday += mgmtFee;
+            ledgerRows.push({
+              bt_run_id, org_id, trade_date: tradeDate, close_date: closeDate,
+              kind: "fee", amount_btc: 0, amount_usdt: 0, fee_btc: 0, fee_usdt: mgmtFee,
+              note: "BitWealth management fee (NAV x rate / 12)"
+            });
+            if (usdtBal < 0 && btcBal > 0 && px > 0) {
+              const shortfall = -usdtBal;
+              const btcToSell = shortfall / (px * (1 - tradeFeeRate));
+              const btcSold = Math.min(btcBal, btcToSell);
+              const feeBtc = btcSold * tradeFeeRate;
+              const usdtReceived = (btcSold - feeBtc) * px;
+              btcBal -= btcSold; usdtBal += usdtReceived;
+              exchangeFeesBtcCum += feeBtc; exchangeFeeBtcToday += feeBtc;
+              ledgerRows.push({
+                bt_run_id, org_id, trade_date: tradeDate, close_date: closeDate,
+                kind: "fee", amount_btc: -btcSold, amount_usdt: usdtReceived, fee_btc: feeBtc, fee_usdt: 0,
+                note: "BTC→USDT conversion to cover management fee shortfall"
+              });
+            }
+          }
+        }
       }
       lastMonthForPerfFee = monthKey;
       

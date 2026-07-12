@@ -222,6 +222,10 @@
                                     <span>Performance Fee</span>
                                     <span id="usdtAccruedPerformanceFee" style="color: #f59e0b; font-weight: 600;">--</span>
                                 </div>
+                                <div id="usdtAccruedManagementFeeRow" style="display: none; justify-content: space-between; margin-top: 3px;">
+                                    <span>Management Fee</span>
+                                    <span id="usdtAccruedManagementFee" style="color: #f59e0b; font-weight: 600;">--</span>
+                                </div>
                             </div>
                         </div>
 
@@ -1300,6 +1304,7 @@
                             const platBtc  = parseFloat(f.platform_fee_btc  || 0);
                             const perfUsdt = parseFloat(f.performance_fee_usdt || 0);
                             const perfBtc  = parseFloat(f.performance_fee_btc  || 0);
+                            const mgmtUsdt = parseFloat(f.management_fee_usdt || 0);
                             // BTC tile
                             if (platBtc > 0 || perfBtc > 0) {
                                 document.getElementById('btcAccruedPlatformFee').textContent    = `${platBtc.toFixed(8)} BTC`;
@@ -1307,9 +1312,13 @@
                                 document.getElementById('btcAccruedFeesDisplay').style.display = 'block';
                             }
                             // USDT tile
-                            if (platUsdt > 0 || perfUsdt > 0) {
+                            if (platUsdt > 0 || perfUsdt > 0 || mgmtUsdt > 0) {
                                 document.getElementById('usdtAccruedPlatformFee').textContent    = `$${platUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                                 document.getElementById('usdtAccruedPerformanceFee').textContent = `$${perfUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                if (mgmtUsdt > 0) {
+                                    document.getElementById('usdtAccruedManagementFee').textContent = `$${mgmtUsdt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                    document.getElementById('usdtAccruedManagementFeeRow').style.display = 'flex';
+                                }
                                 document.getElementById('usdtAccruedFeesDisplay').style.display = 'block';
                             }
                         }

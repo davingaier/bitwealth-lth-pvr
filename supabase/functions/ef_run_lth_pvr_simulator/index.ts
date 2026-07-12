@@ -67,6 +67,8 @@ Deno.serve(async (req) => {
     const performance_fee_rate = body.performance_fee_rate != null ? Number(body.performance_fee_rate) : undefined;
     const trade_fee_rate       = body.trade_fee_rate       != null ? Number(body.trade_fee_rate)       : undefined;
     const contrib_fee_rate     = body.contrib_fee_rate     != null ? Number(body.contrib_fee_rate)     : undefined;
+    const fee_plan             = typeof body.fee_plan === "string" ? body.fee_plan : undefined; // 'platform' | 'management'
+    const management_fee_rate  = body.management_fee_rate  != null ? Number(body.management_fee_rate)  : undefined;
     const variation_ids = body.variation_ids; // Array of UUIDs or null
     // Day 5 of CI->RB migration (2026-05-19): default simulator source is RB.
     // normaliseBandSource defaults to 'ci' for missing/invalid input, which is
@@ -228,6 +230,8 @@ Deno.serve(async (req) => {
         ...(performance_fee_rate !== undefined && { performance_fee_rate }),
         ...(trade_fee_rate       !== undefined && { trade_fee_rate }),
         ...(contrib_fee_rate     !== undefined && { contrib_fee_rate }),
+        ...(fee_plan             !== undefined && { fee_plan }),
+        ...(management_fee_rate  !== undefined && { management_fee_rate }),
       });
       
       // Add variation metadata

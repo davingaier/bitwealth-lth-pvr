@@ -81,7 +81,10 @@ CREATE OR REPLACE FUNCTION public.update_customer_fee_rates(
   p_created_by text DEFAULT NULL)
  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public','lth_pvr'
 AS $function$
-DECLARE v_org uuid; v_found boolean;
+DECLARE
+  v_org uuid;
+  cur_perf numeric; cur_plat numeric; cur_mgmt numeric;
+  cur_perf_s text; cur_plat_s text; cur_mgmt_s text;
 BEGIN
   IF p_performance_fee_rate IS NOT NULL AND (p_performance_fee_rate<0 OR p_performance_fee_rate>1) THEN
     RETURN jsonb_build_object('success',false,'error','Performance fee rate must be between 0 and 1'); END IF;
@@ -99,6 +102,12 @@ BEGIN
   SELECT org_id INTO v_org FROM public.customer_details WHERE customer_id=p_customer_id;
   IF NOT FOUND THEN RETURN jsonb_build_object('success',false,'error','Customer not found'); END IF;
 
+  SELECT performance_fee_rate, platform_fee_rate, management_fee_rate,
+         performance_fee_schedule, platform_fee_schedule, management_fee_schedule
+    INTO cur_perf, cur_plat, cur_mgmt, cur_perf_s, cur_plat_s, cur_mgmt_s
+    FROM public.customer_strategies WHERE customer_id=p_customer_id AND strategy_code='LTH_PVR' LIMIT 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('success',false,'error','Customer strategy not found'); END IF;
+
   UPDATE public.customer_strategies SET
     performance_fee_rate     = COALESCE(p_performance_fee_rate, performance_fee_rate),
     platform_fee_rate        = COALESCE(p_platform_fee_rate, platform_fee_rate),
@@ -107,11 +116,26 @@ BEGIN
     management_fee_rate      = COALESCE(p_management_fee_rate, management_fee_rate),
     management_fee_schedule  = COALESCE(p_management_fee_schedule, management_fee_schedule)
   WHERE customer_id=p_customer_id AND strategy_code='LTH_PVR';
-  GET DIAGNOSTICS v_found = ROW_COUNT;
-  IF NOT v_found THEN RETURN jsonb_build_object('success',false,'error','Customer strategy not found'); END IF;
 
   PERFORM public.fn_write_fee_history(p_customer_id, CURRENT_DATE, p_created_by, 'Rate/schedule update');
-  RETURN jsonb_build_object('success',true,'customer_id',p_customer_id,'message','Fee rates updated');
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'customer_id', p_customer_id,
+    'previous_performance_fee_rate', COALESCE(cur_perf, 0.10),
+    'previous_platform_fee_rate', COALESCE(cur_plat, 0.0075),
+    'previous_management_fee_rate', COALESCE(cur_mgmt, 0.01),
+    'new_performance_fee_rate', COALESCE(p_performance_fee_rate, cur_perf, 0.10),
+    'new_platform_fee_rate', COALESCE(p_platform_fee_rate, cur_plat, 0.0075),
+    'new_management_fee_rate', COALESCE(p_management_fee_rate, cur_mgmt, 0.01),
+    'previous_performance_fee_schedule', COALESCE(cur_perf_s, 'monthly'),
+    'previous_platform_fee_schedule', COALESCE(cur_plat_s, 'immediate'),
+    'previous_management_fee_schedule', COALESCE(cur_mgmt_s, 'monthly'),
+    'new_performance_fee_schedule', COALESCE(p_performance_fee_schedule, cur_perf_s, 'monthly'),
+    'new_platform_fee_schedule', COALESCE(p_platform_fee_schedule, cur_plat_s, 'immediate'),
+    'new_management_fee_schedule', COALESCE(p_management_fee_schedule, cur_mgmt_s, 'monthly'),
+    'message', 'Fee rates updated'
+  );
 END;
 $function$;
 
