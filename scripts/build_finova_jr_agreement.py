@@ -600,7 +600,20 @@ clause(doc, "8.4", "No alteration or variation of this Agreement shall be of any
 clause(doc, "8.5", "This Agreement constitutes the entire agreement between the Parties in "
         "respect of its subject matter, and no representation or warranty not recorded herein "
         "shall be binding.")
-clause(doc, "8.6", "The Parties choose the following as their respective domicilia citandi et "
+clause(doc, "8.6", "INTELLECTUAL PROPERTY RIGHTS. All intellectual property rights in and to "
+        "the BitWealth LTH PVR strategy, algorithm, software, platform, models, methodologies, "
+        "data, trade marks, branding and all related materials (the \u201cBitWealth IP\u201d) are and "
+        "shall remain the sole and exclusive property of the Juristic Representative. Nothing in "
+        "this Agreement transfers, assigns, licenses or grants to the Appointing FSP any right, "
+        "title or interest in or to the BitWealth IP, save for a limited, non-exclusive, "
+        "non-transferable right to use the BitWealth IP solely to the extent strictly necessary "
+        "to perform its oversight and supervisory functions under this Agreement and the FAIS "
+        "Act. Any improvements, modifications or derivative works of the BitWealth IP, whether "
+        "made by either Party, shall vest in and remain the property of the Juristic "
+        "Representative. Upon termination of this Agreement, the Appointing FSP shall cease all "
+        "use of the BitWealth IP and, on request, return or destroy all materials containing the "
+        "BitWealth IP in its possession or control.")
+clause(doc, "8.7", "The Parties choose the following as their respective domicilia citandi et "
         "executandi and addresses for the service of notices:")
 plain(doc, "The Appointing FSP: [[Finova registered address, email address to confirm]]",
       space_after=2)
