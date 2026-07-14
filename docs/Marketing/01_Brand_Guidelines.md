@@ -14,23 +14,16 @@ artwork. Never recreate, redraw, or re-typeset the mark.
 
 | Variant | Use on | Files |
 |---------|--------|-------|
-| Primary — full lockup | Light / white backgrounds | `bitwealth_logo_transparent_cropped.png`, `.svg` |
-| On-dark — transparent lockup | Dark / navy / photographic backgrounds | `bitwealth_logo_ondark_cropped.png`, `bitwealth_logo_ondark.png`, `bitwealth_logo_ondark.svg` |
+| Primary — full lockup | Light / white backgrounds | `bitwealth_logo_transparent_cropped.png` |
+| On-dark — transparent lockup | Dark / navy / photographic backgrounds | `bitwealth_logo_ondark_cropped.png`, `bitwealth_logo_ondark.png` |
 | Icon / app mark | Favicons, avatars, app tiles, small spaces | `Website & UI Icons/bitwealth_icon_only_*.png` |
-| Icon on dark | The symbol on dark / navy / photographic backgrounds | `bitwealth_icon_only_ondark.svg`, `bitwealth_icon_only_ondark.png` |
+| Icon on dark | The symbol on dark / navy / photographic backgrounds | `bitwealth_icon_ondark_cropped.png` |
 | Icon + name | Where a compact badge with the name is needed | `bitwealth (with name)_icon_*.png` |
 
-> **On-dark artwork** (`*_ondark.*`) shows the mark in white + gold for dark, navy,
-> and photographic backgrounds. The `.svg` files are clean, hand-reconstructed vectors:
-> the **wordmark is set in Aptos Bold** (the brand typeface) and the icon is rebuilt as
-> exact geometry (open ring + Bitcoin ₿ + gold bar chart). They scale infinitely and
-> stay crisp at any size. Matching raster `.png` exports are provided as fallbacks.
->
-> Clean vector versions for **light backgrounds** are also available in navy:
-> `bitwealth_logo_navy.svg` and `bitwealth_icon_only_navy.svg`.
+> **On-dark artwork** (`*_ondark*.png`) shows the mark in white + gold for dark, navy,
+> and photographic backgrounds. The `bitwealth_icon_ondark_cropped.png` symbol is simply
+> the icon cropped out of the on-dark lockup.
 
-Prefer the **SVG** files wherever the medium supports them (web, vector print) so the
-mark stays crisp at any size.
 
 ### Clear space & minimum size
 

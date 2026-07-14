@@ -22,9 +22,8 @@ source library — including the full favicon set, Apple touch icons, and Androi
 icons at every size — lives in the repository `/logos` folder:
 
 - `bitwealth_logo_transparent*.png / .svg` — full lockup for light backgrounds
-- `bitwealth_logo_ondark*.png / .svg` — on-dark lockup (white + gold) for dark/navy/photographic backgrounds
-- `bitwealth_icon_only_ondark.svg / .png` — on-dark symbol for dark backgrounds
-- `bitwealth_logo_navy.svg`, `bitwealth_icon_only_navy.svg` — clean vector marks for light backgrounds
+- `bitwealth_logo_ondark*.png` — on-dark lockup (white + gold) for dark/navy/photographic backgrounds
+- `bitwealth_icon_ondark_cropped.png` — on-dark symbol (cropped from the on-dark lockup)
 - `Website & UI Icons/` — icon-only marks (64–256 px)
 - `Apple Touch Icon/` — 180×180 app icons
 - `Android & PWA Icons/` — 192, 384, 512 px icons
