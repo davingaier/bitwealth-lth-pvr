@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitWealth — Brand &amp; Marketing Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary-dark:#003F5C;
+    --primary-blue:#0A4A6E;
+    --gold:#FFB400;
+    --gold-light:#FFC933;
+    --gold-dark:#E6A200;
+    --bg-dark:#0A0F1E;
+    --bg-darker:#050A14;
+    --bg-card:#151B2E;
+    --text-primary:#FFFFFF;
+    --text-secondary:#A8B2D1;
+    --text-tertiary:#6B7896;
+    --gradient-gold:linear-gradient(135deg,var(--gold-dark),var(--gold),var(--gold-light));
+    --gradient-accent:linear-gradient(135deg,#003F5C,#FFB400);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg-dark);color:var(--text-primary);line-height:1.65;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  h1,h2,h3,h4{font-weight:800;line-height:1.2}
+  .gradient-text{background:var(--gradient-gold);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+  /* Header */
+  header{
+    background:radial-gradient(1200px 400px at 20% -10%,rgba(255,180,0,.12),transparent),
+               linear-gradient(135deg,var(--bg-darker),var(--bg-card));
+    border-bottom:1px solid rgba(255,255,255,.06);
+    padding:64px 0 56px;
+  }
+  header .kicker{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  header h1{font-size:44px;margin:14px 0 10px}
+  header p{color:var(--text-secondary);max-width:640px;font-size:17px}
+  .hdr-logo{height:56px;margin-bottom:26px}
+  .meta{margin-top:26px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:var(--text-tertiary)}
+  .meta b{color:var(--text-secondary);font-weight:600}
+
+  /* Sections */
+  section{padding:56px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .sec-num{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+  section h2{font-size:30px;margin:8px 0 8px}
+  .sec-lead{color:var(--text-secondary);max-width:720px;margin-bottom:34px;font-size:16px}
+
+  /* Logo grid */
+  .logo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px}
+  .logo-tile{border:1px solid rgba(255,255,255,.1);border-radius:14px;overflow:hidden;background:var(--bg-card)}
+  .logo-tile .preview{display:flex;align-items:center;justify-content:center;min-height:150px;padding:26px}
+  .logo-tile .preview.light{background:#FFFFFF}
+  .logo-tile .preview.dark{background:var(--bg-darker)}
+  .logo-tile .preview.navy{background:var(--primary-dark)}
+  .logo-tile img{max-height:70px;max-width:100%}
+  .logo-tile img.icon{max-height:90px}
+  .logo-tile .cap{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08)}
+  .logo-tile .cap b{font-size:14px}
+  .logo-tile .cap span{display:block;font-size:12px;color:var(--text-tertiary);margin-top:3px}
+  code.file{font-family:'Courier New',monospace;font-size:12px;color:var(--gold-light)}
+
+  /* Colours */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px}
+  .swatch{border:1px solid rgba(255,255,255,.1);border-radius:12px;overflow:hidden;background:var(--bg-card)}
+  .swatch .chip{height:92px}
+  .swatch .info{padding:12px 14px}
+  .swatch .info b{font-size:14px}
+  .swatch .info div{font-size:12px;color:var(--text-tertiary);font-family:'Courier New',monospace;margin-top:4px}
+  .swatch .role{font-size:11px;color:var(--text-secondary);margin-top:6px;font-family:'Inter'}
+
+  /* Typography */
+  .type-row{border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:22px 24px;margin-bottom:14px;background:var(--bg-card);display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .type-row .lbl{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
+
+  /* Do / Dont */
+  .dd{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .dd .card{border-radius:12px;padding:22px 24px}
+  .dd .do{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.35)}
+  .dd .dont{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.32)}
+  .dd h4{font-size:15px;margin-bottom:12px}
+  .dd .do h4{color:#10B981}
+  .dd .dont h4{color:#EF4444}
+  .dd ul{list-style:none}
+  .dd li{font-size:14px;color:var(--text-secondary);padding:5px 0 5px 22px;position:relative}
+  .dd .do li::before{content:"\2713";position:absolute;left:0;color:#10B981;font-weight:700}
+  .dd .dont li::before{content:"\2715";position:absolute;left:0;color:#EF4444;font-weight:700}
+
+  /* Voice */
+  .voice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+  .voice-card{background:var(--bg-card);border:1px solid rgba(255,255,255,.1);border-top:3px solid var(--gold);border-radius:12px;padding:22px}
+  .voice-card b{color:var(--gold);font-size:15px}
+  .voice-card p{font-size:14px;color:var(--text-secondary);margin-top:8px}
+
+  .tagline-list{display:grid;gap:12px;margin-top:8px}
+  .tagline{background:var(--bg-card);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:16px 20px;font-size:17px;font-weight:600}
+  .tagline span{display:block;font-size:12px;color:var(--text-tertiary);font-weight:500;margin-top:4px}
+
+  .boiler{background:var(--bg-card);border-left:4px solid var(--gold);border-radius:10px;padding:22px 24px;margin-bottom:16px}
+  .boiler .tag{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-weight:700}
+  .boiler p{color:var(--text-secondary);margin-top:8px;font-size:15px}
+
+  /* Product */
+  .pillars{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px;margin-top:8px}
+  .pillar{background:var(--bg-card);border:1px solid rgba(255,255,255,.1);border-top:3px solid var(--gold);border-radius:12px;padding:22px}
+  .pillar .n{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:50%;background:var(--gold);color:var(--bg-darker);font-weight:800;margin-bottom:10px}
+  .pillar b{display:block;color:var(--gold);font-size:16px}
+  .pillar .sub{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-tertiary);margin:2px 0 10px}
+  .pillar p{font-size:13.5px;color:var(--text-secondary)}
+  .fee-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-top:22px}
+  .fee{background:var(--bg-card);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:22px;text-align:center}
+  .fee .amt{font-size:26px;font-weight:800;color:var(--gold)}
+  .fee .lbl{font-size:13px;color:var(--text-secondary);margin-top:4px}
+
+  footer{padding:40px 0 60px;color:var(--text-tertiary);font-size:13px}
+  .disclaimer{background:var(--bg-card);border:1px solid rgba(255,180,0,.25);border-radius:10px;padding:18px 22px;color:var(--text-secondary);font-size:13px;margin-top:18px}
+  a{color:var(--gold-light)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <img class="hdr-logo" src="assets/logos/bitwealth_logo_white_cropped.png" alt="BitWealth logo">
+    <div class="kicker">Brand &amp; Marketing Kit</div>
+    <h1>The <span class="gradient-text">BitWealth</span> Brand</h1>
+    <p>Everything needed to represent BitWealth accurately and consistently across client-facing documentation, web, and marketing materials.</p>
+    <div class="meta">
+      <div><b>Prepared for:</b> Finova</div>
+      <div><b>Version:</b> 1.0</div>
+      <div><b>Contact:</b> info@bitwealth.co.za</div>
+    </div>
+  </div>
+</header>
+
+<!-- 1. LOGO -->
+<section>
+  <div class="wrap">
+    <div class="sec-num">01 — Logo</div>
+    <h2>Logo &amp; Icon Suite</h2>
+    <p class="sec-lead">The BitWealth mark combines a Bitcoin “B” with an ascending bar chart inside an open arc — signalling disciplined, data-driven wealth accumulation. Always use the supplied artwork; never recreate or redraw it.</p>
+    <div class="logo-grid">
+      <div class="logo-tile">
+        <div class="preview light"><img src="assets/logos/bitwealth_logo_transparent_cropped.png" alt="Primary logo on light"></div>
+        <div class="cap"><b>Primary — full lockup</b><span>For light backgrounds · <code class="file">bitwealth_logo_transparent_cropped.png</code> / .svg</span></div>
+      </div>
+      <div class="logo-tile">
+        <div class="preview navy"><img src="assets/logos/bitwealth_logo_white_cropped.png" alt="White logo on navy"></div>
+        <div class="cap"><b>Reversed — white lockup</b><span>For dark / navy backgrounds · <code class="file">bitwealth_logo_white_cropped.png</code> / .svg</span></div>
+      </div>
+      <div class="logo-tile">
+        <div class="preview light"><img class="icon" src="assets/logos/bitwealth_icon_only_256x256.png" alt="Icon only"></div>
+        <div class="cap"><b>Icon / app mark</b><span>Favicons, avatars, app tiles · full size set in <code class="file">/logos</code></span></div>
+      </div>
+      <div class="logo-tile">
+        <div class="preview dark"><img class="icon" src="assets/logos/bitwealth_icon_only_256x256.png" alt="Icon only on dark"></div>
+        <div class="cap"><b>Icon on dark</b><span>Keep clear space of at least the height of the icon around the mark</span></div>
+      </div>
+    </div>
+
+    <div class="dd" style="margin-top:34px">
+      <div class="card do">
+        <h4>Do</h4>
+        <ul>
+          <li>Use the white lockup on dark/navy and photographic backgrounds</li>
+          <li>Use the transparent lockup on white or very light backgrounds</li>
+          <li>Preserve clear space and minimum size (≥ 24 px icon height on screen)</li>
+          <li>Scale proportionally using the provided SVGs where possible</li>
+        </ul>
+      </div>
+      <div class="card dont">
+        <h4>Don't</h4>
+        <ul>
+          <li>Recolour, add gradients, shadows or outlines to the mark</li>
+          <li>Stretch, rotate, or crop the lockup</li>
+          <li>Place the transparent logo on low-contrast or busy backgrounds</li>
+          <li>Recreate the wordmark in a different typeface</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. COLOUR -->
+<section>
+  <div class="wrap">
+    <div class="sec-num">02 — Colour</div>
+    <h2>Colour Palette</h2>
+    <p class="sec-lead">Deep navy conveys trust and stability; gold signals value and premium quality. Navy and near-black tones anchor backgrounds, gold is reserved for emphasis, calls-to-action, and the brand accent.</p>
+
+    <h4 style="font-size:14px;color:var(--text-secondary);margin-bottom:14px">Core brand</h4>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background:#003F5C"></div><div class="info"><b>Primary Dark</b><div>#003F5C</div><div class="role">Wordmark · headings · anchors</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#0A4A6E"></div><div class="info"><b>Primary Blue</b><div>#0A4A6E</div><div class="role">Gradient partner · panels</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFB400"></div><div class="info"><b>Gold</b><div>#FFB400</div><div class="role">Brand accent · CTAs</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFC933"></div><div class="info"><b>Gold Light</b><div>#FFC933</div><div class="role">Gradient highlight</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#E6A200"></div><div class="info"><b>Gold Dark</b><div>#E6A200</div><div class="role">Gradient shadow · hover</div></div></div>
+    </div>
+
+    <h4 style="font-size:14px;color:var(--text-secondary);margin:28px 0 14px">Backgrounds &amp; surfaces</h4>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background:#0A0F1E"></div><div class="info"><b>BG Dark</b><div>#0A0F1E</div><div class="role">Page background</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#050A14"></div><div class="info"><b>BG Darker</b><div>#050A14</div><div class="role">Deep sections</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#151B2E"></div><div class="info"><b>Card</b><div>#151B2E</div><div class="role">Cards · panels</div></div></div>
+    </div>
+
+    <h4 style="font-size:14px;color:var(--text-secondary);margin:28px 0 14px">Text</h4>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background:#FFFFFF"></div><div class="info"><b>Text Primary</b><div>#FFFFFF</div><div class="role">Headlines · body on dark</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#A8B2D1"></div><div class="info"><b>Text Secondary</b><div>#A8B2D1</div><div class="role">Body copy · subtitles</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#6B7896"></div><div class="info"><b>Text Tertiary</b><div>#6B7896</div><div class="role">Captions · muted labels</div></div></div>
+    </div>
+
+    <h4 style="font-size:14px;color:var(--text-secondary);margin:28px 0 14px">Signature gradients</h4>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background:linear-gradient(135deg,#E6A200,#FFB400,#FFC933)"></div><div class="info"><b>Gold Gradient</b><div>135° · dark → light</div><div class="role">Buttons · gradient text</div></div></div>
+      <div class="swatch"><div class="chip" style="background:linear-gradient(135deg,#003F5C,#FFB400)"></div><div class="info"><b>Accent Gradient</b><div>135° · navy → gold</div><div class="role">Hero &amp; feature accents</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. TYPOGRAPHY -->
+<section>
+  <div class="wrap">
+    <div class="sec-num">03 — Typography</div>
+    <h2>Typography</h2>
+    <p class="sec-lead"><b>Inter</b> is the single brand typeface across all digital and print materials — a clean, highly legible grotesque. It is free and open-source (Google Fonts / SIL Open Font License).</p>
+    <div class="type-row"><span style="font-weight:800;font-size:34px">Aa Bitcoin Wealth</span><span class="lbl">Inter · ExtraBold 800 — display &amp; H1</span></div>
+    <div class="type-row"><span style="font-weight:700;font-size:26px">Aa Bitcoin Wealth</span><span class="lbl">Inter · Bold 700 — headings</span></div>
+    <div class="type-row"><span style="font-weight:600;font-size:20px">Aa Bitcoin Wealth</span><span class="lbl">Inter · SemiBold 600 — subheads · buttons</span></div>
+    <div class="type-row"><span style="font-weight:400;font-size:16px">Aa Bitcoin Wealth — the quick brown fox</span><span class="lbl">Inter · Regular 400 — body</span></div>
+    <div class="type-row"><span style="font-weight:300;font-size:16px">Aa Bitcoin Wealth — the quick brown fox</span><span class="lbl">Inter · Light 300 — large intros</span></div>
+    <p style="color:var(--text-tertiary);font-size:13px;margin-top:10px">Fallback stack: <code class="file">'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif</code></p>
+  </div>
+</section>
+
+<!-- 4. VOICE -->
+<section>
+  <div class="wrap">
+    <div class="sec-num">04 — Voice &amp; Messaging</div>
+    <h2>Tone of Voice</h2>
+    <p class="sec-lead">BitWealth sounds like a confident, data-driven quant partner — never a hype-driven crypto promoter. We explain the sophisticated simply and let the discipline of the strategy speak for itself.</p>
+    <div class="voice-grid">
+      <div class="voice-card"><b>Confident, not hyped</b><p>Assured and precise. We avoid moon-shot language, guarantees, and price predictions.</p></div>
+      <div class="voice-card"><b>Clear over clever</b><p>Plain English first; technical terms defined on first use. Sophistication made accessible.</p></div>
+      <div class="voice-card"><b>Transparent</b><p>Rules-based, auditable, honest about risk. Every claim is qualified where needed.</p></div>
+      <div class="voice-card"><b>Long-term</b><p>Patient, disciplined framing. We talk in cycles and years, not days and pumps.</p></div>
+    </div>
+
+    <h3 style="margin:36px 0 4px;font-size:20px">Taglines</h3>
+    <div class="tagline-list">
+      <div class="tagline">Intelligent Bitcoin DCA.<span>Primary tagline</span></div>
+      <div class="tagline">Smart Bitcoin accumulation using on-chain intelligence.<span>Descriptive / product</span></div>
+      <div class="tagline">The strategy you can actually live with.<span>Emotive / conversion</span></div>
+      <div class="tagline">Disciplined accumulation. Automated execution. Full transparency.<span>Three-beat supporting line</span></div>
+    </div>
+
+    <h3 style="margin:36px 0 12px;font-size:20px">Boilerplate copy</h3>
+    <div class="boiler">
+      <div class="tag">One-liner</div>
+      <p>BitWealth is an intelligent Bitcoin dollar-cost-averaging service that uses on-chain data to accumulate BTC patiently when it is statistically cheap and trim exposure when it is expensive.</p>
+    </div>
+    <div class="boiler">
+      <div class="tag">Short (≈ 50 words)</div>
+      <p>BitWealth makes sophisticated Bitcoin investment strategies accessible to everyone. We combine on-chain intelligence, automated dollar-cost averaging, and a dynamic sizing engine into a single rules-based, fully-auditable strategy — helping clients build long-term wealth through Bitcoin without the emotion, guesswork, or constant monitoring.</p>
+    </div>
+    <div class="boiler">
+      <div class="tag">Long (≈ 90 words)</div>
+      <p>BitWealth was founded to make sophisticated Bitcoin investment strategies accessible to everyone. Our flagship LTH PVR strategy reads Long-Term Holder behaviour directly from the Bitcoin blockchain to judge when BTC is statistically cheap or expensive, then combines patient dollar-cost averaging with a dynamic grid engine that scales each order to conviction. The result is a disciplined, transparent, and fully-automated approach that accumulates in weakness and trims in strength. Every decision is rules-based and auditable, and clients track performance in real time through a dedicated portal.</p>
+    </div>
+    <div class="disclaimer">⚠️ <b>Standard disclaimer</b> — Include on all performance-related material: “Past performance does not guarantee future results. Cryptocurrency investments are volatile and carry risk, including the risk of loss. This material is for information only and is not financial advice.”</div>
+  </div>
+</section>
+
+<!-- 5. PRODUCT -->
+<section>
+  <div class="wrap">
+    <div class="sec-num">05 — Product</div>
+    <h2>LTH PVR Bitcoin DCA <span style="font-size:14px;color:#10B981;font-weight:700;vertical-align:middle;background:rgba(16,185,129,.12);padding:4px 10px;border-radius:20px;margin-left:8px">Available now</span></h2>
+    <p class="sec-lead"><b>Smart Bitcoin accumulation using on-chain intelligence.</b> A rules-based strategy that capitalises on BTC market cycles by monitoring Long-Term Holder behaviour and the profit-to-volatility ratio. Automated, transparent, and fully auditable — BTC/USDT.</p>
+
+    <div class="pillars">
+      <div class="pillar"><span class="n">1</span><b>On-Chain Signal</b><div class="sub">LTH PVR metric</div><p>The Long-Term Holder Profit-to-Volatility Ratio reads the “smart money” cohort directly from blockchain data — a manipulation-resistant, cycle-aware gauge of when BTC is cheap or expensive, measured in standard deviations from its mean.</p></div>
+      <div class="pillar"><span class="n">2</span><b>Disciplined Accumulation</b><div class="sub">Dollar-cost averaging</div><p>Automated contributions on a regular cadence remove entry-point risk and emotion. Cost basis converges to the mean over the contribution window rather than any single day's price.</p></div>
+      <div class="pillar"><span class="n">3</span><b>Adaptive Execution</b><div class="sub">Dynamic grid logic</div><p>Sigma bands around the daily on-chain mean form a self-recalibrating grid. Orders scale to conviction — aggressive buys when oversold, trims when overheated — and never go stale.</p></div>
+      <div class="pillar" style="border-top-color:#10B981"><span class="n" style="background:#10B981">4</span><b style="color:#10B981">Idle-Cash Yield</b><div class="sub">Optional · USDPC</div><p>Between positions, idle USD can be auto-swept into USDPC targeting ~8–10% APR, then converted back the instant a buy signal fires. Optional, per portfolio.</p></div>
+    </div>
+
+    <h3 style="margin:36px 0 4px;font-size:20px">Why it matters</h3>
+    <p style="color:var(--text-secondary);max-width:760px">LTH PVR is engineered for the best <b>risk-adjusted</b> outcome — accumulating patiently when on-chain data says Bitcoin is cheap and trimming when it says Bitcoin is expensive. The goal is a strategy investors can stay invested in through full market cycles, month after month, drawdown after drawdown.</p>
+
+    <h3 style="margin:36px 0 4px;font-size:20px">Transparent pricing</h3>
+    <div class="fee-grid">
+      <div class="fee"><div class="amt">10%</div><div class="lbl">Performance fee — on new profits only, with high-water-mark protection</div></div>
+      <div class="fee"><div class="amt">0.75%</div><div class="lbl">Platform fee — one-time, on contributions only</div></div>
+      <div class="fee"><div class="amt">R0</div><div class="lbl">No management, withdrawal (beyond exchange), or inactivity fees</div></div>
+    </div>
+
+    <div class="disclaimer">⚠️ Past performance does not guarantee future results. All investments carry risk, including the risk of loss.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    BitWealth — Brand &amp; Marketing Kit v1.0 · Prepared for Finova · info@bitwealth.co.za<br>
+    Source logo artwork: <code class="file">/logos</code> (PNG + SVG, full favicon/app-icon sets included). Kit assets: <code class="file">docs/Marketing/assets/logos</code>.
+  </div>
+</footer>
+
+</body>
+</html>
