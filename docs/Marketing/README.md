@@ -1,6 +1,6 @@
 # BitWealth — Brand & Marketing Kit
 
-**Version 1.0 · Prepared for Finova**
+**Version 1.0**
 
 This kit contains everything needed to represent the BitWealth brand accurately and
 consistently across client-facing documentation, the website, and marketing materials.
@@ -35,7 +35,7 @@ icons at every size — lives in the repository `/logos` folder:
 - **Primary tagline:** *Intelligent Bitcoin DCA.*
 - **Contact:** info@bitwealth.co.za
 
-## Notes for Finova
+## Notes for partners
 
 - Company statistics that appear on the current website (e.g. founding year, assets
   under management, client counts, uptime) are **placeholders** and should not be

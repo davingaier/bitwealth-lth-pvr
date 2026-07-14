@@ -15,7 +15,7 @@ artwork. Never recreate, redraw, or re-typeset the mark.
 | Variant | Use on | Files |
 |---------|--------|-------|
 | Primary — full lockup | Light / white backgrounds | `bitwealth_logo_transparent_cropped.png`, `.svg` |
-| Reversed — white lockup | Dark / navy / photographic backgrounds | `bitwealth_logo_white_cropped.png`, `.svg` |
+| On-dark — transparent lockup | Dark / navy / photographic backgrounds | `bitwealth_logo_ondark_cropped.png`, `bitwealth_logo_ondark.png` |
 | Icon / app mark | Favicons, avatars, app tiles, small spaces | `Website & UI Icons/bitwealth_icon_only_*.png` |
 | Icon + name | Where a compact badge with the name is needed | `bitwealth (with name)_icon_*.png` |
 
@@ -29,7 +29,7 @@ mark stays crisp at any size.
 
 ### Do
 
-- Use the white lockup on dark/navy and photographic backgrounds.
+- Use the on-dark (transparent, light-text) lockup on dark/navy and photographic backgrounds.
 - Use the transparent lockup on white or very light backgrounds.
 - Scale proportionally, ideally from the SVG.
 

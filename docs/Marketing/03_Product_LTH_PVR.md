@@ -78,8 +78,8 @@ after month, drawdown after drawdown.
 | Fee | Rate | Detail |
 |-----|------|--------|
 | Performance fee | **10%** | On new profits only, above previous peak NAV (high-water-mark protection). Calculated monthly. |
-| Platform fee | **0.75%** | One-time, charged on contributions only (e.g. $1,000 deposit → $7.50). |
-| Everything else | **None** | No management fees, no withdrawal fees (beyond exchange costs), no inactivity fees. |
+| Annual management fee | **1%** | Quantified annually on portfolio value, billed monthly. |
+| Everything else | **None** | No withdrawal fees (beyond exchange costs), no inactivity fees. |
 
 **High-water mark:** you never pay a performance fee twice for reaching the same value. If
 the portfolio dips and recovers, no fee is charged on the recovery.

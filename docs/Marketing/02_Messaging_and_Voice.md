@@ -83,7 +83,7 @@ moon, guaranteed, get rich, 10x, pump, can't lose, risk-free, to the moon, insid
 - **Transparent.** Rules-based and fully auditable, with a real-time client portal and
   detailed monthly statements.
 - **Aligned pricing.** Performance fee only on new profits (high-water-mark protected);
-  a modest one-time platform fee; no hidden or management fees.
+  a modest annual management fee (billed monthly); no hidden fees.
 
 ---
 
