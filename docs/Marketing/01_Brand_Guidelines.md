@@ -20,11 +20,14 @@ artwork. Never recreate, redraw, or re-typeset the mark.
 | Icon on dark | The symbol on dark / navy / photographic backgrounds | `bitwealth_icon_only_ondark.svg`, `bitwealth_icon_only_ondark.png` |
 | Icon + name | Where a compact badge with the name is needed | `bitwealth (with name)_icon_*.png` |
 
-> **On-dark artwork** (`*_ondark.*`) was derived from the transparent artwork by
-> recolouring the navy elements to white and preserving the gold bars. The `.svg`
-> versions are true vectors traced from that artwork, so they scale cleanly. Because
-> the only available source was raster (the original SVGs embed a PNG), the vector
-> traces are faithful but not pixel-identical to a hand-drawn master.
+> **On-dark artwork** (`*_ondark.*`) shows the mark in white + gold for dark, navy,
+> and photographic backgrounds. The `.svg` files are clean, hand-reconstructed vectors:
+> the **wordmark is set in Aptos Bold** (the brand typeface) and the icon is rebuilt as
+> exact geometry (open ring + Bitcoin ₿ + gold bar chart). They scale infinitely and
+> stay crisp at any size. Matching raster `.png` exports are provided as fallbacks.
+>
+> Clean vector versions for **light backgrounds** are also available in navy:
+> `bitwealth_logo_navy.svg` and `bitwealth_icon_only_navy.svg`.
 
 Prefer the **SVG** files wherever the medium supports them (web, vector print) so the
 mark stays crisp at any size.
