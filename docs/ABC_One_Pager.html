@@ -807,7 +807,7 @@
         <div class="variant-bench-body">
           <ul>
             <li>Fixed-amount BTC purchases at closing price on each contribution day &mdash; no signal, no timing optimisation</li>
-            <li>Exchange fees only (VALR exchange: 8bps trading, 18bps conversion) &mdash; no BitWealth platform fee or performance fee applied</li>
+            <li>Exchange fees only (VALR exchange: 8bps trading, 18bps conversion) &mdash; no BitWealth management, platform, or performance fee applied</li>
             <li>Never sells &mdash; portfolio value tracks BTC price directly and experiences full market drawdowns</li>
             <li>Represents the simplest possible Bitcoin accumulation strategy &mdash; included here as a performance baseline only</li>
           </ul>
@@ -823,7 +823,7 @@
         <div class="variant-bench-body">
           <ul>
             <li>Single lump-sum BTC purchase on day&nbsp;1 equal to the full nominal value of all scheduled contributions over the test period (upfront + every monthly instalment)</li>
-            <li>Same exchange fees as the other strategies (VALR: 8bps trading, 18bps conversion) &mdash; no BitWealth platform fee or performance fee applied</li>
+            <li>Same exchange fees as the other strategies (VALR: 8bps trading, 18bps conversion) &mdash; no BitWealth management, platform, or performance fee applied</li>
             <li>Never sells, never adds &mdash; pure mark-to-market exposure to BTC price from inception</li>
             <li>Represents the maximum-conviction passive strategy and the theoretical ceiling for unhedged BTC exposure when entry timing is favourable</li>
           </ul>
@@ -1033,18 +1033,18 @@
           <div class="chart-title">5-Year Back-Test: NAV Growth Comparison &nbsp;&middot;&nbsp; 10 Jun 2021 &ndash; 9 Jun 2026</div>
           <canvas id="chart5yr" height="90"></canvas>
           <div class="chart-legend">
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $57,519</div>
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $24,694</div>
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $33,025</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $49,959</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $22,210</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $24,749</div>
           </div>
         </div>
         <div class="chart-box">
           <div class="chart-title">10-Year Back-Test: NAV Growth Comparison &nbsp;&middot;&nbsp; 10 Jun 2016 &ndash; 9 Jun 2026</div>
           <canvas id="chart10yr" height="90"></canvas>
           <div class="chart-legend">
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $8,494,538</div>
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $786,404</div>
-            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $3,952,584</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#FFB400;"></div>LTH PVR Progressive &mdash; final $5,143,515</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#6B7896;"></div>Standard DCA &mdash; final $550,327</div>
+            <div class="chart-legend-item"><div class="chart-legend-line" style="background:#A855F7;"></div>Buy &amp; Hold (HODL) &mdash; final $2,850,274</div>
           </div>
         </div>
       </div>
@@ -1072,7 +1072,7 @@
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
-              <td><span class="nav-val">$5,054</span></td>
+              <td><span class="nav-val">$5,056</span></td>
               <td class="contrib-val">$5,000</td>
               <td><span class="cagr-pos">+1.1%</span></td>
               <td><span class="dd-val">0.0%</span></td>
@@ -1104,12 +1104,12 @@
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
-              <td><span class="nav-val">$22,880</span></td>
+              <td><span class="nav-val">$22,548</span></td>
               <td class="contrib-val">$9,800</td>
-              <td><span class="cagr-pos">+32.7%</span></td>
+              <td><span class="cagr-pos">+32.0%</span></td>
               <td><span class="dd-val">18.7%</span></td>
-              <td class="sharpe-val">1.75</td>
-              <td><span class="cagr-pos">+133.5%</span></td>
+              <td class="sharpe-val">1.71</td>
+              <td><span class="cagr-pos">+130.1%</span></td>
             </tr>
             <tr class="strategy-row-dca bench-block-start">
               <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
@@ -1136,12 +1136,12 @@
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
-              <td><span class="nav-val">$51,370</span></td>
+              <td><span class="nav-val">$49,959</span></td>
               <td class="contrib-val">$14,600</td>
-              <td><span class="cagr-pos">+28.6%</span></td>
+              <td><span class="cagr-pos">+27.9%</span></td>
               <td><span class="dd-val">25.9%</span></td>
-              <td class="sharpe-val">1.11</td>
-              <td><span class="cagr-pos">+251.8%</span></td>
+              <td class="sharpe-val">1.08</td>
+              <td><span class="cagr-pos">+242.2%</span></td>
             </tr>
             <tr class="strategy-row-dca bench-block-start">
               <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
@@ -1168,12 +1168,12 @@
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
-              <td><span class="nav-val">$213,526</span></td>
+              <td><span class="nav-val">$203,652</span></td>
               <td class="contrib-val">$19,400</td>
-              <td><span class="cagr-pos">+40.8%</span></td>
-              <td><span class="dd-val">50.9%</span></td>
-              <td class="sharpe-val">0.80</td>
-              <td><span class="cagr-pos">+1,000.7%</span></td>
+              <td><span class="cagr-pos">+39.9%</span></td>
+              <td><span class="dd-val">51.0%</span></td>
+              <td class="sharpe-val">0.78</td>
+              <td><span class="cagr-pos">+949.8%</span></td>
             </tr>
             <tr class="strategy-row-dca bench-block-start">
               <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
@@ -1200,12 +1200,12 @@
             </tr>
             <tr class="strategy-row-prog">
               <td class="period-cell"><span class="strategy-label label-prog">Progressive</span></td>
-              <td><span class="nav-val">$5,566,066</span></td>
+              <td><span class="nav-val">$5,143,515</span></td>
               <td class="contrib-val">$26,600</td>
-              <td><span class="cagr-pos">+70.6%</span></td>
-              <td><span class="dd-val">62.2%</span></td>
-              <td class="sharpe-val">1.14</td>
-              <td><span class="cagr-pos">+20,825.1%</span></td>
+              <td><span class="cagr-pos">+69.3%</span></td>
+              <td><span class="dd-val">62.4%</span></td>
+              <td class="sharpe-val">1.11</td>
+              <td><span class="cagr-pos">+19,236.5%</span></td>
             </tr>
             <tr class="strategy-row-dca bench-block-start">
               <td class="period-cell"><span class="strategy-label label-dca">Std DCA</span></td>
@@ -1229,7 +1229,7 @@
           </tbody>
         </table>
         <div class="table-note">
-          Back-test parameters: $2,400 upfront + $200/month contribution, ending 9 June 2026. Idle USDT swept to USDPC (~10% p.a.) between BTC positions; conversion fee 0.1% per sweep. LTH PVR fees: VALR exchange (8bps trading &amp; 18bps conversion), BitWealth (0.75% platform fee, 10% performance fee on monthly profits above high-water mark). Std DCA &amp; HODL benchmark rows reflect exchange fees only &mdash; no platform, performance, or USDPC fee applied. HODL deposits the full multi-year contribution schedule as a single lump sum on day&nbsp;1; ROI/CAGR are measured against that nominal cash deposit. Benchmark rows are visually grouped (muted background, slate-gray bracket) to make the LTH PVR comparison easy to scan. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using LTH on-chain data.
+          Back-test parameters: $2,400 upfront + $200/month contribution, ending 9 June 2026. Idle USDT swept to USDPC (~10% p.a.) between BTC positions; conversion fee 0.1% per sweep. LTH PVR fees: VALR exchange (8bps trading &amp; 18bps conversion), BitWealth (1% p.a. management fee on NAV, 10% performance fee on monthly profits above high-water mark). Std DCA &amp; HODL benchmark rows reflect exchange fees only &mdash; no platform, performance, or USDPC fee applied. HODL deposits the full multi-year contribution schedule as a single lump sum on day&nbsp;1; ROI/CAGR are measured against that nominal cash deposit. Benchmark rows are visually grouped (muted background, slate-gray bracket) to make the LTH PVR comparison easy to scan. Past performance is not indicative of future results. Data sourced from BitWealth proprietary simulator using LTH on-chain data.
         </div>
       </div>
 

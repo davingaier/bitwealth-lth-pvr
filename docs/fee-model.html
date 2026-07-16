@@ -312,9 +312,9 @@
 
   <div class="assum">
     <strong>Methodology &amp; Assumptions</strong><br>
-    <strong>Headline accuracy:</strong> When the inputs match the live product defaults ($2,400 start + $200/mo, 0.75% platform, 10% performance), the summary's <strong>Ending NAV</strong> and platform/performance/exchange figures are read straight from the simulator (<code>ef_run_lth_pvr_simulator</code>, USDPC 10% APY on) and match the public back-tester / Admin simulator <strong>exactly</strong> (✓). Change any rate or contribution and the model falls back to the monthly return-extraction estimate described next.<br>
+    <strong>Headline accuracy:</strong> When the inputs match the live product defaults ($2,400 start + $200/mo, 10% performance, and the selected plan's rate — 1% p.a. management <em>or</em> 0.75% platform), the summary's <strong>Ending NAV</strong> and fee figures are read straight from the simulator (<code>ef_run_lth_pvr_simulator</code>, USDPC 10% APY on) and match the public back-tester / ABC One-Pager <strong>exactly</strong> (✓). Both fee plans are anchored to their own simulator run. Change any rate or contribution and the model falls back to the monthly return-extraction estimate described next.<br>
     <strong>Portfolio model (estimate):</strong> Monthly returns extracted from the LTH PVR back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
-    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. (Hypothetical alternative structure — not part of the live product, so it is never anchored.)<br>
+    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. At the product default (1% p.a.) it is anchored to the simulator's management-fee run; custom rates fall back to the estimate.<br>
     <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, same as <code>maker_bps_trade=8</code> in back-tester); USDPC/USDT 10 bps taker (market order, matches <code>USDPC_DEFAULT_TAKER_FEE_RATE</code>). For the anchored product config the rebate is the simulator's <strong>actual per-day</strong> total across all three legs — every BUY converts USDPC→USDT then USDT→BTC, every SELL the converse, so the rebate varies with the real daily order size and HOLD days earn nothing. Each period's daily rebates sum exactly to the anchored period total. Custom rates/ranges fall back to a per-contribution estimate (<code>amt × ½ × rate</code> per leg).<br>
     <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
     <strong>Drill-down:</strong> Raw LTH PVR back-test NAV for the original simulation portfolio (daily when <code>chart-data-daily.js</code> is present, otherwise weekly). At the daily level, fees are attributed to the day they are charged: <strong>platform</strong> on the contribution day (month start), <strong>exchange rebate</strong> on each BUY/SELL trade day (real daily order sizes, anchored config), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
@@ -384,34 +384,50 @@ function getWindow(period){
    reconstruction below.
 ───────────────────────────────────────────────────────────── */
 const ANCHORS=(typeof _lthAnchors!=='undefined')?_lthAnchors:null;
+const MGMT_ANCHORS=(typeof _lthMgmtAnchors!=='undefined')?_lthMgmtAnchors:null;
 const NET5 =(typeof _lth5_daily_net !=='undefined')?sampleMonthly(_lth5_daily_net) :null;
 const NET10=(typeof _lth10_daily_net!=='undefined')?sampleMonthly(_lth10_daily_net):null;
+const NET5_MGMT =(typeof _lth5_daily_net_mgmt !=='undefined')?sampleMonthly(_lth5_daily_net_mgmt) :null;
+const NET10_MGMT=(typeof _lth10_daily_net_mgmt!=='undefined')?sampleMonthly(_lth10_daily_net_mgmt):null;
 // Real per-day exchange rebate (50% of all three VALR legs) for each anchored period.
-// Keyed by period label; each series sums to ANCHORS[label].exchRebate.
+// Keyed by period label; each series sums to the matching anchor's exchRebate. Both the
+// platform and management runs have their own series (fees change trade sizes slightly).
 const REBATE_DAILY=(typeof _lthRebateDaily!=='undefined')?_lthRebateDaily:null;
-function rebateDailyMap(label){
-  if(!REBATE_DAILY||!REBATE_DAILY[label])return null;
-  const m=new Map();for(const e of REBATE_DAILY[label])m.set(e[0],e[1]);return m;
+const REBATE_DAILY_MGMT=(typeof _lthMgmtRebateDaily!=='undefined')?_lthMgmtRebateDaily:null;
+// Plan-aware selectors: 'management' → management-fee run, else the platform-fee run.
+function anchorsForPlan(plan){return plan==='management'?MGMT_ANCHORS:ANCHORS;}
+function rebateStore(plan){return plan==='management'?REBATE_DAILY_MGMT:REBATE_DAILY;}
+function netMonthlyStore(plan){return plan==='management'?NET_MONTHLY_MGMT:NET_MONTHLY;}
+function netFallback(plan,src){return plan==='management'?(src==='5yr'?NET5_MGMT:NET10_MGMT):(src==='5yr'?NET5:NET10);}
+function rebateDailyMap(label,plan){
+  const R=rebateStore(plan);
+  if(!R||!R[label])return null;
+  const m=new Map();for(const e of R[label])m.set(e[0],e[1]);return m;
 }
 function rebateMonthMap(dailyMap){
   if(!dailyMap)return null;
   const m=new Map();for(const [d,v] of dailyMap){const ym=d.slice(0,7);m.set(ym,(m.get(ym)||0)+v);}return m;
 }
-const PRODUCT_DEFAULTS={initial:2400,monthly:200,pltRate:0.0075,prfRate:0.10};
-function isProductRates(p){
-  return Math.abs(p.initial -PRODUCT_DEFAULTS.initial )<1e-6
-      && Math.abs(p.monthly -PRODUCT_DEFAULTS.monthly )<1e-6
-      && Math.abs(p.pltRate -PRODUCT_DEFAULTS.pltRate )<1e-9
-      && Math.abs(p.prfRate -PRODUCT_DEFAULTS.prfRate )<1e-9;
+const PRODUCT_DEFAULTS={initial:2400,monthly:200,pltRate:0.0075,mgmtRate:0.01,prfRate:0.10};
+// Whether the inputs match the anchored product for the given plan. Both plans share the
+// contribution + performance defaults; the plan picks which fee rate must also match.
+function isProductRates(p,plan){
+  const base= Math.abs(p.initial-PRODUCT_DEFAULTS.initial)<1e-6
+           && Math.abs(p.monthly-PRODUCT_DEFAULTS.monthly)<1e-6
+           && Math.abs(p.prfRate-PRODUCT_DEFAULTS.prfRate)<1e-9;
+  if(plan==='management') return base && Math.abs(p.mgmtRate-PRODUCT_DEFAULTS.mgmtRate)<1e-9;
+  return base && Math.abs(p.pltRate-PRODUCT_DEFAULTS.pltRate)<1e-9;
 }
 // Per-period monthly NET NAV (each period's own fresh-client curve, ending at its anchored final
 // NAV). Preferred for the chart so EVERY anchored period (incl. 1/3/7yr) plots its true curve
-// instead of a mis-scaled tail of the 5yr/10yr run.
+// instead of a mis-scaled tail of the 5yr/10yr run. One set per plan.
 const NET_MONTHLY=(typeof _lthNetMonthly!=='undefined')?_lthNetMonthly:null;
-// Net monthly NAV series (real fees) for the chart when anchored.
-function netMonthly(period){
-  if(NET_MONTHLY&&NET_MONTHLY[period.label])return NET_MONTHLY[period.label];
-  const s=period.src==='5yr'?NET5:NET10;          // fallback: tail of 5yr/10yr run
+const NET_MONTHLY_MGMT=(typeof _lthMgmtNetMonthly!=='undefined')?_lthMgmtNetMonthly:null;
+// Net monthly NAV series (real fees) for the chart when anchored — plan-aware.
+function netMonthly(period,plan){
+  const NM=netMonthlyStore(plan);
+  if(NM&&NM[period.label])return NM[period.label];
+  const s=netFallback(plan,period.src);          // fallback: tail of 5yr/10yr run
   if(!s)return null;
   return period.slice==='all'?s:s.slice(Math.max(0,s.length-period.months-1));
 }
@@ -527,15 +543,20 @@ function getT(){
 }
 function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totPlt:0)+(t.prf?r.totPrf:0);}
 
-// The live product = platform + performance, no management fee. Only in that exact
-// toggle state can we show the simulator's authoritative net NAV.
-function productState(t){return t.plt&&t.prf&&!t.mgmt;}
+// Each plan (platform XOR management, both + performance) has its own simulator anchor.
+// In either of those exact toggle states we can show the simulator's authoritative net NAV.
+function productState(t){return t.prf&&((t.plan==='platform'&&t.plt&&!t.mgmt)||(t.plan==='management'&&t.mgmt&&!t.plt));}
 // Resolve the figures shown in the summary row: authoritative anchor when the config
-// matches the live product, otherwise the reconstruction estimate.
+// matches an anchored plan, otherwise the reconstruction estimate.
 function summaryFigures(r,t){
   if(r.anchor&&productState(t)){
     const a=r.anchor;
     const totExch=a.exchRebate;
+    if(t.plan==='management'){
+      const totMgmt=a.managementFee;
+      const active=totMgmt+a.perfFee+(t.exch?totExch:0);
+      return{endNav:a.netNav,invested:a.invested,totMgmt,totExch,totPlt:r.totPlt,totPrf:a.perfFee,active,anchored:true};
+    }
     const active=a.platformFee+a.perfFee+(t.exch?totExch:0);
     return{endNav:a.netNav,invested:a.invested,totMgmt:r.totMgmt,totExch,totPlt:a.platformFee,totPrf:a.perfFee,active,anchored:true};
   }
@@ -569,10 +590,12 @@ function runAll(p,t){
     // Custom range / non-default end date can reach before the 5yr series → use the 10yr daily series for drill-down
     const useTen=period.custom||!period.isDefaultEnd||period.src==='10yr';
     const rawSrc=useTen?rawSrc10:rawSrc5;
-    // Authoritative simulator figures apply only to the standard periods ending at the latest data date.
-    const anchor=(ANCHORS&&isProductRates(p)&&!period.custom&&period.isDefaultEnd)?(ANCHORS[period.label]||null):null;
+    // Authoritative simulator figures apply only to the standard periods ending at the latest
+    // data date, and only for the plan the user has selected (platform XOR management anchors).
+    const anchorsObj=anchorsForPlan(t.plan);
+    const anchor=(anchorsObj&&isProductRates(p,t.plan)&&!period.custom&&period.isDefaultEnd)?(anchorsObj[period.label]||null):null;
     // Real per-day exchange rebate available only when anchored (matches the simulator run).
-    const rebDaily=anchor?rebateDailyMap(period.label):null;
+    const rebDaily=anchor?rebateDailyMap(period.label,t.plan):null;
     const rebMonth=rebateMonthMap(rebDaily);
     const{navs,rets,mgmt,exch,curr,hwm}=buildPortfolio(win,p,t,rebMonth);
     const months=navs.length-1;
@@ -620,22 +643,31 @@ function renderSummary(clients,t){
 }
 
 function renderComparison(){
-  // Prefer authoritative anchors for the platform/perf/exchange streams when present.
-  const aPlt =r=>r.anchor?r.anchor.platformFee:r.totPlt;
-  const aPrf =r=>r.anchor?r.anchor.perfFee   :r.totPrf;
-  const aExch=r=>r.anchor?r.anchor.exchRebate:r.totExch;
+  // This table always contrasts the CURRENT (platform) product vs the NEW (management)
+  // product, so it resolves each side's anchor independently of the selected plan.
+  const p=getP();
+  const okStd=r=>r.period.isDefaultEnd&&!r.period.custom;
+  const pltA=r=>(ANCHORS&&isProductRates(p,'platform')&&okStd(r))?ANCHORS[r.period.label]:null;
+  const mgA =r=>(MGMT_ANCHORS&&isProductRates(p,'management')&&okStd(r))?MGMT_ANCHORS[r.period.label]:null;
+  // Current (platform) streams:
+  const cPlt =r=>{const a=pltA(r);return a?a.platformFee:r.totPlt;};
+  const cPrf =r=>{const a=pltA(r);return a?a.perfFee   :r.totPrf;};
+  // New (management) streams:
+  const nMgmt=r=>{const a=mgA(r);return a?a.managementFee:r.totMgmt;};
+  const nPrf =r=>{const a=mgA(r);return a?a.perfFee     :r.totPrf;};
+  const nExch=r=>{const a=mgA(r);return a?a.exchRebate  :r.totExch;};
   const rows=[
-    {label:'Current — Platform Fee Only',          cls:'dim', key:aPlt},
-    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:aPrf},
-    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>aPlt(r)+aPrf(r),bold:true},
-    {label:'New — Management Fee',                 cls:'vb',  key:r=>r.totMgmt},
-    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:aExch},
-    {label:'New — Perf + Mgmt + Exchange Rebate',   cls:'vgr', key:r=>aPrf(r)+r.totMgmt+aExch(r), bold:true},
+    {label:'Current — Platform Fee Only',          cls:'dim', key:cPlt},
+    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:cPrf},
+    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>cPlt(r)+cPrf(r),bold:true},
+    {label:'New — Management Fee',                 cls:'vb',  key:nMgmt},
+    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:nExch},
+    {label:'New — Perf + Mgmt + Exchange Rebate',   cls:'vgr', key:r=>nPrf(r)+nMgmt(r)+nExch(r), bold:true},
     {label:'Δ New vs Current (full)',               cls:'',    diff:true},
   ];
   const html=rows.map(row=>{
     const cells=RESULTS.map(r=>{
-      if(row.diff){const d=(aPrf(r)+r.totMgmt+aExch(r))-(aPlt(r)+aPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
+      if(row.diff){const d=(nPrf(r)+nMgmt(r)+nExch(r))-(cPlt(r)+cPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
       return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(row.key(r),2)}</td>`;
     }).join('');
     return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
@@ -695,12 +727,12 @@ function chartNav(){
   // NOTE: the Exchange toggle never moves the line — VALR's fee is always borne by the client (the
   // toggle only switches BitWealth's revenue share), so only Mgmt/Platform/Performance reshape NAV.
   const t=getT(),p=getP();
-  const useAnchor=productState(t)&&isProductRates(p);
+  const useAnchor=productState(t)&&isProductRates(p,t.plan);
   const maxM=Math.max(...RESULTS.map(r=>r.months));
   const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
   const datasets=RESULTS.map((r,i)=>{
     let series=r.navs;
-    if(r.anchor&&useAnchor){const nm=netMonthly(r.period);if(nm&&nm.length)series=nm.map(x=>x[1]);}
+    if(r.anchor&&useAnchor){const nm=netMonthly(r.period,t.plan);if(nm&&nm.length)series=nm.map(x=>x[1]);}
     const d=[...series];while(d.length<maxM+1)d.push(null);
     return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
   });
