@@ -238,7 +238,7 @@ export function renderStatementHtml(d: StatementData): string {
   .page { max-width: 178mm; margin: 0 auto; padding: 6mm 0; }
 
   header.brand { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 2px solid var(--navy); }
-  header.brand .logo { display: flex; align-items: center; gap: 12px; }
+  header.brand .logo { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
   header.brand .logo img { height: 56px; width: auto; display: block; max-width: 260px; }
   header.brand .meta { text-align: right; font-size: 9.5pt; }
   header.brand .meta .title { font-size: 13pt; font-weight: 700; color: var(--navy); }
@@ -276,8 +276,8 @@ export function renderStatementHtml(d: StatementData): string {
   table.kv tr.total td { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; color: var(--navy); }
 
   table.tx { margin-top: 6px; }
-  table.tx th, table.tx td { padding: 6px 6px; border-bottom: 1px solid var(--line); font-size: 9.5pt; }
-  table.tx th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.tx th, table.tx td { padding: 4px 4px; border-bottom: 1px solid var(--line); font-size: 8pt; }
+  table.tx th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
   table.tx td.num { text-align: right; font-variant-numeric: tabular-nums; }
   table.tx td.fees { text-align: right; font-size: 8pt; white-space: nowrap; line-height: 1.35; color: #92400e; }
   table.tx tfoot td { font-weight: 700; border-top: 2px solid var(--navy); border-bottom: none; padding-top: 8px; }
@@ -317,7 +317,7 @@ export function renderStatementHtml(d: StatementData): string {
   <header class="brand">
     <div class="logo">
       <img src="${e(BRAND.logoTransparentSvg)}" alt="BitWealth" />
-      <div style="font-size:7.5pt; color:var(--muted); margin-top:3px;">Reg. No. ${e(BRAND.regNumber)}</div>
+      <div style="font-size:7.5pt; color:var(--muted);">Reg. No. ${e(BRAND.regNumber)}</div>
     </div>
     <div class="meta">
       <div class="title">Monthly Statement</div>

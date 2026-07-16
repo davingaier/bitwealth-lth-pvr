@@ -31,6 +31,7 @@ import {
   StatementSparkPoint,
   StatementTransactionRow,
 } from "../_shared/statement_template.ts";
+import { BRAND } from "../_shared/branding.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -102,7 +103,7 @@ async function htmlToPdf(html: string): Promise<Uint8Array> {
   // header/footer templates run in an isolated context with no shared CSS.
   const footerTemplate = `
     <div style="width:100%; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:8pt; color:#6b7280; padding:0 16mm; display:flex; justify-content:space-between; align-items:center;">
-      <span>BitWealth (Pty) Ltd · bitwealth.co.za</span>
+      <span>${BRAND.legalName} · ${BRAND.websiteUrl.replace(/^https?:\/\//, "")}</span>
       <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
     </div>`;
   const res = await fetch(url, {
