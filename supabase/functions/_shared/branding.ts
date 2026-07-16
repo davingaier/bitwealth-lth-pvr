@@ -19,7 +19,8 @@ export const BRAND = {
   logoTransparentSvg: publicAsset("bitwealth_logo_transparent.svg"),
   logoWhiteSvg: publicAsset("bitwealth_logo_white.svg"),
   // Org details
-  legalName: "BitWealth (Pty) Ltd",
+  legalName: "BitWealth Asset Managers (Pty) Ltd",
+  regNumber: "2026 / 090346 / 07",
   websiteUrl: Deno.env.get("WEBSITE_URL") ?? "https://bitwealth.co.za",
   supportEmail: "support@bitwealth.co.za",
 } as const;

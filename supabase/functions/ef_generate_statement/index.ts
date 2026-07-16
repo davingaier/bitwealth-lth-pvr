@@ -202,7 +202,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: openingBal } = await supabase
     .schema("lth_pvr")
     .from("balances_daily")
-    .select("date, btc_balance, usdt_balance, nav_usd")
+    .select("date, btc_balance, usdt_balance, usdpc_balance, nav_usd")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .lte("date", prevEndStr)
@@ -252,7 +252,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: txRows, error: txRowsErr } = await supabase
     .schema("lth_pvr")
     .from("ledger_lines")
-    .select("trade_date, kind, amount_btc, amount_usdt, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, management_fee_usdt, note")
+    .select("trade_date, kind, amount_btc, amount_usdt, amount_usdpc, amount_zar, fee_btc, fee_usdt, performance_fee_usdt, platform_fee_usdt, platform_fee_btc, management_fee_usdt, note")
     .eq("org_id", orgId)
     .eq("customer_id", customerId)
     .gte("trade_date", startStr)
@@ -317,6 +317,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   let managementFeeUsdtSum = 0;
   let totalBtc = 0;
   let totalUsdt = 0;
+  let totalUsdpc = 0;
   let totalZar = 0;
 
   for (const t of txRows ?? []) {
@@ -331,6 +332,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
     totalBtc += amtBtc;
     totalUsdt += amtUsdt;
+    totalUsdpc += Number(t.amount_usdpc ?? 0);
     totalZar += amtZar;
     exchangeFeesUsd += feeUsdt + (feeBtc * btcPrice);
     platformFeeUsdtSum += platFeeUsdt;
@@ -374,10 +376,12 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
   let runningBtc = Number(openingBal?.btc_balance ?? 0);
   let runningUsdt = Number(openingBal?.usdt_balance ?? 0);
+  let runningUsdpc = Number(openingBal?.usdpc_balance ?? 0);
   const rows: StatementTransactionRow[] = [];
   for (const t of monthTx) {
     const amtBtc = Number(t.amount_btc ?? 0);
     const amtUsdt = Number(t.amount_usdt ?? 0);
+    const amtUsdpc = Number(t.amount_usdpc ?? 0);
     const amtZar = Number(t.amount_zar ?? 0);
     const feeBtc = Number(t.fee_btc ?? 0);
     const feeUsdt = Number(t.fee_usdt ?? 0);
@@ -386,6 +390,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
 
     runningBtc += amtBtc;
     runningUsdt += amtUsdt;
+    runningUsdpc += amtUsdpc;
 
     const kind = String(t.kind ?? "").toLowerCase();
     const typeLabel = kind === "topup" ? "deposit" : kind;
@@ -403,10 +408,12 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
       type: typeLabel,
       btc: amtBtc !== 0 ? (amtBtc > 0 ? "+ " : "– ") + Math.abs(amtBtc).toFixed(8) : "—",
       usdt: amtUsdt !== 0 ? (amtUsdt > 0 ? "+ " : "– ") + Math.abs(amtUsdt).toFixed(2) : "—",
+      usdpc: amtUsdpc !== 0 ? (amtUsdpc > 0 ? "+ " : "– ") + Math.abs(amtUsdpc).toFixed(2) : "—",
       zar: amtZar !== 0 ? (amtZar > 0 ? "+ " : "– ") + Math.abs(amtZar).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—",
       fees,
       btc_balance: runningBtc.toFixed(8),
       usdt_balance: runningUsdt.toFixed(2),
+      usdpc_balance: runningUsdpc.toFixed(2),
     });
   }
   const txCount = rows.length;
@@ -700,6 +707,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     tx_count: txCount,
     tx_total_btc: totalBtc.toFixed(8),
     tx_total_usdt: totalUsdt.toFixed(2),
+    tx_total_usdpc: totalUsdpc.toFixed(2),
     tx_total_zar: totalZar.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     tx_total_fees_usd: (exchangeFeesUsd + platformFeeUsdSum).toFixed(2),
 

@@ -20,6 +20,7 @@ export interface StatementTransactionRow {
   /** Pre-formatted strings — pass "—" or "" for empty cells. */
   btc: string;
   usdt: string;
+  usdpc: string;
   zar: string;
   /** One pre-formatted line per non-zero fee, e.g. ["Exch $41.91", "Plat $89.49"].
       Empty array renders "—". Lets all four fee types (exchange + platform, in
@@ -27,6 +28,7 @@ export interface StatementTransactionRow {
   fees: string[];
   btc_balance: string;
   usdt_balance: string;
+  usdpc_balance: string;
 }
 
 export interface StatementSparkPoint {
@@ -108,6 +110,7 @@ export interface StatementData {
   tx_count: number;
   tx_total_btc: string;
   tx_total_usdt: string;
+  tx_total_usdpc: string;
   tx_total_zar: string;
   tx_total_fees_usd: string;
 
@@ -165,7 +168,7 @@ function renderFeeRows(rows: StatementFeeRow[]): string {
 
 function renderTxRows(rows: StatementTransactionRow[]): string {
   if (!rows?.length) {
-    return `<tr><td colspan="8" style="text-align:center; color:#6b7280; padding:14px;">No transactions this month</td></tr>`;
+    return `<tr><td colspan="10" style="text-align:center; color:#6b7280; padding:14px;">No transactions this month</td></tr>`;
   }
   const tagClass = (kind: string) => {
     const k = kind.toLowerCase();
@@ -186,10 +189,12 @@ function renderTxRows(rows: StatementTransactionRow[]): string {
         <td><span class="tag ${tagClass(r.type)}">${escapeHtml(r.type)}</span></td>
         <td class="num">${escapeHtml(r.btc) || "—"}</td>
         <td class="num">${escapeHtml(r.usdt) || "—"}</td>
+        <td class="num">${escapeHtml(r.usdpc) || "—"}</td>
         <td class="num">${escapeHtml(r.zar) || "—"}</td>
         <td class="num fees">${feeCell(r.fees)}</td>
         <td class="num">${escapeHtml(r.btc_balance) || "—"}</td>
         <td class="num">${escapeHtml(r.usdt_balance) || "—"}</td>
+        <td class="num">${escapeHtml(r.usdpc_balance) || "—"}</td>
       </tr>`,
     )
     .join("");
@@ -312,6 +317,7 @@ export function renderStatementHtml(d: StatementData): string {
   <header class="brand">
     <div class="logo">
       <img src="${e(BRAND.logoTransparentSvg)}" alt="BitWealth" />
+      <div style="font-size:7.5pt; color:var(--muted); margin-top:3px;">Reg. No. ${e(BRAND.regNumber)}</div>
     </div>
     <div class="meta">
       <div class="title">Monthly Statement</div>
@@ -434,8 +440,8 @@ export function renderStatementHtml(d: StatementData): string {
     <thead>
       <tr>
         <th>Date</th><th>Type</th>
-        <th class="num">BTC</th><th class="num">USDT</th><th class="num">ZAR</th>
-        <th class="num">Fees</th><th class="num">BTC bal.</th><th class="num">USDT bal.</th>
+        <th class="num">BTC</th><th class="num">USDT</th><th class="num">USDPC</th><th class="num">ZAR</th>
+        <th class="num">Fees</th><th class="num">BTC bal.</th><th class="num">USDT bal.</th><th class="num">USDPC bal.</th>
       </tr>
     </thead>
     <tbody>
@@ -448,9 +454,10 @@ export function renderStatementHtml(d: StatementData): string {
         <td colspan="2">Totals (${d.tx_count} transaction${d.tx_count === 1 ? "" : "s"})</td>
         <td class="num">${e(d.tx_total_btc)}</td>
         <td class="num">${e(d.tx_total_usdt)}</td>
+        <td class="num">${e(d.tx_total_usdpc)}</td>
         <td class="num">${e(d.tx_total_zar)}</td>
         <td class="num">${e(d.tx_total_fees_usd)}</td>
-        <td colspan="2"></td>
+        <td colspan="3"></td>
       </tr>
     </tfoot>`
         : ""
