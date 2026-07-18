@@ -3,11 +3,34 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-12 (v0.6.143)
+**Last updated:** 2026-07-18 (v0.6.144)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.144 – Option 4 diminishing-return forecast RPC + client forecaster tool
+**Date:** 2026-07-18  
+**Status:** ✅ DEPLOYED (1× DB RPC migration + 2× standalone docs tools)
+
+**Motivation.** The ABC One Pager's historical back-tests are useful for showing what clients could have earned in prior BTC cycles, but they risk creating unrealistic future expectations because BTC has experienced sharply diminishing cycle returns. A forward-looking client forecaster was added to model a more conservative future path using the selected **Option 4 hybrid methodology**: a recent-cycle log-linear diminishing-return anchor, presented through Conservative / Base / Optimistic scenario bands.
+
+**Methodology.** Option 4 uses the recent-cycle log-linear fit from cycles 2-4 (`12,124.84%`, `2,049.51%`, `715.70%`) as the mathematical anchor, deliberately excluding the extreme first cycle (`202,487,794.75%`) from the fit so it remains historical context rather than dominating the forecast. Scenario bands apply factors of `0.65×`, `1.00×`, and `1.35×` to the fitted return path, with a cap below the prior cycle's return. This is an illustrative planning model, not a future LTH PVR signal simulator and not an expected-return guarantee.
+
+**DB function.** New reusable RPC `lth_pvr.forecast_lth_pvr_option4(p_upfront_usdt, p_monthly_usdt, p_years DEFAULT 5, p_org_id DEFAULT NULL, p_management_fee_rate DEFAULT 0.01, p_performance_fee_rate DEFAULT 0.10, p_exchange_conversion_fee_rate DEFAULT 0.0018, p_exchange_trade_fee_rate DEFAULT 0.0008)` returns annual rows by scenario with `forecast_year`, `forecast_date`, `scenario`, `nav_usd`, `roi_pct`, `cagr_pct`, `total_invested_usd`, `btc_price_usd`, `btc_balance`, `total_fees_usd`, and `model_details`. It sources the latest BTC price from `lth_pvr.rb_bands_daily` with `lth_pvr.ci_bands_daily` fallback, supports optional `org_id`, validates all numeric inputs, and is granted to `anon`, `authenticated`, and `service_role` for reuse in browser tools and reporting surfaces.
+
+**Fee modelling.** The forecaster defaults to the current LTH PVR management-plan economics: **1% p.a. management fee**, **10% performance fee**, **18bps VALR conversion fee**, and **8bps VALR trade fee**. All four rates are function parameters and are exposed as configurable inputs in the HTML page. The calculation models contributions into BTC exposure, monthly management-fee drag, exchange conversion/trade fees, and a simplified HWM performance-fee deduction on gains above the scenario's prior high-water mark.
+
+**HTML tools.** `docs/BTC_Forecast_Models_Comparison.html` provides the side-by-side model-selection page for Options 1-4. New `docs/LTH_PVR_Option4_Forecaster.html` calls the RPC directly via Supabase JS and renders:
+- input boxes for upfront contribution, monthly contribution, forecast years (default `5`, max `30`), optional `org_id`, and configurable fee rates;
+- three charts: NAV, ROI, and CAGR by Conservative / Base / Optimistic scenario;
+- an annual output table with one row per year and **NAV columns only**: Conservative NAV, Base NAV, Optimistic NAV.
+
+**Validation.** The Supabase migration `20260718_lth_pvr_option4_forecaster.sql` was applied via MCP. Live RPC test with `$2,400` upfront, `$200` monthly, and `5` years returned `15` rows (`5 years × 3 scenarios`). HTML diagnostics found no errors, and the structural check confirmed the RPC call, three chart canvases, fee inputs, and the revised NAV-only scenario table.
+
+**Important limitation.** This is not a true future LTH PVR trading engine because future RB bands, LTH realised price, volatility state, and future daily buy/sell decisions do not exist. It is a scenario forecaster for client expectation-setting. Future enhancement under review: add a scarcity/adoption-aware upside overlay that explicitly models BTC's fixed 21 million supply and demand/adoption assumptions, without presenting scarcity as a guaranteed price outcome.
+
+**Files/objects changed:** `supabase/migrations/20260718_lth_pvr_option4_forecaster.sql`; `lth_pvr.forecast_lth_pvr_option4`; `docs/BTC_Forecast_Models_Comparison.html`; `docs/LTH_PVR_Option4_Forecaster.html`; `docs/SDD_v0.6.md`.
 
 ### v0.6.143 – Fee-plan choice: Management fee (1% p.a.) OR Platform fee (0.75%)
 **Date:** 2026-07-12  
