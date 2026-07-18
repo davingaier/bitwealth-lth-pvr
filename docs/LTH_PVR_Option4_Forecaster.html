@@ -146,15 +146,15 @@
       <header class="hero">
         <div>
           <div class="eyebrow">BitWealth forecasting tool</div>
-          <h1>LTH PVR Option 4 Client Forecaster</h1>
-          <p class="hero-sub">Forecast annual client outcomes using the hybrid diminishing-return model: a recent-cycle mathematical anchor with Conservative, Base, and Optimistic scenario bands.</p>
+          <h1>LTH PVR Option 4 / 4A Client Forecaster</h1>
+          <p class="hero-sub">Forecast annual client outcomes using the hybrid diminishing-return model, with an optional scarcity/adoption overlay that blends fixed-supply upside into the Conservative, Base, and Optimistic scenario bands.</p>
         </div>
-        <div class="hero-meta">Current model draft<br />Default horizon: 5 years<br />Fees default to current LTH PVR management plan</div>
+        <div class="hero-meta">Current model draft<br />Default horizon: 5 years<br />Option 4A overlay defaults to off</div>
       </header>
 
       <div class="notice">
         <div class="notice-mark">NOTE</div>
-        <div><strong>Forecasts are illustrative only.</strong> The RPC uses the latest BTC price in the database, applies configurable LTH PVR-style fees, and projects scenario outcomes from the Option 4 diminishing-return model. This is not a guarantee or investment advice.</div>
+        <div><strong>Forecasts are illustrative only.</strong> The RPC uses the latest BTC price in the database, applies configurable LTH PVR-style fees, and projects scenario outcomes from the Option 4 diminishing-return model. Option 4A adds an optional scarcity/adoption overlay; it does not assume scarcity alone guarantees price appreciation.</div>
       </div>
 
       <div class="section-heading">Inputs</div>
@@ -174,6 +174,19 @@
               <div class="field"><label for="performanceFee">Performance fee</label><input id="performanceFee" type="number" min="0" max="100" step="0.01" value="10.00" /><div class="hint">Default: 10.00%</div></div>
               <div class="field"><label for="conversionFee">VALR conversion fee</label><input id="conversionFee" type="number" min="0" max="100" step="0.01" value="0.18" /><div class="hint">Default: 18bps</div></div>
               <div class="field"><label for="tradeFee">VALR trade fee</label><input id="tradeFee" type="number" min="0" max="100" step="0.01" value="0.08" /><div class="hint">Default: 8bps</div></div>
+            </div>
+          </details>
+
+          <details>
+            <summary>Option 4A scarcity / adoption overlay</summary>
+            <div class="fee-grid">
+              <div class="field"><label for="overlayWeight">Overlay weight</label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = pure Option 4. Try 25% or 50% for scarcity-adjusted cases.</div></div>
+              <div class="field"><label for="effectiveSupply">Effective BTC supply</label><input id="effectiveSupply" type="number" min="1" max="21000000" step="100000" value="19800000" /><div class="hint">Hard cap is 21,000,000; default allows for lost/illiquid coins.</div></div>
+              <div class="field"><label for="targetMarket">Target market size ($T)</label><input id="targetMarket" type="number" min="1" step="1" value="100" /><div class="hint">Illustrative store-of-value / portfolio-allocation TAM.</div></div>
+              <div class="field"><label for="curveSteepness">Adoption curve steepness</label><input id="curveSteepness" type="number" min="0.1" max="25" step="0.1" value="6" /><div class="hint">Higher values front/back-load adoption more sharply.</div></div>
+              <div class="field"><label for="adoptionCons">Conservative adoption</label><input id="adoptionCons" type="number" min="0" max="100" step="0.1" value="2.0" /><div class="hint">Final share of target market by horizon.</div></div>
+              <div class="field"><label for="adoptionBase">Base adoption</label><input id="adoptionBase" type="number" min="0" max="100" step="0.1" value="5.0" /><div class="hint">Final share of target market by horizon.</div></div>
+              <div class="field"><label for="adoptionOpt">Optimistic adoption</label><input id="adoptionOpt" type="number" min="0" max="100" step="0.1" value="10.0" /><div class="hint">Final share of target market by horizon.</div></div>
             </div>
           </details>
 
@@ -211,7 +224,7 @@
       <footer class="footer">
         <div>
           <div class="footer-title">Reusable Forecast RPC</div>
-          <div class="footer-sub">This page calls <code>lth_pvr.forecast_lth_pvr_option4</code>, so the same forecast output can be reused in other UI surfaces or reporting tools.</div>
+          <div class="footer-sub">This page calls <code>lth_pvr.forecast_lth_pvr_option4</code>. Overlay weight 0% produces Option 4; overlay weight above 0% produces Option 4A scarcity-adjusted scenarios.</div>
         </div>
         <div class="footer-right"><strong>BitWealth</strong><br />Option 4 diminishing-return model<br />Internal/client-review draft</div>
       </footer>
@@ -256,6 +269,13 @@
       document.getElementById('performanceFee').value = '10.00';
       document.getElementById('conversionFee').value = '0.18';
       document.getElementById('tradeFee').value = '0.08';
+      document.getElementById('overlayWeight').value = '0';
+      document.getElementById('effectiveSupply').value = '19800000';
+      document.getElementById('targetMarket').value = '100';
+      document.getElementById('curveSteepness').value = '6';
+      document.getElementById('adoptionCons').value = '2.0';
+      document.getElementById('adoptionBase').value = '5.0';
+      document.getElementById('adoptionOpt').value = '10.0';
       setStatus('Defaults restored.', 'ok');
     }
 
@@ -354,7 +374,14 @@
           p_management_fee_rate: getRate('managementFee'),
           p_performance_fee_rate: getRate('performanceFee'),
           p_exchange_conversion_fee_rate: getRate('conversionFee'),
-          p_exchange_trade_fee_rate: getRate('tradeFee')
+          p_exchange_trade_fee_rate: getRate('tradeFee'),
+          p_scarcity_overlay_weight: getRate('overlayWeight'),
+          p_effective_btc_supply: Number(document.getElementById('effectiveSupply').value || 19800000),
+          p_target_market_size_usd: Number(document.getElementById('targetMarket').value || 100) * 1000000000000,
+          p_scarcity_adoption_share_conservative: getRate('adoptionCons'),
+          p_scarcity_adoption_share_base: getRate('adoptionBase'),
+          p_scarcity_adoption_share_optimistic: getRate('adoptionOpt'),
+          p_adoption_curve_steepness: Number(document.getElementById('curveSteepness').value || 6)
         };
 
         const { data, error } = await client.schema('lth_pvr').rpc('forecast_lth_pvr_option4', params);
@@ -364,7 +391,7 @@
         renderSummary(rows);
         renderCharts(rows);
         renderTable(rows);
-        setStatus('Forecast complete. Latest BTC price is sourced by the database RPC.', 'ok');
+        setStatus(params.p_scarcity_overlay_weight > 0 ? 'Option 4A forecast complete. Latest BTC price is sourced by the database RPC.' : 'Option 4 forecast complete. Latest BTC price is sourced by the database RPC.', 'ok');
       } catch (error) {
         console.error(error);
         setStatus(error.message || 'Forecast failed.', 'error');

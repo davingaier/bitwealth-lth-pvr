@@ -3,11 +3,50 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-18 (v0.6.144)
+**Last updated:** 2026-07-18 (v0.6.145)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.145 – Option 4A scarcity/adoption overlay for BTC fixed-supply upside
+**Date:** 2026-07-18  
+**Status:** ✅ DEPLOYED (1× DB RPC migration + forecaster UI extension)
+
+**Motivation.** The 20-year Option 4 forecast can look muted because it deliberately models BTC's diminishing historical cycle returns. That is useful for expectation-setting, but it does not explicitly model BTC's hard cap of 21 million coins, the possibility of lost/illiquid supply, or demand growth from institutional/store-of-value adoption. Option 4A adds a controlled scarcity/adoption overlay so upside from fixed supply can be analysed without replacing the conservative diminishing-return baseline.
+
+**Model.** The existing Option 4 price path remains the base case. Option 4A computes a scarcity-implied BTC price from a target-addressable-market assumption:
+
+```
+scarcity_price = target_market_size_usd × adoption_share / effective_btc_supply
+```
+
+Adoption follows a normalised S-curve across the selected forecast horizon. The final adoption share is scenario-specific: Conservative, Base, and Optimistic. The scarcity price is treated as an **upside overlay only** by flooring it at the Option 4 price path; it cannot drag the baseline lower. The final model price blends the two paths geometrically:
+
+```
+price = exp((1 − overlay_weight) × ln(option4_price) + overlay_weight × ln(scarcity_price))
+```
+
+`overlay_weight = 0` exactly preserves Option 4. Values above zero produce Option 4A.
+
+**DB function upgrade.** Migration `20260718_lth_pvr_option4a_scarcity_overlay.sql` replaces `lth_pvr.forecast_lth_pvr_option4` with an extended signature. Existing parameters are preserved, and the following optional parameters were added with defaults:
+- `p_scarcity_overlay_weight DEFAULT 0`
+- `p_effective_btc_supply DEFAULT 19800000`
+- `p_target_market_size_usd DEFAULT 100000000000000`
+- `p_scarcity_adoption_share_conservative DEFAULT 0.02`
+- `p_scarcity_adoption_share_base DEFAULT 0.05`
+- `p_scarcity_adoption_share_optimistic DEFAULT 0.10`
+- `p_adoption_curve_steepness DEFAULT 6`
+
+The RPC still returns the same annual output columns (`nav_usd`, `roi_pct`, `cagr_pct`, etc.) so the forecaster UI and future consumers can treat Option 4 and Option 4A uniformly. `model_details` now includes audit fields for `option4_price_usd`, `scarcity_price_usd`, `scarcity_overlay_weight`, adoption assumptions, effective supply, target market size, and curve steepness.
+
+**UI.** `docs/LTH_PVR_Option4_Forecaster.html` was extended with an **Option 4A scarcity / adoption overlay** section containing inputs for overlay weight, effective BTC supply, target market size, adoption curve steepness, and Conservative/Base/Optimistic adoption shares. Defaults keep the overlay off (`0%`) so the page opens in pure Option 4 mode. Setting overlay weight above zero enables scarcity-adjusted forecasts while preserving the same three charts (NAV/ROI/CAGR) and annual scenario NAV table.
+
+**Validation.** The migration was applied via Supabase MCP. Live RPC validation confirmed that `overlay_weight = 0` preserves Option 4 outputs, while `overlay_weight = 0.50` produces `model='option4a_scarcity_adjusted'` and lifts scenarios where the adoption-implied scarcity price exceeds the Option 4 path. HTML diagnostics found no errors after the UI extension.
+
+**Risk note.** Option 4A is assumption-sensitive. The target market size and adoption-share inputs are not forecasts; they are scenario controls. Client-facing materials must describe this as a scarcity/adoption sensitivity analysis, not a prediction that the BTC hard cap alone forces price appreciation.
+
+**Files/objects changed:** `supabase/migrations/20260718_lth_pvr_option4a_scarcity_overlay.sql`; `lth_pvr.forecast_lth_pvr_option4`; `docs/LTH_PVR_Option4_Forecaster.html`; `docs/SDD_v0.6.md`.
 
 ### v0.6.144 – Option 4 diminishing-return forecast RPC + client forecaster tool
 **Date:** 2026-07-18  
