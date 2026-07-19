@@ -56,12 +56,12 @@
     }
     .print-btn:hover { background: var(--gold-lt); }
 
-    .hero { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: end; padding-bottom: 18px; border-bottom: 2px solid var(--gold); margin-bottom: 18px; }
+    .hero { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 2px solid var(--gold); margin-bottom: 18px; gap: 16px; }
     .hero-logo img { height: 52px; border-radius: 8px; background: #fff; padding: 4px; display: block; }
-    .eyebrow { color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; }
-    h1 { color: var(--white); font-size: clamp(28px, 4vw, 46px); line-height: 1.04; letter-spacing: -0.04em; font-weight: 800; }
-    .hero-sub { max-width: 900px; margin-top: 10px; color: var(--txt2); font-size: 14px; line-height: 1.7; }
-    .hero-meta { min-width: 260px; text-align: right; color: var(--txt3); font-size: 11px; line-height: 1.6; }
+    .hero-text { flex: 1; text-align: right; }
+    .hero-text h1 { color: var(--gold); font-size: 22px; line-height: 1.1; letter-spacing: -0.5px; font-weight: 800; }
+    .hero-text .tagline { color: var(--txt2); font-size: 12px; line-height: 1.45; margin-top: 3px; font-weight: 400; }
+    .hero-text .meta { color: var(--txt3); font-size: 10px; margin-top: 2px; }
 
     .notice { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 14px 16px; background: rgba(255,180,0,0.08); border: 1px solid rgba(255,180,0,0.28); border-radius: 10px; color: var(--txt2); font-size: 12px; line-height: 1.6; margin-bottom: 18px; }
     .notice strong { color: var(--gold-lt); }
@@ -167,8 +167,9 @@
       .screen-wrap { padding: 12px; }
       .page { padding: 18px; }
       .hero, .footer, .bridge { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; align-items: flex-start; }
       .hero-logo img { height: 46px; }
-      .hero-meta, .footer-right { text-align: left; }
+      .hero-text, .footer-right { text-align: left; }
       .form-grid, .fee-grid, .summary-grid, .chart-grid, .chart-grid.three { grid-template-columns: 1fr; }
       .chart-frame, .chart-frame.short { height: 260px; }
       .print-btn { position: static; width: calc(100% - 24px); margin: 12px; }
@@ -200,12 +201,11 @@
     <section class="page">
       <header class="hero">
         <div class="hero-logo"><img src="bitwealth-abc-logo.png" alt="BitWealth Logo" /></div>
-        <div>
-          <div class="eyebrow">BitWealth client illustration</div>
+        <div class="hero-text">
           <h1>LTH PVR Historical Performance + Forward Forecast</h1>
-          <p class="hero-sub">This page separates what the LTH PVR strategy would have produced in historical back-tests from what the Option 4 / 4A forecast model projects under selected future assumptions.</p>
+          <div class="tagline">Historical back-tested experience separated from forward-looking Option 4 / 4A forecast scenarios</div>
+          <div class="meta">Prepared by BitWealth · July 2026 · Client review illustration</div>
         </div>
-        <div class="hero-meta">Historical reference: ABC One Pager<br />Forecast source: Option 4A RPC<br />Review draft: July 2026</div>
       </header>
 
       <div class="notice">
