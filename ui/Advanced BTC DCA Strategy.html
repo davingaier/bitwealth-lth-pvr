@@ -5333,6 +5333,7 @@
             <option value="pvr">STH / LTH Profit-to-Volatility Ratio (PVR)</option>
             <option value="lthMvrvZ">LTH MVRV Z-Score</option>
             <option value="cvdd">Bitcoin: CVDD</option>
+            <option value="lthNupl">LTH-NUPL</option>
           </select>
           <h3 class="bc-title" id="onchainChartTitle" style="margin:.75rem 0 0;">STH / LTH Profit-to-Volatility Ratio (PVR)</h3>
           <div class="bc-meta" id="pvrMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
@@ -5394,6 +5395,7 @@
       const PRICE_COLOR = '#f8fafc';
       const REALIZED_COLOR = '#a855f7';
       const CVDD_COLOR = '#16a34a';
+      const NUPL_COLOR = '#f59e0b';
 
       const ABOUT_PVR = `
         <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
@@ -5466,6 +5468,34 @@
           cycle lows rather than tracking price one-for-one through bull markets.
         </p>`;
 
+      const ABOUT_LTH_NUPL = `
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          LTH-NUPL represents the unrealized profit/loss status of long-term Bitcoin holders, defined as coins
+          held for more than 155 days. It compares the market value of LTH coins with their realized value to show
+          whether experienced holders are in aggregate profit or loss.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Formula:</strong></p>
+        <pre style="font-size:.8rem;color:var(--muted);background:transparent;margin:.75rem 0;white-space:pre-wrap;">LTH-NUPL = (LTH Market Cap - LTH Realized Cap) / LTH Market Cap</pre>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          Because both LTH market cap and realized cap use the same LTH supply, the chart derives the ratio from
+          existing daily inputs as <code>(BTC Price - LTH Realized Price) / BTC Price</code>.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Market Signals:</strong></p>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong style="color:#2563eb;">Capitulation (&lt; -25%):</strong> extreme LTH losses, rare event</li>
+          <li><strong style="color:#06b6d4;">Denial (-25% to 0%):</strong> LTH underwater, strong conviction required</li>
+          <li><strong style="color:#22c55e;">Anxiety (0% to 20%):</strong> minimal profits, uncertainty phase</li>
+          <li><strong style="color:#84cc16;">Hope (20% to 40%):</strong> moderate profits, holding continues</li>
+          <li><strong style="color:#eab308;">Optimism (40% to 60%):</strong> strong profits, distribution begins</li>
+          <li><strong style="color:#f97316;">Belief (60% to 80%):</strong> high profits, increased selling pressure</li>
+          <li><strong style="color:#ef4444;">Euphoria (&gt; 80%):</strong> extreme profits, major distribution phase</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          LTH-NUPL is typically more stable than STH-NUPL because long-term holders tend to have stronger conviction
+          and react less to short-term price movements. Very high readings often indicate late-cycle profit-taking risk,
+          while negative readings are uncommon and usually align with generational accumulation zones.
+        </p>`;
+
       const CHARTS = {
         pvr: {
           title: 'STH / LTH Profit-to-Volatility Ratio (PVR)',
@@ -5521,6 +5551,25 @@
             { key: 'cvdd', label: 'CVDD', color: CVDD_COLOR },
           ],
         },
+        lthNupl: {
+          title: 'LTH-NUPL',
+          aboutTitle: 'About LTH-NUPL (Long-Term Holder Net Unrealized Profit/Loss)',
+          aboutHtml: ABOUT_LTH_NUPL,
+          hintHtml: 'Drag to zoom · double-click to reset · click legend items to toggle series. <strong>LTH-NUPL</strong> = (LTH Market Cap − LTH Realized Cap) / LTH Market Cap. Left axis: LTH unrealized profit/loss ratio. Right axis: BTC price (log).',
+          leftAxisTitle: 'LTH Net Unrealized Profit/Loss',
+          leftMin: -0.8,
+          leftMax: 1.1,
+          series: [
+            { key: 'lth_nupl', label: 'LTH Net Unrealized Profit/Loss', color: NUPL_COLOR, axis: 'y', segmentColor: nuplColor, borderWidth: 1.4, value: lthNuplValue },
+          ],
+          references: [
+            { label: 'Zero Line', value: 0, color: 'rgba(148,163,184,0.60)', dash: [4,4] },
+            { label: 'Optimism', value: 0.4, color: 'rgba(234,179,8,0.35)', dash: [3,3] },
+            { label: 'Belief', value: 0.6, color: 'rgba(249,115,22,0.35)', dash: [3,3] },
+            { label: 'Euphoria', value: 0.8, color: 'rgba(239,68,68,0.35)', dash: [3,3] },
+          ],
+          priceSeries: [{ key: 'btc_price', label: 'BTC Price', color: PRICE_COLOR }],
+        },
       };
 
       function zScoreColor(value) {
@@ -5529,6 +5578,29 @@
         if (value < 1) return '#eab308';
         if (value < 2) return '#f97316';
         return '#ef4444';
+      }
+
+      function lthNuplValue(row) {
+        const price = Number(row.btc_price);
+        const realized = Number(row.lth_realized_price);
+        if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(realized)) return null;
+        return (price - realized) / price;
+      }
+
+      function nuplColor(value) {
+        if (value == null) return NUPL_COLOR;
+        if (value < -0.25) return '#2563eb';
+        if (value < 0) return '#06b6d4';
+        if (value < 0.2) return '#22c55e';
+        if (value < 0.4) return '#84cc16';
+        if (value < 0.6) return '#eab308';
+        if (value < 0.8) return '#f97316';
+        return '#ef4444';
+      }
+
+      function seriesValue(row, series) {
+        const value = series.value ? series.value(row) : row[series.key];
+        return value == null ? null : Number(value);
       }
 
       function getActiveDefinition() {
@@ -5549,7 +5621,7 @@
         const datasets = definition.series.map(s => {
           const dataset = {
             label: s.label,
-            data: rows.map(r => (r[s.key] == null ? null : Number(r[s.key]))),
+            data: rows.map(r => seriesValue(r, s)),
             borderColor: s.color,
             backgroundColor: s.fill ? s.fillColor : s.color,
             borderWidth: s.borderWidth || 1.2,

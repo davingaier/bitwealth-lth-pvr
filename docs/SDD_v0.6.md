@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-19 (v0.6.146)
+**Last updated:** 2026-07-19 (v0.6.148)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.148 – On-Chain Charts: LTH-NUPL
+**Date:** 2026-07-19  
+**Status:** ✅ IMPLEMENTED (admin UI chart; no DB migration required)
+
+**Motivation.** Add the final requested on-chain chart, **LTH-NUPL (Long-Term Holder Net Unrealized Profit/Loss)**, to the On-Chain Charts dropdown.
+
+**Methodology.** LTH-NUPL measures the unrealized profit/loss status of coins held by long-term holders (155+ days):
+
+```
+LTH-NUPL = (LTH Market Cap - LTH Realized Cap) / LTH Market Cap
+```
+
+Because both LTH Market Cap and LTH Realized Cap use the same LTH supply, the UI derives the same ratio from existing cached fields:
+
+```
+LTH-NUPL = (BTC Price - LTH Realized Price) / BTC Price
+```
+
+This avoids a new table column, migration, edge-function fetch, or backfill while preserving the Research Bitcoin-derived inputs already maintained for the LTH MVRV Z-Score chart.
+
+**Changes:**
+- **Admin UI:** adds **LTH-NUPL** to the On-Chain Charts dropdown.
+- **Chart renderer:** supports per-series derived values so LTH-NUPL can be calculated client-side from `btc_price` and `lth_realized_price` returned by `public.get_onchain_pvr_series_json()`.
+- **Displayed series:** LTH Net Unrealized Profit/Loss on the left axis with regime colouring, BTC Price on the right logarithmic USD axis, and reference levels at 0%, 40%, 60%, and 80%.
+- **Explanation panel:** documents the formula, simplification, and market-signal bands from capitulation through euphoria.
+
+**Impact.** The On-Chain Charts module now covers STH/LTH PVR, LTH MVRV Z-Score, Bitcoin CVDD, and LTH-NUPL using the same cached on-chain dataset.
+
+---
 
 ### v0.6.146 – On-Chain Charts selector + LTH MVRV Z-Score chart
 **Date:** 2026-07-19  
