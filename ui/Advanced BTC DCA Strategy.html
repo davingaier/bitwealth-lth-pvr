@@ -5332,6 +5332,7 @@
           <select id="onchainChartSelect" style="min-width:18rem;padding:.45rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);font-size:.9rem;">
             <option value="pvr">STH / LTH Profit-to-Volatility Ratio (PVR)</option>
             <option value="lthMvrvZ">LTH MVRV Z-Score</option>
+            <option value="cvdd">Bitcoin: CVDD</option>
           </select>
           <h3 class="bc-title" id="onchainChartTitle" style="margin:.75rem 0 0;">STH / LTH Profit-to-Volatility Ratio (PVR)</h3>
           <div class="bc-meta" id="pvrMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
@@ -5392,6 +5393,7 @@
       // Colours match the Research Bitcoin chart legend.
       const PRICE_COLOR = '#f8fafc';
       const REALIZED_COLOR = '#a855f7';
+      const CVDD_COLOR = '#16a34a';
 
       const ABOUT_PVR = `
         <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
@@ -5441,6 +5443,29 @@
           LTH behavior is critical for understanding major market cycles. High Z-Scores historically coincide with major tops where experienced holders distribute to newer participants. LTH rarely go underwater (MVRV &lt; 1.0), making negative Z-Scores particularly significant.
         </p>`;
 
+      const ABOUT_CVDD = `
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          CVDD stands for Cumulative Value Coin Days Destroyed. It tracks the cumulative value-time destruction
+          that occurs as coins move from old hands into new hands, divided by Bitcoin's market age and scaled into
+          a USD valuation band.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          Coin Days Destroyed is used to identify the economic weight of UTXOs moving between wallets. When coins
+          are spent, the transaction has both a USD value and a time value based on how long the original holder
+          held those coins. That destroyed time value is Coin Days Destroyed.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Calculation Method:</strong></p>
+        <pre style="font-size:.8rem;color:var(--muted);background:transparent;margin:.75rem 0;white-space:pre-wrap;">CVDD = cumulative USD value coin-days destroyed / market age days / 6,000,000</pre>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong>Cumulative value destroyed</strong> is sourced from Research Bitcoin cointime statistics and converted from coinblocks to coin-days.</li>
+          <li><strong>Market age</strong> is measured as days since Bitcoin genesis.</li>
+          <li><strong>6,000,000</strong> is the conventional CVDD scaling constant used to align the valuation band with Bitcoin's historical lows.</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          CVDD has historically acted as a long-run lower valuation band for Bitcoin, often sitting near major
+          cycle lows rather than tracking price one-for-one through bull markets.
+        </p>`;
+
       const CHARTS = {
         pvr: {
           title: 'STH / LTH Profit-to-Volatility Ratio (PVR)',
@@ -5479,6 +5504,21 @@
           priceSeries: [
             { key: 'btc_price', label: 'Bitcoin Price', color: PRICE_COLOR },
             { key: 'lth_realized_price', label: 'LTH Realized Price', color: REALIZED_COLOR },
+          ],
+        },
+        cvdd: {
+          title: 'Bitcoin: CVDD',
+          aboutTitle: 'Indicator overview',
+          aboutHtml: ABOUT_CVDD,
+          hintHtml: 'Drag to zoom · double-click to reset · click legend items to toggle series. <strong>CVDD</strong> = cumulative value coin days destroyed divided by market age and scaled into a USD valuation band. Right axis: BTC price and CVDD (USD, log).',
+          showLeftAxis: false,
+          leftAxisTitle: '',
+          series: [],
+          references: [],
+          priceAxisTitle: 'BTC Price / CVDD (USD, log)',
+          priceSeries: [
+            { key: 'btc_price', label: 'BTC Price', color: PRICE_COLOR },
+            { key: 'cvdd', label: 'CVDD', color: CVDD_COLOR },
           ],
         },
       };
@@ -5601,6 +5641,7 @@
               y: {
                 type: 'linear',
                 position: 'left',
+                display: definition.showLeftAxis !== false,
                 min: definition.leftMin,
                 max: definition.leftMax,
                 title: { display: true, text: definition.leftAxisTitle },
@@ -5610,7 +5651,7 @@
               yPrice: {
                 type: 'logarithmic',
                 position: 'right',
-                title: { display: true, text: 'BTC Price (USD, log)' },
+                title: { display: true, text: definition.priceAxisTitle || 'BTC Price (USD, log)' },
                 grid: { drawOnChartArea: false },
                 ticks: {
                   callback: (v) => {

@@ -26,6 +26,29 @@
 
 ---
 
+### v0.6.147 – On-Chain Charts: Bitcoin CVDD
+**Date:** 2026-07-19  
+**Status:** ✅ IMPLEMENTED (DB/RPC migration + edge-function fetcher update + admin UI chart)
+
+**Motivation.** Add the Bitcoin Magazine Pro-style **Cumulative Value Coin Days Destroyed (CVDD)** chart to the On-Chain Charts dropdown.
+
+**Methodology.** CVDD uses Research Bitcoin `cointime_statistics/coinblock_value_cum_destroyed` as the cumulative USD value destroyed input. Because RB reports this cointime input in coinblocks, the fetcher converts it to coin-days using the expected 144 blocks/day cadence before calculating CVDD:
+
+```
+CVDD = (coinblock_value_cum_destroyed / 144) / market_age_days / 6,000,000
+```
+
+`market_age_days` is measured from Bitcoin genesis (`2009-01-03`). The 6,000,000 divisor is the conventional CVDD scaling constant.
+
+**Changes:**
+- **Migration `onchain_cvdd`:** adds `coinblock_value_cum_destroyed` and `cvdd` to `lth_pvr.onchain_pvr_daily` and extends `public.get_onchain_pvr_series_json()` with both fields.
+- **Edge function `ef_fetch_onchain_pvr`:** fetches `cointime_statistics/coinblock_value_cum_destroyed` alongside the existing PVR inputs and computes CVDD during both backfill and daily append modes.
+- **Admin UI:** adds **Bitcoin: CVDD** to the On-Chain Charts dropdown. The chart displays BTC Price and CVDD on the shared right logarithmic USD axis and switches the explanation panel to the CVDD indicator overview.
+
+**Impact.** CVDD is now maintained by the same RB-data-ready pipeline as the PVR charts and can be extended/backfilled through the existing `ef_fetch_onchain_pvr` workflow.
+
+---
+
 ### v0.6.145 – Option 4A scarcity/adoption overlay for BTC fixed-supply upside
 **Date:** 2026-07-18  
 **Status:** ✅ DEPLOYED (1× DB RPC migration + forecaster UI extension)

@@ -1,6 +1,6 @@
 // ef_fetch_onchain_pvr/index.ts
 // ===========================================================================
-// On-Chain Charts data engine — STH/LTH Profit-to-Volatility Ratio (PVR).
+// On-Chain Charts data engine — STH/LTH PVR, LTH MVRV Z-Score, CVDD.
 //
 // PVR for a holder cohort = unrealised profit / expanding-window volatility of
 // that cohort's market cap:
@@ -18,6 +18,7 @@
 // Derived series:
 //     pvr_ratio      = sth_pvr / lth_pvr
 //     pvr_divergence = sth_pvr - lth_pvr
+//     cvdd           = cumulative USD value coin-days destroyed / market age / 6,000,000
 //
 // Modes (JSON body):
 //   { "backfill": true, "from": "2010-07-01" }  → recompute full history
@@ -35,6 +36,9 @@ import { getServiceClient, sleep } from "./client.ts";
 const RB_BASE = "https://api.researchbitcoin.net";
 const ORG_FALLBACK = "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
 const DEFAULT_HISTORY_START = "2010-07-01";
+const BITCOIN_GENESIS_DATE = "2009-01-03";
+const CVDD_SCALE = 6_000_000;
+const BLOCKS_PER_DAY = 144;
 
 // ---------------------------------------------------------------------------
 // Welford online algorithm (sample std, ddof=1)
@@ -145,6 +149,8 @@ interface PvrRow {
   sth_realized_price: number;
   lth_supply: number;
   lth_realized_price: number;
+  coinblock_value_cum_destroyed: number | null;
+  cvdd: number | null;
   sth_pvr: number | null;
   lth_pvr: number | null;
   pvr_ratio: number | null;
@@ -154,6 +160,13 @@ interface PvrRow {
 
 function round6(x: number): number {
   return Math.round(x * 1e6) / 1e6;
+}
+
+function marketAgeDays(date: string): number {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const genesis = Date.parse(`${BITCOIN_GENESIS_DATE}T00:00:00Z`);
+  const current = Date.parse(`${date}T00:00:00Z`);
+  return Math.max(1, Math.floor((current - genesis) / dayMs));
 }
 
 // Build PVR rows by walking dates in order, advancing the Welford state.
@@ -166,6 +179,7 @@ function computeRows(
   sthRp: Map<string, number>,
   lthSupply: Map<string, number>,
   lthRp: Map<string, number>,
+  coinblockValueCumDestroyed: Map<string, number>,
   sthW0: Welford,
   lthW0: Welford,
 ): { rows: PvrRow[]; sthW: Welford; lthW: Welford } {
@@ -180,6 +194,7 @@ function computeRows(
     const sr = sthRp.get(d);
     const ls = lthSupply.get(d);
     const lr = lthRp.get(d);
+    const cvd = coinblockValueCumDestroyed.get(d);
 
     // Require all five inputs present and strictly positive (0.0 = no data yet).
     if (!p || !ss || !sr || !ls || !lr) continue;
@@ -199,6 +214,7 @@ function computeRows(
     let lthPvr: number | null = null;
     let ratio: number | null = null;
     let divergence: number | null = null;
+    let cvdd: number | null = null;
 
     if (sthStd > 0) sthPvr = round6((sthMc - sthRc) / sthStd);
     if (lthStd > 0) lthPvr = round6((lthMc - lthRc) / lthStd);
@@ -206,6 +222,9 @@ function computeRows(
       divergence = round6(sthPvr - lthPvr);
       // Guard divide-by-near-zero: leave ratio null when LTH PVR is ~0.
       if (Math.abs(lthPvr) > 1e-6) ratio = round6(sthPvr / lthPvr);
+    }
+    if (cvd !== undefined && Number.isFinite(cvd) && cvd > 0) {
+      cvdd = round6((cvd / BLOCKS_PER_DAY) / marketAgeDays(d) / CVDD_SCALE);
     }
 
     rows.push({
@@ -216,6 +235,8 @@ function computeRows(
       sth_realized_price: sr,
       lth_supply: ls,
       lth_realized_price: lr,
+      coinblock_value_cum_destroyed: cvd ?? null,
+      cvdd,
       sth_pvr: sthPvr,
       lth_pvr: lthPvr,
       pvr_ratio: ratio,
@@ -327,13 +348,15 @@ Deno.serve(async (req: Request) => {
   let sthRp: Map<string, number>;
   let lthSupply: Map<string, number>;
   let lthRp: Map<string, number>;
+  let coinblockValueCumDestroyed: Map<string, number>;
   try {
-    [price, sthSupply, sthRp, lthSupply, lthRp] = await Promise.all([
+    [price, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed] = await Promise.all([
       rbFetchRange(rbToken, "price", "price", fromDate, toTime),
       rbFetchRange(rbToken, "supply_distribution", "supply_sth", fromDate, toTime),
       rbFetchRange(rbToken, "realizedprice", "realized_price_sth", fromDate, toTime),
       rbFetchRange(rbToken, "supply_distribution", "supply_lth", fromDate, toTime),
       rbFetchRange(rbToken, "realizedprice", "realized_price_lth", fromDate, toTime),
+      rbFetchRange(rbToken, "cointime_statistics", "coinblock_value_cum_destroyed", fromDate, toTime),
     ]);
   } catch (e) {
     await logAlert(sb, "error", "RB API fetch failed in ef_fetch_onchain_pvr",
@@ -347,7 +370,7 @@ Deno.serve(async (req: Request) => {
     .sort();
 
   const { rows, sthW: sthWFinal, lthW: lthWFinal } = computeRows(
-    org_id, dates, price, sthSupply, sthRp, lthSupply, lthRp, sthW, lthW,
+    org_id, dates, price, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed, sthW, lthW,
   );
 
   if (rows.length === 0) {
