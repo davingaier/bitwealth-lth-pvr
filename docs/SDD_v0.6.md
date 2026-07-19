@@ -3,11 +3,28 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-18 (v0.6.145)
+**Last updated:** 2026-07-19 (v0.6.146)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.146 – On-Chain Charts selector + LTH MVRV Z-Score chart
+**Date:** 2026-07-19  
+**Status:** ✅ IMPLEMENTED (RPC migration applied; admin UI file updated)
+
+**Motivation.** The On-Chain Charts module is now a multi-chart workspace rather than a single fixed STH/LTH PVR view. Users can choose which Research Bitcoin-derived on-chain chart to view from a dropdown at the top of the module.
+
+**Changes:**
+- **Admin UI:** added `onchainChartSelect` dropdown and chart-definition renderer. Existing STH/LTH PVR chart remains the default option.
+- **New chart:** **LTH MVRV Z-Score**, derived from the existing `lth_pvr` series because the formula is identical: `(LTH Market Cap - LTH Realized Cap) / std(LTH Market Cap)`.
+- **Displayed series:** LTH MVRV Z-Score (left axis), Zero Line, Bitcoin Price (right log axis), and LTH Realized Price (right log axis). The Z-score line is conditionally coloured green/yellow/orange/red by market regime.
+- **Explanation panel:** now changes with the selected chart. The LTH MVRV Z-Score explanation documents MVRV interpretation, formula inputs, and market-condition bands.
+- **Migration `onchain_pvr_json_lth_realized_price`:** extends `public.get_onchain_pvr_series_json()` to include `lth_realized_price`, enabling the realized-price overlay without creating a new storage path.
+
+**Impact.** The On-Chain Charts module is ready for additional chart definitions using the same cached on-chain dataset, avoiding duplicate fetches and extra tables unless a future chart requires new raw inputs.
+
+---
 
 ### v0.6.145 – Option 4A scarcity/adoption overlay for BTC fixed-supply upside
 **Date:** 2026-07-18  

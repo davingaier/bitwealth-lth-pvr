@@ -5319,7 +5319,7 @@
   </main>
 
   <!-- ═══════════════════════════════════════════════════════════════════════
-       ON-CHAIN CHARTS MODULE — STH/LTH Profit-to-Volatility Ratio (PVR)
+       ON-CHAIN CHARTS MODULE
   ════════════════════════════════════════════════════════════════════════ -->
   <main>
   <div id="onchain-charts-module" class="module">
@@ -5328,7 +5328,12 @@
     <div class="card" id="pvrChartCard">
       <div class="bc-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
         <div>
-          <h3 class="bc-title" style="margin:0;">STH / LTH Profit-to-Volatility Ratio (PVR)</h3>
+          <label for="onchainChartSelect" style="display:block;font-size:.75rem;color:var(--muted);margin-bottom:.35rem;">Chart</label>
+          <select id="onchainChartSelect" style="min-width:18rem;padding:.45rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);font-size:.9rem;">
+            <option value="pvr">STH / LTH Profit-to-Volatility Ratio (PVR)</option>
+            <option value="lthMvrvZ">LTH MVRV Z-Score</option>
+          </select>
+          <h3 class="bc-title" id="onchainChartTitle" style="margin:.75rem 0 0;">STH / LTH Profit-to-Volatility Ratio (PVR)</h3>
           <div class="bc-meta" id="pvrMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
         </div>
         <div class="bc-controls" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
@@ -5345,7 +5350,7 @@
         <canvas id="pvrChart"></canvas>
       </div>
       <div class="bc-status" style="margin-top:.5rem;">
-        <span class="bc-hint" style="font-size:.75rem;color:var(--muted);">
+        <span class="bc-hint" id="onchainChartHint" style="font-size:.75rem;color:var(--muted);">
           Drag to zoom · double-click to reset · click legend items to toggle series.
           <strong>PVR</strong> = each cohort's unrealised profit (market cap − realised cap) normalised by the historical volatility of its market cap.
           <strong>Ratio &gt; 1.5</strong> → STH euphoria (distribution risk); <strong>Ratio &lt; 0.5</strong> → LTH stress (capitulation). Left axis: PVR / ratio / divergence. Right axis: BTC price (log).
@@ -5353,49 +5358,142 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:1rem;">
-      <h3 style="margin-top:0;">About the STH/LTH PVR</h3>
-      <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
-        The Profit-to-Volatility Ratio compares normalised profit levels between Short-Term Holders (&lt;155 days)
-        and Long-Term Holders (155+ days). Each cohort's unrealised profit is divided by its own historical
-        volatility, revealing which group is experiencing more extreme conditions relative to its typical behaviour.
-        Data is sourced daily from Research Bitcoin and computed with the same methodology as the LTH PVR trading bands.
-      </p>
-      <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
-        <li><strong style="color:#dc2626;">Ratio &gt; 1.5</strong> — STH in extreme profit relative to LTH → potential distribution phase / local top.</li>
-        <li><strong style="color:#f59e0b;">Ratio 0.8–1.2</strong> — Balanced market conditions between new and old participants.</li>
-        <li><strong style="color:#16a34a;">Ratio &lt; 0.5</strong> — LTH under more stress than STH → potential capitulation.</li>
-        <li><strong style="color:#3b82f6;">Negative ratio</strong> — Opposite profit/loss conditions between cohorts → major regime transition.</li>
-      </ul>
+    <div class="card" id="onchainChartAbout" style="margin-top:1rem;">
+      <h3 id="onchainAboutTitle" style="margin-top:0;">About the STH/LTH PVR</h3>
+      <div id="onchainAboutBody"></div>
     </div>
   </div>
   </main>
 
   <script>
-    // ===================== On-Chain Charts: STH/LTH PVR =====================
+    // ===================== On-Chain Charts =====================
     (() => {
       const root = document.querySelector('#onchain-charts-module');
       if (!root) return;
       const card = root.querySelector('#pvrChartCard');
       if (!card) return;
       const canvas   = card.querySelector('#pvrChart');
+      const selector = card.querySelector('#onchainChartSelect');
+      const titleEl  = card.querySelector('#onchainChartTitle');
       const metaEl   = card.querySelector('#pvrMeta');
+      const hintEl   = card.querySelector('#onchainChartHint');
       const presetsEl= card.querySelector('#pvrPresets');
       const resetBtn = card.querySelector('#pvrResetZoom');
+      const aboutTitle = root.querySelector('#onchainAboutTitle');
+      const aboutBody = root.querySelector('#onchainAboutBody');
 
       let chart = null;
       let loaded = false;
       let loading = false;
       let zoomRegistered = false;
+      let cachedRows = [];
+      let activeChartKey = 'pvr';
 
       // Colours match the Research Bitcoin chart legend.
-      const SERIES = [
-        { key: 'sth_pvr',        label: 'STH PVR',            color: '#f59e0b', axis: 'y' },
-        { key: 'lth_pvr',        label: 'LTH PVR',            color: '#16a34a', axis: 'y' },
-        { key: 'pvr_ratio',      label: 'STH/LTH PVR Ratio',  color: '#7c3aed', axis: 'y' },
-        { key: 'pvr_divergence', label: 'PVR Divergence',     color: '#2563eb', axis: 'y', fill: 'origin', fillColor: 'rgba(37,99,235,0.18)', order: -1 },
-      ];
       const PRICE_COLOR = '#f8fafc';
+      const REALIZED_COLOR = '#a855f7';
+
+      const ABOUT_PVR = `
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          The Profit-to-Volatility Ratio compares normalised profit levels between Short-Term Holders (&lt;155 days)
+          and Long-Term Holders (155+ days). Each cohort's unrealised profit is divided by its own historical
+          volatility, revealing which group is experiencing more extreme conditions relative to its typical behaviour.
+          Data is sourced daily from Research Bitcoin and computed with the same methodology as the LTH PVR trading bands.
+        </p>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong style="color:#dc2626;">Ratio &gt; 1.5</strong> — STH in extreme profit relative to LTH → potential distribution phase / local top.</li>
+          <li><strong style="color:#f59e0b;">Ratio 0.8–1.2</strong> — Balanced market conditions between new and old participants.</li>
+          <li><strong style="color:#16a34a;">Ratio &lt; 0.5</strong> — LTH under more stress than STH → potential capitulation.</li>
+          <li><strong style="color:#3b82f6;">Negative ratio</strong> — Opposite profit/loss conditions between cohorts → major regime transition.</li>
+        </ul>`;
+
+      const ABOUT_LTH_MVRV_Z = `
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          LTH MVRV compares the market value of coins held by long-term holders (more than 155 days)
+          to their realized value (cost basis). This metric helps identify when experienced market participants
+          are in profit or loss.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Understanding the Values:</strong></p>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong>MVRV = 1.0:</strong> LTH are breaking even (market price = cost basis)</li>
+          <li><strong>MVRV &gt; 1.0:</strong> LTH are in profit (e.g., 1.5 = 50% profit)</li>
+          <li><strong>MVRV &lt; 1.0:</strong> LTH are at a loss (rare but significant)</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Z-Score Calculation Method:</strong></p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          The LTH MVRV Z-Score evaluates whether LTH holdings are overvalued or undervalued relative to their fair value.
+          It follows the same methodology as the standard MVRV Z-Score, applied to Long-Term Holder cohort data:
+        </p>
+        <pre style="font-size:.8rem;color:var(--muted);background:transparent;margin:.75rem 0;white-space:pre-wrap;">LTH MVRV Z-Score = (LTH Market Cap - LTH Realized Cap) / std(LTH Market Cap)</pre>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong>LTH Market Cap</strong> = LTH Supply × BTC Price (current market valuation)</li>
+          <li><strong>LTH Realized Cap</strong> = LTH Supply × LTH Realized Price (cumulative capital inflow)</li>
+          <li><strong>std(LTH Market Cap)</strong> = cumulative standard deviation from first data point to current</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Market Conditions:</strong></p>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong style="color:#dc2626;">&gt; 2.0σ:</strong> Extreme overvaluation — major cycle tops</li>
+          <li><strong style="color:#f59e0b;">1.0σ to 2.0σ:</strong> Overheated — distribution phase likely</li>
+          <li><strong style="color:#eab308;">-1.0σ to 1.0σ:</strong> Neutral market conditions</li>
+          <li><strong style="color:#16a34a;">&lt; -1.0σ:</strong> Deep value — rare for LTH</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          LTH behavior is critical for understanding major market cycles. High Z-Scores historically coincide with major tops where experienced holders distribute to newer participants. LTH rarely go underwater (MVRV &lt; 1.0), making negative Z-Scores particularly significant.
+        </p>`;
+
+      const CHARTS = {
+        pvr: {
+          title: 'STH / LTH Profit-to-Volatility Ratio (PVR)',
+          aboutTitle: 'About the STH/LTH PVR',
+          aboutHtml: ABOUT_PVR,
+          hintHtml: 'Drag to zoom · double-click to reset · click legend items to toggle series. <strong>PVR</strong> = each cohort\'s unrealised profit (market cap − realised cap) normalised by the historical volatility of its market cap. <strong>Ratio &gt; 1.5</strong> → STH euphoria (distribution risk); <strong>Ratio &lt; 0.5</strong> → LTH stress (capitulation). Left axis: PVR / ratio / divergence. Right axis: BTC price (log).',
+          leftAxisTitle: 'PVR / Ratio / Divergence',
+          leftMin: -6,
+          leftMax: 6,
+          series: [
+            { key: 'sth_pvr',        label: 'STH PVR',            color: '#f59e0b', axis: 'y' },
+            { key: 'lth_pvr',        label: 'LTH PVR',            color: '#16a34a', axis: 'y' },
+            { key: 'pvr_ratio',      label: 'STH/LTH PVR Ratio',  color: '#7c3aed', axis: 'y' },
+            { key: 'pvr_divergence', label: 'PVR Divergence',     color: '#2563eb', axis: 'y', fill: 'origin', fillColor: 'rgba(37,99,235,0.18)', order: -1 },
+          ],
+          references: [
+            { label: 'Zero Line', value: 0, color: 'rgba(148,163,184,0.55)', dash: [4,4] },
+            { label: 'Ratio = 1', value: 1, color: 'rgba(148,163,184,0.30)', dash: [2,3] },
+          ],
+          priceSeries: [{ key: 'btc_price', label: 'Bitcoin Price', color: PRICE_COLOR }],
+        },
+        lthMvrvZ: {
+          title: 'LTH MVRV Z-Score',
+          aboutTitle: 'About LTH MVRV Z-Score',
+          aboutHtml: ABOUT_LTH_MVRV_Z,
+          hintHtml: 'Drag to zoom · double-click to reset · click legend items to toggle series. <strong>LTH MVRV Z-Score</strong> = (LTH Market Cap − LTH Realized Cap) / std(LTH Market Cap). Left axis: Z-score. Right axis: BTC price and LTH realized price (log).',
+          leftAxisTitle: 'LTH MVRV Z-Score',
+          leftMin: -2,
+          leftMax: 14,
+          series: [
+            { key: 'lth_pvr', label: 'LTH MVRV Z-Score', color: '#eab308', axis: 'y', segmentColor: zScoreColor, borderWidth: 1.4 },
+          ],
+          references: [
+            { label: 'Zero Line', value: 0, color: 'rgba(148,163,184,0.60)', dash: [] },
+          ],
+          priceSeries: [
+            { key: 'btc_price', label: 'Bitcoin Price', color: PRICE_COLOR },
+            { key: 'lth_realized_price', label: 'LTH Realized Price', color: REALIZED_COLOR },
+          ],
+        },
+      };
+
+      function zScoreColor(value) {
+        if (value == null) return '#eab308';
+        if (value < -1) return '#22c55e';
+        if (value < 1) return '#eab308';
+        if (value < 2) return '#f97316';
+        return '#ef4444';
+      }
+
+      function getActiveDefinition() {
+        return CHARTS[activeChartKey] || CHARTS.pvr;
+      }
 
       function ensureZoomPlugin() {
         if (zoomRegistered) return;
@@ -5406,53 +5504,62 @@
         } catch (e) { zoomRegistered = false; }
       }
 
-      function buildDatasets(rows) {
+      function buildDatasets(rows, definition) {
         const labels = rows.map(r => r.date);
-        const datasets = SERIES.map(s => ({
-          label: s.label,
-          data: rows.map(r => (r[s.key] == null ? null : Number(r[s.key]))),
-          borderColor: s.color,
-          backgroundColor: s.fill ? s.fillColor : s.color,
-          borderWidth: 1.2,
-          pointRadius: 0,
-          tension: 0,
-          spanGaps: true,
-          fill: s.fill || false,
-          order: (s.order != null ? s.order : 0),
-          yAxisID: s.axis,
-        }));
-        // Reference lines (match RB legend: "Zero Line" and "Ratio = 1").
-        datasets.push({
-          label: 'Zero Line',
-          data: rows.map(() => 0),
-          borderColor: 'rgba(148,163,184,0.55)',
-          borderWidth: 1, borderDash: [4,4], pointRadius: 0, tension: 0, yAxisID: 'y',
+        const datasets = definition.series.map(s => {
+          const dataset = {
+            label: s.label,
+            data: rows.map(r => (r[s.key] == null ? null : Number(r[s.key]))),
+            borderColor: s.color,
+            backgroundColor: s.fill ? s.fillColor : s.color,
+            borderWidth: s.borderWidth || 1.2,
+            pointRadius: 0,
+            tension: 0,
+            spanGaps: true,
+            fill: s.fill || false,
+            order: (s.order != null ? s.order : 0),
+            yAxisID: s.axis,
+          };
+          if (s.segmentColor) {
+            dataset.segment = {
+              borderColor: (ctx) => s.segmentColor(ctx.p1.parsed.y),
+            };
+          }
+          return dataset;
         });
-        datasets.push({
-          label: 'Ratio = 1',
-          data: rows.map(() => 1),
-          borderColor: 'rgba(148,163,184,0.30)',
-          borderWidth: 1, borderDash: [2,3], pointRadius: 0, tension: 0, yAxisID: 'y',
+        definition.references.forEach(ref => {
+          datasets.push({
+            label: ref.label,
+            data: rows.map(() => ref.value),
+            borderColor: ref.color,
+            borderWidth: 1, borderDash: ref.dash, pointRadius: 0, tension: 0, yAxisID: 'y',
+          });
         });
-        // BTC price on the right log axis.
-        datasets.push({
-          label: 'Bitcoin Price',
-          data: rows.map(r => (r.btc_price == null ? null : Number(r.btc_price))),
-          borderColor: PRICE_COLOR,
-          backgroundColor: PRICE_COLOR,
-          borderWidth: 1.6,
-          pointRadius: 0,
-          tension: 0,
-          spanGaps: true,
-          yAxisID: 'yPrice',
-          order: 10,
+        definition.priceSeries.forEach(s => {
+          datasets.push({
+            label: s.label,
+            data: rows.map(r => (r[s.key] == null ? null : Number(r[s.key]))),
+            borderColor: s.color,
+            backgroundColor: s.color,
+            borderWidth: 1.6,
+            pointRadius: 0,
+            tension: 0,
+            spanGaps: true,
+            yAxisID: 'yPrice',
+            order: 10,
+          });
         });
         return { labels, datasets };
       }
 
       function renderChart(rows) {
         ensureZoomPlugin();
-        const { labels, datasets } = buildDatasets(rows);
+        const definition = getActiveDefinition();
+        const { labels, datasets } = buildDatasets(rows, definition);
+        titleEl.textContent = definition.title;
+        hintEl.innerHTML = definition.hintHtml;
+        aboutTitle.textContent = definition.aboutTitle;
+        aboutBody.innerHTML = definition.aboutHtml;
         const cfg = {
           type: 'line',
           data: { labels, datasets },
@@ -5494,9 +5601,9 @@
               y: {
                 type: 'linear',
                 position: 'left',
-                // Clip extreme early-history spikes (matches the RB chart's fixed axis).
-                min: -6, max: 6,
-                title: { display: true, text: 'PVR / Ratio / Divergence' },
+                min: definition.leftMin,
+                max: definition.leftMax,
+                title: { display: true, text: definition.leftAxisTitle },
                 grid: { color: 'rgba(148,163,184,0.12)' },
                 ticks: { font: { size: 10 } },
               },
@@ -5566,7 +5673,8 @@
           if (error) { metaEl.textContent = `Error: ${error.message}`; loading = false; return; }
           const rows = Array.isArray(data) ? data : (data || []);
           if (!rows.length) { metaEl.textContent = 'No PVR data available yet.'; loading = false; return; }
-          renderChart(rows);
+          cachedRows = rows;
+          renderChart(cachedRows);
           applyPreset('ALL');
           const first = rows[0].date, lastRow = rows[rows.length - 1].date;
           metaEl.textContent = `${rows.length.toLocaleString()} days · ${first} → ${lastRow} · source: Research Bitcoin`;
@@ -5576,6 +5684,14 @@
         }
         loading = false;
       }
+
+      selector?.addEventListener('change', () => {
+        activeChartKey = selector.value;
+        if (!cachedRows.length) { load(); return; }
+        renderChart(cachedRows);
+        const activePreset = presetsEl.querySelector('button.active')?.dataset.range || 'ALL';
+        applyPreset(activePreset);
+      });
 
       presetsEl?.addEventListener('click', (e) => {
         const btn = e.target.closest('button'); if (!btn) return;
