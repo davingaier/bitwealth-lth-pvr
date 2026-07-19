@@ -18,6 +18,7 @@
 **Changes:**
 - **New page:** `docs/LTH_PVR_Client_Performance_Forecast_Illustration.html` combines historical back-test reference, forward forecast charts/tables, printable assumptions narrative, and print-friendly page breaks.
 - **Exact historical workflow:** migration `20260719_client_performance_historical_rpc.sql` adds `lth_pvr.request_lth_pvr_historical_annual_results(...)`, which queues one exact back-test per lookback period through the existing `public.backtest_requests` queue, fires `ef_bt_execute`, and returns run status plus annual/final result rows when complete.
+- **Timeout fix:** follow-up migration `20260719_patch_client_historical_rpc_service_jwt.sql` adds a filtered helper, `lth_pvr._client_historical_annual_payload(...)`, so the client RPC reads only the requested `bt_run_id`s instead of scanning the broad annual-results view. The page also uses sequential polling instead of overlapping `setInterval` calls.
 - **Admin visibility:** adds `lth_pvr.get_lth_pvr_client_illustration_admin_status(...)` and an Administration card showing current/prior illustration file links plus requested/fired/completed timestamps for recent exact historical runs.
 - **Version registry:** `lth_pvr.client_performance_illustration_versions` records the current illustration file and supports prior-version links.
 

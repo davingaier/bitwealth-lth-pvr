@@ -1,3 +1,114 @@
+CREATE OR REPLACE FUNCTION lth_pvr._client_historical_annual_payload(p_request_group_id uuid)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO lth_pvr, public, lth_pvr_bt
+AS $function$
+  WITH target_runs AS (
+    SELECT request_group_id, lookback_years, start_date, end_date, bt_run_id
+    FROM lth_pvr.client_historical_annual_request_runs
+    WHERE request_group_id = p_request_group_id
+      AND status = 'complete'
+      AND bt_run_id IS NOT NULL
+  ), adv AS (
+    SELECT DISTINCT ON (d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int)
+      d.bt_run_id,
+      EXTRACT(YEAR FROM d.trade_date)::int AS trading_year,
+      d.price_usd AS btc_price,
+      d.contrib_gross_usdt_cum AS total_investment,
+      d.btc_balance AS btc_holdings,
+      d.usdt_balance AS usd_holdings,
+      d.nav_usd,
+      d.total_roi_percent AS roi_percent,
+      d.cagr_percent
+    FROM lth_pvr_bt.bt_results_daily d
+    JOIN target_runs tr ON tr.bt_run_id = d.bt_run_id
+    ORDER BY d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int, d.trade_date DESC
+  ), std AS (
+    SELECT DISTINCT ON (d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int)
+      d.bt_run_id,
+      EXTRACT(YEAR FROM d.trade_date)::int AS trading_year,
+      d.nav_usd,
+      d.total_roi_percent AS roi_percent,
+      d.cagr_percent
+    FROM lth_pvr_bt.bt_std_dca_balances d
+    JOIN target_runs tr ON tr.bt_run_id = d.bt_run_id
+    ORDER BY d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int, d.trade_date DESC
+  ), hodl AS (
+    SELECT DISTINCT ON (d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int)
+      d.bt_run_id,
+      EXTRACT(YEAR FROM d.trade_date)::int AS trading_year,
+      d.nav_usd,
+      d.total_roi_percent AS roi_percent,
+      d.cagr_percent
+    FROM lth_pvr_bt.bt_hodl_balances d
+    JOIN target_runs tr ON tr.bt_run_id = d.bt_run_id
+    ORDER BY d.bt_run_id, EXTRACT(YEAR FROM d.trade_date)::int, d.trade_date DESC
+  ), annual AS (
+    SELECT
+      tr.lookback_years,
+      tr.start_date,
+      tr.end_date,
+      a.trading_year,
+      a.total_investment,
+      a.nav_usd,
+      a.roi_percent,
+      a.cagr_percent,
+      s.nav_usd AS std_nav_usd,
+      s.roi_percent AS std_roi_percent,
+      s.cagr_percent AS std_cagr_percent,
+      h.nav_usd AS hodl_nav_usd,
+      h.roi_percent AS hodl_roi_percent,
+      h.cagr_percent AS hodl_cagr_percent
+    FROM target_runs tr
+    JOIN adv a ON a.bt_run_id = tr.bt_run_id
+    LEFT JOIN std s ON s.bt_run_id = a.bt_run_id AND s.trading_year = a.trading_year
+    LEFT JOIN hodl h ON h.bt_run_id = a.bt_run_id AND h.trading_year = a.trading_year
+  ), summary AS (
+    SELECT DISTINCT ON (lookback_years)
+      *
+    FROM annual
+    ORDER BY lookback_years, trading_year DESC
+  )
+  SELECT jsonb_build_object(
+    'summary_rows', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+        'lookback_years', lookback_years,
+        'period_start', start_date,
+        'period_end', end_date,
+        'total_investment', total_investment,
+        'lth_pvr_nav', nav_usd,
+        'lth_pvr_roi', roi_percent,
+        'lth_pvr_cagr', cagr_percent,
+        'std_dca_nav', std_nav_usd,
+        'std_dca_roi', std_roi_percent,
+        'std_dca_cagr', std_cagr_percent,
+        'hodl_nav', hodl_nav_usd,
+        'hodl_roi', hodl_roi_percent,
+        'hodl_cagr', hodl_cagr_percent
+      ) ORDER BY lookback_years)
+      FROM summary
+    ), '[]'::jsonb),
+    'annual_rows', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+        'lookback_years', lookback_years,
+        'trading_year', trading_year,
+        'total_investment', total_investment,
+        'lth_pvr_nav', nav_usd,
+        'lth_pvr_roi', roi_percent,
+        'lth_pvr_cagr', cagr_percent,
+        'std_dca_nav', std_nav_usd,
+        'std_dca_roi', std_roi_percent,
+        'std_dca_cagr', std_cagr_percent,
+        'hodl_nav', hodl_nav_usd,
+        'hodl_roi', hodl_roi_percent,
+        'hodl_cagr', hodl_cagr_percent
+      ) ORDER BY lookback_years, trading_year)
+      FROM annual
+    ), '[]'::jsonb)
+  );
+$function$;
+
 CREATE OR REPLACE FUNCTION lth_pvr.request_lth_pvr_historical_annual_results(
   p_upfront_usdt numeric,
   p_monthly_usdt numeric,
@@ -188,55 +299,8 @@ BEGIN
         ) ORDER BY r.lookback_years)
         FROM lth_pvr.client_historical_annual_request_runs r
         WHERE r.request_group_id = g.request_group_id
-      ), '[]'::jsonb),
-      'summary_rows', COALESCE((
-        SELECT jsonb_agg(jsonb_build_object(
-          'lookback_years', x.lookback_years,
-          'period_start', x.start_date,
-          'period_end', x.end_date,
-          'total_investment', a.total_investment,
-          'lth_pvr_nav', a.nav_usd,
-          'lth_pvr_roi', a.roi_percent,
-          'lth_pvr_cagr', a.cagr_percent,
-          'std_dca_nav', a.std_nav_usd,
-          'std_dca_roi', a.std_roi_percent,
-          'std_dca_cagr', a.std_cagr_percent,
-          'hodl_nav', a.hodl_nav_usd,
-          'hodl_roi', a.hodl_roi_percent,
-          'hodl_cagr', a.hodl_cagr_percent
-        ) ORDER BY x.lookback_years)
-        FROM lth_pvr.client_historical_annual_request_runs x
-        JOIN LATERAL (
-          SELECT va.*
-          FROM lth_pvr_bt.v_bt_results_annual va
-          WHERE va.bt_run_id = x.bt_run_id
-          ORDER BY va.trading_year DESC
-          LIMIT 1
-        ) a ON true
-        WHERE x.request_group_id = g.request_group_id
-          AND x.status = 'complete'
-      ), '[]'::jsonb),
-      'annual_rows', COALESCE((
-        SELECT jsonb_agg(jsonb_build_object(
-          'lookback_years', x.lookback_years,
-          'trading_year', a.trading_year,
-          'total_investment', a.total_investment,
-          'lth_pvr_nav', a.nav_usd,
-          'lth_pvr_roi', a.roi_percent,
-          'lth_pvr_cagr', a.cagr_percent,
-          'std_dca_nav', a.std_nav_usd,
-          'std_dca_roi', a.std_roi_percent,
-          'std_dca_cagr', a.std_cagr_percent,
-          'hodl_nav', a.hodl_nav_usd,
-          'hodl_roi', a.hodl_roi_percent,
-          'hodl_cagr', a.hodl_cagr_percent
-        ) ORDER BY x.lookback_years, a.trading_year)
-        FROM lth_pvr.client_historical_annual_request_runs x
-        JOIN lth_pvr_bt.v_bt_results_annual a ON a.bt_run_id = x.bt_run_id
-        WHERE x.request_group_id = g.request_group_id
-          AND x.status = 'complete'
       ), '[]'::jsonb)
-    )
+    ) || lth_pvr._client_historical_annual_payload(v_group_id)
     FROM lth_pvr.client_historical_annual_requests g
     WHERE g.request_group_id = v_group_id
   );
@@ -246,3 +310,6 @@ $function$;
 GRANT EXECUTE ON FUNCTION lth_pvr.request_lth_pvr_historical_annual_results(
   numeric, numeric, date, integer[], numeric, numeric, numeric, numeric, boolean, numeric, numeric, text
 ) TO anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION lth_pvr._client_historical_annual_payload(uuid)
+  TO service_role;

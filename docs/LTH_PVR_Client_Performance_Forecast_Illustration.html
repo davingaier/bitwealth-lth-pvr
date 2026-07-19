@@ -363,6 +363,7 @@
     let investedVsNavChart = null;
     let exactHistoricalRows = null;
     let historicalPollTimer = null;
+    let historicalPollInFlight = false;
     let lastHistoricalRequestParams = null;
 
     function money(value) {
@@ -585,30 +586,41 @@
     }
 
     async function requestExactHistoricalResults(isPoll = false) {
+      if (historicalPollInFlight) return null;
+      historicalPollInFlight = true;
       const client = ensureClient();
       const params = lastHistoricalRequestParams || historicalRequestParams();
       lastHistoricalRequestParams = params;
-      const { data, error } = await client.schema('lth_pvr').rpc('request_lth_pvr_historical_annual_results', params);
-      if (error) throw error;
-      updateHistoricalStatus(data, data?.status === 'complete' ? 'ok' : null);
-      if (data?.summary_rows?.length) {
-        exactHistoricalRows = normaliseExactHistoricalRows(data.summary_rows);
-        renderHistorical();
-      }
-      if (data?.status === 'complete' || data?.status === 'partial' || data?.status === 'failed') {
-        if (historicalPollTimer) clearInterval(historicalPollTimer);
-        historicalPollTimer = null;
+      try {
+        const { data, error } = await client.schema('lth_pvr').rpc('request_lth_pvr_historical_annual_results', params);
+        if (error) throw error;
+        updateHistoricalStatus(data, data?.status === 'complete' ? 'ok' : null);
+        if (data?.summary_rows?.length) {
+          exactHistoricalRows = normaliseExactHistoricalRows(data.summary_rows);
+          renderHistorical();
+        }
+        if (data?.status === 'complete' || data?.status === 'partial' || data?.status === 'failed') {
+          if (historicalPollTimer) clearTimeout(historicalPollTimer);
+          historicalPollTimer = null;
+          return data;
+        }
+        if (!historicalPollTimer) {
+          historicalPollTimer = setTimeout(() => {
+            historicalPollTimer = null;
+            requestExactHistoricalResults(true).catch(error => {
+              console.error('historical poll failed', error);
+              updateHistoricalStatus({ status: 'poll failed', runs: [] }, 'error');
+            });
+          }, isPoll ? 10000 : 7000);
+        }
         return data;
+      } catch (error) {
+        if (historicalPollTimer) clearTimeout(historicalPollTimer);
+        historicalPollTimer = null;
+        throw error;
+      } finally {
+        historicalPollInFlight = false;
       }
-      if (!isPoll && !historicalPollTimer) {
-        historicalPollTimer = setInterval(() => {
-          requestExactHistoricalResults(true).catch(error => {
-            console.error('historical poll failed', error);
-            updateHistoricalStatus({ status: 'poll failed', runs: [] }, 'error');
-          });
-        }, 7000);
-      }
-      return data;
     }
 
     function pivotRows(rows) {
