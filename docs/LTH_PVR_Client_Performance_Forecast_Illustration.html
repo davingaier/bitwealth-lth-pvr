@@ -184,9 +184,12 @@
       .page { width: 297mm; max-width: none; margin: 0; padding: 12mm; border: none; box-shadow: none; }
       .panel, .chart-card, .footer, .bridge-card { break-inside: avoid; }
       .print-page-break { break-before: page; page-break-before: always; padding-top: 12mm; }
-      .chart-grid, .chart-grid.three, .bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .chart-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .chart-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+      .bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
       .chart-card { padding: 10px; }
-      .chart-frame, .chart-frame.short { height: 220px; }
+      .chart-frame { height: 220px; }
+      .chart-frame.short { height: 185px; }
       table { min-width: 0; }
       th, td { padding: 7px 8px; font-size: 10px; }
       th { font-size: 8px; }
