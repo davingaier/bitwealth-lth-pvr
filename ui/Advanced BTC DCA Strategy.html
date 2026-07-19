@@ -5083,6 +5083,21 @@
 
       <!-- Pipeline Control Panel — MOVED to Customer Transactions tab (merged into Live Customer Transactions card) -->
 
+      <!-- Client Performance Forecast Illustration Panel -->
+      <div class="card" id="clientIllustrationAdminCard">
+        <h3>📈 Client Performance Forecast Illustration</h3>
+        <p class="small-muted">Tracks exact historical annual-result RPC requests and links to the current and prior client illustration HTML files.</p>
+
+        <div style="display:flex;gap:.75rem;align-items:center;margin:.75rem 0;flex-wrap:wrap;">
+          <button id="clientIllustrationRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          <span id="clientIllustrationStatusMsg" class="small-muted">Not loaded.</span>
+        </div>
+
+        <div id="clientIllustrationStatusPanel" style="display:grid;gap:.75rem;">
+          <div class="small-muted">Open the Administration tab and sign in to load illustration status.</div>
+        </div>
+      </div>
+
       <!-- Pending ZAR Conversions Panel -->
       <div class="card" id="pendingZarCard">
         <h3>⏳ Pending ZAR Conversions</h3>
@@ -6096,6 +6111,11 @@
             // Admin module RB API token status
             if (currentHash === '#admin-module' && typeof window.loadRbTokenStatus === 'function') {
               window.loadRbTokenStatus();
+            }
+
+            // Admin module client illustration status
+            if (currentHash === '#admin-module' && typeof window.loadClientIllustrationStatus === 'function') {
+              window.loadClientIllustrationStatus();
             }
             
             // Customer Maintenance module data
@@ -11105,6 +11125,112 @@
         });
       }
     });
+  })();
+
+  // ===================== Client Performance Illustration Admin Status =====================
+  (() => {
+    const panel = document.getElementById('clientIllustrationStatusPanel');
+    const msg = document.getElementById('clientIllustrationStatusMsg');
+    const refreshBtn = document.getElementById('clientIllustrationRefreshBtn');
+    if (!panel) return;
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch] || ch));
+    }
+
+    function fmtClientDate(iso) {
+      if (!iso) return 'not yet';
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime()) ? esc(iso) : esc(d.toLocaleString());
+    }
+
+    function versionHref(filePath) {
+      const path = String(filePath || '').replace(/^\/+/, '');
+      return '../' + path;
+    }
+
+    function statusBadge(status) {
+      const s = String(status || 'unknown').toLowerCase();
+      const bg = s === 'complete' ? '#d4edda' : s === 'failed' ? '#f8d7da' : s === 'partial' ? '#fff3cd' : '#e2e3e5';
+      const fg = s === 'complete' ? '#155724' : s === 'failed' ? '#721c24' : s === 'partial' ? '#856404' : '#383d41';
+      return `<span class="status-pill" style="background:${bg};color:${fg};">${esc(s)}</span>`;
+    }
+
+    function renderClientIllustrationStatus(payload) {
+      const current = payload?.current_version;
+      const versions = payload?.versions || [];
+      const requests = payload?.requests || [];
+
+      const currentHtml = current ? `
+        <div style="padding:.75rem;border:1px solid var(--border);border-radius:8px;">
+          <div style="font-weight:700;margin-bottom:.25rem;">Current illustration</div>
+          <a href="${esc(versionHref(current.file_path))}" target="_blank" rel="noopener">${esc(current.file_path)}</a>
+          <div class="small-muted">${esc(current.version_label || '')}${current.notes ? ' — ' + esc(current.notes) : ''}</div>
+        </div>` : '<div class="small-muted">No current illustration version registered.</div>';
+
+      const versionsHtml = versions.length ? `
+        <details>
+          <summary>Prior / registered illustration versions (${versions.length})</summary>
+          <ul style="margin:.5rem 0 0 1.25rem;">
+            ${versions.map(v => `<li><a href="${esc(versionHref(v.file_path))}" target="_blank" rel="noopener">${esc(v.version_label || v.file_path)}</a> <span class="small-muted">${esc(v.file_path)}${v.is_current ? ' · current' : ''}</span></li>`).join('')}
+          </ul>
+        </details>` : '';
+
+      const requestsHtml = requests.length ? requests.map(req => {
+        const runs = req.runs || [];
+        const rows = runs.map(run => `
+          <tr>
+            <td>${esc(run.lookback_years)}Y</td>
+            <td>${statusBadge(run.status)}</td>
+            <td>${fmtClientDate(run.requested_at)}</td>
+            <td>${fmtClientDate(run.fired_at)}</td>
+            <td>${fmtClientDate(run.completed_at)}</td>
+            <td><code>${esc(run.bt_run_id || '')}</code></td>
+          </tr>`).join('');
+        return `
+          <div style="padding:.75rem;border:1px solid var(--border);border-radius:8px;">
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem;">
+              <strong>Request ${esc(String(req.request_group_id || '').slice(0, 8))}</strong>
+              ${statusBadge(req.status)}
+              <span class="small-muted">Created ${fmtClientDate(req.created_at)} · Updated ${fmtClientDate(req.updated_at)}</span>
+            </div>
+            <div class="small-muted" style="margin-bottom:.5rem;">Input: ${esc(req.upfront_usdt)} upfront + ${esc(req.monthly_usdt)} monthly · End date ${esc(req.end_date)} · Lookbacks ${(req.lookback_years || []).map(esc).join(', ')}</div>
+            <div style="overflow-x:auto;">
+              <table style="min-width:720px;"><thead><tr><th>Lookback</th><th>Status</th><th>Requested</th><th>Fired</th><th>Completed</th><th>BT Run</th></tr></thead><tbody>${rows || '<tr><td colspan="6">No child runs yet.</td></tr>'}</tbody></table>
+            </div>
+          </div>`;
+      }).join('') : '<div class="small-muted">No exact historical illustration requests have been recorded yet.</div>';
+
+      panel.innerHTML = currentHtml + versionsHtml + `<div style="font-weight:700;margin-top:.5rem;">Recent exact historical RPC requests</div>` + requestsHtml;
+    }
+
+    async function loadClientIllustrationStatus() {
+      if (!window.supabaseClient) {
+        panel.innerHTML = '<div class="small-muted">Supabase client not ready.</div>';
+        return;
+      }
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session?.user) {
+        panel.innerHTML = '<div class="small-muted">Please sign in via Administration tab to view illustration status.</div>';
+        if (msg) msg.textContent = 'Sign-in required.';
+        return;
+      }
+      if (msg) msg.textContent = 'Loading illustration status...';
+      const { data, error } = await window.supabaseClient.rpc('get_lth_pvr_client_illustration_admin_status', { p_limit: 10 });
+      if (error) {
+        console.error('loadClientIllustrationStatus error', error);
+        panel.innerHTML = '<div class="error">Failed to load illustration status: ' + esc(error.message || String(error)) + '</div>';
+        if (msg) msg.textContent = 'Load failed.';
+        return;
+      }
+      renderClientIllustrationStatus(data || {});
+      if (msg) msg.textContent = 'Loaded ' + fmtClientDate(data?.generated_at);
+    }
+
+    if (refreshBtn) refreshBtn.addEventListener('click', loadClientIllustrationStatus);
+    window.loadClientIllustrationStatus = loadClientIllustrationStatus;
   })();
 
   // ===================== Walk-Forward Validation (Back-Testing Module) =====================

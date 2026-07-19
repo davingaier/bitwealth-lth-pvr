@@ -3,11 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-19 (v0.6.148)
+**Last updated:** 2026-07-19 (v0.6.149)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.149 – Client Performance Forecast Illustration + exact historical RPC
+**Date:** 2026-07-19  
+**Status:** ✅ IMPLEMENTED LOCALLY (migration created; pending remote apply)
+
+**Motivation.** Provide a standalone client-facing illustration that clearly separates historical LTH PVR back-tested experience from forward-looking Option 4 / 4A forecast scenarios, while avoiding the misleading impression that forecasts are guaranteed performance.
+
+**Changes:**
+- **New page:** `docs/LTH_PVR_Client_Performance_Forecast_Illustration.html` combines historical back-test reference, forward forecast charts/tables, printable assumptions narrative, and print-friendly page breaks.
+- **Exact historical workflow:** migration `20260719_client_performance_historical_rpc.sql` adds `public.request_lth_pvr_historical_annual_results(...)`, which queues one exact back-test per lookback period, fires `ef_bt_execute`, and returns run status plus annual/final result rows when complete.
+- **Admin visibility:** adds `public.get_lth_pvr_client_illustration_admin_status(...)` and an Administration card showing current/prior illustration file links plus requested/fired/completed timestamps for recent exact historical runs.
+- **Version registry:** `public.client_performance_illustration_versions` records the current illustration file and supports prior-version links.
+
+**Storage convention.** Current and future client-illustration HTML files should live under `docs/` using versioned names when materially changed, e.g. `docs/LTH_PVR_Client_Performance_Forecast_Illustration_v2.html`; register each version in `public.client_performance_illustration_versions` and mark exactly one row as `is_current=true`.
+
+**Deployment note.** The migration is intentionally additive but has not been applied through CLI because the remote migration history contains many versions that are absent locally; apply via Supabase MCP/manual SQL or reconcile migration history before `supabase db push`.
+
+---
 
 ### v0.6.148 – On-Chain Charts: LTH-NUPL
 **Date:** 2026-07-19  

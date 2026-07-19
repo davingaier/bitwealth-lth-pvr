@@ -65,6 +65,7 @@
     .notice { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 14px 16px; background: rgba(255,180,0,0.08); border: 1px solid rgba(255,180,0,0.28); border-radius: 10px; color: var(--txt2); font-size: 12px; line-height: 1.6; margin-bottom: 18px; }
     .notice strong { color: var(--gold-lt); }
     .notice-mark { color: var(--gold); font-weight: 800; }
+    .print-only { display: none; }
 
     .section-heading { display: flex; align-items: center; gap: 8px; margin: 24px 0 10px; color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
     .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border); }
@@ -145,6 +146,12 @@
     .bridge-card { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px; }
     .bridge-title { color: var(--white); font-size: 14px; font-weight: 800; margin-bottom: 6px; }
     .bridge-copy { color: var(--txt2); font-size: 12px; line-height: 1.65; }
+    .assumption-narrative { display: grid; gap: 10px; }
+    .assumption-narrative p { color: var(--txt2); font-size: 12px; line-height: 1.65; }
+    .assumption-narrative strong { color: var(--white); }
+    .assumption-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin-top: 4px; }
+    .assumption-item { color: var(--txt2); font-size: 11px; line-height: 1.55; }
+    .assumption-item strong { color: var(--gold-lt); }
 
     .footer { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; margin-top: 22px; padding: 16px 18px; background: linear-gradient(90deg, #003F5C 0%, #0A4A6E 100%); border: 1px solid rgba(255,180,0,0.30); border-radius: 10px; }
     .footer-title { color: var(--gold); font-size: 15px; font-weight: 800; margin-bottom: 3px; }
@@ -168,15 +175,19 @@
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       body { background: #fff !important; }
       .no-print { display: none !important; }
+      .screen-only { display: none !important; }
+      .print-only { display: block !important; }
       .screen-wrap { padding: 0; background: transparent; }
       .page { width: 297mm; max-width: none; margin: 0; padding: 12mm; border: none; box-shadow: none; }
       .panel, .chart-card, .footer, .bridge-card { break-inside: avoid; }
+      .print-page-break { break-before: page; page-break-before: always; padding-top: 12mm; }
       .chart-grid, .chart-grid.three, .bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
       .chart-card { padding: 10px; }
       .chart-frame, .chart-frame.short { height: 220px; }
       table { min-width: 0; }
       th, td { padding: 7px 8px; font-size: 10px; }
       th { font-size: 8px; }
+      .assumption-list { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -200,7 +211,12 @@
       </div>
 
       <div class="section-heading">Client Assumptions</div>
-      <section class="panel">
+      <section class="panel print-only" id="printAssumptionsNarrative">
+        <div class="assumption-narrative">
+          <p>Run the illustration to populate the printable assumptions narrative.</p>
+        </div>
+      </section>
+      <section class="panel screen-only" id="assumptionsInputPanel">
         <form id="forecastForm">
           <div class="form-grid">
             <div class="field"><label for="upfront">Upfront contribution (USDT)</label><input id="upfront" type="number" min="0" step="100" value="2400" required /></div>
@@ -252,7 +268,7 @@
         </div>
       </section>
 
-      <div class="section-heading">Illustration Summary</div>
+      <div class="section-heading print-page-break">Illustration Summary</div>
       <section class="summary-grid" id="summaryGrid">
         <div class="metric"><div class="metric-label">10Y Historical LTH PVR NAV</div><div class="metric-value" id="histNavMetric">--</div><div class="metric-note">Scaled ABC back-test reference.</div></div>
         <div class="metric"><div class="metric-label">10Y Historical CAGR</div><div class="metric-value" id="histCagrMetric">--</div><div class="metric-note">Annualised back-tested return.</div></div>
@@ -271,8 +287,9 @@
         <div class="chart-card"><div class="chart-title">Cumulative invested vs Base forecast NAV</div><div class="chart-frame short"><canvas id="investedVsNavChart"></canvas></div></div>
       </section>
 
-      <div class="section-heading">Historical Back-Test Reference</div>
+      <div class="section-heading print-page-break">Historical Back-Test Reference</div>
       <section class="panel table-wrap">
+        <div class="status" id="historicalStatusText" style="margin-bottom:10px;">Showing scaled ABC One Pager reference values until exact historical runs are requested.</div>
         <table>
           <thead>
             <tr>
@@ -344,6 +361,9 @@
     let forecastNavChart = null;
     let forecastCagrChart = null;
     let investedVsNavChart = null;
+    let exactHistoricalRows = null;
+    let historicalPollTimer = null;
+    let lastHistoricalRequestParams = null;
 
     function money(value) {
       return '$' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -357,6 +377,32 @@
       const el = document.getElementById('statusText');
       el.textContent = message;
       el.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    function inputValue(id) {
+      return document.getElementById(id).value;
+    }
+
+    function renderPrintAssumptions() {
+      const narrative = document.getElementById('printAssumptionsNarrative');
+      if (!narrative) return;
+      const overlayWeight = Number(inputValue('overlayWeight') || 0);
+      const targetMarket = Number(inputValue('targetMarket') || 0);
+      const effectiveSupply = Number(inputValue('effectiveSupply') || 0);
+      narrative.innerHTML = `
+        <div class="assumption-narrative">
+          <p><strong>Client contribution assumptions.</strong> This illustration assumes an upfront contribution of ${money(inputValue('upfront'))}, followed by monthly contributions of ${money(inputValue('monthly'))}. The forward-looking forecast period is ${Number(inputValue('years') || 0)} years.</p>
+          <p><strong>Fee assumptions.</strong> The model applies a ${pct(Number(inputValue('managementFee') || 0))} annual management fee, a ${pct(Number(inputValue('performanceFee') || 0))} performance fee, a ${pct(Number(inputValue('conversionFee') || 0))} VALR conversion fee, and a ${pct(Number(inputValue('tradeFee') || 0))} VALR trade fee.</p>
+          <p><strong>Option 4A overlay assumptions.</strong> The scarcity/adoption overlay weight is ${pct(overlayWeight)}. A 0% overlay means the forecast is pure Option 4; 25% or 50% allows scarcity/adoption assumptions to influence the forecast if they imply a higher BTC price. The effective BTC supply is ${Number(effectiveSupply || 0).toLocaleString()} BTC, which recognises that the hard cap is 21 million BTC but some coins may be lost or illiquid.</p>
+          <div class="assumption-list">
+            <div class="assumption-item"><strong>Target market by horizon:</strong> ${money(targetMarket * 1000000000000)}. This is the estimated pool of capital BTC could compete for by the final forecast year, not all global wealth today. Practical guide: $75T is cautious, $100T to $150T is a central range, and $200T+ is a long-horizon bullish case.</div>
+            <div class="assumption-item"><strong>Adoption curve steepness:</strong> ${inputValue('curveSteepness')}. Lower values make adoption arrive more gradually; higher values make adoption slow at first and then accelerate more sharply. Practical guide: 3 is gentle, 6 is balanced, and 12 is aggressive.</div>
+            <div class="assumption-item"><strong>Conservative adoption:</strong> ${pct(Number(inputValue('adoptionCons') || 0))} of the target market by the final forecast year. This should represent a restrained but plausible adoption case.</div>
+            <div class="assumption-item"><strong>Base adoption:</strong> ${pct(Number(inputValue('adoptionBase') || 0))} of the target market by the final forecast year. This is the central sensitivity assumption, not a prediction.</div>
+            <div class="assumption-item"><strong>Optimistic adoption:</strong> ${pct(Number(inputValue('adoptionOpt') || 0))} of the target market by the final forecast year. This is an upside scenario and can imply very large BTC prices.</div>
+            <div class="assumption-item"><strong>Historical data source:</strong> the exact historical section is generated from LTH PVR back-test runs when available. Until exact runs complete, the page may show scaled ABC One Pager reference values as a review fallback.</div>
+          </div>
+        </div>`;
     }
 
     function getRate(id) {
@@ -381,6 +427,27 @@
           scaledHodlNav: row.hodlNav * scale
         };
       });
+    }
+
+    function normaliseExactHistoricalRows(summaryRows) {
+      return (summaryRows || []).map(row => ({
+        years: Number(row.lookback_years),
+        label: Number(row.lookback_years) === 1 ? '1 Year' : Number(row.lookback_years) + ' Years',
+        period: `${row.period_start || ''} - ${row.period_end || ''}`,
+        scaledInvested: Number(row.total_investment || 0),
+        scaledLthNav: Number(row.lth_pvr_nav || 0),
+        lthCagr: Number(row.lth_pvr_cagr || 0),
+        lthRoi: Number(row.lth_pvr_roi || 0),
+        scaledDcaNav: Number(row.std_dca_nav || 0),
+        dcaCagr: Number(row.std_dca_cagr || 0),
+        scaledHodlNav: Number(row.hodl_nav || 0),
+        hodlCagr: Number(row.hodl_cagr || 0),
+        source: 'Exact back-test'
+      })).sort((a, b) => a.years - b.years);
+    }
+
+    function currentHistoricalRows() {
+      return exactHistoricalRows && exactHistoricalRows.length ? exactHistoricalRows : scaledHistoricalRows();
     }
 
     function ensureClient() {
@@ -433,12 +500,14 @@
     }
 
     function renderHistorical() {
-      const rows = scaledHistoricalRows();
+      renderPrintAssumptions();
+      const rows = currentHistoricalRows();
       const table = document.getElementById('historicalTable');
+      const sourceLabel = exactHistoricalRows && exactHistoricalRows.length ? 'Exact' : 'Scaled reference';
       table.innerHTML = rows.map(row => `
         <tr>
           <td class="period">${row.label}<div class="hint">${row.period}</div></td>
-          <td><span class="source-pill source-backtest">Back-test</span></td>
+          <td><span class="source-pill source-backtest">${sourceLabel}</span></td>
           <td>${money(row.scaledInvested)}</td>
           <td class="base">${money(row.scaledLthNav)}</td>
           <td class="base">${pct(row.lthCagr)}</td>
@@ -481,6 +550,65 @@
         },
         options: chartOptions(money)
       });
+    }
+
+    function historicalRequestParams() {
+      return {
+        p_upfront_usdt: Number(document.getElementById('upfront').value || 0),
+        p_monthly_usdt: Number(document.getElementById('monthly').value || 0),
+        p_end_date: '2026-06-09',
+        p_lookback_years: [1, 3, 5, 7, 10],
+        p_management_fee_rate: getRate('managementFee'),
+        p_performance_fee_rate: getRate('performanceFee'),
+        p_exchange_conversion_fee_rate: getRate('conversionFee'),
+        p_exchange_trade_fee_rate: getRate('tradeFee'),
+        p_usdpc_enabled: true,
+        p_usdpc_apy_percent: 10,
+        p_usdpc_conversion_fee_percent: 0.1,
+        p_source_page_path: 'docs/LTH_PVR_Client_Performance_Forecast_Illustration.html'
+      };
+    }
+
+    function updateHistoricalStatus(payload, kind) {
+      const el = document.getElementById('historicalStatusText');
+      if (!el) return;
+      if (!payload) {
+        el.textContent = 'Showing scaled ABC One Pager reference values until exact historical runs are requested.';
+        el.className = 'status';
+        return;
+      }
+      const runs = payload.runs || [];
+      const completeCount = runs.filter(run => run.status === 'complete').length;
+      const firedCount = runs.filter(run => run.fired_at).length;
+      el.textContent = `Exact historical request ${payload.status || 'queued'}: ${completeCount}/${runs.length || 5} lookbacks complete, ${firedCount}/${runs.length || 5} fired. Request group: ${payload.request_group_id || 'pending'}.`;
+      el.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    async function requestExactHistoricalResults(isPoll = false) {
+      const client = ensureClient();
+      const params = lastHistoricalRequestParams || historicalRequestParams();
+      lastHistoricalRequestParams = params;
+      const { data, error } = await client.rpc('request_lth_pvr_historical_annual_results', params);
+      if (error) throw error;
+      updateHistoricalStatus(data, data?.status === 'complete' ? 'ok' : null);
+      if (data?.summary_rows?.length) {
+        exactHistoricalRows = normaliseExactHistoricalRows(data.summary_rows);
+        renderHistorical();
+      }
+      if (data?.status === 'complete' || data?.status === 'partial' || data?.status === 'failed') {
+        if (historicalPollTimer) clearInterval(historicalPollTimer);
+        historicalPollTimer = null;
+        return data;
+      }
+      if (!isPoll && !historicalPollTimer) {
+        historicalPollTimer = setInterval(() => {
+          requestExactHistoricalResults(true).catch(error => {
+            console.error('historical poll failed', error);
+            updateHistoricalStatus({ status: 'poll failed', runs: [] }, 'error');
+          });
+        }, 7000);
+      }
+      return data;
     }
 
     function pivotRows(rows) {
@@ -565,7 +693,17 @@
       investedVsNavChart = null;
     }
 
+    function clearExactHistorical() {
+      exactHistoricalRows = null;
+      lastHistoricalRequestParams = null;
+      if (historicalPollTimer) clearInterval(historicalPollTimer);
+      historicalPollTimer = null;
+      updateHistoricalStatus(null);
+      renderHistorical();
+    }
+
     function resizeCharts() {
+      renderPrintAssumptions();
       [historicalCagrChart, historicalNavChart, forecastNavChart, forecastCagrChart, investedVsNavChart].forEach(chart => {
         if (chart) chart.resize();
       });
@@ -573,7 +711,17 @@
 
     async function runForecast(event) {
       event.preventDefault();
+      exactHistoricalRows = null;
+      lastHistoricalRequestParams = historicalRequestParams();
       renderHistorical();
+      requestExactHistoricalResults().catch(error => {
+        console.error('exact historical request failed', error);
+        const el = document.getElementById('historicalStatusText');
+        if (el) {
+          el.textContent = 'Exact historical request failed: ' + (error.message || String(error)) + '. Showing scaled ABC reference values.';
+          el.className = 'status error';
+        }
+      });
       const runBtn = document.getElementById('runBtn');
       runBtn.disabled = true;
       setStatus('Running forward-looking forecast...', null);
@@ -616,12 +764,17 @@
 
     document.getElementById('forecastForm').addEventListener('submit', runForecast);
     document.getElementById('resetBtn').addEventListener('click', resetDefaults);
-    document.getElementById('upfront').addEventListener('input', renderHistorical);
-    document.getElementById('monthly').addEventListener('input', renderHistorical);
+    ['upfront', 'monthly', 'years', 'managementFee', 'performanceFee', 'conversionFee', 'tradeFee', 'overlayWeight', 'effectiveSupply', 'targetMarket', 'curveSteepness', 'adoptionCons', 'adoptionBase', 'adoptionOpt'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        renderPrintAssumptions();
+        if (id === 'upfront' || id === 'monthly' || id === 'managementFee' || id === 'performanceFee' || id === 'conversionFee' || id === 'tradeFee') clearExactHistorical();
+      });
+    });
     window.addEventListener('beforeprint', () => setTimeout(resizeCharts, 0));
     window.addEventListener('afterprint', () => setTimeout(resizeCharts, 0));
 
     renderHistorical();
+    renderPrintAssumptions();
   </script>
 </body>
 </html>
