@@ -284,8 +284,8 @@
       <div class="section-heading">Annual Scenario NAV</div>
       <section class="panel table-wrap">
         <table>
-          <thead><tr><th>Year</th><th>Conservative NAV</th><th>Base NAV</th><th>Optimistic NAV</th></tr></thead>
-          <tbody id="forecastTable"><tr><td colspan="4">Run a forecast to populate the annual NAV table.</td></tr></tbody>
+          <thead><tr><th>Year</th><th>Cumulative Invested</th><th>Conservative NAV</th><th>Base NAV</th><th>Optimistic NAV</th></tr></thead>
+          <tbody id="forecastTable"><tr><td colspan="5">Run a forecast to populate the annual NAV table.</td></tr></tbody>
         </table>
       </section>
 
@@ -381,6 +381,7 @@
       table.innerHTML = pivoted.map(row => `
         <tr>
           <td>Year ${row.year}</td>
+          <td>${money((row.Base || row.Conservative || row.Optimistic)?.total_invested_usd || 0)}</td>
           <td class="cons">${row.Conservative ? money(row.Conservative.nav_usd) : '--'}</td>
           <td class="base">${row.Base ? money(row.Base.nav_usd) : '--'}</td>
           <td class="opt">${row.Optimistic ? money(row.Optimistic.nav_usd) : '--'}</td>
