@@ -210,7 +210,7 @@
 
       <div class="notice">
         <div class="notice-mark">NOTE</div>
-        <div><strong>Back-tested and forecast figures must be read separately.</strong> Historical values use actual BTC market history from the ABC One Pager reference back-test and are scaled to the selected contribution schedule. Forecast values are modelled scenarios from <code>lth_pvr.forecast_lth_pvr_option4</code>. Forecasts are not guaranteed and actual returns may differ materially.</div>
+        <div><strong>Back-tested and forecast figures must be read separately.</strong> Historical values use actual BTC market history from the LTH PVR Product Fact Sheet reference back-test and are scaled to the selected contribution schedule. Forecast values are modelled scenarios from <code>lth_pvr.forecast_lth_pvr_option4</code>. Forecasts are not guaranteed and actual returns may differ materially.</div>
       </div>
 
       <div class="section-heading">Client Assumptions</div>
@@ -292,7 +292,7 @@
 
       <div class="section-heading print-page-break">Historical Back-Test Reference</div>
       <section class="panel table-wrap">
-        <div class="status" id="historicalStatusText" style="margin-bottom:10px;">Showing scaled ABC One Pager reference values until exact historical runs are requested.</div>
+        <div class="status" id="historicalStatusText" style="margin-bottom:10px;">Showing scaled LTH PVR Product Fact Sheet reference values until exact historical runs are requested.</div>
         <table>
           <thead>
             <tr>
@@ -310,7 +310,7 @@
           </thead>
           <tbody id="historicalTable"></tbody>
         </table>
-        <div class="table-note">Historical figures are scaled from the ABC One Pager reference back-test. Scaling is suitable for illustration because contribution amounts and percentage-based fees move proportionally, but this first version should be reviewed before being used as a formal client report.</div>
+        <div class="table-note">Historical figures are scaled from the LTH PVR Product Fact Sheet reference back-test. Scaling is suitable for illustration because contribution amounts and percentage-based fees move proportionally, but this first version should be reviewed before being used as a formal client report.</div>
       </section>
 
       <div class="section-heading">Forward-Looking Forecast</div>
@@ -404,7 +404,7 @@
             <div class="assumption-item"><strong>Conservative adoption:</strong> ${pct(Number(inputValue('adoptionCons') || 0))} of the target market by the final forecast year. This should represent a restrained but plausible adoption case.</div>
             <div class="assumption-item"><strong>Base adoption:</strong> ${pct(Number(inputValue('adoptionBase') || 0))} of the target market by the final forecast year. This is the central sensitivity assumption, not a prediction.</div>
             <div class="assumption-item"><strong>Optimistic adoption:</strong> ${pct(Number(inputValue('adoptionOpt') || 0))} of the target market by the final forecast year. This is an upside scenario and can imply very large BTC prices.</div>
-            <div class="assumption-item"><strong>Historical data source:</strong> the exact historical section is generated from LTH PVR back-test runs when available. Until exact runs complete, the page may show scaled ABC One Pager reference values as a review fallback.</div>
+            <div class="assumption-item"><strong>Historical data source:</strong> the exact historical section is generated from LTH PVR back-test runs when available. Until exact runs complete, the page may show scaled LTH PVR Product Fact Sheet reference values as a review fallback.</div>
           </div>
         </div>`;
     }
@@ -577,7 +577,7 @@
       const el = document.getElementById('historicalStatusText');
       if (!el) return;
       if (!payload) {
-        el.textContent = 'Showing scaled ABC One Pager reference values until exact historical runs are requested.';
+        el.textContent = 'Showing scaled LTH PVR Product Fact Sheet reference values until exact historical runs are requested.';
         el.className = 'status';
         return;
       }
