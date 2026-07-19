@@ -203,7 +203,7 @@
         <div class="hero-logo"><img src="bitwealth-abc-logo.png" alt="BitWealth Logo" /></div>
         <div class="hero-text">
           <h1>LTH PVR Historical Performance + Forward Forecast</h1>
-          <div class="tagline">Historical back-tested experience separated from forward-looking Option 4 / 4A forecast scenarios</div>
+          <div class="tagline">Historical back-tested experience separated from forward-looking scarcity/adoption overlay forecast scenarios</div>
           <div class="meta">Prepared by BitWealth · July 2026 · Client review illustration</div>
         </div>
       </header>
@@ -239,9 +239,9 @@
           </details>
 
           <details open>
-            <summary>Option 4A scarcity / adoption overlay</summary>
+            <summary>Scarcity / adoption overlay</summary>
             <div class="fee-grid">
-              <div class="field"><label class="label-with-info" for="overlayWeight">Overlay weight <span class="info-tip" tabindex="0" role="tooltip" data-tip="How much the scarcity/adoption model influences the forecast. 0% means pure Option 4. 25% or 50% allows scarcity/adoption assumptions to lift the scenario if they imply a higher BTC price.">i</span></label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = pure Option 4. Try 25% or 50% for Option 4A.</div></div>
+              <div class="field"><label class="label-with-info" for="overlayWeight">Overlay weight <span class="info-tip" tabindex="0" role="tooltip" data-tip="How much the scarcity/adoption model influences the forecast. 0% means no scarcity/adoption overlay. 25% or 50% allows scarcity/adoption assumptions to lift the scenario if they imply a higher BTC price.">i</span></label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = No scarcity/adoption modelling. 100% = Full scarcity/adoption modelling.</div></div>
               <div class="field"><label class="label-with-info" for="effectiveSupply">Effective BTC supply <span class="info-tip" tabindex="0" role="tooltip" data-tip="The number of BTC assumed to be economically available. The hard cap is 21 million, but lost or illiquid coins may reduce practical supply.">i</span></label><input id="effectiveSupply" type="number" min="1" max="21000000" step="1" value="19800000" /><div class="hint">Default allows for lost/illiquid coins.</div></div>
               <div class="field"><label class="label-with-info" for="targetMarket">Target market by horizon ($T) <span class="info-tip" tabindex="0" role="tooltip" data-tip="The estimated pool of capital BTC could compete for by the final forecast year. Practical guide: $75T is cautious, $100T to $150T is a central range, and $200T+ is a long-horizon bullish case.">i</span></label><input id="targetMarket" type="number" min="1" step="1" value="100" /><div class="hint">Addressable market at forecast horizon.</div></div>
               <div class="field"><label for="curveSteepness">Adoption curve steepness</label><input id="curveSteepness" type="number" min="0.1" max="25" step="0.1" value="6" /><div class="hint">3 gentle, 6 balanced, 12 aggressive.</div></div>
@@ -267,7 +267,7 @@
         </div>
         <div class="bridge-card">
           <div class="bridge-title">Forward forecast</div>
-          <div class="bridge-copy">Shows Conservative, Base, and Optimistic future outcomes from the selected Option 4 / 4A assumptions. This is a scenario illustration, not a promise or guarantee of future returns.</div>
+          <div class="bridge-copy">Shows Conservative, Base, and Optimistic future outcomes from the selected scarcity/adoption overlay assumptions. This is a scenario illustration, not a promise or guarantee of future returns.</div>
         </div>
       </section>
 
@@ -397,7 +397,7 @@
         <div class="assumption-narrative">
           <p><strong>Client contribution assumptions.</strong> This illustration assumes an upfront contribution of ${money(inputValue('upfront'))}, followed by monthly contributions of ${money(inputValue('monthly'))}. The forward-looking forecast period is ${Number(inputValue('years') || 0)} years.</p>
           <p><strong>Fee assumptions.</strong> The model applies a ${pct(Number(inputValue('managementFee') || 0))} annual management fee, a ${pct(Number(inputValue('performanceFee') || 0))} performance fee, a ${pct(Number(inputValue('conversionFee') || 0))} VALR conversion fee, and a ${pct(Number(inputValue('tradeFee') || 0))} VALR trade fee.</p>
-          <p><strong>Option 4A overlay assumptions.</strong> The scarcity/adoption overlay weight is ${pct(overlayWeight)}. A 0% overlay means the forecast is pure Option 4; 25% or 50% allows scarcity/adoption assumptions to influence the forecast if they imply a higher BTC price. The effective BTC supply is ${Number(effectiveSupply || 0).toLocaleString()} BTC, which recognises that the hard cap is 21 million BTC but some coins may be lost or illiquid.</p>
+          <p><strong>Scarcity/adoption overlay assumptions.</strong> The scarcity/adoption overlay weight is ${pct(overlayWeight)}. A 0% overlay means the forecast applies no scarcity/adoption overlay; 25% or 50% allows scarcity/adoption assumptions to influence the forecast if they imply a higher BTC price. The effective BTC supply is ${Number(effectiveSupply || 0).toLocaleString()} BTC, which recognises that the hard cap is 21 million BTC but some coins may be lost or illiquid.</p>
           <div class="assumption-list">
             <div class="assumption-item"><strong>Target market by horizon:</strong> ${money(targetMarket * 1000000000000)}. This is the estimated pool of capital BTC could compete for by the final forecast year, not all global wealth today. Practical guide: $75T is cautious, $100T to $150T is a central range, and $200T+ is a long-horizon bullish case.</div>
             <div class="assumption-item"><strong>Adoption curve steepness:</strong> ${inputValue('curveSteepness')}. Lower values make adoption arrive more gradually; higher values make adoption slow at first and then accelerate more sharply. Practical guide: 3 is gentle, 6 is balanced, and 12 is aggressive.</div>
@@ -767,7 +767,7 @@
         const rows = data || [];
         if (!rows.length) throw new Error('Forecast returned no rows.');
         renderForecast(rows);
-        setStatus(params.p_scarcity_overlay_weight > 0 ? 'Illustration complete using Option 4A forecast assumptions.' : 'Illustration complete using pure Option 4 forecast assumptions.', 'ok');
+        setStatus(params.p_scarcity_overlay_weight > 0 ? 'Illustration complete using scarcity/adoption overlay forecast assumptions.' : 'Illustration complete using no scarcity/adoption overlay forecast assumptions.', 'ok');
       } catch (error) {
         console.error(error);
         clearForecast();
