@@ -56,7 +56,8 @@
     }
     .print-btn:hover { background: var(--gold-lt); }
 
-    .hero { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; padding-bottom: 18px; border-bottom: 2px solid var(--gold); margin-bottom: 18px; }
+    .hero { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: end; padding-bottom: 18px; border-bottom: 2px solid var(--gold); margin-bottom: 18px; }
+    .hero-logo img { height: 52px; border-radius: 8px; background: #fff; padding: 4px; display: block; }
     .eyebrow { color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; }
     h1 { color: var(--white); font-size: clamp(28px, 4vw, 46px); line-height: 1.04; letter-spacing: -0.04em; font-weight: 800; }
     .hero-sub { max-width: 900px; margin-top: 10px; color: var(--txt2); font-size: 14px; line-height: 1.7; }
@@ -166,6 +167,7 @@
       .screen-wrap { padding: 12px; }
       .page { padding: 18px; }
       .hero, .footer, .bridge { grid-template-columns: 1fr; }
+      .hero-logo img { height: 46px; }
       .hero-meta, .footer-right { text-align: left; }
       .form-grid, .fee-grid, .summary-grid, .chart-grid, .chart-grid.three { grid-template-columns: 1fr; }
       .chart-frame, .chart-frame.short { height: 260px; }
@@ -197,6 +199,7 @@
   <main class="screen-wrap">
     <section class="page">
       <header class="hero">
+        <div class="hero-logo"><img src="bitwealth-abc-logo.png" alt="BitWealth Logo" /></div>
         <div>
           <div class="eyebrow">BitWealth client illustration</div>
           <h1>LTH PVR Historical Performance + Forward Forecast</h1>
