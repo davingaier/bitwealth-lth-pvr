@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LTH PVR Client Performance Forecast Illustration - BitWealth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0A0F1E;
+      --bg2: #151B2E;
+      --bg3: #1A2138;
+      --gold: #FFB400;
+      --gold-lt: #FFC933;
+      --white: #FFFFFF;
+      --txt2: #A8B2D1;
+      --txt3: #6B7896;
+      --green: #10B981;
+      --red: #EF4444;
+      --blue: #3B82F6;
+      --violet: #A855F7;
+      --border: rgba(255,180,0,0.15);
+    }
+
+    html, body {
+      min-height: 100%;
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--white);
+      background: #060a12;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 18% 4%, rgba(255,180,0,0.11), transparent 24rem),
+        radial-gradient(circle at 88% 10%, rgba(16,185,129,0.10), transparent 28rem),
+        linear-gradient(180deg, #060a12 0%, var(--bg) 44%, #070b14 100%);
+    }
+
+    .screen-wrap { width: 100%; min-height: 100vh; padding: 28px; overflow-x: auto; }
+    .page { width: min(100%, 1360px); margin: 0 auto; padding: 28px; background: rgba(10,15,30,0.96); border: 1px solid rgba(255,180,0,0.12); box-shadow: 0 24px 80px rgba(0,0,0,0.55); }
+
+    .print-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 999;
+      border: none; border-radius: 8px; padding: 10px 18px;
+      background: var(--gold); color: #111827; font-family: inherit;
+      font-size: 13px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 4px 18px rgba(255,180,0,0.35);
+    }
+    .print-btn:hover { background: var(--gold-lt); }
+
+    .hero { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; padding-bottom: 18px; border-bottom: 2px solid var(--gold); margin-bottom: 18px; }
+    .eyebrow { color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; }
+    h1 { color: var(--white); font-size: clamp(28px, 4vw, 46px); line-height: 1.04; letter-spacing: -0.04em; font-weight: 800; }
+    .hero-sub { max-width: 900px; margin-top: 10px; color: var(--txt2); font-size: 14px; line-height: 1.7; }
+    .hero-meta { min-width: 260px; text-align: right; color: var(--txt3); font-size: 11px; line-height: 1.6; }
+
+    .notice { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 14px 16px; background: rgba(255,180,0,0.08); border: 1px solid rgba(255,180,0,0.28); border-radius: 10px; color: var(--txt2); font-size: 12px; line-height: 1.6; margin-bottom: 18px; }
+    .notice strong { color: var(--gold-lt); }
+    .notice-mark { color: var(--gold); font-weight: 800; }
+
+    .section-heading { display: flex; align-items: center; gap: 8px; margin: 24px 0 10px; color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    label { color: var(--txt3); font-size: 10px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; }
+    .label-with-info { display: inline-flex; align-items: center; gap: 6px; }
+    .info-tip {
+      position: relative; display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255,180,0,0.55);
+      background: rgba(255,180,0,0.12); color: var(--gold-lt); font-size: 10px; font-weight: 800;
+      letter-spacing: 0; text-transform: none; cursor: help; outline: none;
+    }
+    .info-tip::after {
+      content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 9px);
+      transform: translateX(-50%) translateY(4px); width: min(340px, 80vw); padding: 10px 12px;
+      border: 1px solid rgba(255,180,0,0.35); border-radius: 8px; background: #0B1020;
+      color: var(--txt2); box-shadow: 0 12px 30px rgba(0,0,0,0.45); font-size: 11px;
+      font-weight: 500; letter-spacing: 0; line-height: 1.45; text-transform: none; text-align: left;
+      white-space: normal; opacity: 0; visibility: hidden; pointer-events: none; z-index: 50;
+      transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    }
+    .info-tip::before {
+      content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%);
+      border-width: 5px 5px 0 5px; border-style: solid; border-color: rgba(255,180,0,0.35) transparent transparent transparent;
+      opacity: 0; visibility: hidden; z-index: 51; transition: opacity 120ms ease, visibility 120ms ease;
+    }
+    .info-tip:hover::after, .info-tip:focus::after, .info-tip:hover::before, .info-tip:focus::before { opacity: 1; visibility: visible; }
+    .info-tip:hover::after, .info-tip:focus::after { transform: translateX(-50%) translateY(0); }
+
+    input, select { width: 100%; min-height: 40px; border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; background: rgba(0,0,0,0.20); color: var(--white); font-family: inherit; font-size: 14px; padding: 9px 10px; }
+    input:focus, select:focus { outline: 2px solid rgba(255,180,0,0.32); border-color: rgba(255,180,0,0.45); }
+    .hint { color: var(--txt3); font-size: 10px; line-height: 1.35; }
+
+    .button-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+    button.primary { border: none; border-radius: 8px; min-height: 40px; padding: 10px 16px; background: var(--gold); color: #111827; font-family: inherit; font-weight: 800; cursor: pointer; }
+    button.secondary { border: 1px solid rgba(255,180,0,0.30); border-radius: 8px; min-height: 40px; padding: 10px 16px; background: transparent; color: var(--gold-lt); font-family: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: 0.58; cursor: wait; }
+    .status { color: var(--txt2); font-size: 12px; }
+    .status.error { color: #FCA5A5; }
+    .status.ok { color: #6EE7B7; }
+
+    details { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; }
+    summary { cursor: pointer; color: var(--gold-lt); font-size: 12px; font-weight: 800; }
+    .fee-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .metric { padding: 13px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; }
+    .metric-label { color: var(--txt3); font-size: 10px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 5px; }
+    .metric-value { color: var(--white); font-size: clamp(18px, 2.4vw, 26px); font-weight: 800; letter-spacing: -0.03em; }
+    .metric-note { color: var(--txt3); font-size: 10px; margin-top: 4px; }
+
+    .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .chart-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .chart-title { color: var(--txt2); font-size: 12px; font-weight: 800; margin-bottom: 8px; text-align: center; }
+    .chart-frame { position: relative; height: 310px; }
+    .chart-frame.short { height: 260px; }
+    .chart-frame canvas { display: block; width: 100% !important; height: 100% !important; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; min-width: 880px; border-collapse: collapse; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.055); text-align: right; color: var(--txt2); font-size: 13px; }
+    th { background: var(--bg3); color: var(--txt3); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    th:first-child, td:first-child { text-align: left; color: var(--white); font-weight: 700; }
+    td.period { color: var(--gold-lt); font-weight: 800; }
+    td.cons { color: #6EE7B7; }
+    td.base { color: var(--gold-lt); }
+    td.opt { color: #D8B4FE; }
+    .source-pill { display: inline-flex; padding: 3px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+    .source-backtest { background: rgba(255,180,0,0.12); color: var(--gold-lt); }
+    .source-forecast { background: rgba(16,185,129,0.12); color: #6EE7B7; }
+    .table-note { color: var(--txt3); font-size: 11px; line-height: 1.55; margin-top: 10px; }
+
+    .bridge { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .bridge-card { background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px; }
+    .bridge-title { color: var(--white); font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+    .bridge-copy { color: var(--txt2); font-size: 12px; line-height: 1.65; }
+
+    .footer { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; margin-top: 22px; padding: 16px 18px; background: linear-gradient(90deg, #003F5C 0%, #0A4A6E 100%); border: 1px solid rgba(255,180,0,0.30); border-radius: 10px; }
+    .footer-title { color: var(--gold); font-size: 15px; font-weight: 800; margin-bottom: 3px; }
+    .footer-sub { color: var(--txt2); font-size: 12px; line-height: 1.55; }
+    .footer-right { text-align: right; color: var(--txt2); font-size: 11px; line-height: 1.55; }
+    .footer-right strong { color: var(--white); }
+
+    @media (max-width: 1100px) {
+      .form-grid, .fee-grid, .summary-grid, .chart-grid, .chart-grid.three, .bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .screen-wrap { padding: 12px; }
+      .page { padding: 18px; }
+      .hero, .footer, .bridge { grid-template-columns: 1fr; }
+      .hero-meta, .footer-right { text-align: left; }
+      .form-grid, .fee-grid, .summary-grid, .chart-grid, .chart-grid.three { grid-template-columns: 1fr; }
+      .chart-frame, .chart-frame.short { height: 260px; }
+      .print-btn { position: static; width: calc(100% - 24px); margin: 12px; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff !important; }
+      .no-print { display: none !important; }
+      .screen-wrap { padding: 0; background: transparent; }
+      .page { width: 297mm; max-width: none; margin: 0; padding: 12mm; border: none; box-shadow: none; }
+      .panel, .chart-card, .footer, .bridge-card { break-inside: avoid; }
+      .chart-grid, .chart-grid.three, .bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .chart-card { padding: 10px; }
+      .chart-frame, .chart-frame.short { height: 220px; }
+      table { min-width: 0; }
+      th, td { padding: 7px 8px; font-size: 10px; }
+      th { font-size: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">Print / Save PDF</button>
+
+  <main class="screen-wrap">
+    <section class="page">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">BitWealth client illustration</div>
+          <h1>LTH PVR Historical Performance + Forward Forecast</h1>
+          <p class="hero-sub">This page separates what the LTH PVR strategy would have produced in historical back-tests from what the Option 4 / 4A forecast model projects under selected future assumptions.</p>
+        </div>
+        <div class="hero-meta">Historical reference: ABC One Pager<br />Forecast source: Option 4A RPC<br />Review draft: July 2026</div>
+      </header>
+
+      <div class="notice">
+        <div class="notice-mark">NOTE</div>
+        <div><strong>Back-tested and forecast figures must be read separately.</strong> Historical values use actual BTC market history from the ABC One Pager reference back-test and are scaled to the selected contribution schedule. Forecast values are modelled scenarios from <code>lth_pvr.forecast_lth_pvr_option4</code>. Forecasts are not guaranteed and actual returns may differ materially.</div>
+      </div>
+
+      <div class="section-heading">Client Assumptions</div>
+      <section class="panel">
+        <form id="forecastForm">
+          <div class="form-grid">
+            <div class="field"><label for="upfront">Upfront contribution (USDT)</label><input id="upfront" type="number" min="0" step="100" value="2400" required /></div>
+            <div class="field"><label for="monthly">Monthly contribution (USDT)</label><input id="monthly" type="number" min="0" step="10" value="200" required /></div>
+            <div class="field"><label for="years">Forecast years</label><input id="years" type="number" min="1" max="30" step="1" value="10" required /><div class="hint">Forward-looking forecast horizon.</div></div>
+            <div class="field"><label for="orgId">Org ID (optional)</label><input id="orgId" type="text" placeholder="Use latest price across orgs" /></div>
+          </div>
+
+          <details>
+            <summary>Fee assumptions</summary>
+            <div class="fee-grid">
+              <div class="field"><label for="managementFee">Management fee p.a.</label><input id="managementFee" type="number" min="0" max="100" step="0.01" value="1.00" /><div class="hint">Default: 1.00%</div></div>
+              <div class="field"><label for="performanceFee">Performance fee</label><input id="performanceFee" type="number" min="0" max="100" step="0.01" value="10.00" /><div class="hint">Default: 10.00%</div></div>
+              <div class="field"><label for="conversionFee">VALR conversion fee</label><input id="conversionFee" type="number" min="0" max="100" step="0.01" value="0.18" /><div class="hint">Default: 18bps</div></div>
+              <div class="field"><label for="tradeFee">VALR trade fee</label><input id="tradeFee" type="number" min="0" max="100" step="0.01" value="0.08" /><div class="hint">Default: 8bps</div></div>
+            </div>
+          </details>
+
+          <details open>
+            <summary>Option 4A scarcity / adoption overlay</summary>
+            <div class="fee-grid">
+              <div class="field"><label class="label-with-info" for="overlayWeight">Overlay weight <span class="info-tip" tabindex="0" role="tooltip" data-tip="How much the scarcity/adoption model influences the forecast. 0% means pure Option 4. 25% or 50% allows scarcity/adoption assumptions to lift the scenario if they imply a higher BTC price.">i</span></label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = pure Option 4. Try 25% or 50% for Option 4A.</div></div>
+              <div class="field"><label class="label-with-info" for="effectiveSupply">Effective BTC supply <span class="info-tip" tabindex="0" role="tooltip" data-tip="The number of BTC assumed to be economically available. The hard cap is 21 million, but lost or illiquid coins may reduce practical supply.">i</span></label><input id="effectiveSupply" type="number" min="1" max="21000000" step="1" value="19800000" /><div class="hint">Default allows for lost/illiquid coins.</div></div>
+              <div class="field"><label class="label-with-info" for="targetMarket">Target market by horizon ($T) <span class="info-tip" tabindex="0" role="tooltip" data-tip="The estimated pool of capital BTC could compete for by the final forecast year. Practical guide: $75T is cautious, $100T to $150T is a central range, and $200T+ is a long-horizon bullish case.">i</span></label><input id="targetMarket" type="number" min="1" step="1" value="100" /><div class="hint">Addressable market at forecast horizon.</div></div>
+              <div class="field"><label for="curveSteepness">Adoption curve steepness</label><input id="curveSteepness" type="number" min="0.1" max="25" step="0.1" value="6" /><div class="hint">3 gentle, 6 balanced, 12 aggressive.</div></div>
+              <div class="field"><label for="adoptionCons">Conservative adoption</label><input id="adoptionCons" type="number" min="0" max="100" step="0.1" value="2.0" /><div class="hint">Final share of target market.</div></div>
+              <div class="field"><label for="adoptionBase">Base adoption</label><input id="adoptionBase" type="number" min="0" max="100" step="0.1" value="5.0" /><div class="hint">Final share of target market.</div></div>
+              <div class="field"><label for="adoptionOpt">Optimistic adoption</label><input id="adoptionOpt" type="number" min="0" max="100" step="0.1" value="10.0" /><div class="hint">Final share of target market.</div></div>
+            </div>
+          </details>
+
+          <div class="button-row">
+            <button class="primary" id="runBtn" type="submit">Run Illustration</button>
+            <button class="secondary" type="button" id="resetBtn">Reset Defaults</button>
+            <span class="status" id="statusText">Ready. Historical reference is already shown; run the forecast to populate future scenarios.</span>
+          </div>
+        </form>
+      </section>
+
+      <div class="section-heading">Interpretation</div>
+      <section class="bridge">
+        <div class="bridge-card">
+          <div class="bridge-title">Historical back-test</div>
+          <div class="bridge-copy">Shows what the strategy would have produced over prior 1, 3, 5, 7, and 10 year periods ending 9 June 2026. These values are based on actual BTC history and the published ABC One Pager back-test, scaled to the selected contribution amount.</div>
+        </div>
+        <div class="bridge-card">
+          <div class="bridge-title">Forward forecast</div>
+          <div class="bridge-copy">Shows Conservative, Base, and Optimistic future outcomes from the selected Option 4 / 4A assumptions. This is a scenario illustration, not a promise or guarantee of future returns.</div>
+        </div>
+      </section>
+
+      <div class="section-heading">Illustration Summary</div>
+      <section class="summary-grid" id="summaryGrid">
+        <div class="metric"><div class="metric-label">10Y Historical LTH PVR NAV</div><div class="metric-value" id="histNavMetric">--</div><div class="metric-note">Scaled ABC back-test reference.</div></div>
+        <div class="metric"><div class="metric-label">10Y Historical CAGR</div><div class="metric-value" id="histCagrMetric">--</div><div class="metric-note">Annualised back-tested return.</div></div>
+        <div class="metric"><div class="metric-label">Forecast Base NAV</div><div class="metric-value" id="forecastNavMetric">--</div><div class="metric-note">Run illustration to populate.</div></div>
+        <div class="metric"><div class="metric-label">Forecast Base CAGR</div><div class="metric-value" id="forecastCagrMetric">--</div><div class="metric-note">Annualised modelled return.</div></div>
+      </section>
+
+      <div class="section-heading">Charts</div>
+      <section class="chart-grid">
+        <div class="chart-card"><div class="chart-title">Historical annualised performance by lookback period</div><div class="chart-frame"><canvas id="historicalCagrChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Forward NAV forecast by scenario</div><div class="chart-frame"><canvas id="forecastNavChart"></canvas></div></div>
+      </section>
+      <section class="chart-grid three" style="margin-top:14px;">
+        <div class="chart-card"><div class="chart-title">Historical final NAV by lookback period</div><div class="chart-frame short"><canvas id="historicalNavChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Forward CAGR by scenario</div><div class="chart-frame short"><canvas id="forecastCagrChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Cumulative invested vs Base forecast NAV</div><div class="chart-frame short"><canvas id="investedVsNavChart"></canvas></div></div>
+      </section>
+
+      <div class="section-heading">Historical Back-Test Reference</div>
+      <section class="panel table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Lookback</th>
+              <th>Source</th>
+              <th>Total Invested</th>
+              <th>LTH PVR NAV</th>
+              <th>LTH PVR CAGR</th>
+              <th>LTH PVR ROI</th>
+              <th>Std DCA NAV</th>
+              <th>Std DCA CAGR</th>
+              <th>HODL NAV</th>
+              <th>HODL CAGR</th>
+            </tr>
+          </thead>
+          <tbody id="historicalTable"></tbody>
+        </table>
+        <div class="table-note">Historical figures are scaled from the ABC One Pager reference back-test. Scaling is suitable for illustration because contribution amounts and percentage-based fees move proportionally, but this first version should be reviewed before being used as a formal client report.</div>
+      </section>
+
+      <div class="section-heading">Forward-Looking Forecast</div>
+      <section class="panel table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Source</th>
+              <th>Cumulative Invested</th>
+              <th>Conservative NAV</th>
+              <th>Conservative CAGR</th>
+              <th>Base NAV</th>
+              <th>Base CAGR</th>
+              <th>Optimistic NAV</th>
+              <th>Optimistic CAGR</th>
+            </tr>
+          </thead>
+          <tbody id="forecastTable"><tr><td colspan="9">Run the illustration to populate forward-looking forecast scenarios.</td></tr></tbody>
+        </table>
+        <div class="table-note">Forecast rows are generated by the database RPC using the latest available BTC price and selected assumptions. Conservative, Base, and Optimistic are model scenarios, not guarantees.</div>
+      </section>
+
+      <footer class="footer">
+        <div>
+          <div class="footer-title">Client Communication Boundary</div>
+          <div class="footer-sub">Use this page to show two different claims side-by-side: historical back-tested experience and future modelled scenarios. Keep the source label visible when printing or saving to PDF.</div>
+        </div>
+        <div class="footer-right"><strong>BitWealth</strong><br />LTH PVR strategy illustration<br />Internal/client-review draft</div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+
+    const historicalReference = [
+      { years: 1, label: '1 Year', period: '10 Jun 2025 - 9 Jun 2026', invested: 5000, lthNav: 5056, lthCagr: 1.1, lthRoi: 1.1, dcaNav: 3176, dcaCagr: -36.6, hodlNav: 2822, hodlCagr: -43.7 },
+      { years: 3, label: '3 Years', period: '10 Jun 2023 - 9 Jun 2026', invested: 9800, lthNav: 22548, lthCagr: 32.0, lthRoi: 130.1, dcaNav: 13638, dcaCagr: 11.6, hodlNav: 23559, hodlCagr: 34.0 },
+      { years: 5, label: '5 Years', period: '10 Jun 2021 - 9 Jun 2026', invested: 14600, lthNav: 49959, lthCagr: 27.9, lthRoi: 242.2, dcaNav: 22210, dcaCagr: 8.8, hodlNav: 24749, hodlCagr: 11.1 },
+      { years: 7, label: '7 Years', period: '10 Jun 2019 - 9 Jun 2026', invested: 19400, lthNav: 203652, lthCagr: 39.9, lthRoi: 949.8, dcaNav: 63027, dcaCagr: 18.3, hodlNav: 150565, hodlCagr: 34.0 },
+      { years: 10, label: '10 Years', period: '10 Jun 2016 - 9 Jun 2026', invested: 26600, lthNav: 5143515, lthCagr: 69.3, lthRoi: 19236.5, dcaNav: 550327, dcaCagr: 35.4, hodlNav: 2850274, hodlCagr: 59.6 }
+    ];
+
+    const scenarios = ['Conservative', 'Base', 'Optimistic'];
+    const colors = { Conservative: '#10B981', Base: '#FFB400', Optimistic: '#A855F7' };
+    let sb = null;
+    let historicalCagrChart = null;
+    let historicalNavChart = null;
+    let forecastNavChart = null;
+    let forecastCagrChart = null;
+    let investedVsNavChart = null;
+
+    function money(value) {
+      return '$' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function pct(value) {
+      return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+    }
+
+    function setStatus(message, kind) {
+      const el = document.getElementById('statusText');
+      el.textContent = message;
+      el.className = 'status' + (kind ? ' ' + kind : '');
+    }
+
+    function getRate(id) {
+      return Number(document.getElementById(id).value || 0) / 100;
+    }
+
+    function currentContributionForYears(years) {
+      const upfront = Number(document.getElementById('upfront').value || 0);
+      const monthly = Number(document.getElementById('monthly').value || 0);
+      return upfront + monthly * (years * 12 + 1);
+    }
+
+    function scaledHistoricalRows() {
+      return historicalReference.map(row => {
+        const invested = currentContributionForYears(row.years);
+        const scale = row.invested > 0 ? invested / row.invested : 0;
+        return {
+          ...row,
+          scaledInvested: invested,
+          scaledLthNav: row.lthNav * scale,
+          scaledDcaNav: row.dcaNav * scale,
+          scaledHodlNav: row.hodlNav * scale
+        };
+      });
+    }
+
+    function ensureClient() {
+      if (!window.supabase) throw new Error('Supabase JS did not load. Check your internet connection.');
+      if (!sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      return sb;
+    }
+
+    function resetDefaults() {
+      document.getElementById('upfront').value = 2400;
+      document.getElementById('monthly').value = 200;
+      document.getElementById('years').value = 10;
+      document.getElementById('orgId').value = '';
+      document.getElementById('managementFee').value = '1.00';
+      document.getElementById('performanceFee').value = '10.00';
+      document.getElementById('conversionFee').value = '0.18';
+      document.getElementById('tradeFee').value = '0.08';
+      document.getElementById('overlayWeight').value = '0';
+      document.getElementById('effectiveSupply').value = '19800000';
+      document.getElementById('targetMarket').value = '100';
+      document.getElementById('curveSteepness').value = '6';
+      document.getElementById('adoptionCons').value = '2.0';
+      document.getElementById('adoptionBase').value = '5.0';
+      document.getElementById('adoptionOpt').value = '10.0';
+      renderHistorical();
+      clearForecast();
+      setStatus('Defaults restored. Run the illustration to refresh forecast scenarios.', 'ok');
+    }
+
+    function destroyChart(chart) {
+      if (chart) chart.destroy();
+    }
+
+    function chartOptions(formatter) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { labels: { color: '#A8B2D1', boxWidth: 16, font: { size: 10 } } },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + formatter(ctx.parsed.y) } }
+        },
+        layout: { padding: { top: 8, right: 12, bottom: 4, left: 4 } },
+        scales: {
+          x: { offset: true, ticks: { color: '#6B7896', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.10)' } },
+          y: { grace: '8%', ticks: { color: '#6B7896', font: { size: 10 }, callback: value => formatter(value) }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.10)' } }
+        },
+        elements: { point: { radius: 3, hoverRadius: 4 }, line: { borderWidth: 2, tension: 0.24 } }
+      };
+    }
+
+    function renderHistorical() {
+      const rows = scaledHistoricalRows();
+      const table = document.getElementById('historicalTable');
+      table.innerHTML = rows.map(row => `
+        <tr>
+          <td class="period">${row.label}<div class="hint">${row.period}</div></td>
+          <td><span class="source-pill source-backtest">Back-test</span></td>
+          <td>${money(row.scaledInvested)}</td>
+          <td class="base">${money(row.scaledLthNav)}</td>
+          <td class="base">${pct(row.lthCagr)}</td>
+          <td class="base">${pct(row.lthRoi)}</td>
+          <td>${money(row.scaledDcaNav)}</td>
+          <td>${pct(row.dcaCagr)}</td>
+          <td>${money(row.scaledHodlNav)}</td>
+          <td>${pct(row.hodlCagr)}</td>
+        </tr>`).join('');
+
+      const tenYear = rows.find(row => row.years === 10);
+      document.getElementById('histNavMetric').textContent = money(tenYear.scaledLthNav);
+      document.getElementById('histCagrMetric').textContent = pct(tenYear.lthCagr);
+
+      destroyChart(historicalCagrChart);
+      destroyChart(historicalNavChart);
+
+      const labels = rows.map(row => row.label);
+      historicalCagrChart = new Chart(document.getElementById('historicalCagrChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'LTH PVR', data: rows.map(row => row.lthCagr), backgroundColor: 'rgba(255,180,0,0.75)' },
+            { label: 'Std DCA', data: rows.map(row => row.dcaCagr), backgroundColor: 'rgba(107,120,150,0.75)' },
+            { label: 'HODL', data: rows.map(row => row.hodlCagr), backgroundColor: 'rgba(168,85,247,0.75)' }
+          ]
+        },
+        options: chartOptions(pct)
+      });
+
+      historicalNavChart = new Chart(document.getElementById('historicalNavChart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'LTH PVR NAV', data: rows.map(row => row.scaledLthNav), borderColor: '#FFB400', backgroundColor: 'transparent' },
+            { label: 'Total Invested', data: rows.map(row => row.scaledInvested), borderColor: '#6B7896', backgroundColor: 'transparent', borderDash: [6, 5] }
+          ]
+        },
+        options: chartOptions(money)
+      });
+    }
+
+    function pivotRows(rows) {
+      const byYear = new Map();
+      rows.forEach(row => {
+        const year = Number(row.forecast_year);
+        if (!byYear.has(year)) byYear.set(year, { year });
+        byYear.get(year)[row.scenario] = row;
+      });
+      return Array.from(byYear.values()).sort((a, b) => a.year - b.year);
+    }
+
+    function datasetFor(rows, metric) {
+      return scenarios.map(name => ({
+        label: name,
+        data: rows.filter(row => row.scenario === name).sort((a, b) => a.forecast_year - b.forecast_year).map(row => Number(row[metric])),
+        borderColor: colors[name],
+        backgroundColor: 'transparent'
+      }));
+    }
+
+    function renderForecast(rows) {
+      const pivoted = pivotRows(rows);
+      const table = document.getElementById('forecastTable');
+      table.innerHTML = pivoted.map(row => `
+        <tr>
+          <td class="period">Year ${row.year}</td>
+          <td><span class="source-pill source-forecast">Forecast</span></td>
+          <td>${money((row.Base || row.Conservative || row.Optimistic)?.total_invested_usd || 0)}</td>
+          <td class="cons">${row.Conservative ? money(row.Conservative.nav_usd) : '--'}</td>
+          <td class="cons">${row.Conservative ? pct(row.Conservative.cagr_pct) : '--'}</td>
+          <td class="base">${row.Base ? money(row.Base.nav_usd) : '--'}</td>
+          <td class="base">${row.Base ? pct(row.Base.cagr_pct) : '--'}</td>
+          <td class="opt">${row.Optimistic ? money(row.Optimistic.nav_usd) : '--'}</td>
+          <td class="opt">${row.Optimistic ? pct(row.Optimistic.cagr_pct) : '--'}</td>
+        </tr>`).join('');
+
+      const baseRows = rows.filter(row => row.scenario === 'Base').sort((a, b) => a.forecast_year - b.forecast_year);
+      const finalBase = baseRows[baseRows.length - 1];
+      document.getElementById('forecastNavMetric').textContent = money(finalBase.nav_usd);
+      document.getElementById('forecastCagrMetric').textContent = pct(finalBase.cagr_pct);
+
+      destroyChart(forecastNavChart);
+      destroyChart(forecastCagrChart);
+      destroyChart(investedVsNavChart);
+
+      const labels = Array.from(new Set(rows.map(row => row.forecast_year))).sort((a, b) => a - b).map(year => 'Year ' + year);
+      forecastNavChart = new Chart(document.getElementById('forecastNavChart'), {
+        type: 'line',
+        data: { labels, datasets: datasetFor(rows, 'nav_usd') },
+        options: chartOptions(money)
+      });
+
+      forecastCagrChart = new Chart(document.getElementById('forecastCagrChart'), {
+        type: 'line',
+        data: { labels, datasets: datasetFor(rows, 'cagr_pct') },
+        options: chartOptions(pct)
+      });
+
+      investedVsNavChart = new Chart(document.getElementById('investedVsNavChart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Cumulative Invested', data: baseRows.map(row => Number(row.total_invested_usd)), borderColor: '#6B7896', backgroundColor: 'transparent', borderDash: [6, 5] },
+            { label: 'Base NAV', data: baseRows.map(row => Number(row.nav_usd)), borderColor: '#FFB400', backgroundColor: 'transparent' }
+          ]
+        },
+        options: chartOptions(money)
+      });
+    }
+
+    function clearForecast() {
+      document.getElementById('forecastTable').innerHTML = '<tr><td colspan="9">Run the illustration to populate forward-looking forecast scenarios.</td></tr>';
+      document.getElementById('forecastNavMetric').textContent = '--';
+      document.getElementById('forecastCagrMetric').textContent = '--';
+      destroyChart(forecastNavChart);
+      destroyChart(forecastCagrChart);
+      destroyChart(investedVsNavChart);
+      forecastNavChart = null;
+      forecastCagrChart = null;
+      investedVsNavChart = null;
+    }
+
+    function resizeCharts() {
+      [historicalCagrChart, historicalNavChart, forecastNavChart, forecastCagrChart, investedVsNavChart].forEach(chart => {
+        if (chart) chart.resize();
+      });
+    }
+
+    async function runForecast(event) {
+      event.preventDefault();
+      renderHistorical();
+      const runBtn = document.getElementById('runBtn');
+      runBtn.disabled = true;
+      setStatus('Running forward-looking forecast...', null);
+
+      try {
+        const client = ensureClient();
+        const orgId = document.getElementById('orgId').value.trim();
+        const params = {
+          p_upfront_usdt: Number(document.getElementById('upfront').value || 0),
+          p_monthly_usdt: Number(document.getElementById('monthly').value || 0),
+          p_years: Number(document.getElementById('years').value || 10),
+          p_org_id: orgId || null,
+          p_management_fee_rate: getRate('managementFee'),
+          p_performance_fee_rate: getRate('performanceFee'),
+          p_exchange_conversion_fee_rate: getRate('conversionFee'),
+          p_exchange_trade_fee_rate: getRate('tradeFee'),
+          p_scarcity_overlay_weight: getRate('overlayWeight'),
+          p_effective_btc_supply: Number(document.getElementById('effectiveSupply').value || 19800000),
+          p_target_market_size_usd: Number(document.getElementById('targetMarket').value || 100) * 1000000000000,
+          p_scarcity_adoption_share_conservative: getRate('adoptionCons'),
+          p_scarcity_adoption_share_base: getRate('adoptionBase'),
+          p_scarcity_adoption_share_optimistic: getRate('adoptionOpt'),
+          p_adoption_curve_steepness: Number(document.getElementById('curveSteepness').value || 6)
+        };
+
+        const { data, error } = await client.schema('lth_pvr').rpc('forecast_lth_pvr_option4', params);
+        if (error) throw error;
+        const rows = data || [];
+        if (!rows.length) throw new Error('Forecast returned no rows.');
+        renderForecast(rows);
+        setStatus(params.p_scarcity_overlay_weight > 0 ? 'Illustration complete using Option 4A forecast assumptions.' : 'Illustration complete using pure Option 4 forecast assumptions.', 'ok');
+      } catch (error) {
+        console.error(error);
+        clearForecast();
+        setStatus(error.message || 'Forecast failed.', 'error');
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('forecastForm').addEventListener('submit', runForecast);
+    document.getElementById('resetBtn').addEventListener('click', resetDefaults);
+    document.getElementById('upfront').addEventListener('input', renderHistorical);
+    document.getElementById('monthly').addEventListener('input', renderHistorical);
+    window.addEventListener('beforeprint', () => setTimeout(resizeCharts, 0));
+    window.addEventListener('afterprint', () => setTimeout(resizeCharts, 0));
+
+    renderHistorical();
+  </script>
+</body>
+</html>
