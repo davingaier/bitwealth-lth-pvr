@@ -5349,6 +5349,7 @@
             <option value="lthMvrvZ">LTH MVRV Z-Score</option>
             <option value="cvdd">Bitcoin: CVDD</option>
             <option value="lthNupl">LTH-NUPL</option>
+            <option value="sthLthSupply">STH vs LTH Supply</option>
           </select>
           <h3 class="bc-title" id="onchainChartTitle" style="margin:.75rem 0 0;">STH / LTH Profit-to-Volatility Ratio (PVR)</h3>
           <div class="bc-meta" id="pvrMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
@@ -5411,6 +5412,8 @@
       const REALIZED_COLOR = '#a855f7';
       const CVDD_COLOR = '#16a34a';
       const NUPL_COLOR = '#f59e0b';
+      const STH_SUPPLY_COLOR = '#f59e0b';
+      const LTH_SUPPLY_COLOR = '#3b82f6';
 
       const ABOUT_PVR = `
         <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
@@ -5511,6 +5514,24 @@
           while negative readings are uncommon and usually align with generational accumulation zones.
         </p>`;
 
+      const ABOUT_STH_LTH_SUPPLY = `
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          Short-term holders (STH) are addresses holding Bitcoin for less than 155 days, while long-term holders
+          (LTH) have held for 155 days or more. This threshold is statistically significant because holders become
+          less likely to sell after crossing it.
+        </p>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:.35rem;"><strong>Key Insights:</strong></p>
+        <ul style="font-size:.85rem;color:var(--muted);line-height:1.6;">
+          <li><strong>Market Dynamics:</strong> rising LTH supply suggests accumulation, while falling LTH supply indicates distribution. STH spikes often precede volatility.</li>
+          <li><strong>Holder Behavior:</strong> LTH coins rarely move, while STH coins drive price discovery. The 155-day threshold marks a behavioral shift.</li>
+          <li><strong>Cycle Identification:</strong> crossovers and sharp changes can signal trend changes. LTH supply often grows during bear markets; STH supply often grows during bull markets.</li>
+        </ul>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.5;">
+          The STH/LTH ratio helps identify market phases and sentiment. High STH percentages often coincide with
+          market tops as new participants enter, while high LTH percentages suggest stronger conviction and potential
+          accumulation zones.
+        </p>`;
+
       const CHARTS = {
         pvr: {
           title: 'STH / LTH Profit-to-Volatility Ratio (PVR)',
@@ -5585,6 +5606,21 @@
           ],
           priceSeries: [{ key: 'btc_price', label: 'BTC Price', color: PRICE_COLOR }],
         },
+        sthLthSupply: {
+          title: 'STH vs LTH Supply',
+          aboutTitle: 'About STH/LTH Distribution',
+          aboutHtml: ABOUT_STH_LTH_SUPPLY,
+          hintHtml: 'Drag to zoom · double-click to reset · click legend items to toggle series. <strong>STH Supply</strong> covers coins held less than 155 days; <strong>LTH Supply</strong> covers coins held 155+ days. Left axis: supply in millions of BTC. Right axis: BTC price (log).',
+          leftAxisTitle: 'Supply (million BTC)',
+          leftMin: 0,
+          leftMax: 18.5,
+          series: [
+            { key: 'sth_supply', label: 'STH Supply', color: STH_SUPPLY_COLOR, axis: 'y', borderWidth: 1.4, value: supplyMillions },
+            { key: 'lth_supply', label: 'LTH Supply', color: LTH_SUPPLY_COLOR, axis: 'y', borderWidth: 1.4, value: supplyMillions },
+          ],
+          references: [],
+          priceSeries: [{ key: 'btc_price', label: 'Bitcoin Price', color: PRICE_COLOR }],
+        },
       };
 
       function zScoreColor(value) {
@@ -5602,6 +5638,12 @@
         return (price - realized) / price;
       }
 
+      function supplyMillions(row, series) {
+        const supply = Number(row[series.key]);
+        if (!Number.isFinite(supply)) return null;
+        return supply / 1_000_000;
+      }
+
       function nuplColor(value) {
         if (value == null) return NUPL_COLOR;
         if (value < -0.25) return '#2563eb';
@@ -5614,7 +5656,7 @@
       }
 
       function seriesValue(row, series) {
-        const value = series.value ? series.value(row) : row[series.key];
+        const value = series.value ? series.value(row, series) : row[series.key];
         return value == null ? null : Number(value);
       }
 

@@ -3,11 +3,33 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-19 (v0.6.149)
+**Last updated:** 2026-07-19 (v0.6.150)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.150 – On-Chain Charts: STH vs LTH Supply
+**Date:** 2026-07-19  
+**Status:** ✅ IMPLEMENTED (RPC migration + admin UI chart)
+
+**Motivation.** Add the **STH vs LTH Supply** chart to the On-Chain Charts dropdown so users can compare short-term holder and long-term holder supply distribution against BTC price.
+
+**Methodology.** Research Bitcoin already supplies the underlying cohort balances through the existing on-chain fetcher:
+- `supply_distribution/supply_sth` for coins held less than 155 days.
+- `supply_distribution/supply_lth` for coins held 155+ days.
+
+Those values are stored daily in `lth_pvr.onchain_pvr_daily.sth_supply` and `lth_pvr.onchain_pvr_daily.lth_supply`. The chart displays both series in millions of BTC on the left axis and overlays BTC price on the right logarithmic USD axis.
+
+**Changes:**
+- **Migration `onchain_supply_distribution_json`:** extends `public.get_onchain_pvr_series_json()` with `sth_supply` and `lth_supply`. No table changes or edge-function changes are required because the values are already stored by `ef_fetch_onchain_pvr`.
+- **Admin UI:** adds **STH vs LTH Supply** to `onchainChartSelect`.
+- **Chart renderer:** reuses the existing per-series derived-value support to convert raw supply into millions of BTC for display.
+- **Explanation panel:** documents the 155-day threshold, accumulation/distribution interpretation, and cycle context.
+
+**Impact.** The On-Chain Charts module now includes cohort supply distribution alongside PVR, LTH MVRV Z-Score, CVDD, and LTH-NUPL without expanding the edge-function data pipeline.
+
+---
 
 ### v0.6.149 – Client Performance Forecast Illustration + exact historical RPC
 **Date:** 2026-07-19  
