@@ -73,6 +73,74 @@
     .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
     .field { display: flex; flex-direction: column; gap: 5px; }
     label { color: var(--txt3); font-size: 10px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; }
+    .label-with-info { display: inline-flex; align-items: center; gap: 6px; }
+    .info-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,180,0,0.55);
+      background: rgba(255,180,0,0.12);
+      color: var(--gold-lt);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: none;
+      cursor: help;
+      outline: none;
+    }
+    .info-tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 9px);
+      transform: translateX(-50%) translateY(4px);
+      width: min(330px, 80vw);
+      padding: 10px 12px;
+      border: 1px solid rgba(255,180,0,0.35);
+      border-radius: 8px;
+      background: #0B1020;
+      color: var(--txt2);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0;
+      line-height: 1.45;
+      text-transform: none;
+      text-align: left;
+      white-space: normal;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    }
+    .info-tip::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 4px);
+      transform: translateX(-50%);
+      border-width: 5px 5px 0 5px;
+      border-style: solid;
+      border-color: rgba(255,180,0,0.35) transparent transparent transparent;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 51;
+      transition: opacity 120ms ease, visibility 120ms ease;
+    }
+    .info-tip:hover::after,
+    .info-tip:focus::after,
+    .info-tip:hover::before,
+    .info-tip:focus::before {
+      opacity: 1;
+      visibility: visible;
+    }
+    .info-tip:hover::after,
+    .info-tip:focus::after { transform: translateX(-50%) translateY(0); }
     input { width: 100%; min-height: 40px; border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; background: rgba(0,0,0,0.20); color: var(--white); font-family: inherit; font-size: 14px; padding: 9px 10px; }
     input:focus { outline: 2px solid rgba(255,180,0,0.32); border-color: rgba(255,180,0,0.45); }
     .hint { color: var(--txt3); font-size: 10px; line-height: 1.35; }
@@ -180,13 +248,13 @@
           <details>
             <summary>Option 4A scarcity / adoption overlay</summary>
             <div class="fee-grid">
-              <div class="field"><label for="overlayWeight">Overlay weight</label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = pure Option 4. Try 25% or 50% for scarcity-adjusted cases.</div></div>
-              <div class="field"><label for="effectiveSupply">Effective BTC supply</label><input id="effectiveSupply" type="number" min="1" max="21000000" step="1" value="19800000" /><div class="hint">Hard cap is 21,000,000; default allows for lost/illiquid coins.</div></div>
-              <div class="field"><label for="targetMarket">Target market size ($T)</label><input id="targetMarket" type="number" min="1" step="1" value="100" /><div class="hint">Illustrative store-of-value / portfolio-allocation TAM.</div></div>
-              <div class="field"><label for="curveSteepness">Adoption curve steepness</label><input id="curveSteepness" type="number" min="0.1" max="25" step="0.1" value="6" /><div class="hint">Higher values front/back-load adoption more sharply.</div></div>
-              <div class="field"><label for="adoptionCons">Conservative adoption</label><input id="adoptionCons" type="number" min="0" max="100" step="0.1" value="2.0" /><div class="hint">Final share of target market by horizon.</div></div>
-              <div class="field"><label for="adoptionBase">Base adoption</label><input id="adoptionBase" type="number" min="0" max="100" step="0.1" value="5.0" /><div class="hint">Final share of target market by horizon.</div></div>
-              <div class="field"><label for="adoptionOpt">Optimistic adoption</label><input id="adoptionOpt" type="number" min="0" max="100" step="0.1" value="10.0" /><div class="hint">Final share of target market by horizon.</div></div>
+              <div class="field"><label class="label-with-info" for="overlayWeight">Overlay weight <span class="info-tip" tabindex="0" role="tooltip" data-tip="How much the scarcity/adoption model is allowed to influence the forecast. 0% means ignore scarcity and use pure Option 4. 25% means scarcity has a small influence. 50% means the forecast is half driven by diminishing returns and half by the adoption model. Avoid 100% unless you deliberately want to ignore the conservative Option 4 anchor.">i</span></label><input id="overlayWeight" type="number" min="0" max="100" step="1" value="0" /><div class="hint">0% = pure Option 4. Try 25% or 50% for scarcity-adjusted cases.</div></div>
+              <div class="field"><label class="label-with-info" for="effectiveSupply">Effective BTC supply <span class="info-tip" tabindex="0" role="tooltip" data-tip="The number of BTC assumed to be economically available. The hard cap is 21 million, but some coins are lost or held long term and may not trade. A lower number increases the implied price because the same demand is spread across fewer coins. Example: $5T of demand over 20M BTC implies about $250k per BTC; over 15M BTC it implies about $333k.">i</span></label><input id="effectiveSupply" type="number" min="1" max="21000000" step="1" value="19800000" /><div class="hint">Hard cap is 21,000,000; default allows for lost/illiquid coins.</div></div>
+              <div class="field"><label class="label-with-info" for="targetMarket">Target market size ($T) <span class="info-tip" tabindex="0" role="tooltip" data-tip="The pool of global capital BTC could realistically compete for, shown in trillions of dollars. Think of this as the addressable market for store-of-value or portfolio allocation demand, not money guaranteed to enter BTC. Example: with a $100T market and 5% adoption, BTC captures $5T of value.">i</span></label><input id="targetMarket" type="number" min="1" step="1" value="100" /><div class="hint">Illustrative store-of-value / portfolio-allocation TAM.</div></div>
+              <div class="field"><label class="label-with-info" for="curveSteepness">Adoption curve steepness <span class="info-tip" tabindex="0" role="tooltip" data-tip="Controls how quickly adoption accelerates over the forecast period. Low values make adoption arrive smoothly and gradually. Higher values make adoption slow at first, then accelerate sharply around the middle of the period. Example: 3 is gentle, 6 is balanced, 12 is aggressive and more back-loaded.">i</span></label><input id="curveSteepness" type="number" min="0.1" max="25" step="0.1" value="6" /><div class="hint">Higher values front/back-load adoption more sharply.</div></div>
+              <div class="field"><label class="label-with-info" for="adoptionCons">Conservative adoption <span class="info-tip" tabindex="0" role="tooltip" data-tip="The cautious scenario's final share of the target market by the end of the forecast. If the target market is $100T and this is 4%, the model assumes BTC reaches $4T of adoption value by the final year. This should represent a restrained but plausible adoption case.">i</span></label><input id="adoptionCons" type="number" min="0" max="100" step="0.1" value="2.0" /><div class="hint">Final share of target market by horizon.</div></div>
+              <div class="field"><label class="label-with-info" for="adoptionBase">Base adoption <span class="info-tip" tabindex="0" role="tooltip" data-tip="The central adoption assumption by the final forecast year. If the target market is $100T and this is 10%, the model assumes BTC captures $10T of value by the end of the horizon. This is not a prediction; it is the middle scenario for sensitivity testing.">i</span></label><input id="adoptionBase" type="number" min="0" max="100" step="0.1" value="5.0" /><div class="hint">Final share of target market by horizon.</div></div>
+              <div class="field"><label class="label-with-info" for="adoptionOpt">Optimistic adoption <span class="info-tip" tabindex="0" role="tooltip" data-tip="The upside scenario's final share of the target market. If the target market is $100T and this is 20%, the model assumes BTC captures $20T by the final year. This can create very large implied prices, so it should be framed as an upside scenario rather than an expected result.">i</span></label><input id="adoptionOpt" type="number" min="0" max="100" step="0.1" value="10.0" /><div class="hint">Final share of target market by horizon.</div></div>
             </div>
           </details>
 
