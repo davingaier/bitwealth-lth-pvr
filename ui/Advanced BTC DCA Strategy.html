@@ -11218,7 +11218,7 @@
         return;
       }
       if (msg) msg.textContent = 'Loading illustration status...';
-      const { data, error } = await window.supabaseClient.rpc('get_lth_pvr_client_illustration_admin_status', { p_limit: 10 });
+      const { data, error } = await window.supabaseClient.schema('lth_pvr').rpc('get_lth_pvr_client_illustration_admin_status', { p_limit: 10 });
       if (error) {
         console.error('loadClientIllustrationStatus error', error);
         panel.innerHTML = '<div class="error">Failed to load illustration status: ' + esc(error.message || String(error)) + '</div>';

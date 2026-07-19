@@ -30,7 +30,29 @@ COMMENT ON COLUMN lth_pvr_bt.bt_params.fee_plan IS
 COMMENT ON COLUMN lth_pvr_bt.bt_params.management_fee_pct IS
   'Annual management fee rate for management-plan back-tests, e.g. 0.01 = 1% p.a.';
 
-CREATE TABLE IF NOT EXISTS public.client_performance_illustration_versions (
+DROP FUNCTION IF EXISTS public.request_lth_pvr_historical_annual_results(
+  numeric, numeric, date, integer[], numeric, numeric, numeric, numeric, boolean, numeric, numeric, text
+);
+DROP FUNCTION IF EXISTS public.get_lth_pvr_client_illustration_admin_status(integer);
+DROP FUNCTION IF EXISTS public._refresh_client_historical_annual_request(uuid);
+
+DO $$
+BEGIN
+  IF to_regclass('public.client_performance_illustration_versions') IS NOT NULL
+     AND to_regclass('lth_pvr.client_performance_illustration_versions') IS NULL THEN
+    ALTER TABLE public.client_performance_illustration_versions SET SCHEMA lth_pvr;
+  END IF;
+  IF to_regclass('public.client_historical_annual_requests') IS NOT NULL
+     AND to_regclass('lth_pvr.client_historical_annual_requests') IS NULL THEN
+    ALTER TABLE public.client_historical_annual_requests SET SCHEMA lth_pvr;
+  END IF;
+  IF to_regclass('public.client_historical_annual_request_runs') IS NOT NULL
+     AND to_regclass('lth_pvr.client_historical_annual_request_runs') IS NULL THEN
+    ALTER TABLE public.client_historical_annual_request_runs SET SCHEMA lth_pvr;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS lth_pvr.client_performance_illustration_versions (
   version_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   file_path text NOT NULL UNIQUE,
   version_label text NOT NULL,
@@ -40,13 +62,13 @@ CREATE TABLE IF NOT EXISTS public.client_performance_illustration_versions (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_client_perf_illustration_current
-  ON public.client_performance_illustration_versions (is_current)
+  ON lth_pvr.client_performance_illustration_versions (is_current)
   WHERE is_current;
 
-COMMENT ON TABLE public.client_performance_illustration_versions IS
+COMMENT ON TABLE lth_pvr.client_performance_illustration_versions IS
   'Registry of client performance illustration HTML files so Admin UI can link current and prior versions.';
 
-INSERT INTO public.client_performance_illustration_versions (file_path, version_label, notes, is_current)
+INSERT INTO lth_pvr.client_performance_illustration_versions (file_path, version_label, notes, is_current)
 VALUES (
   'docs/LTH_PVR_Client_Performance_Forecast_Illustration.html',
   'v1 - historical plus forecast illustration',
@@ -58,7 +80,7 @@ SET version_label = EXCLUDED.version_label,
     notes = EXCLUDED.notes,
     is_current = EXCLUDED.is_current;
 
-CREATE TABLE IF NOT EXISTS public.client_historical_annual_requests (
+CREATE TABLE IF NOT EXISTS lth_pvr.client_historical_annual_requests (
   request_group_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -81,13 +103,13 @@ CREATE TABLE IF NOT EXISTS public.client_historical_annual_requests (
 );
 
 CREATE INDEX IF NOT EXISTS idx_client_hist_req_created_at
-  ON public.client_historical_annual_requests (created_at DESC);
+  ON lth_pvr.client_historical_annual_requests (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client_hist_req_status
-  ON public.client_historical_annual_requests (status, created_at DESC);
+  ON lth_pvr.client_historical_annual_requests (status, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS public.client_historical_annual_request_runs (
+CREATE TABLE IF NOT EXISTS lth_pvr.client_historical_annual_request_runs (
   request_run_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_group_id uuid NOT NULL REFERENCES public.client_historical_annual_requests(request_group_id) ON DELETE CASCADE,
+  request_group_id uuid NOT NULL REFERENCES lth_pvr.client_historical_annual_requests(request_group_id) ON DELETE CASCADE,
   lookback_years integer NOT NULL,
   start_date date NOT NULL,
   end_date date NOT NULL,
@@ -103,25 +125,25 @@ CREATE TABLE IF NOT EXISTS public.client_historical_annual_request_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_client_hist_runs_group
-  ON public.client_historical_annual_request_runs (request_group_id, lookback_years);
+  ON lth_pvr.client_historical_annual_request_runs (request_group_id, lookback_years);
 CREATE INDEX IF NOT EXISTS idx_client_hist_runs_bt_run
-  ON public.client_historical_annual_request_runs (bt_run_id);
+  ON lth_pvr.client_historical_annual_request_runs (bt_run_id);
 
-COMMENT ON TABLE public.client_historical_annual_requests IS
+COMMENT ON TABLE lth_pvr.client_historical_annual_requests IS
   'Groups exact historical annual back-test runs requested by the client performance illustration page.';
-COMMENT ON TABLE public.client_historical_annual_request_runs IS
+COMMENT ON TABLE lth_pvr.client_historical_annual_request_runs IS
   'One exact historical back-test run per lookback period, with requested/fired/completed timestamps for Admin UI visibility.';
 
-CREATE OR REPLACE FUNCTION public._refresh_client_historical_annual_request(p_request_group_id uuid)
+CREATE OR REPLACE FUNCTION lth_pvr._refresh_client_historical_annual_request(p_request_group_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO public, lth_pvr_bt
+SET search_path TO lth_pvr, public, lth_pvr_bt
 AS $function$
 DECLARE
   v_group_status text;
 BEGIN
-  UPDATE public.client_historical_annual_request_runs r
+  UPDATE lth_pvr.client_historical_annual_request_runs r
   SET status = CASE
         WHEN bt.status = 'ok' THEN 'complete'
         WHEN bt.status = 'error' THEN 'failed'
@@ -144,23 +166,23 @@ BEGIN
       ELSE 'queued'
     END
   INTO v_group_status
-  FROM public.client_historical_annual_request_runs
+  FROM lth_pvr.client_historical_annual_request_runs
   WHERE request_group_id = p_request_group_id;
 
-  UPDATE public.client_historical_annual_requests
+  UPDATE lth_pvr.client_historical_annual_requests
   SET status = v_group_status,
       updated_at = now(),
       completed_at = CASE WHEN v_group_status IN ('complete','failed','partial') THEN COALESCE(completed_at, now()) ELSE completed_at END,
       error_message = CASE WHEN v_group_status IN ('failed','partial') THEN (
         SELECT string_agg(error_message, '; ' ORDER BY lookback_years)
-        FROM public.client_historical_annual_request_runs
+        FROM lth_pvr.client_historical_annual_request_runs
         WHERE request_group_id = p_request_group_id AND error_message IS NOT NULL
       ) ELSE error_message END
   WHERE request_group_id = p_request_group_id;
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.request_lth_pvr_historical_annual_results(
+CREATE OR REPLACE FUNCTION lth_pvr.request_lth_pvr_historical_annual_results(
   p_upfront_usdt numeric,
   p_monthly_usdt numeric,
   p_end_date date DEFAULT CURRENT_DATE,
@@ -177,7 +199,7 @@ CREATE OR REPLACE FUNCTION public.request_lth_pvr_historical_annual_results(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO public, lth_pvr_bt, lth_pvr
+SET search_path TO lth_pvr, public, lth_pvr_bt
 AS $function$
 DECLARE
   v_group_id uuid;
@@ -189,6 +211,7 @@ DECLARE
   v_org_id uuid;
   v_service_key text;
   v_http_request_id bigint;
+  v_run record;
   v_email text := 'client-illustration@bitwealth.system';
   v_allowed_years integer[] := ARRAY[1,3,5,7,10];
 BEGIN
@@ -213,7 +236,7 @@ BEGIN
 
   SELECT request_group_id
     INTO v_existing
-  FROM public.client_historical_annual_requests
+  FROM lth_pvr.client_historical_annual_requests
   WHERE upfront_usdt = p_upfront_usdt
     AND monthly_usdt = p_monthly_usdt
     AND end_date = p_end_date
@@ -240,7 +263,7 @@ BEGIN
       SELECT id INTO v_org_id FROM public.organizations LIMIT 1;
     END IF;
 
-    INSERT INTO public.client_historical_annual_requests (
+    INSERT INTO lth_pvr.client_historical_annual_requests (
       requested_by, source_page_path, upfront_usdt, monthly_usdt, end_date, lookback_years,
       management_fee_rate, performance_fee_rate, exchange_conversion_fee_rate, exchange_trade_fee_rate,
       usdpc_enabled, usdpc_apy_percent, usdpc_conversion_fee_percent, status
@@ -255,6 +278,7 @@ BEGIN
 
     v_service_key := COALESCE(
       (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1),
+      (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_jwt' LIMIT 1),
       (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1),
       current_setting('app.settings.service_role_key', true)
     );
@@ -301,7 +325,7 @@ BEGIN
         ) INTO v_http_request_id;
       END IF;
 
-      INSERT INTO public.client_historical_annual_request_runs (
+      INSERT INTO lth_pvr.client_historical_annual_request_runs (
         request_group_id, lookback_years, start_date, end_date,
         backtest_request_id, bt_run_id, status, fired_at, http_request_id
       ) VALUES (
@@ -314,7 +338,40 @@ BEGIN
     END LOOP;
   END IF;
 
-  PERFORM public._refresh_client_historical_annual_request(v_group_id);
+  IF v_service_key IS NULL THEN
+    v_service_key := COALESCE(
+      (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1),
+      (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_jwt' LIMIT 1),
+      (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1),
+      current_setting('app.settings.service_role_key', true)
+    );
+  END IF;
+
+  IF v_service_key IS NOT NULL AND length(v_service_key) > 20 THEN
+    FOR v_run IN
+      SELECT request_run_id, bt_run_id
+      FROM lth_pvr.client_historical_annual_request_runs
+      WHERE request_group_id = v_group_id
+        AND bt_run_id IS NOT NULL
+        AND fired_at IS NULL
+        AND status IN ('queued','fired','running')
+      ORDER BY lookback_years
+    LOOP
+      SELECT net.http_post(
+        url := 'https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_bt_execute',
+        headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer ' || v_service_key),
+        body := jsonb_build_object('bt_run_id', v_run.bt_run_id, 'band_source', 'rb')
+      ) INTO v_http_request_id;
+
+      UPDATE lth_pvr.client_historical_annual_request_runs
+      SET status = 'fired',
+          fired_at = now(),
+          http_request_id = v_http_request_id
+      WHERE request_run_id = v_run.request_run_id;
+    END LOOP;
+  END IF;
+
+  PERFORM lth_pvr._refresh_client_historical_annual_request(v_group_id);
 
   RETURN (
     SELECT jsonb_build_object(
@@ -338,7 +395,7 @@ BEGIN
           'http_request_id', r.http_request_id,
           'error_message', r.error_message
         ) ORDER BY r.lookback_years)
-        FROM public.client_historical_annual_request_runs r
+        FROM lth_pvr.client_historical_annual_request_runs r
         WHERE r.request_group_id = g.request_group_id
       ), '[]'::jsonb),
       'summary_rows', COALESCE((
@@ -357,7 +414,7 @@ BEGIN
           'hodl_roi', a.hodl_roi_percent,
           'hodl_cagr', a.hodl_cagr_percent
         ) ORDER BY x.lookback_years)
-        FROM public.client_historical_annual_request_runs x
+        FROM lth_pvr.client_historical_annual_request_runs x
         JOIN LATERAL (
           SELECT va.*
           FROM lth_pvr_bt.v_bt_results_annual va
@@ -383,36 +440,36 @@ BEGIN
           'hodl_roi', a.hodl_roi_percent,
           'hodl_cagr', a.hodl_cagr_percent
         ) ORDER BY x.lookback_years, a.trading_year)
-        FROM public.client_historical_annual_request_runs x
+        FROM lth_pvr.client_historical_annual_request_runs x
         JOIN lth_pvr_bt.v_bt_results_annual a ON a.bt_run_id = x.bt_run_id
         WHERE x.request_group_id = g.request_group_id
           AND x.status = 'complete'
       ), '[]'::jsonb)
     )
-    FROM public.client_historical_annual_requests g
+    FROM lth_pvr.client_historical_annual_requests g
     WHERE g.request_group_id = v_group_id
   );
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.get_lth_pvr_client_illustration_admin_status(p_limit integer DEFAULT 10)
+CREATE OR REPLACE FUNCTION lth_pvr.get_lth_pvr_client_illustration_admin_status(p_limit integer DEFAULT 10)
 RETURNS jsonb
 LANGUAGE sql
 SECURITY DEFINER
-SET search_path TO public, lth_pvr_bt
+SET search_path TO lth_pvr, public, lth_pvr_bt
 AS $function$
   SELECT jsonb_build_object(
     'generated_at', now(),
     'current_version', (
       SELECT to_jsonb(v)
-      FROM public.client_performance_illustration_versions v
+      FROM lth_pvr.client_performance_illustration_versions v
       WHERE v.is_current
       ORDER BY v.created_at DESC
       LIMIT 1
     ),
     'versions', COALESCE((
       SELECT jsonb_agg(to_jsonb(v) ORDER BY v.created_at DESC)
-      FROM public.client_performance_illustration_versions v
+      FROM lth_pvr.client_performance_illustration_versions v
     ), '[]'::jsonb),
     'requests', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
@@ -440,13 +497,13 @@ AS $function$
             'http_request_id', r.http_request_id,
             'error_message', r.error_message
           ) ORDER BY r.lookback_years)
-          FROM public.client_historical_annual_request_runs r
+          FROM lth_pvr.client_historical_annual_request_runs r
           WHERE r.request_group_id = g.request_group_id
         ), '[]'::jsonb)
       ) ORDER BY g.created_at DESC)
       FROM (
         SELECT *
-        FROM public.client_historical_annual_requests
+        FROM lth_pvr.client_historical_annual_requests
         ORDER BY created_at DESC
         LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 10), 50))
       ) g
@@ -454,17 +511,17 @@ AS $function$
   );
 $function$;
 
-GRANT EXECUTE ON FUNCTION public.request_lth_pvr_historical_annual_results(
+GRANT EXECUTE ON FUNCTION lth_pvr.request_lth_pvr_historical_annual_results(
   numeric, numeric, date, integer[], numeric, numeric, numeric, numeric, boolean, numeric, numeric, text
 ) TO anon, authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION public.get_lth_pvr_client_illustration_admin_status(integer)
+GRANT EXECUTE ON FUNCTION lth_pvr.get_lth_pvr_client_illustration_admin_status(integer)
   TO authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION public._refresh_client_historical_annual_request(uuid)
+GRANT EXECUTE ON FUNCTION lth_pvr._refresh_client_historical_annual_request(uuid)
   TO service_role;
 
-COMMENT ON FUNCTION public.request_lth_pvr_historical_annual_results IS
+COMMENT ON FUNCTION lth_pvr.request_lth_pvr_historical_annual_results IS
   'Queues/fires exact historical annual LTH PVR back-test runs for the client performance illustration page and returns status/results when complete.';
-COMMENT ON FUNCTION public.get_lth_pvr_client_illustration_admin_status IS
+COMMENT ON FUNCTION lth_pvr.get_lth_pvr_client_illustration_admin_status IS
   'Admin UI status payload for client performance illustration versions and exact historical back-test requests.';
