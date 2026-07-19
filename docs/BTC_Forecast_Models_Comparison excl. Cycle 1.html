@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC Diminishing-Return Forecast Models excl. Cycle 1 &mdash; BitWealth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0A0F1E;
+      --bg2: #151B2E;
+      --bg3: #1A2138;
+      --gold: #FFB400;
+      --gold-lt: #FFC933;
+      --gold-dk: #E6A200;
+      --white: #FFFFFF;
+      --txt2: #A8B2D1;
+      --txt3: #6B7896;
+      --green: #10B981;
+      --red: #EF4444;
+      --blue: #3B82F6;
+      --teal: #14B8A6;
+      --orange: #F97316;
+      --violet: #A855F7;
+      --border: rgba(255,180,0,0.15);
+      --muted-border: rgba(107,120,150,0.28);
+    }
+
+    html, body {
+      min-height: 100%;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--white);
+      background: #060a12;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 16% 4%, rgba(255,180,0,0.10), transparent 24rem),
+        radial-gradient(circle at 88% 12%, rgba(20,184,166,0.10), transparent 28rem),
+        linear-gradient(180deg, #060a12 0%, var(--bg) 42%, #070b14 100%);
+    }
+
+    .screen-wrap {
+      width: 100%;
+      min-height: 100vh;
+      padding: 28px;
+      overflow-x: auto;
+    }
+
+    .page {
+      width: min(100%, 1440px);
+      margin: 0 auto;
+      padding: 28px;
+      background: rgba(10,15,30,0.96);
+      border: 1px solid rgba(255,180,0,0.12);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+    }
+
+    .print-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      background: var(--gold);
+      color: #111827;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 18px rgba(255,180,0,0.35);
+    }
+
+    .print-btn:hover { background: var(--gold-lt); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      padding-bottom: 18px;
+      border-bottom: 2px solid var(--gold);
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    h1 {
+      color: var(--white);
+      font-size: clamp(28px, 4vw, 48px);
+      line-height: 1.03;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      max-width: 900px;
+    }
+
+    .hero-sub {
+      max-width: 820px;
+      margin-top: 10px;
+      color: var(--txt2);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .hero-meta {
+      min-width: 220px;
+      text-align: right;
+      color: var(--txt3);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 24px 0 10px;
+      color: var(--gold);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .section-heading::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .notice {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      padding: 14px 16px;
+      background: rgba(255,180,0,0.08);
+      border: 1px solid rgba(255,180,0,0.28);
+      border-radius: 10px;
+      color: var(--txt2);
+      font-size: 12px;
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+
+    .notice strong { color: var(--gold-lt); }
+    .notice-mark { color: var(--gold); font-weight: 800; }
+
+    .input-panel {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .history-card,
+    .chart-card,
+    .comparison-card,
+    .decision-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .history-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .cycle-stat {
+      padding: 12px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+    }
+
+    .cycle-label {
+      color: var(--txt3);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .cycle-value {
+      color: var(--white);
+      font-size: clamp(16px, 2vw, 22px);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      overflow-wrap: anywhere;
+    }
+
+    .cycle-note {
+      color: var(--txt3);
+      font-size: 10px;
+      margin-top: 5px;
+    }
+
+    .summary-text {
+      margin-top: 12px;
+      color: var(--txt2);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .summary-text strong { color: var(--white); }
+
+    .model-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .model-card {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 100%;
+      padding: 15px;
+      background: linear-gradient(180deg, rgba(26,33,56,0.95) 0%, rgba(21,27,46,0.98) 100%);
+      border: 1px solid var(--border);
+      border-top: 4px solid var(--gold);
+      border-radius: 10px;
+      break-inside: avoid;
+    }
+
+    .model-card.option-1 { border-top-color: var(--blue); }
+    .model-card.option-2 { border-top-color: var(--teal); }
+    .model-card.option-3 { border-top-color: var(--orange); }
+    .model-card.option-4 { border-top-color: var(--violet); box-shadow: 0 0 0 1px rgba(168,85,247,0.18) inset; }
+
+    .model-kicker {
+      color: var(--txt3);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .model-title {
+      color: var(--white);
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(107,120,150,0.14);
+      border: 1px solid rgba(107,120,150,0.28);
+      color: var(--txt2);
+    }
+
+    .badge.blue { color: #93C5FD; border-color: rgba(59,130,246,0.35); background: rgba(59,130,246,0.12); }
+    .badge.teal { color: #5EEAD4; border-color: rgba(20,184,166,0.35); background: rgba(20,184,166,0.12); }
+    .badge.orange { color: #FDBA74; border-color: rgba(249,115,22,0.35); background: rgba(249,115,22,0.12); }
+    .badge.violet { color: #D8B4FE; border-color: rgba(168,85,247,0.40); background: rgba(168,85,247,0.13); }
+    .badge.gold { color: var(--gold-lt); border-color: rgba(255,180,0,0.40); background: rgba(255,180,0,0.12); }
+
+    .model-desc {
+      color: var(--txt2);
+      font-size: 12px;
+      line-height: 1.65;
+      margin-bottom: 12px;
+    }
+
+    .formula-box {
+      min-height: 54px;
+      margin-bottom: 12px;
+      padding: 10px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      color: var(--txt2);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .formula-box code {
+      color: var(--gold-lt);
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 11px;
+    }
+
+    .projection-table,
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .projection-table { margin-bottom: 12px; }
+
+    .projection-table th,
+    .projection-table td {
+      padding: 6px 7px;
+      border-bottom: 1px solid rgba(255,255,255,0.055);
+      font-size: 11px;
+      text-align: right;
+      color: var(--txt2);
+      white-space: nowrap;
+    }
+
+    .projection-table th:first-child,
+    .projection-table td:first-child { text-align: left; color: var(--txt3); }
+    .projection-table th { color: var(--txt3); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .projection-table td strong { color: var(--white); }
+
+    .pros-cons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .pc-title {
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    ul { list-style: none; }
+    li {
+      position: relative;
+      padding-left: 12px;
+      margin-bottom: 4px;
+      color: var(--txt2);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    li::before {
+      content: '>';
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--gold);
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .chart-title {
+      color: var(--txt2);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .chart-frame {
+      position: relative;
+      height: 280px;
+    }
+
+    .chart-frame.small { height: 240px; }
+
+    .comparison-card { margin-top: 14px; overflow-x: auto; }
+    .comparison-table { min-width: 880px; }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.055);
+      font-size: 12px;
+      color: var(--txt2);
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .comparison-table th {
+      background: var(--bg3);
+      color: var(--txt3);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .comparison-table th:first-child,
+    .comparison-table td:first-child {
+      text-align: left;
+      color: var(--white);
+      font-weight: 700;
+    }
+
+    .score {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 78px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+
+    .score.strong { color: #6EE7B7; background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.28); }
+    .score.moderate { color: var(--gold-lt); background: rgba(255,180,0,0.12); border-color: rgba(255,180,0,0.28); }
+    .score.weak { color: #FCA5A5; background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.28); }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .decision-card h3 {
+      color: var(--gold);
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .decision-card p {
+      color: var(--txt2);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+      margin-top: 22px;
+      padding: 16px 18px;
+      background: linear-gradient(90deg, #003F5C 0%, #0A4A6E 100%);
+      border: 1px solid rgba(255,180,0,0.30);
+      border-radius: 10px;
+    }
+
+    .footer-title { color: var(--gold); font-size: 15px; font-weight: 800; margin-bottom: 3px; }
+    .footer-sub { color: var(--txt2); font-size: 12px; line-height: 1.55; }
+    .footer-right { text-align: right; color: var(--txt2); font-size: 11px; line-height: 1.55; }
+    .footer-right strong { color: var(--white); }
+
+    @media (max-width: 1180px) {
+      .model-grid,
+      .decision-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .input-panel,
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .screen-wrap { padding: 12px; }
+      .page { padding: 18px; }
+      .hero { grid-template-columns: 1fr; }
+      .hero-meta { text-align: left; }
+      .history-grid,
+      .model-grid,
+      .decision-grid { grid-template-columns: 1fr; }
+      .print-btn { position: static; margin: 12px; width: calc(100% - 24px); }
+      .chart-frame,
+      .chart-frame.small { height: 230px; }
+      .footer { grid-template-columns: 1fr; }
+      .footer-right { text-align: left; }
+    }
+
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff !important; }
+      .no-print { display: none !important; }
+      .screen-wrap { display: block; padding: 0; background: transparent; }
+      .page { width: 297mm; max-width: none; margin: 0; padding: 12mm; border: none; box-shadow: none; }
+      .model-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+      .model-card { padding: 10px; break-inside: avoid; }
+      .model-title { font-size: 13px; }
+      .model-desc,
+      .formula-box,
+      li,
+      .projection-table th,
+      .projection-table td { font-size: 8.5px; }
+      .chart-frame { height: 190px; }
+      .chart-frame.small { height: 175px; }
+      .comparison-card,
+      .history-card,
+      .chart-card,
+      .decision-card,
+      .footer { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">Print / Save PDF</button>
+
+  <main class="screen-wrap">
+    <section class="page">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">BitWealth internal review</div>
+          <h1>BTC Diminishing-Return Forecast Models excl. Cycle 1</h1>
+          <p class="hero-sub">A side-by-side view of four ways to temper future Bitcoin return expectations using only cycles 2-4 as the historical input dataset.</p>
+        </div>
+        <div class="hero-meta">
+          Prepared for model selection<br />
+          July 2026<br />
+          Forecast methodology draft<br />excl. Cycle 1
+        </div>
+      </header>
+
+      <div class="notice">
+        <div class="notice-mark">NOTE</div>
+        <div><strong>These forecasts are illustrative planning models only.</strong> This version deliberately excludes Bitcoin's extreme first cycle from the model input dataset so the projected paths show the influence of the more mature cycles only. They are not expected returns, financial advice, or a guarantee of future Bitcoin performance.</div>
+      </div>
+
+      <div class="section-heading">Historical Cycle Inputs</div>
+      <section class="input-panel">
+        <div class="history-card">
+          <div class="history-grid" id="historyGrid"></div>
+          <p class="summary-text">This version starts from Cycle 2 and excludes Cycle 1's outlier return. The core observation remains: <strong>Bitcoin bottom-to-top cycle returns have compressed materially over time.</strong> This view shows the model behaviour when the earliest, least mature market phase is removed from the dataset.</p>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Historical bottom-to-top cycle returns, log scale</div>
+          <div class="chart-frame small"><canvas id="historyChart"></canvas></div>
+        </div>
+      </section>
+
+      <div class="section-heading">Four Model Options</div>
+      <section class="model-grid">
+        <article class="model-card option-1">
+          <div class="model-kicker">Option 1</div>
+          <h2 class="model-title">Log-Linear / Exponential Decay</h2>
+          <div class="badge-row"><span class="badge blue">Mathematical</span><span class="badge">Simple fit</span></div>
+          <p class="model-desc">Fits a straight line through the logarithm of recent cycle returns, then projects the declining curve forward.</p>
+          <div class="formula-box"><code>ln(return) = a + b * cycle</code><br />Uses cycles 2-4 as the fitted anchor; Cycle 1 is excluded from this version's dataset.</div>
+          <table class="projection-table" id="option1Table"></table>
+          <div class="pros-cons">
+            <div><div class="pc-title">Pros</div><ul><li>Easy to explain and audit.</li><li>Directly models diminishing returns.</li><li>Good first model for internal review.</li></ul></div>
+            <div><div class="pc-title">Cons</div><ul><li>Only three data points.</li><li>Still assumes cycles remain comparable.</li><li>Can become too conservative.</li></ul></div>
+          </div>
+        </article>
+
+        <article class="model-card option-2">
+          <div class="model-kicker">Option 2</div>
+          <h2 class="model-title">Power-Law Maturation</h2>
+          <div class="badge-row"><span class="badge teal">BTC-native</span><span class="badge">Maturation curve</span></div>
+          <p class="model-desc">Treats Bitcoin as a maturing network asset where early gains compress quickly, then the decline becomes more gradual.</p>
+          <div class="formula-box"><code>ln(return) = a - b * ln(cycle)</code><br />Best when the narrative is market maturation rather than a fixed decay rate per cycle.</div>
+          <table class="projection-table" id="option2Table"></table>
+          <div class="pros-cons">
+            <div><div class="pc-title">Pros</div><ul><li>Fits adoption and network-growth language.</li><li>Less likely to trend to zero too quickly.</li><li>Useful for long-horizon discussion.</li></ul></div>
+            <div><div class="pc-title">Cons</div><ul><li>More abstract for clients.</li><li>Assumes cycles remain comparable.</li><li>Can look more precise than justified.</li></ul></div>
+          </div>
+        </article>
+
+        <article class="model-card option-3">
+          <div class="model-kicker">Option 3</div>
+          <h2 class="model-title">Scenario Haircut Model</h2>
+          <div class="badge-row"><span class="badge orange">Governance</span><span class="badge">Scenario range</span></div>
+          <p class="model-desc">Applies explicit conservative, base, and optimistic haircuts to the prior cycle return instead of claiming a precise fit.</p>
+          <div class="formula-box"><code>next return = prior return * haircut</code><br />Uses 20%, 35%, and 50% illustrative haircuts for conservative, base, and optimistic cases.</div>
+          <table class="projection-table" id="option3Table"></table>
+          <div class="pros-cons">
+            <div><div class="pc-title">Pros</div><ul><li>Very easy for clients to understand.</li><li>Avoids false precision.</li><li>Simple to govern and update.</li></ul></div>
+            <div><div class="pc-title">Cons</div><ul><li>Assumption-driven.</li><li>Needs formal approval of haircut levels.</li><li>Less mathematically elegant.</li></ul></div>
+          </div>
+        </article>
+
+        <article class="model-card option-4">
+          <div class="model-kicker">Option 4</div>
+          <h2 class="model-title">Hybrid: Model Anchor + Scenarios</h2>
+          <div class="badge-row"><span class="badge violet">Balanced</span><span class="badge gold">Recommended draft</span></div>
+          <p class="model-desc">Uses the recent-cycle Option 1 fit as the mathematical anchor, then presents conservative, base, and optimistic bands around it.</p>
+          <div class="formula-box"><code>scenario = log-linear base * band factor</code><br />Uses 65%, 100%, and 135% of the fitted base projection, capped below the previous cycle.</div>
+          <table class="projection-table" id="option4Table"></table>
+          <div class="pros-cons">
+            <div><div class="pc-title">Pros</div><ul><li>Defensible mathematical core.</li><li>Client-friendly scenario framing.</li><li>Best fit for ABC One Pager disclosure.</li></ul></div>
+            <div><div class="pc-title">Cons</div><ul><li>Still depends on model assumptions.</li><li>Requires clear methodology notes.</li><li>More complex than a single model.</li></ul></div>
+          </div>
+        </article>
+      </section>
+
+      <div class="section-heading">Forecast Visuals</div>
+      <section class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Historical plus projected cycle returns by model, log scale</div>
+          <div class="chart-frame"><canvas id="projectionChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Option 4 scenario band: conservative / base / optimistic</div>
+          <div class="chart-frame"><canvas id="hybridChart"></canvas></div>
+        </div>
+      </section>
+
+      <div class="section-heading">Head-to-Head Assessment</div>
+      <section class="comparison-card">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Assessment</th>
+              <th>Option 1<br />Log-linear</th>
+              <th>Option 2<br />Power-law</th>
+              <th>Option 3<br />Haircut</th>
+              <th>Option 4<br />Hybrid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Mathematical defensibility</td><td><span class="score strong">Strong</span></td><td><span class="score moderate">Moderate</span></td><td><span class="score weak">Weak</span></td><td><span class="score strong">Strong</span></td></tr>
+            <tr><td>Client explainability</td><td><span class="score moderate">Moderate</span></td><td><span class="score moderate">Moderate</span></td><td><span class="score strong">Strong</span></td><td><span class="score strong">Strong</span></td></tr>
+            <tr><td>Conservatism</td><td><span class="score strong">Strong</span></td><td><span class="score moderate">Moderate</span></td><td><span class="score strong">Strong</span></td><td><span class="score strong">Strong</span></td></tr>
+            <tr><td>Subjectivity</td><td><span class="score strong">Low</span></td><td><span class="score moderate">Medium</span></td><td><span class="score weak">High</span></td><td><span class="score moderate">Medium</span></td></tr>
+            <tr><td>Ease of updating</td><td><span class="score strong">Strong</span></td><td><span class="score moderate">Moderate</span></td><td><span class="score strong">Strong</span></td><td><span class="score moderate">Moderate</span></td></tr>
+            <tr><td>Suitability for ABC One Pager</td><td><span class="score moderate">Moderate</span></td><td><span class="score moderate">Moderate</span></td><td><span class="score strong">Strong</span></td><td><span class="score strong">Strong</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div class="section-heading">Decision Guidance</div>
+      <section class="decision-grid">
+        <div class="decision-card"><h3>Choose Option 1 if...</h3><p>You want the simplest defensible mathematical model and are comfortable explaining that the forecast is a fitted decay curve.</p></div>
+        <div class="decision-card"><h3>Choose Option 2 if...</h3><p>You want the language to centre on Bitcoin's market maturation and long-term adoption rather than a fixed cycle decay rate.</p></div>
+        <div class="decision-card"><h3>Choose Option 3 if...</h3><p>You want maximum client clarity and governance control, even if the assumptions are more explicitly subjective.</p></div>
+        <div class="decision-card"><h3>Choose Option 4 if...</h3><p>You want a balanced approach: a mathematical anchor for discipline, wrapped in conservative/base/optimistic scenarios for communication.</p></div>
+      </section>
+
+      <footer class="footer">
+        <div>
+          <div class="footer-title">Recommended Next Step</div>
+          <div class="footer-sub">Use this page to select a forecasting methodology before modifying the ABC One Pager. The chosen forecast should temper future expectations, not replace historical back-test disclosure.</div>
+        </div>
+        <div class="footer-right"><strong>BitWealth</strong><br />Internal model selection draft<br />Not for client distribution without final disclosure review</div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var historical = [
+        { cycle: 2, label: 'Cycle 2', returnPct: 12124.84 },
+        { cycle: 3, label: 'Cycle 3', returnPct: 2049.51 },
+        { cycle: 4, label: 'Cycle 4', returnPct: 715.70 }
+      ];
+      var projectionCycles = [5, 6, 7];
+      var scenarioNames = ['Conservative', 'Base', 'Optimistic'];
+
+      function formatPct(value) {
+        if (!isFinite(value)) return 'n/a';
+        if (value >= 1000000) return value.toLocaleString(undefined, { maximumFractionDigits: 0 }) + '%';
+        if (value >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%';
+        return value.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '%';
+      }
+
+      function linearRegression(points) {
+        var n = points.length;
+        var sx = 0, sy = 0, sxy = 0, sx2 = 0;
+        points.forEach(function (point) {
+          sx += point.x;
+          sy += point.y;
+          sxy += point.x * point.y;
+          sx2 += point.x * point.x;
+        });
+        var slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+        var intercept = (sy - slope * sx) / n;
+        return { slope: slope, intercept: intercept };
+      }
+
+      function fitLogLinear(cycle) {
+        var recentCycles = historical.filter(function (item) { return item.cycle >= 2; });
+        var fit = linearRegression(recentCycles.map(function (item) {
+          return { x: item.cycle, y: Math.log(item.returnPct) };
+        }));
+        return Math.exp(fit.intercept + fit.slope * cycle);
+      }
+
+      function fitPowerLaw(cycle) {
+        var fit = linearRegression(historical.map(function (item) {
+          return { x: Math.log(item.cycle), y: Math.log(item.returnPct) };
+        }));
+        return Math.exp(fit.intercept + fit.slope * Math.log(cycle));
+      }
+
+      function buildHaircutSeries(haircut) {
+        var previous = historical[historical.length - 1].returnPct;
+        return projectionCycles.map(function (cycle) {
+          previous = previous * haircut;
+          return { cycle: cycle, value: previous };
+        });
+      }
+
+      function buildHybridSeries(factor) {
+        var prior = historical[historical.length - 1].returnPct;
+        return projectionCycles.map(function (cycle) {
+          var raw = fitLogLinear(cycle) * factor;
+          var capped = Math.min(raw, prior * 0.92);
+          prior = capped;
+          return { cycle: cycle, value: Math.max(capped, 1) };
+        });
+      }
+
+      var option1 = projectionCycles.map(function (cycle) { return { cycle: cycle, value: fitLogLinear(cycle) }; });
+      var option2 = projectionCycles.map(function (cycle) { return { cycle: cycle, value: fitPowerLaw(cycle) }; });
+      var option3 = {
+        Conservative: buildHaircutSeries(0.20),
+        Base: buildHaircutSeries(0.35),
+        Optimistic: buildHaircutSeries(0.50)
+      };
+      var option4 = {
+        Conservative: buildHybridSeries(0.65),
+        Base: buildHybridSeries(1.00),
+        Optimistic: buildHybridSeries(1.35)
+      };
+
+      function renderHistoryGrid() {
+        var grid = document.getElementById('historyGrid');
+        grid.innerHTML = historical.map(function (item, index) {
+          var compression = index === 0 ? 'starting point' : (historical[index - 1].returnPct / item.returnPct).toFixed(1) + 'x lower than prior';
+          return '<div class="cycle-stat"><div class="cycle-label">' + item.label + '</div><div class="cycle-value">' + formatPct(item.returnPct) + '</div><div class="cycle-note">' + compression + '</div></div>';
+        }).join('');
+      }
+
+      function renderSingleProjectionTable(id, series) {
+        var table = document.getElementById(id);
+        table.innerHTML = '<thead><tr><th>Projected cycle</th><th>Return</th></tr></thead><tbody>' +
+          series.map(function (item) {
+            return '<tr><td>Cycle ' + item.cycle + '</td><td><strong>' + formatPct(item.value) + '</strong></td></tr>';
+          }).join('') + '</tbody>';
+      }
+
+      function renderScenarioTable(id, scenarios) {
+        var table = document.getElementById(id);
+        table.innerHTML = '<thead><tr><th>Cycle</th><th>Cons.</th><th>Base</th><th>Opt.</th></tr></thead><tbody>' +
+          projectionCycles.map(function (cycle, index) {
+            return '<tr><td>Cycle ' + cycle + '</td><td><strong>' + formatPct(scenarios.Conservative[index].value) + '</strong></td><td><strong>' + formatPct(scenarios.Base[index].value) + '</strong></td><td><strong>' + formatPct(scenarios.Optimistic[index].value) + '</strong></td></tr>';
+          }).join('') + '</tbody>';
+      }
+
+      function chartOptions(logScale) {
+        return {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { labels: { color: '#A8B2D1', boxWidth: 16, font: { size: 10 } } },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  return context.dataset.label + ': ' + formatPct(context.parsed.y);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#6B7896', font: { size: 10 } },
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              border: { color: 'rgba(255,255,255,0.10)' }
+            },
+            y: {
+              type: logScale ? 'logarithmic' : 'linear',
+              min: logScale ? 1 : undefined,
+              ticks: {
+                color: '#6B7896',
+                font: { size: 10 },
+                callback: function (value) { return formatPct(Number(value)); }
+              },
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              border: { color: 'rgba(255,255,255,0.10)' }
+            }
+          },
+          elements: { point: { radius: 3, hoverRadius: 4 }, line: { borderWidth: 2, tension: 0.22 } }
+        };
+      }
+
+      function makeFullSeries(projected) {
+        return historical.map(function (item) { return item.returnPct; }).concat(projected.map(function (item) { return item.value; }));
+      }
+
+      function renderCharts() {
+        if (typeof Chart === 'undefined') return;
+
+        var historicalLabels = historical.map(function (item) { return item.label; });
+        var fullLabels = historicalLabels.concat(projectionCycles.map(function (cycle) { return 'Cycle ' + cycle; }));
+        var historicalOnly = historical.map(function (item) { return item.returnPct; });
+
+        new Chart(document.getElementById('historyChart'), {
+          type: 'bar',
+          data: {
+            labels: historicalLabels,
+            datasets: [{ label: 'Historical return', data: historicalOnly, backgroundColor: '#FFB400', borderColor: '#FFC933', borderWidth: 1 }]
+          },
+          options: chartOptions(true)
+        });
+
+        new Chart(document.getElementById('projectionChart'), {
+          type: 'line',
+          data: {
+            labels: fullLabels,
+            datasets: [
+              { label: 'Historical', data: historicalOnly.concat([null, null, null]), borderColor: '#FFB400', backgroundColor: 'transparent' },
+              { label: 'Opt. 1 log-linear', data: historicalOnly.concat(option1.map(function (item) { return item.value; })), borderColor: '#3B82F6', backgroundColor: 'transparent' },
+              { label: 'Opt. 2 power-law', data: historicalOnly.concat(option2.map(function (item) { return item.value; })), borderColor: '#14B8A6', backgroundColor: 'transparent' },
+              { label: 'Opt. 3 base haircut', data: historicalOnly.concat(option3.Base.map(function (item) { return item.value; })), borderColor: '#F97316', backgroundColor: 'transparent' },
+              { label: 'Opt. 4 hybrid base', data: historicalOnly.concat(option4.Base.map(function (item) { return item.value; })), borderColor: '#A855F7', backgroundColor: 'transparent' }
+            ]
+          },
+          options: chartOptions(true)
+        });
+
+        new Chart(document.getElementById('hybridChart'), {
+          type: 'line',
+          data: {
+            labels: projectionCycles.map(function (cycle) { return 'Cycle ' + cycle; }),
+            datasets: [
+              { label: 'Conservative', data: option4.Conservative.map(function (item) { return item.value; }), borderColor: '#10B981', backgroundColor: 'transparent' },
+              { label: 'Base', data: option4.Base.map(function (item) { return item.value; }), borderColor: '#FFB400', backgroundColor: 'transparent' },
+              { label: 'Optimistic', data: option4.Optimistic.map(function (item) { return item.value; }), borderColor: '#A855F7', backgroundColor: 'transparent' }
+            ]
+          },
+          options: chartOptions(true)
+        });
+      }
+
+      renderHistoryGrid();
+      renderSingleProjectionTable('option1Table', option1);
+      renderSingleProjectionTable('option2Table', option2);
+      renderScenarioTable('option3Table', option3);
+      renderScenarioTable('option4Table', option4);
+      renderCharts();
+    })();
+  </script>
+</body>
+</html>
