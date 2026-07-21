@@ -310,7 +310,7 @@ for n, txt in [
 
 clause(doc, "2.12", "Where the Juristic Representative employs the services of a third-party "
         "administrator or technology provider to render administrative or system functions on "
-        "its behalf (including the [[VALR exchange / other providers — confirm]]), it shall "
+        "its behalf, it shall "
         "remain responsible for such functions and ensure that appropriate outsourcing controls "
         "and agreements are in place.")
 
@@ -735,7 +735,7 @@ plain(doc, "Branch name: MY BRANCH", space_after=1)
 plain(doc, "Branch / universal code: 255355", space_after=6)
 
 plain(doc, "Agreed and accepted \u2014 Schedule C (Fee Schedule):", bold=True, space_after=10)
-for line in ["For the Appointing FSP:  Signed __________________   Name: Guy Algeo   Capacity: [[Guy Algeo to complete]]   Date __________",
+for line in ["For the Appointing FSP:  Signed __________________   Name: Guy Algeo   Capacity: __________________________   Date __________",
              "For the Juristic Representative:  Signed __________________   Name Davin Harald Gaier   Date __________"]:
     plain(doc, line, space_after=8)
 
@@ -744,9 +744,7 @@ section(doc, None, "SIGNATURES")
 plain(doc, "Signed for and on behalf of the Appointing FSP, the signatory warranting authority:",
       space_after=10, bold=True)
 for line in ["Signed: __________________________     Name: Guy Algeo",
-             "Capacity: [[Guy Algeo to complete their own capacity/title]]",
-             "At: Johannesburg            Date: (date of last signature = Effective Date)",
-             "Capacity: ________________________     Date: __________________",
+             "Capacity: __________________________     Date: __________________",
              "At: ______________________________",
              "Witness 1: _______________________     Witness 2: _______________________"]:
     plain(doc, line, space_after=6)
