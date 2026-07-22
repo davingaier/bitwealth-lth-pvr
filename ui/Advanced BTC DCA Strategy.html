@@ -1557,7 +1557,7 @@
             </section>
 
             <!-- =============== Strategy & Contributions =============== -->
-            <section class="cm-tabpanel" data-panel="strategy">
+            <section class="cm-tabpanel" data-panel="strategy" data-feeplan-scope>
               <div class="cm-grid">
                 <label><span class="label-line">Strategy code (read-only)</span><input data-readonly="strategy_code" disabled /></label>
                 <label><span class="label-line">Strategy label</span><input name="strategy_label" /></label>
@@ -1581,9 +1581,21 @@
                 <label><span class="label-line">Recurring contribution (ZAR)</span><input name="recurring_contribution_zar" type="number" min="0" step="0.01" /></label>
                 <label><span class="label-line">Upfront contribution (ZAR)</span><input name="upfront_contribution_zar" type="number" min="0" step="0.01" /></label>
                 <label><span class="label-line">Upfront contribution (BTC)</span><input name="upfront_contribution_btc" type="number" min="0" step="0.00000001" /></label>
-                <label><span class="label-line">Platform fee rate</span><input name="platform_fee_rate" type="number" step="0.0025" min="0" max="0.10" /></label>
+                <label><span class="label-line">Fee plan</span>
+                  <select name="fee_plan" data-feeplan-select title="Management (1% p.a. on NAV) is the business default. Platform (on contributions) is by-request only. Switching the plan takes effect on the 1st of next month.">
+                    <option value="management">Management (1% p.a. on NAV)</option>
+                    <option value="platform">Platform (on contributions)</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Management fee rate (p.a.)</span><input name="management_fee_rate" data-feeplan-management type="number" step="0.0025" min="0" max="0.10" title="Annual management fee as a fraction of NAV (0.01 = 1% p.a.)." /></label>
+                <label><span class="label-line">Management fee schedule</span>
+                  <select name="management_fee_schedule" data-feeplan-management>
+                    <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Platform fee rate</span><input name="platform_fee_rate" data-feeplan-platform type="number" step="0.0025" min="0" max="0.10" /></label>
                 <label><span class="label-line">Platform fee schedule</span>
-                  <select name="platform_fee_schedule" data-cadence-platform>
+                  <select name="platform_fee_schedule" data-feeplan-platform data-cadence-platform>
                     <option value="immediate">Immediate</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
                   </select>
                 </label>
@@ -1721,24 +1733,35 @@
           </fieldset>
 
           <!-- Fee Configuration -->
-          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+          <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;" data-feeplan-scope>
             <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Fee Configuration</legend>
             <div style="margin-bottom:.75rem;">
               <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Fee Plan</label>
-              <select id="strategyModalFeePlan" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;" title="Management is the business default; Platform is by-request only. Platform Fee applies only on the Platform plan; Management Fee (1% p.a.) applies only on the Management plan.">
+              <select id="strategyModalFeePlan" data-feeplan-select style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;" title="Management is the business default; Platform is by-request only. Platform Fee applies only on the Platform plan; Management Fee (1% p.a.) applies only on the Management plan.">
                 <option value="management" selected>Management (1% p.a. on NAV)</option>
                 <option value="platform">Platform (0.75% on contributions)</option>
               </select>
-              <input id="strategyModalMgmtRate" type="hidden" value="0.01">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
               <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Management Fee Rate (p.a.)</label>
+                <input id="strategyModalMgmtRate" data-feeplan-management type="number" step="0.0025" min="0" max="0.10" value="0.01" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;" title="Annual management fee as a fraction of NAV (0.01 = 1% p.a.). Editable on the Management plan.">
+              </div>
+              <div>
+                <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Management Fee Schedule</label>
+                <select id="strategyModalMgmtSchedule" data-feeplan-management style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                  <option value="monthly" selected>Monthly</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="annual">Annual</option>
+                </select>
+              </div>
+              <div>
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Rate</label>
-                <input id="strategyModalPlatformRate" type="number" step="0.0025" min="0" max="0.10" value="0.0075" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                <input id="strategyModalPlatformRate" data-feeplan-platform type="number" step="0.0025" min="0" max="0.10" value="0.0075" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
               </div>
               <div>
                 <label style="display:block;font-size:.85rem;font-weight:500;margin-bottom:.25rem;">Platform Fee Schedule</label>
-                <select id="strategyModalPlatformSchedule" data-cadence-platform style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+                <select id="strategyModalPlatformSchedule" data-feeplan-platform data-cadence-platform style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
                   <option value="immediate">Immediate</option>
                   <option value="monthly">Monthly</option>
                   <option value="quarterly">Quarterly</option>
@@ -3478,9 +3501,42 @@
         sync(null);
       });
     };
+    // Fee-plan input guards: on the MANAGEMENT plan the platform fee is NOT charged,
+    // so its rate + schedule inputs are disabled (and the management rate + schedule are
+    // enabled). On the PLATFORM plan the reverse holds. Applies to EVERY journey that
+    // pairs a plan control ([data-feeplan-select]) with platform inputs
+    // ([data-feeplan-platform]) and/or management inputs ([data-feeplan-management])
+    // within a common scope ([data-feeplan-scope], else the nearest tr/fieldset/section/form).
+    window.applyFeePlanGuards = function (root) {
+      const scope = root || document;
+      const selects = scope.querySelectorAll('[data-feeplan-select]');
+      selects.forEach((sel) => {
+        const box = sel.closest('[data-feeplan-scope]') || sel.closest('tr,fieldset,section,form,body');
+        if (!box) return;
+        const setDisabled = (nodes, disabled) => {
+          nodes.forEach((el) => {
+            el.disabled = disabled;
+            el.style.opacity = disabled ? '0.5' : '';
+            el.title = disabled
+              ? 'Not applicable on the selected fee plan'
+              : (el.getAttribute('data-feeplan-title') || el.title || '');
+          });
+        };
+        const sync = () => {
+          const isMgmt = sel.value === 'management';
+          setDisabled(box.querySelectorAll('[data-feeplan-platform]'), isMgmt);
+          setDisabled(box.querySelectorAll('[data-feeplan-management]'), !isMgmt);
+        };
+        if (sel.dataset.feeplanWired !== '1') {
+          sel.dataset.feeplanWired = '1';
+          sel.addEventListener('change', sync);
+        }
+        sync();
+      });
+    };
     // Initial wire-up + global delegated re-scan whenever DOM mutates a modal.
-    document.addEventListener('DOMContentLoaded', () => window.applyFeeCadenceGuards());
-    new MutationObserver(() => window.applyFeeCadenceGuards())
+    document.addEventListener('DOMContentLoaded', () => { window.applyFeeCadenceGuards(); window.applyFeePlanGuards(); });
+    new MutationObserver(() => { window.applyFeeCadenceGuards(); window.applyFeePlanGuards(); })
       .observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -4459,7 +4515,7 @@
       <div id="btReportsError"></div>
 
       <div class="reports-controls-outer">
-        <div class="reports-controls">
+        <div class="reports-controls" data-feeplan-scope>
           <!-- Strategy selector -->
           <label for="btStrategySelect"><strong>Strategy:</strong></label>
           <select id="btStrategySelect">
@@ -4490,16 +4546,16 @@
 
           <!-- BitWealth Fees -->
           <label for="btFeePlan"><strong>Fee Plan:</strong></label>
-          <select id="btFeePlan" title="Management = 1% p.a. on NAV (business default); Platform = 0.75% on contributions">
+          <select id="btFeePlan" data-feeplan-select title="Management = 1% p.a. on NAV (business default); Platform = 0.75% on contributions">
             <option value="management" selected>Management (1% p.a. on NAV)</option>
             <option value="platform">Platform (0.75% on contributions)</option>
           </select>
 
           <label for="btManagementFeePct"><strong>Management Fee (% p.a.):</strong></label>
-          <input id="btManagementFeePct" type="number" min="0" max="100" step="0.01" value="1.0" title="1% p.a. on NAV, charged monthly (management plan)">
+          <input id="btManagementFeePct" data-feeplan-management type="number" min="0" max="100" step="0.01" value="1.0" title="1% p.a. on NAV, charged monthly (management plan)">
 
           <label for="btPlatformFeePct"><strong>BitWealth Platform Fee (%):</strong></label>
-          <input id="btPlatformFeePct" type="number" min="0" max="100" step="0.01" value="0.75" title="0.75% - BitWealth platform fee on all contributions (platform plan only)">
+          <input id="btPlatformFeePct" data-feeplan-platform type="number" min="0" max="100" step="0.01" value="0.75" title="0.75% - BitWealth platform fee on all contributions (platform plan only)">
 
           <label for="btPerformanceFeePct"><strong>BitWealth Performance Fee (%):</strong></label>
           <input id="btPerformanceFeePct" type="number" min="0" max="100" step="1" value="10" title="10% - BitWealth performance fee on monthly profits (high-water mark)">
@@ -9262,6 +9318,9 @@
     function cmFmtBool(v){ return v===true ? 'Yes' : v===false ? 'No' : '—'; }
 
     let cmEditorState = { customerId: null, profile: null };
+    // Set by cmSaveAll when a fee-plan switch is scheduled (effective next month), so the
+    // save-success alert can tell the admin the switch date. Reset at the start of each save.
+    let cmEditorPlanSwitchNote = null;
 
     /* ---------- Picker ---------- */
     async function cmFetchPickerRows(){
@@ -9397,10 +9456,15 @@
       // Strategy (from customer_strategies)
       cmSetField('strategy_label', strat.label);
       cmSetField('live_enabled', strat.live_enabled);
+      cmSetField('fee_plan', strat.fee_plan || 'management');
+      cmSetField('management_fee_rate', strat.management_fee_rate ?? 0.01);
+      cmSetField('management_fee_schedule', strat.management_fee_schedule || 'monthly');
       cmSetField('platform_fee_rate', strat.platform_fee_rate);
       cmSetField('platform_fee_schedule', strat.platform_fee_schedule);
       cmSetField('performance_fee_rate', strat.performance_fee_rate);
       cmSetField('performance_fee_schedule', strat.performance_fee_schedule);
+      // Reflect the plan on the platform/management inputs (disable the inapplicable set).
+      if (window.applyFeePlanGuards) window.applyFeePlanGuards(form);
 
       // Read-only
       cmSetReadOnly('strategy_code', strat.strategy_code);
@@ -9457,7 +9521,7 @@
         if(k in obj) obj[k] = obj[k] === 'true';
       });
       // Numbers (keep '' as null)
-      ['recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','platform_fee_rate','performance_fee_rate']
+      ['recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','platform_fee_rate','performance_fee_rate','management_fee_rate']
         .forEach(k => {
           const v = String(obj[k] ?? '').trim();
           obj[k] = (v === '' ? null : Number(v));
@@ -9618,6 +9682,7 @@
     /* ---------- Save All ---------- */
     async function cmSaveAll(){
       cmEditorAlertHide();
+      cmEditorPlanSwitchNote = null;
       const payload = cmCollectEditorPayload();
       // Required fields
       if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email||'').trim() || !String(payload.cellphone_number||'').trim()){
@@ -9647,16 +9712,35 @@
       // 2) Strategy patch (only if there's an active strategy row)
       const strat = cmEditorState.profile?.strat;
       if(strat?.customer_strategy_id){
+        // Plan-specific fee inputs are DISABLED when they don't apply to the selected
+        // plan, and disabled controls are omitted from FormData (coerced to null here).
+        // Fall back to the stored value so a disabled field is never wiped/nulled.
         const stratPatch = {
           label: payload.strategy_label || strat.label,
           live_enabled: !!payload.live_enabled,
-          platform_fee_rate: payload.platform_fee_rate,
+          platform_fee_rate: payload.platform_fee_rate ?? strat.platform_fee_rate,
           platform_fee_schedule: payload.platform_fee_schedule || strat.platform_fee_schedule,
-          performance_fee_rate: payload.performance_fee_rate,
+          performance_fee_rate: payload.performance_fee_rate ?? strat.performance_fee_rate,
           performance_fee_schedule: payload.performance_fee_schedule || strat.performance_fee_schedule,
+          management_fee_rate: payload.management_fee_rate ?? strat.management_fee_rate ?? 0.01,
+          management_fee_schedule: payload.management_fee_schedule || strat.management_fee_schedule || 'monthly',
         };
         const { error } = await supabaseClient.from('customer_strategies').update(stratPatch).eq('customer_strategy_id', strat.customer_strategy_id);
         if(error) throw error;
+
+        // Fee-PLAN switch is history-tracked and effective the 1st of next month, so it
+        // goes through the dedicated RPC rather than a direct column write.
+        const newPlan = payload.fee_plan;
+        const curPlan = strat.fee_plan || 'management';
+        if(strat.strategy_code === 'LTH_PVR' && newPlan && newPlan !== curPlan){
+          const { data: planRes, error: planErr } = await supabaseClient.rpc('set_customer_fee_plan', {
+            p_customer_id: custId,
+            p_fee_plan: newPlan
+          });
+          if(planErr) throw planErr;
+          if(planRes && planRes.success === false) throw new Error(planRes.error || 'Plan switch failed');
+          cmEditorPlanSwitchNote = planRes?.message || `Fee plan switch to "${newPlan}" scheduled for the 1st of next month.`;
+        }
       }
 
       // 3) Exchange account patch (deposit ref, BTC wallet, USDT wallet, api key label, subaccount)
@@ -9777,7 +9861,7 @@
           if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
           try{
             const id = await cmSaveAll();
-            cmEditorAlert('success', `Saved (client #${id}).`);
+            cmEditorAlert('success', `Saved (client #${id}).` + (cmEditorPlanSwitchNote ? ' ' + cmEditorPlanSwitchNote : ''));
             if(typeof loadCustomers === 'function') await loadCustomers();
             // Refresh local state if editing
             if(cmEditorState.customerId){
@@ -12699,6 +12783,7 @@
       const performanceFeeSchedule = document.getElementById('strategyModalPerfSchedule').value;
       const feePlan = document.getElementById('strategyModalFeePlan')?.value || 'management';
       const managementFeeRate = parseFloat(document.getElementById('strategyModalMgmtRate')?.value || 0.01);
+      const managementFeeSchedule = document.getElementById('strategyModalMgmtSchedule')?.value || 'monthly';
 
       const strategyName = allStrategies.find(s => s.strategy_code === strategyCode)?.name || strategyCode;
       const variationName = allVariations.find(v => v.id === variationId)?.display_name;
@@ -12706,8 +12791,10 @@
       const confirmMsg = `Confirm strategy setup for customer ${modalCustomerId}?\n\n` +
         `Strategy: ${strategyName}\n` +
         (variationName ? `Variation: ${variationName}\n` : '') +
-        `Fee Plan: ${feePlan === 'management' ? 'Management (1% p.a. on NAV)' : 'Platform (0.75% on contributions)'}\n` +
-        `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n` +
+        `Fee Plan: ${feePlan === 'management' ? `Management (${(managementFeeRate * 100).toFixed(2)}% p.a. on NAV)` : 'Platform (on contributions)'}\n` +
+        (feePlan === 'management'
+          ? `Management Fee: ${(managementFeeRate * 100).toFixed(2)}% p.a. (${managementFeeSchedule})\n`
+          : `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n`) +
         `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
         `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
 
@@ -12736,6 +12823,7 @@
             performance_fee_schedule: performanceFeeSchedule,
             fee_plan: feePlan,
             management_fee_rate: managementFeeRate,
+            management_fee_schedule: managementFeeSchedule,
             admin_email: adminEmail
           })
         });
@@ -13272,6 +13360,7 @@
       // Load current fee config for this customer
       (async () => {
         let perfRate = 10.00, platRate = 0.750, perfSched = 'monthly', platSched = 'immediate';
+        let mgmtRate = 1.00, mgmtSched = 'monthly', feePlan = 'management';
         try {
           const { data } = await supabaseClient.rpc('get_customer_fee_rates', {
             p_customer_ids: [customerId]
@@ -13281,6 +13370,9 @@
             platRate = (data[0].platform_fee_rate * 100).toFixed(3);
             perfSched = data[0].performance_fee_schedule || 'monthly';
             platSched = data[0].platform_fee_schedule || 'immediate';
+            mgmtRate = ((data[0].management_fee_rate ?? 0.01) * 100).toFixed(2);
+            mgmtSched = data[0].management_fee_schedule || 'monthly';
+            feePlan = data[0].fee_plan || 'management';
           }
         } catch (e) { console.warn('Could not load current fees:', e); }
 
@@ -13343,6 +13435,16 @@
               </div>
 
               <h4 style="margin:0 0 12px 0;color:#1e3a8a;">💰 Fee Configuration</h4>
+              <div data-feeplan-scope data-orig-plan="${feePlan}">
+              <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Fee Plan:</label>
+                <select id="setupModal_feePlan" data-feeplan-select
+                        style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;"
+                        title="Management (1% p.a. on NAV) is the business default. Switching the plan takes effect on the 1st of next month.">
+                  <option value="management"${feePlan === 'management' ? ' selected' : ''}>Management (1% p.a. on NAV)</option>
+                  <option value="platform"${feePlan === 'platform' ? ' selected' : ''}>Platform (on contributions)</option>
+                </select>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px;">
                 <div>
                   <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Performance Fee Rate (%):</label>
@@ -13359,15 +13461,31 @@
                   </select>
                 </div>
               </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px;">
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Management Fee Rate (% p.a.):</label>
+                  <input type="number" id="setupModal_mgmtRate" data-feeplan-management value="${mgmtRate}" min="0" max="10" step="0.01"
+                         style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
+                </div>
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Management Schedule:</label>
+                  <select id="setupModal_mgmtSched" data-feeplan-management
+                          style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
+                    <option value="monthly"${mgmtSched === 'monthly' ? ' selected' : ''}>Monthly</option>
+                    <option value="quarterly"${mgmtSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
+                    <option value="annual"${mgmtSched === 'annual' ? ' selected' : ''}>Annual</option>
+                  </select>
+                </div>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
                 <div>
                   <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Platform Fee Rate (%):</label>
-                  <input type="number" id="setupModal_platRate" value="${platRate}" min="0" max="10" step="0.001"
+                  <input type="number" id="setupModal_platRate" data-feeplan-platform value="${platRate}" min="0" max="10" step="0.001"
                          style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                 </div>
                 <div>
                   <label style="display:block;font-weight:600;margin-bottom:4px;font-size:.9em;">Platform Schedule:</label>
-                  <select id="setupModal_platSched" data-cadence-platform
+                  <select id="setupModal_platSched" data-feeplan-platform data-cadence-platform
                           style="width:100%;padding:9px;border:1px solid #cbd5e0;border-radius:4px;font-size:.95em;box-sizing:border-box;">
                     <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
                     <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
@@ -13375,6 +13493,7 @@
                     <option value="annual"${platSched === 'annual' ? ' selected' : ''}>Annual</option>
                   </select>
                 </div>
+              </div>
               </div>
 
               ${apiKeySection}
@@ -13412,6 +13531,10 @@
       const platPercent = parseFloat(document.getElementById('setupModal_platRate')?.value);
       const perfSched = document.getElementById('setupModal_perfSched')?.value;
       const platSched = document.getElementById('setupModal_platSched')?.value;
+      const mgmtPercent = parseFloat(document.getElementById('setupModal_mgmtRate')?.value);
+      const mgmtSched = document.getElementById('setupModal_mgmtSched')?.value;
+      const feePlan = document.getElementById('setupModal_feePlan')?.value || 'management';
+      const origPlan = document.querySelector('#setupModal [data-orig-plan]')?.getAttribute('data-orig-plan') || feePlan;
 
       if (isNaN(perfPercent) || perfPercent < 0 || perfPercent > 100) {
         alert('Performance fee rate must be between 0% and 100%.');
@@ -13419,6 +13542,10 @@
       }
       if (isNaN(platPercent) || platPercent < 0 || platPercent > 10) {
         alert('Platform fee rate must be between 0% and 10%.');
+        return;
+      }
+      if (isNaN(mgmtPercent) || mgmtPercent < 0 || mgmtPercent > 10) {
+        alert('Management fee rate must be between 0% and 10%.');
         return;
       }
 
@@ -13452,11 +13579,23 @@
           p_performance_fee_rate: perfPercent / 100,
           p_platform_fee_rate: platPercent / 100,
           p_performance_fee_schedule: perfSched,
-          p_platform_fee_schedule: platSched
+          p_platform_fee_schedule: platSched,
+          p_management_fee_rate: mgmtPercent / 100,
+          p_management_fee_schedule: mgmtSched
         });
 
         if (feeError) throw new Error(`Fee update failed: ${feeError.message}`);
         if (feeResult && feeResult.success === false) throw new Error(feeResult.error);
+
+        // ── STEP 1b: Fee-plan switch (history-tracked, effective 1st of next month) ──
+        if (feePlan && feePlan !== origPlan) {
+          const { data: planRes, error: planErr } = await supabaseClient.rpc('set_customer_fee_plan', {
+            p_customer_id: customerId,
+            p_fee_plan: feePlan
+          });
+          if (planErr) throw new Error(`Plan switch failed: ${planErr.message}`);
+          if (planRes && planRes.success === false) throw new Error(planRes.error);
+        }
 
         // ── STEP 2: Store API keys (may trigger deposit scan → pipeline) ──
         if (isApiModel && apiKey && apiSecret) {
@@ -14080,7 +14219,7 @@
             <td>${escapeHtml(c.name)}</td>
             <td>${escapeHtml(c.email)}</td>
             <td class="fee-plan-cell">
-              <select class="js-plan-select" data-customer-id="${c.customer_id}" style="padding:4px;" title="Switching takes effect on the 1st of next month">
+              <select class="js-plan-select" data-feeplan-select data-customer-id="${c.customer_id}" style="padding:4px;" title="Switching takes effect on the 1st of next month">
                 <option value="platform"${feePlan === 'platform' ? ' selected' : ''}>Platform</option>
                 <option value="management"${feePlan === 'management' ? ' selected' : ''}>Management</option>
               </select>
@@ -14099,11 +14238,11 @@
             </td>
             <td class="platform-fee-cell">
               <span class="fee-display">${platPercent}%</span>
-              <input type="number" class="fee-input" value="${platPercent}" min="0" max="10" step="0.001" style="display:none;width:80px;padding:4px;">
+              <input type="number" class="fee-input" data-feeplan-platform value="${platPercent}" min="0" max="10" step="0.001" style="display:none;width:80px;padding:4px;">
             </td>
             <td class="plat-schedule-cell">
               <span class="schedule-display">${scheduleLabel(platSched)}</span>
-              <select class="schedule-input" data-cadence-platform style="display:none;padding:4px;">
+              <select class="schedule-input" data-feeplan-platform data-cadence-platform style="display:none;padding:4px;">
                 <option value="immediate"${platSched === 'immediate' ? ' selected' : ''}>Immediate</option>
                 <option value="monthly"${platSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                 <option value="quarterly"${platSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
@@ -14112,11 +14251,11 @@
             </td>
             <td class="management-fee-cell">
               <span class="fee-display">${mgmtPercent}%</span>
-              <input type="number" class="fee-input" value="${mgmtPercent}" min="0" max="10" step="0.01" style="display:none;width:80px;padding:4px;">
+              <input type="number" class="fee-input" data-feeplan-management value="${mgmtPercent}" min="0" max="10" step="0.01" style="display:none;width:80px;padding:4px;">
             </td>
             <td class="mgmt-schedule-cell">
               <span class="schedule-display">${scheduleLabel(mgmtSched)}</span>
-              <select class="schedule-input" style="display:none;padding:4px;">
+              <select class="schedule-input" data-feeplan-management style="display:none;padding:4px;">
                 <option value="monthly"${mgmtSched === 'monthly' ? ' selected' : ''}>Monthly</option>
                 <option value="quarterly"${mgmtSched === 'quarterly' ? ' selected' : ''}>Quarterly</option>
                 <option value="annual"${mgmtSched === 'annual' ? ' selected' : ''}>Annual</option>
