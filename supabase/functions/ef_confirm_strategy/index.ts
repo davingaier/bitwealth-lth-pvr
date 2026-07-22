@@ -68,11 +68,14 @@ Deno.serve(async (req) => {
     // Mirrors public.fee_schedule_rank() / customer_strategies_fee_cadence_check.
     // Platform fee schedule must be at least as frequent as performance.
     // Ranks: immediate=1 (most frequent), monthly=2, quarterly=3, annual=4 (least).
+    // On the MANAGEMENT plan the platform fee is not charged, so its schedule is
+    // not considered (neither validated nor cadence-checked against performance).
+    const isManagementPlan = fee_plan === "management";
     const rank = (s?: string) =>
       s === "immediate" ? 1 : s === "monthly" ? 2 : s === "quarterly" ? 3 : s === "annual" ? 4 : null;
     const allowedPlat = ["immediate", "monthly", "quarterly", "annual"];
     const allowedPerf = ["monthly", "quarterly", "annual"];
-    if (platform_fee_schedule && !allowedPlat.includes(platform_fee_schedule)) {
+    if (!isManagementPlan && platform_fee_schedule && !allowedPlat.includes(platform_fee_schedule)) {
       return new Response(
         JSON.stringify({
           error: `Invalid platform_fee_schedule '${platform_fee_schedule}'. Allowed: ${allowedPlat.join(", ")}.`,
@@ -88,7 +91,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: corsHeaders }
       );
     }
-    if (platform_fee_schedule && performance_fee_schedule) {
+    if (!isManagementPlan && platform_fee_schedule && performance_fee_schedule) {
       const pr = rank(platform_fee_schedule)!;
       const fr = rank(performance_fee_schedule)!;
       if (pr > fr) {
