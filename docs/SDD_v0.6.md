@@ -33,6 +33,36 @@ so `last_seen_at` freezes and the 5-day auto-resolve works. The pre-existing sta
 subaccount" error from 2026-06-03 (retired 07-03; `auto_resolve` never touches `error`
 severity) was resolved in the same pass.
 
+#### Follow-up (same day) — "Excess ZAR→USDT conversion" false-positive suppressed
+
+`ef_convert_zar_to_usdt` marks the `pending_zar_conversions` row
+`remaining_amount=0/converted_at` when it *places* the conversion, but leaves the USDT
+credit-leg booking to `ef_sync_valr_transactions` on a later run. By then the FIFO loop
+(which only considers `remaining_amount > 0.01`) finds no matching pending and fires an
+`info` "Excess ZAR→USDT conversion: R… without matching pending deposit" alert — once for
+**every** normal conversion (funds are still booked correctly; the alert auto-resolves after
+5 days). `ef_sync` now suppresses that alert when a recently-converted pending (≤24 h) matches
+the conversion's ZAR total within 1%; it still books the orphan USDT deposit and still alerts
+on genuinely untracked ZAR. The deposit is deliberately **not** re-linked to the converted
+pending — the resolution trigger would double-decrement `remaining_amount` (visible on a
+legacy R7000 pending stuck at `-6999.92`).
+
+#### Follow-up 2 (same day) — pending-resolution trigger double-decrement hardened
+
+The trigger `lth_pvr.on_zar_consumption_resolve_pending` decrements a
+`pending_zar_conversions` row via two paths: **Path 2** (the `zar_withdrawal` leg, FIFO,
+guarded on `converted_at IS NULL`) and **Path 1** (the `USDT deposit` leg). A single ZAR→USDT
+conversion emits *both* legs, and Path 1's `zar_deposit_id` branch had **no `converted_at`
+guard** — so when both legs carried linkage the same pending was decremented twice,
+overshooting `converted_amount` and driving `remaining_amount` negative (historical
+R7000 = `-6999.92`, R10000 = `-9.17`, both 2026-05-26). It does not recur in the current flow
+(today's `ef_sync` USDT deposit legs carry no `zar_deposit_id`, and `ef_convert_zar_to_usdt`
+sets `converted_at` directly), and caused no active harm (negative-remaining rows are excluded
+from FIFO). Hardened defensively: Path 1 now skips an already-resolved pending
+(`converted_at` set), and both paths clamp `remaining_amount` with `GREATEST(0, …)`. The two
+historical rows were normalised to `converted_amount = zar_amount, remaining_amount = 0`.
+Migration `harden_zar_pending_resolution_trigger`.
+
 #### Diagnostic notes (no code change)
 - The `ef_market_fallback` triage the admin saw referenced order `c9f702c1` — a customer-49
   USDPC sweep that **filled** on 2026-06-03; it was a stale open alert, not a live failure.

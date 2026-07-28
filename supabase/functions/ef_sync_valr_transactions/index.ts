@@ -656,24 +656,52 @@ Deno.serve(async (req) => {
                     zar_amount: remainingZar,
                     usdt_amount: remainingUsdt,
                   });
-                  
-                  console.warn(`  ⚠️  Excess conversion detected: R${remainingZar.toFixed(2)} without matching pending deposit`);
-                  await logAlert(
-                    supabase,
-                    "ef_sync_valr_transactions",
-                    "info",  // demoted from 'warn' 2026-05-02: funds are correctly recorded; excess just means a direct VALR ZAR deposit (legacy or external) outside the pending-deposit flow
-                    `Excess ZAR→USDT conversion: R${remainingZar.toFixed(2)} without matching pending deposit`,
-                    {
-                      customer_id: customerId,
-                      customer_name: customerName,
-                      transaction_id: transactionId,
-                      total_zar: totalZar,
-                      excess_zar: remainingZar,
-                      excess_usdt: remainingUsdt,
-                    },
-                    orgId,
-                    customerId
-                  );
+
+                  // The excess alert is meant to flag ZAR converted with NO
+                  // tracked pending deposit at all (a genuine external/legacy
+                  // deposit). But ef_convert_zar_to_usdt marks the pending
+                  // remaining_amount=0/converted_at when it PLACES the conversion,
+                  // and leaves the USDT credit-leg booking to this function on a
+                  // later run. So the FIFO loop above (which only considers
+                  // remaining_amount>0.01) legitimately finds nothing and every
+                  // normal conversion looks "orphaned" here — firing a noisy info
+                  // alert once per conversion. Suppress it when a recently-
+                  // converted pending matches this conversion's ZAR total (within
+                  // 1%); the orphan USDT deposit is still booked above either way.
+                  // We intentionally do NOT re-link the deposit to that pending —
+                  // the resolution trigger would double-decrement remaining_amount
+                  // (see the R7000 pending stuck at a negative remaining).
+                  const { data: matchedConverted } = await supabase
+                    .from("pending_zar_conversions")
+                    .select("id")
+                    .eq("customer_id", customerId)
+                    .not("converted_at", "is", null)
+                    .gte("converted_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+                    .gte("zar_amount", totalZar * 0.99)
+                    .lte("zar_amount", totalZar * 1.01)
+                    .limit(1);
+
+                  if (matchedConverted && matchedConverted.length > 0) {
+                    console.log(`  ℹ️  Excess R${remainingZar.toFixed(2)} matches a recently-converted pending (ef_convert booked ahead of sync) — booking orphan deposit, suppressing alert`);
+                  } else {
+                    console.warn(`  ⚠️  Excess conversion detected: R${remainingZar.toFixed(2)} without matching pending deposit`);
+                    await logAlert(
+                      supabase,
+                      "ef_sync_valr_transactions",
+                      "info",  // demoted from 'warn' 2026-05-02: funds are correctly recorded; excess just means a direct VALR ZAR deposit (legacy or external) outside the pending-deposit flow
+                      `Excess ZAR→USDT conversion: R${remainingZar.toFixed(2)} without matching pending deposit`,
+                      {
+                        customer_id: customerId,
+                        customer_name: customerName,
+                        transaction_id: transactionId,
+                        total_zar: totalZar,
+                        excess_zar: remainingZar,
+                        excess_usdt: remainingUsdt,
+                      },
+                      orgId,
+                      customerId
+                    );
+                  }
                 }
                 
                 // Handle no pendings at all (orphaned conversion)
