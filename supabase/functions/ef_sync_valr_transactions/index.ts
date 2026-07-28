@@ -401,23 +401,40 @@ Deno.serve(async (req) => {
               fundingKind = "zar_deposit";
               console.log(`  💰 ZAR DEPOSIT (${txType}): R${amount} (awaiting conversion to USDT)`);
               
-              // Log alert for admin notification
-              await logAlert(
-                supabase,
-                "ef_sync_valr_transactions",
-                "info",
-                `ZAR deposit detected: R${amount.toFixed(2)} from ${customerName}`,
-                {
-                  customer_id: customerId,
-                  customer_name: customerName,
-                  zar_amount: amount,
-                  transaction_id: transactionId,
-                  transaction_type: txType,
-                  occurred_at: transactedAt,
-                },
-                orgId,
-                customerId
-              );
+              // Only emit the admin alert the FIRST time we see this VALR
+              // transaction. Without this guard every 30-min cron run re-fires
+              // the same info alert: the alert_events dedup trigger keeps
+              // refreshing last_seen_at, which (a) spams the UI occurrence count
+              // and (b) permanently defeats auto_resolve_stale_alerts() because
+              // it ages alerts out on last_seen_at, not created_at. The shared
+              // insert below records this deposit with idempotency_key
+              // `VALR_TX_<txid>`, so its presence means we've already alerted.
+              // Mirrors the ZAR / INTERNAL_TRANSFER withdrawal guards.
+              const zarDepIdempKey = `VALR_TX_${transactionId}`;
+              const { data: existingZarDep } = await supabase
+                .from("exchange_funding_events")
+                .select("funding_id")
+                .eq("idempotency_key", zarDepIdempKey)
+                .maybeSingle();
+              if (!existingZarDep) {
+                // Log alert for admin notification
+                await logAlert(
+                  supabase,
+                  "ef_sync_valr_transactions",
+                  "info",
+                  `ZAR deposit detected: R${amount.toFixed(2)} from ${customerName}`,
+                  {
+                    customer_id: customerId,
+                    customer_name: customerName,
+                    zar_amount: amount,
+                    transaction_id: transactionId,
+                    transaction_type: txType,
+                    occurred_at: transactedAt,
+                  },
+                  orgId,
+                  customerId
+                );
+              }
             }
             // ================================================================
             // INTERNAL_TRANSFER - Main ↔ Subaccount
@@ -927,24 +944,30 @@ Deno.serve(async (req) => {
                   conversion_fee_asset: tx.feeCurrency || "",
                 };
                 
-                // Log alert for admin notification
-                await logAlert(
-                  supabase,
-                  "ef_sync_valr_transactions",
-                  "info",
-                  `${debitCurrency}→ZAR conversion: ${customerName} converted ${debitValue} ${debitCurrency} to R${amount.toFixed(2)}`,
-                  {
-                    customer_id: customerId,
-                    customer_name: customerName,
-                    crypto_amount: debitValue,
-                    crypto_asset: debitCurrency,
-                    zar_amount: amount,
-                    transaction_id: transactionId,
-                    occurred_at: transactedAt,
-                  },
-                  orgId,
-                  customerId
-                );
+                // Log alert for admin notification. Gate on `!existingCrypto`
+                // (the _CRYPTO_OUT leg checked just above) so re-syncs of an
+                // already-processed USDT→ZAR conversion do not re-fire the info
+                // alert every run — same recurrence/auto-resolve trap as the
+                // ZAR-deposit path.
+                if (!existingCrypto) {
+                  await logAlert(
+                    supabase,
+                    "ef_sync_valr_transactions",
+                    "info",
+                    `${debitCurrency}→ZAR conversion: ${customerName} converted ${debitValue} ${debitCurrency} to R${amount.toFixed(2)}`,
+                    {
+                      customer_id: customerId,
+                      customer_name: customerName,
+                      crypto_amount: debitValue,
+                      crypto_asset: debitCurrency,
+                      zar_amount: amount,
+                      transaction_id: transactionId,
+                      occurred_at: transactedAt,
+                    },
+                    orgId,
+                    customerId
+                  );
+                }
               } else if ((debitCurrency === "BTC" || debitCurrency === "USDT") && 
                          (creditCurrency === "BTC" || creditCurrency === "USDT")) {
                 // BTC ↔ USDT trade - SKIP (already tracked in exchange_orders)

@@ -3,11 +3,67 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-19 (v0.6.150)
+**Last updated:** 2026-07-28 (v0.6.151)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.151 – Recurring ZAR-deposit info alert fixed + conversion/sweep history modal
+**Date:** 2026-07-28  
+**Status:** ✅ DEPLOYED (edge-function deploy + 2 views + Admin UI)
+
+#### Fix — "ZAR deposit detected" info alert re-fired every sync, defeating 5-day auto-resolve
+
+`auto_resolve_stale_alerts()` (cron `30 4 * * *`) resolves `info` alerts once
+`COALESCE(last_seen_at, created_at) < now() - 5 days`. But `ef_sync_valr_transactions`
+emitted the `ZAR deposit detected: R…` info alert **unconditionally** on every 30-min run
+for any ZAR deposit still visible in VALR's transaction history — even after it had been
+recorded and converted. The `alert_events` dedup trigger collapsed these into one row but
+kept refreshing `last_seen_at`, so the alert never aged out (e.g. R102304.16: occurrence
+**1236**, created 07-02, still "last seen" 07-28). The funding-event insert further down was
+already idempotent (`idempotency_key = VALR_TX_<txid>`), so only the **alert** was spurious.
+
+**Fix:** gate the `ZAR deposit detected` and `…→ZAR conversion` info alerts on first-sight of
+the VALR transaction — the same guard the ZAR / INTERNAL_TRANSFER withdrawal paths already
+use (`ZAR deposit`: check `exchange_funding_events` for `VALR_TX_<txid>`; `USDT→ZAR`: gate on
+the `_CRYPTO_OUT` leg's existence). Once the deposit/leg is recorded, no further alert fires,
+so `last_seen_at` freezes and the 5-day auto-resolve works. The pre-existing stale alerts
+(R102304.16, R22000) were manually resolved; the dead `ef_market_fallback` "Missing
+subaccount" error from 2026-06-03 (retired 07-03; `auto_resolve` never touches `error`
+severity) was resolved in the same pass.
+
+#### Diagnostic notes (no code change)
+- The `ef_market_fallback` triage the admin saw referenced order `c9f702c1` — a customer-49
+  USDPC sweep that **filled** on 2026-06-03; it was a stale open alert, not a live failure.
+  `ef_market_fallback` has been retired (unscheduled) since v0.6.139.
+- Customer 999's R22000 ZAR→USDT conversion succeeded, and the resulting ~1,301 idle USDT was
+  **already auto-swept** to USDPC (07-28 06:00, `+1,107.09 USDPC / −1,296.58 USDT`). The
+  "Pending USDPC Sweeps" panel correctly showed nothing — `v_pending_usdpc_conversions` only
+  lists customers with `idle_usdt >= usdpc_min_order_usdt` (5), and 999's idle USDT is 0.0056.
+
+#### Feature — conversion/sweep history modal (Admin UI)
+
+Added a 📜 **History** button to both the "Pending ZAR Conversions" and "Pending USDPC
+Sweeps" cards. Both open a shared modal with two tabs (ZAR→USDT Conversions / USDPC Sweeps)
+and a **customer filter**. Backed by two new read-only views mirroring the `v_pending_*`
+pattern (`GRANT SELECT … TO authenticated`):
+- `lth_pvr.v_completed_zar_conversions` — completed ZAR→USDT conversions from the USDT deposit
+  leg (`kind='deposit' AND asset='USDT' AND metadata ? 'zar_amount'`); exposes ZAR amount,
+  USDT received, rate, date, customer.
+- `lth_pvr.v_completed_usdpc_sweeps` — USDT→USDPC sweeps from `ledger_lines`
+  (`kind='convert' AND amount_usdpc > 0`; USDPC→USDT pre-buy unwinds excluded); exposes USDPC
+  gained, USDT spent, fee, date, customer.
+
+**Files/objects changed:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — idempotency-guard the ZAR
+  deposit + USDT→ZAR conversion info alerts (deployed)
+- `lth_pvr.v_completed_zar_conversions`, `lth_pvr.v_completed_usdpc_sweeps` — new views
+- `ui/Advanced BTC DCA Strategy.html` — History buttons + shared history modal
+- `public.alert_events` — resolved stale recurring / `ef_market_fallback` alerts
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.150 – On-Chain Charts: STH vs LTH Supply
 **Date:** 2026-07-19  

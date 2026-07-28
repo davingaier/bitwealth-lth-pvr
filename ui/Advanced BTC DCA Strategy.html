@@ -5167,6 +5167,7 @@
         
         <div style="display:flex;gap:.75rem;align-items:center;">
           <button id="zarSyncNowBtn" type="button" class="btn btn-secondary-sm">🔄 Sync Now</button>
+          <button id="zarHistoryBtn" type="button" class="btn btn-secondary-sm">📜 History</button>
           <span id="zarRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
         </div>
       </div>
@@ -5184,9 +5185,127 @@
 
         <div style="display:flex;gap:.75rem;align-items:center;">
           <button id="usdpcRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          <button id="usdpcHistoryBtn" type="button" class="btn btn-secondary-sm">📜 History</button>
           <span id="usdpcRefreshMessage" style="font-size:.85rem;color:#6c757d;"></span>
         </div>
       </div>
+
+      <!-- Conversion / Sweep History Modal (shared by both cards above) -->
+      <div id="convHistoryModal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);align-items:flex-start;justify-content:center;padding:3rem 1rem;overflow:auto;">
+        <div style="background:#0f1729;color:#e5e7eb;border:1px solid #1f2a44;border-radius:12px;max-width:940px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid #1f2a44;">
+            <h3 id="convHistoryTitle" style="margin:0;font-size:1.05rem;color:#e5e7eb;">History</h3>
+            <button id="convHistoryClose" type="button" class="btn btn-secondary-sm">Close</button>
+          </div>
+          <div style="display:flex;gap:.5rem;padding:.85rem 1.25rem 0;">
+            <button id="convTabZar" type="button" class="btn btn-secondary-sm">ZAR → USDT Conversions</button>
+            <button id="convTabUsdpc" type="button" class="btn btn-secondary-sm">USDPC Sweeps</button>
+          </div>
+          <div style="display:flex;gap:.75rem;align-items:center;padding:.85rem 1.25rem;">
+            <label style="font-size:.85rem;color:#9ca3af;">Customer:</label>
+            <select id="convHistoryCustomer" style="background:#0b1220;color:#e5e7eb;border:1px solid #1f2a44;border-radius:6px;padding:.35rem .5rem;min-width:240px;"><option value="">All customers</option></select>
+            <span id="convHistoryCount" style="font-size:.8rem;color:#6b7280;margin-left:auto;"></span>
+          </div>
+          <div id="convHistoryBody" style="padding:0 1.25rem 1.25rem;max-height:60vh;overflow:auto;">
+            <div style="color:#6b7280;font-size:.9rem;">Loading…</div>
+          </div>
+        </div>
+      </div>
+      <script>
+      (function(){
+        const modal   = document.getElementById('convHistoryModal');
+        if (!modal) return;
+        const titleEl = document.getElementById('convHistoryTitle');
+        const bodyEl  = document.getElementById('convHistoryBody');
+        const custSel = document.getElementById('convHistoryCustomer');
+        const countEl = document.getElementById('convHistoryCount');
+        const tabZar  = document.getElementById('convTabZar');
+        const tabUsdpc= document.getElementById('convTabUsdpc');
+        const closeBtn= document.getElementById('convHistoryClose');
+        const zarBtn  = document.getElementById('zarHistoryBtn');
+        const usdpcBtn= document.getElementById('usdpcHistoryBtn');
+
+        const cache = { zar:null, usdpc:null };
+        let currentTab = 'zar';
+        let currentCustomer = '';
+
+        function esc(v){ if(v==null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+        function fmtR(n){ return 'R'+Number(n||0).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+        function fmtN(n,dp){ return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
+        function fmtDT(v){ if(!v) return ''; try{ return new Date(v).toLocaleString('en-ZA',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(_e){ return String(v); } }
+        function custName(r){ return ((r.first_names||'')+' '+(r.last_name||'')).trim(); }
+
+        function setTab(tab){
+          currentTab = tab;
+          tabZar.style.opacity   = tab==='zar'   ? '1' : '.5';
+          tabUsdpc.style.opacity = tab==='usdpc' ? '1' : '.5';
+          titleEl.textContent = tab==='zar' ? '📜 ZAR → USDT Conversion History' : '📜 USDPC Sweep History';
+        }
+
+        async function load(tab){
+          if (cache[tab]) return cache[tab];
+          if (typeof supabaseClient==='undefined' || !supabaseClient){ bodyEl.innerHTML='<div style="color:#f87171;font-size:.9rem;">Supabase client not ready — sign in first.</div>'; return null; }
+          const view = tab==='zar' ? 'v_completed_zar_conversions' : 'v_completed_usdpc_sweeps';
+          const orderCol = tab==='zar' ? 'occurred_at' : 'created_at';
+          const { data, error } = await supabaseClient.schema('lth_pvr').from(view).select('*').order(orderCol,{ascending:false}).limit(500);
+          if (error){ console.error('history load error',error); bodyEl.innerHTML='<div style="color:#f87171;font-size:.9rem;">Error: '+esc(error.message)+'</div>'; return null; }
+          cache[tab] = data||[];
+          return cache[tab];
+        }
+
+        function buildCustomerOptions(rows){
+          const map = new Map();
+          (rows||[]).forEach(r=>{ if(!map.has(r.customer_id)) map.set(r.customer_id, custName(r)||('Customer '+r.customer_id)); });
+          const prev = currentCustomer;
+          custSel.innerHTML = '<option value="">All customers</option>' +
+            Array.from(map.entries()).sort((a,b)=>String(a[1]).localeCompare(String(b[1])))
+              .map(([id,name])=>'<option value="'+id+'">'+esc(name)+' (#'+id+')</option>').join('');
+          if (prev && map.has(Number(prev))) custSel.value = prev; else { custSel.value=''; currentCustomer=''; }
+        }
+
+        function render(){
+          const rows = (cache[currentTab]||[]).filter(r=> !currentCustomer || String(r.customer_id)===String(currentCustomer));
+          countEl.textContent = rows.length + ' record' + (rows.length===1?'':'s');
+          if (!rows.length){ bodyEl.innerHTML='<div style="color:#6b7280;font-size:.9rem;padding:1rem 0;">No records.</div>'; return; }
+          let head, body;
+          const th = (h,r)=>'<th style="text-align:'+(r?'right':'left')+';padding:.45rem .5rem;border-bottom:1px solid #1f2a44;color:#9ca3af;font-weight:600;position:sticky;top:0;background:#0f1729;">'+esc(h)+'</th>';
+          const td = (v,r)=>'<td style="padding:.4rem .5rem;border-bottom:1px solid #141c30;text-align:'+(r?'right':'left')+';">'+v+'</td>';
+          if (currentTab==='zar'){
+            head = th('Date',false)+th('Customer',false)+th('ZAR',true)+th('USDT received',true)+th('Rate',true);
+            body = rows.map(r=>'<tr>'+td(esc(fmtDT(r.occurred_at)),false)+td(esc(custName(r))+' <span style=\'color:#6b7280\'>#'+r.customer_id+'</span>',false)+td(esc(fmtR(r.zar_amount)),true)+td(esc(fmtN(r.usdt_amount,2)),true)+td(esc(fmtN(r.conversion_rate,4)),true)+'</tr>').join('');
+          } else {
+            head = th('Date',false)+th('Customer',false)+th('USDPC gained',true)+th('USDT spent',true)+th('Fee (USDPC)',true);
+            body = rows.map(r=>'<tr>'+td(esc(fmtDT(r.created_at)),false)+td(esc(custName(r))+' <span style=\'color:#6b7280\'>#'+r.customer_id+'</span>',false)+td(esc(fmtN(r.amount_usdpc,2)),true)+td(esc(fmtN(Math.abs(r.amount_usdt),2)),true)+td(esc(fmtN(r.fee_usdpc,4)),true)+'</tr>').join('');
+          }
+          bodyEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.85rem;"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+        }
+
+        async function refresh(){
+          bodyEl.innerHTML='<div style="color:#6b7280;font-size:.9rem;">Loading…</div>';
+          const rows = await load(currentTab);
+          if (rows===null) return;
+          buildCustomerOptions(rows);
+          render();
+        }
+
+        async function openModal(tab){
+          cache.zar=null; cache.usdpc=null;   // always fetch fresh on open
+          setTab(tab);
+          modal.style.display='flex';
+          await refresh();
+        }
+        function closeModal(){ modal.style.display='none'; }
+
+        if (zarBtn)   zarBtn.addEventListener('click', ()=>openModal('zar'));
+        if (usdpcBtn) usdpcBtn.addEventListener('click', ()=>openModal('usdpc'));
+        tabZar.addEventListener('click', ()=>{ if(currentTab!=='zar'){ setTab('zar'); refresh(); }});
+        tabUsdpc.addEventListener('click', ()=>{ if(currentTab!=='usdpc'){ setTab('usdpc'); refresh(); }});
+        custSel.addEventListener('change', ()=>{ currentCustomer = custSel.value; render(); });
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
+        document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.style.display==='flex') closeModal(); });
+      })();
+      </script>
 
       <!-- ===========================================================
            Research Bitcoin (RB) API Token
