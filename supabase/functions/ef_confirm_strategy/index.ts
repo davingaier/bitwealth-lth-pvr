@@ -1,6 +1,9 @@
 // Edge Function: ef_confirm_strategy
-// Purpose: Milestone 2 - Confirm prospect strategy selection and trigger registration email
-// Flow: Creates portfolio → Updates status prospect→kyc → Sends kyc_portal_registration email
+// Purpose: Milestone 2 - Confirm prospect strategy selection and start Finova KYC
+// Flow: Creates strategy → Updates status prospect→kyc → creates kyc_finova 'invited'
+//       row → sends kyc_finova_invite heads-up email. The admin then invites the
+//       client into Finova/KYCDD; the portal registration email is sent later by
+//       ef_finova_webhook once the client passes.
 // Deployed with: --no-verify-jwt
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -244,23 +247,32 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate registration URL
-    // IMPORTANT: Set WEBSITE_URL environment variable in production to your actual domain
-    // For local testing, use file:// protocol or local server (e.g., http://localhost:8081)
-    const websiteUrl = Deno.env.get("WEBSITE_URL") || "http://localhost:8081";
-    const registrationUrl = `${websiteUrl}/register.html?customer_id=${customer_id}&email=${encodeURIComponent(customer.email)}`;
+    // Finova KYC flow: record the invite intent and send a heads-up email. An
+    // admin invites the client into Finova/KYCDD manually (their form does not
+    // accept automated input); the portal registration email is sent later by
+    // ef_finova_webhook once Finova reports the client has passed.
+    const websiteUrl = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
+    // Base invite URL for the admin "Invite to KYC" panel (overridable via env).
+    const finovaInviteUrl = Deno.env.get("FINOVA_INVITE_URL") ||
+      "https://app.kycdd.co.za/client/-/insert/subscription_id/9c60cc9e-d6a1-4059-975f-e77d89e35809/workflow_id/9c60ccf1-f56b-4e78-8fa3-707aa7ed6bdb/status_type_id/939e7c63-2570-44f2-8a6e-327bdc4d67f0";
 
-    // Send kyc_portal_registration email
-    const emailData = {
-      first_name: customer.first_names,
-      strategy_name: strategy.name,
-      registration_url: registrationUrl,
-      website_url: "https://bitwealth.co.za",
-    };
+    // Upsert the Finova tracking row (one per customer).
+    const { error: finovaErr } = await supabase
+      .from("kyc_finova")
+      .upsert(
+        {
+          customer_id: customer_id,
+          org_id: customer.org_id,
+          finova_status: "invited",
+          invited_at: new Date().toISOString(),
+        },
+        { onConflict: "customer_id" }
+      );
+    if (finovaErr) console.error("kyc_finova upsert failed:", finovaErr.message);
 
+    // Send the KYC-invite heads-up email.
     let emailSent = false;
     let emailError = null;
-
     try {
       const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
         method: "POST",
@@ -269,19 +281,19 @@ Deno.serve(async (req) => {
           "Authorization": `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
-          template_key: "kyc_portal_registration",
+          template_key: "kyc_finova_invite",
           to_email: customer.email,
-          data: emailData,
+          data: { first_name: customer.first_names, website_url: "https://bitwealth.co.za" },
         }),
       });
 
       if (emailResponse.ok) {
         emailSent = true;
-        console.log(`Registration email sent to ${customer.email}`);
+        console.log(`KYC invite email sent to ${customer.email}`);
       } else {
         const errorData = await emailResponse.json();
         emailError = errorData.error || "Unknown email error";
-        console.error(`Failed to send registration email: ${emailError}`);
+        console.error(`Failed to send KYC invite email: ${emailError}`);
       }
     } catch (error) {
       emailError = error instanceof Error ? error.message : String(error);
@@ -297,7 +309,8 @@ Deno.serve(async (req) => {
         strategy_code: strategy_code,
         strategy_name: strategy.name,
         email: customer.email,
-        registration_url: registrationUrl,
+        customer_name: `${customer.first_names} ${customer.last_name}`,
+        finova_invite_url: finovaInviteUrl,
         email_sent: emailSent,
         email_error: emailError,
       }),

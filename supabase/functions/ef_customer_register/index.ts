@@ -65,7 +65,7 @@ serve(async (req) => {
     // Verify customer exists and status is 'kyc' (KYC approved, ready to register)
     const { data: customer, error: customerError } = await supabase
       .from("customer_details")
-      .select("customer_id, email, registration_status, first_names, last_name")
+      .select("customer_id, email, registration_status, first_names, last_name, kyc_id_verified_at")
       .eq("customer_id", customer_id)
       .eq("email", email.toLowerCase())
       .single();
@@ -168,17 +168,21 @@ serve(async (req) => {
       // Don't fail the request if agreement recording fails, just log it
     }
 
-    // Update customer_details with acceptance timestamps
-    // NOTE: Status stays as 'kyc' - only changes to 'setup' after admin verifies ID document
+    // Update customer_details with acceptance timestamps. When KYC is already
+    // verified (Finova sets kyc_id_verified_at on pass), auto-advance to 'setup';
+    // otherwise leave status at 'kyc' for the legacy admin-verification path.
+    const registerUpdate: Record<string, unknown> = {
+      terms_accepted_at: accept_terms ? now : null,
+      privacy_accepted_at: accept_privacy ? now : null,
+      disclaimer_signed_at: sign_disclaimer ? now : null,
+      portal_access_granted_at: now,
+    };
+    const advancedToSetup = customer.kyc_id_verified_at != null;
+    if (advancedToSetup) registerUpdate.registration_status = "setup";
+
     const { error: updateError } = await supabase
       .from("customer_details")
-      .update({
-        terms_accepted_at: accept_terms ? now : null,
-        privacy_accepted_at: accept_privacy ? now : null,
-        disclaimer_signed_at: sign_disclaimer ? now : null,
-        portal_access_granted_at: now,
-        // registration_status stays as 'kyc' - admin must verify ID before moving to 'setup'
-      })
+      .update(registerUpdate)
       .eq("customer_id", customer.customer_id);
 
     if (updateError) {
@@ -192,6 +196,7 @@ serve(async (req) => {
         message: "Account created successfully! You can now log in to your portal.",
         portal_url: PORTAL_URL,
         user_id: authUser.user.id,
+        registration_status: advancedToSetup ? "setup" : customer.registration_status,
       }),
       { status: 200, headers: CORS }
     );

@@ -12882,6 +12882,52 @@
       ).join('');
     }
 
+    // After confirming a strategy, show the manual Finova KYC invite details.
+    function showFinovaInvitePanel(result) {
+      const inviteUrl = result.finova_invite_url || '';
+      const name = result.customer_name || '';
+      const email = result.email || '';
+      const cid = String(result.customer_id ?? '');
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;';
+      const row = (label, value) => `
+        <div style="margin-bottom:12px;">
+          <div style="font-size:.78rem;color:#6c757d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">${label}</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input readonly value="${escapeHtml(value)}" style="flex:1;padding:8px 10px;border:1px solid #ced4da;border-radius:4px;font-size:.9rem;background:#f8f9fa;">
+            <button data-copy="${escapeHtml(value)}" class="fnv-copy" style="padding:8px 12px;border:1px solid #003B73;background:#003B73;color:#fff;border-radius:4px;cursor:pointer;font-size:.82rem;">Copy</button>
+          </div>
+        </div>`;
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:10px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#003B73,#0074D9);color:#fff;padding:18px 22px;">
+            <div style="font-size:1.1rem;font-weight:700;">Invite client to KYC (Finova)</div>
+            <div style="font-size:.85rem;opacity:.9;margin-top:2px;">Open the Finova invite form and paste these three values, then click Continue.</div>
+          </div>
+          <div style="padding:22px;">
+            ${row('Client name', name)}
+            ${row('Client email address', email)}
+            ${row('UUID (paste exactly)', cid)}
+            <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
+              <a href="${escapeHtml(inviteUrl)}" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:11px 14px;background:#F39C12;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Open Finova invite form ↗</a>
+              <button class="fnv-close" style="padding:11px 18px;background:#e9ecef;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Done</button>
+            </div>
+            <p style="font-size:.78rem;color:#868e96;margin:14px 0 0;">The client has already been emailed to expect the KYCDD verification email. After they complete it, they will automatically receive their portal registration link.</p>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelectorAll('.fnv-copy').forEach(btn => {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(btn.getAttribute('data-copy') || '').then(() => {
+            const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200);
+          });
+        });
+      });
+      const close = () => overlay.remove();
+      overlay.querySelector('.fnv-close').addEventListener('click', close);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    }
+
     modalCloseBtn.addEventListener('click', closeModal);
     modalCancelBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
@@ -12915,7 +12961,7 @@
           ? `Management Fee: ${(managementFeeRate * 100).toFixed(2)}% p.a. (${managementFeeSchedule})\n`
           : `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n`) +
         `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
-        `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send registration email`;
+        `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send KYC invitation email\n• Show the Finova invite details`;
 
       if (!confirm(confirmMsg)) return;
 
@@ -12951,8 +12997,9 @@
 
         if (response.ok && result.success) {
           closeModal();
-          showMessage(`Strategy confirmed for customer ${modalCustomerId}. Email ${result.email_sent ? 'sent' : 'queued'} to ${result.email}`, 'success');
+          showMessage(`Strategy confirmed for customer ${modalCustomerId}. KYC invitation email ${result.email_sent ? 'sent' : 'queued'} to ${result.email}`, 'success');
           await loadProspects();
+          showFinovaInvitePanel(result);
         } else {
           showMessage(`Failed to confirm strategy: ${result.error || 'Unknown error'}`, 'error');
         }
