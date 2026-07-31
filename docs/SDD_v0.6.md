@@ -3,11 +3,95 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-28 (v0.6.151)
+**Last updated:** 2026-07-31 (v0.6.152)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.152 – Finova KYCDD onboarding integration (KYC-first flow)
+**Date:** 2026-07-31  
+**Status:** ✅ DEPLOYED (3 migrations + 4 edge functions + admin UI)
+
+**Motivation.** BitWealth operates under Finova's FSP licence until it obtains its own. All client KYC must therefore run through Finova's KYCDD system. This change replaces the internal `upload-kyc.html` document-upload step with a Finova-hosted onboarding workflow and wires the returning data back into the BitWealth database automatically.
+
+#### Architecture
+
+**Revised onboarding sequence (KYC-first):**
+```
+prospect
+  → admin confirms strategy (ef_confirm_strategy)
+      • creates kyc_finova row (finova_status='invited')
+      • sends kyc_finova_invite heads-up email to client
+      • shows admin the "Invite to KYC" panel
+  → admin manually submits Finova invite form (3 fields: name / email / UUID=customer_id)
+  → client completes KYC on Finova/KYCDD
+  → Finova POSTs signed webhook to ef_finova_webhook
+      • verifies X-Signature-SHA256 (HMAC-SHA256, base64)
+      • links payload.uuid → customer_details.customer_id
+      • maps all fields into customer_details
+      • downloads 4+ documents into kyc-documents/{cid}/finova/ (15-min expiry)
+      • upserts bank_accounts
+      • records everything in public.kyc_finova
+      • on step='passed': sets kyc_id_verified_at, sends kyc_portal_registration email
+      • non-passed: finova_status='review', admin alert
+  → client registers (ef_customer_register)
+      • auto-advances to 'setup' when kyc_id_verified_at is already set
+  → setup → deposit → active (unchanged)
+```
+
+`upload-kyc.html` is retained in the codebase as a fallback for when BitWealth holds its own FSP licence.
+
+#### Invite submission method
+Finova's API is read-only (export/reporting). Query-string prefill was tested and found unsupported (form is JS-rendered). **Admin submits manually** using a panel that displays client name/email/customer_id (copy buttons) and a direct link to the Finova invite form. Upgrade path: Finova's future create-client API → automated submission.
+
+#### Webhook security
+- Finova signs every POST with HMAC-SHA256 over the raw body, base64-encoded in header `X-Signature-SHA256`.
+- Secret stored as Supabase secret `FINOVA_WEBHOOK_SECRET`. Without it the webhook returns 500 by design.
+- Idempotent: retries (Finova retries on non-200) are safe; the `register_email_sent_at` guard prevents duplicate registration emails.
+
+#### Document handling
+Finova delivers documents as short-lived Azure SAS URLs (~15 min). The webhook downloads all documents synchronously on arrival into the `kyc-documents` Supabase storage bucket. Documents captured:
+
+| Finova field | Stored on |
+|---|---|
+| `identity_document` | `customer_details.kyc_id_document_url` |
+| `proof_of_address` | `customer_details.kyc_proof_address_url` |
+| `sa_id_card_backside` | `customer_details.kyc_id_backside_url` (new) |
+| `selfie_holding_an_id` | `customer_details.kyc_selfie_url` (new) |
+| `client_kyc_report` | `customer_details.kyc_finova_report_url` (new) |
+| `banking_documents` | `bank_accounts.bank_confirmation_url` |
+| `finova_individual_mandate`, `bitwealth_individual_addendum` | `kyc_finova.doc_urls` (archive) |
+
+#### Payload field mapping (confirmed from live test, customer 60)
+Key payload keys → DB columns: `given_name/family_name` → `first_names/last_name`; `ClientID/Passport` → `id_number` (13-digit SA ID) or `id_passport_number`; `sa_income_tax_no` → `tax_number`; `date_of_birth`/`gender`/`nationality`/`occupation` → same; `telephone_number` split into `phone_country_code`/`phone_number`; structured address (`address_line1`, `address_level1/2`, `postal_code`, `province`, `country`); `bank_account_*` → `bank_accounts`; `uuid` → linking key (= `customer_id`, free-text confirmed by Finova). ISO-2 country codes mapped to full names. `source_s_of_income` and `source_of_wealth` arrive as arrays, stored joined.
+
+#### Status model
+`registration_status` uses the existing `kyc` value throughout the Finova phase (no CHECK change). Granular Finova state lives in `public.kyc_finova.finova_status`: `invited → passed/review/rejected`. `ef_customer_register` now auto-advances `registration_status` to `setup` when `kyc_id_verified_at IS NOT NULL` (set by webhook on pass); the legacy admin-approval path is preserved as a fallback.
+
+#### Compliance screening
+Finova includes `complyadvantage_mesh_screening` (Sanctions/PEP/adverse media, daily ongoing re-screen). The internal `ef_tfs_screen` FIC step is disabled until BitWealth obtains its own FSP licence. The screening result and risk scores (`client_risk_score`, `liveness_risk_score`, `doc_discrepancy_risk_score`) are stored in `public.kyc_finova`. **TODO:** finalise auto-approve vs manual-review gate once Finova confirms how a hit vs clear is represented in the payload.
+
+#### Open items (pending Finova responses)
+- Exact `step` values for rejected/incomplete outcomes (confirmed: `'passed'` = approval).
+- How `complyadvantage_mesh_screening` represents a sanctions/PEP hit vs a clear.
+
+#### Temporary capture endpoint
+`ef_finova_webhook_test` + `public.finova_webhook_capture` are retained to capture a *rejected* sample for mapping. **TODO:** remove `ef_finova_webhook_test` and `DROP TABLE public.finova_webhook_capture` once the rejected-step mapping is finalised and the screening gate is implemented.
+
+**Files/objects changed:**
+- `supabase/migrations/20260730_finova_webhook_capture.sql` — temporary PII-safe capture table (service-role only)
+- `supabase/migrations/20260731_finova_kyc_integration.sql` — drops `chk_kyc_source_of_income`; adds columns on `customer_details` (address, source-of-funds/wealth, marital-status, selfie/ID-backside/KYC-report URLs, `finova_client_id`); creates `public.kyc_finova` (RLS on, no policies)
+- `supabase/migrations/20260731_finova_kyc_invite_email_template.sql` — `kyc_finova_invite` email template
+- `supabase/functions/ef_finova_webhook_test/index.ts` — temporary capture endpoint (throwaway)
+- `supabase/functions/ef_finova_webhook/{index.ts,finova.ts,client.ts}` — production webhook (signature verify, field map, doc download, bank upsert, kyc_finova upsert, register-email trigger)
+- `supabase/functions/ef_confirm_strategy/index.ts` — replaces registration-email send with `kyc_finova_invite` heads-up + kyc_finova invited row + returns `finova_invite_url`
+- `supabase/functions/ef_customer_register/index.ts` — auto-advances to `setup` when `kyc_id_verified_at` is set (Finova path); legacy `kyc` preserved when unverified
+- `ui/Advanced BTC DCA Strategy.html` — "Invite to KYC" panel (`showFinovaInvitePanel`): name/email/UUID copy buttons + Finova invite link; confirm dialog wording updated
+- `Supabase secrets` — `FINOVA_WEBHOOK_SECRET` added
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.151 – Recurring ZAR-deposit info alert fixed + conversion/sweep history modal
 **Date:** 2026-07-28  
