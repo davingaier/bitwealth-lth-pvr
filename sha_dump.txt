@@ -1,0 +1,284 @@
+0: SHAREHOLDERS' AGREEMENT
+1: BitWealth Asset Managers (Pty) Ltd
+2: (Registration No. 2026/090346/07)
+4: PRIVATE AND CONFIDENTIAL
+5: THIS AGREEMENT HAS NOT BEEN REVIEWED BY AN ATTORNEY. IT IS PROVIDED AS A WORKING DRAFT BASED ON THE TERMS AGREED IN THE PARTIES’ SIGNED EQUITY PROPOSAL (v4). IT MUST BE REVIEWED, FINALISED AND EXECUTED UNDER THE SUPERVISION OF A QUALIFIED SOUTH AFRICAN ATTORNEY AND COMPLIANCE OFFICER BEFORE IT CREATES ANY BINDING OBLIGATIONS.
+7: ENTERED INTO BY AND BETWEEN:
+8: 1.	Davin Harald Gaier, South African, ID 8405025239081 (“Davin” or the “Founder”);
+9: 2.	Simon Henry Newbold Hobday, South African, ID 6806175080088 (“Simon” or the “BD Partner”);
+10: 3.	BitWealth Asset Managers (Pty) Ltd, Registration No. 2026/090346/07, a private company incorporated under the laws of the Republic of South Africa (“the Company”).
+11: (Davin, Simon and the Company are collectively referred to as “the Parties” and individually as a “Party”.)
+13: PREAMBLE
+14: A.	The Company is a private company that operates the BitWealth LTH PVR bitcoin DCA investment management platform and renders Category II discretionary financial services as a Juristic Representative of Finova (Pty) Ltd (FSP No. 21095).
+15: B.	Davin has contributed intellectual property to the Company under a signed IP Transfer Agreement at an agreed value of R2 500 000 and holds all 1 000 issued ordinary shares.
+16: C.	The Parties have agreed that Simon will join the Company as Head of Business Development (non-executive consulting capacity), receive a 10% founding equity grant, and have the opportunity to earn up to a further 30% equity through AUM milestones.
+17: D.	The Parties intend this arrangement to constitute a genuine equity partnership between co-owners and NOT an employee share-incentive scheme.
+18: E.	The Parties wish to record the terms of their relationship in this Agreement in accordance with the Companies Act, 71 of 2008.
+20: THE PARTIES AGREE AS FOLLOWS:
+21: 1.	DEFINITIONS AND INTERPRETATION
+22: 1.1	In this Agreement, unless the context indicates otherwise:
+23: "Agreement"			this Shareholders’ Agreement and all its Annexures;
+24: "AUM"	the aggregate Rand value of assets under management across all active client portfolios managed by the Company, as reported in the BitWealth platform NAV report at the relevant month-end;
+25: "Bad Leaver"	a Party who leaves or is removed in the circumstances defined in clause 12;
+26: "Board"			the board of directors of the Company;
+27: "Business Day"	any day other than a Saturday, Sunday or recognised South African public holiday;
+28: "Commencement Date"	the date on which the last Party signs this Agreement;
+29: "Companies Act"		the Companies Act, 71 of 2008, as amended;
+30: "Davin"				Davin Harald Gaier, ID 8405025239081;
+31: "Earn-In Shares"		the shares to be transferred to Simon under the Milestones in clause 8;
+32: "FAIS Act"			the Financial Advisory and Intermediary Services Act, 37 of 2002;
+33: "Founding Shares"		100 ordinary shares (10%) to be transferred to Simon under clause 7;
+34: "FSP"					Finova (Pty) Ltd (FSP No. 21095);
+35: "Good Leaver"	a Party who leaves or is removed in the circumstances defined in clause 12;
+36: "HWM"	High-Water Mark, the highest NAV previously achieved by a client’s portfolio, used to calculate performance fees;
+37: "Innovation Revenue Share"	the ring-fenced 10% share of net revenue from a Simon-originated, non-AUM, inside-BitWealth revenue stream, as defined in clause 14;
+38: "IP"	all intellectual property in and to the BitWealth LTH PVR strategy, algorithm, software, platform, data, trade marks, branding and related materials;
+39: "LTH PVR"	the Long-Term Holder Profit-to-Volatility Ratio proprietary bitcoin DCA strategy developed by Davin and contributed to the Company;
+40: "Milestone"			each of the three AUM targets defined in clause 8;
+41: "Milestone Deadline"		the deadline applicable to each Milestone as set out in clause 8;
+42: "NAV"				net asset value of a client’s portfolio;
+43: "NewCo"	any new company formed to develop a new product, business line or revenue stream separable from the core AUM business;
+44: "Ordinary Shares"	ordinary shares of R1.00 par value in the Company, each carrying one vote, equal dividend rights and equal rights upon winding-up;
+45: "Party"				each of Davin, Simon and the Company, as the context requires;
+46: "Registrar"			the Companies and Intellectual Property Commission (CIPC);
+47: "SHA"				this Shareholders’ Agreement;
+48: "Simon"			Simon Henry Newbold Hobday, ID 6806175080088;
+49: "STT Act"			the Securities Transfer Tax Act, 25 of 2007;
+50: "Transfer"	any transfer, cession, sale, pledge, hypothecation or other disposition of shares;
+51: "VALR"	VALR Financial Technologies (Pty) Ltd, a registered crypto asset exchange;
+52: 1.2	Words importing the singular include the plural and vice versa; words importing any gender include all genders; and references to a person include a natural person, company, close corporation, trust, partnership or other legal entity.
+53: 1.3	Clause headings are for convenience only and do not affect interpretation. References to clauses and annexures are to clauses and annexures of this Agreement.
+54: 1.4	Any reference to legislation includes any amendment, re-enactment or subordinate legislation thereunder from time to time.
+55: 1.5	If any provision of this Agreement conflicts with the Company’s Memorandum of Incorporation (MOI), the Parties undertake to amend the MOI to give effect to this Agreement to the extent permitted by the Companies Act.
+57: 2.	SHARE CAPITAL AND STRUCTURE
+58: 2.1	The Company has 1 000 (one thousand) ordinary shares of R1.00 par value each in issue. All shares carry equal voting, dividend and liquidation rights.
+59: 2.2	As at the Commencement Date, all 1 000 Ordinary Shares are held by Davin. The IP asset (LTH PVR platform) was contributed by Davin at an agreed value of R2 500 000 and is recorded on the Company’s balance sheet.
+60: 2.3	This Agreement constitutes a genuine equity partnership between co-owners of the Company. Simon’s Founding Shares and Earn-In Shares are and remain Ordinary Shares carrying full ownership, voting and economic rights. They may NOT be reclassified, recharacterised, converted or expropriated without Simon’s prior written consent.
+61: 2.4	The anticipated shareholding at each stage is set out in Annexure A.
+63: 3.	BOARD OF DIRECTORS AND MANAGEMENT
+64: 3.1	The Board shall comprise at least one director. Davin is appointed Managing Director with full executive authority over all day-to-day operations of the Company.
+65: 3.2	Simon is entitled, but not obliged, to serve as a non-executive director of the Company for as long as he holds any Ordinary Shares. Simon’s appointment as director shall not impose any minimum time commitment beyond that required by the Companies Act.
+66: 3.3	Board decisions shall be taken by resolution of a majority of directors present at a duly constituted meeting. Davin, as Managing Director, has a casting vote in the event of a tied vote on any operational or strategic matter.
+67: 3.4	The following matters are RESERVED MATTERS that require the written consent of both Shareholders (regardless of the Board’s decision):
+68: 3.4.1	Any amendment to the Company’s Memorandum of Incorporation;
+69: 3.4.2	Any winding-up, dissolution or deregistration of the Company;
+70: 3.4.3	Any reclassification of Ordinary Shares or creation of any new class of share;
+71: 3.4.4	Any action that would dilute Simon’s economic entitlement below its then-current basis, made for the purpose of such dilution;
+72: 3.4.5	Any sale of all or substantially all the Company’s assets or business;
+73: 3.4.6	Any change to the Company’s principal business (from LTH PVR bitcoin DCA investment management).
+74: 3.5	Once Simon holds 25% or more of the Ordinary Shares, the following additional matters become Reserved Matters requiring Simon’s written consent:
+75: 3.5.1	Any change of FSP / JR arrangement affecting the Company’s FAIS authorisation;
+76: 3.5.2	Any change of primary trading exchange (from VALR) or custody arrangement;
+77: 3.5.3	Any change to the core client fee structure (performance, management and exchange fees), where such change is made for the purpose of, or would have the effect of, materially reducing Simon’s economic entitlement.
+78: 3.6	Subject to the Reserved Matters above, Davin has full authority to manage the business. The Parties agree that Simon’s primary contribution is business development and client acquisition, not operational management.
+79: 3.7	An anti-prejudice covenant applies at all times: no operational or structural change may be made for the purpose of, or with the material effect of, reducing Simon’s economic entitlement below its then-current basis without Simon’s consent, regardless of whether it would otherwise constitute a Reserved Matter.
+81: 4.	SIMON’S ROLE AND OBLIGATIONS
+82: 4.1	Simon serves as non-executive Director of Business Development in a consulting capacity, with no minimum time commitment. His equity participation is linked solely to AUM milestone achievement.
+83: 4.2	Simon’s primary responsibilities are:
+84: 4.2.1	origination and onboarding of new clients;
+85: 4.2.2	management and growth of client relationships;
+86: 4.2.3	achievement of the AUM Milestones; and
+87: 4.2.4	such other business development activities as the Board may reasonably agree.
+88: 4.3	The Company will provide Simon with reasonable sales, marketing and compliance/admin support and an annual marketing budget approved by the Board. Obligations on both sides are defined and not open-ended.
+89: 4.4	Simon will use reasonable endeavours to obtain and maintain any FAIS accreditation required for his representative role. Delays caused by the FSCA, the FSP, paperwork or the Company are excluded from Simon’s obligation. Only a wilful or negligent failure by Simon constitutes a breach of this clause.
+91: 5.	INTRODUCED CLIENT REGISTER
+92: 5.1	The Company will maintain an “Introduced Client Register” in the format set out in Annexure C. Any client Simon introduces is logged within 5 (five) Business Days of first meaningful contact.
+93: 5.2	An “Introduced Client” is one where Simon makes the first meaningful contact and who is not already in the Company’s active pipeline. Each client is credited once. Disputed entries are resolved by the Board acting reasonably, failing which by independent expert determination.
+94: 5.3	The Register is maintained for revenue-share and record purposes. Simon’s AUM milestone vesting is based on TOTAL Company AUM (see clause 8.4) and is NOT limited to clients he personally introduced.
+95: 5.4	An Introduced Client who converts within 18 months of introduction, or within 12 months of Simon’s exit, counts toward any applicable Innovation Revenue Share.
+97: 6.	INFORMATION RIGHTS AND REPORTING
+98: 6.1	While Simon holds any Ordinary Shares, the Company shall provide him with:
+99: 6.1.1	monthly management accounts within 15 Business Days of month-end;
+100: 6.1.2	a monthly AUM report showing total assets under management, per-client balances (anonymised if required by POPIA), and progress toward the current Milestone;
+101: 6.1.3	annual financial statements within 120 days of the Company’s financial year-end; and
+102: 6.1.4	access to the BitWealth platform’s management dashboard.
+103: 6.2	The Company shall hold an annual meeting of shareholders within 6 (six) months of each financial year-end, at which the annual financial statements are presented and key business decisions are discussed.
+105: 7.	FOUNDING EQUITY GRANT
+106: 7.1	Within 5 (five) Business Days of the Commencement Date (and subject to clause 7.4), Davin shall transfer 100 Ordinary Shares (10% of the issued share capital) to Simon for nil monetary consideration.
+107: 7.2	The Founding Shares carry no performance condition. Simon holds them as a full equity owner from the date of transfer, subject only to the leaver provisions in clause 12.
+108: 7.3	At the IP-implied price of R2 500 per share, the notional value of the Founding Shares is R250 000 (Two Hundred and Fifty Thousand Rand). This is an agreed commercial figure, not a guaranteed or market-derived valuation.
+109: 7.4	The transfer of Founding Shares is subject to the following conditions precedent being fulfilled:
+110: 7.4.1	Simon having obtained independent legal advice and confirming this in writing;
+111: 7.4.2	both Parties having obtained independent tax advice regarding the income-tax, CGT and donations-tax consequences of a nil-consideration share transfer;
+112: 7.4.3	the FSP having provided the Company with a JR appointment or a letter of intent to appoint; and
+113: 7.4.4	confirmation that Simon meets the minimum FAIS fit-and-proper requirements applicable to his representative role.
+114: 7.5	The transfer is effected by signed share transfer form, updating the Company’s share register and lodging the required CIPC forms. All costs, including STT payable under the STT Act, are borne by the Company.
+116: 8.	AUM MILESTONE EARN-IN (ADDITIONAL 30%)
+117: 8.1	Simon may earn up to a further 30% equity in three equal tranches of 10% (100 Ordinary Shares per tranche), each constituting a transfer of existing shares from Davin. No new shares are issued. The tranches and Milestones are:
+119: 8.2	AUM means the aggregate Rand value of all client portfolios managed by the Company at month-end, as reported in the BitWealth platform NAV report and confirmed by the Company’s accounting records.
+120: 8.3	Milestones are sequential: a later tranche cannot vest before the earlier tranche is earned or resolved under clause 9.
+121: 8.4	TOTAL-AUM BASIS. Simon’s milestone vesting is tied to TOTAL Company AUM, including clients introduced by Davin, third parties or otherwise. The Introduced Client Register is maintained for revenue-share and record purposes only and does not limit milestone vesting.
+122: 8.5	OBJECTIVE VERIFICATION. A Milestone is achieved when total AUM meets the target at a month-end AND remains at or above it to the following month-end (two consecutive month-ends), verified from platform, custodian, exchange and accounting records.
+123: 8.6	ADMINISTRATIVE CONFIRMATION. Board confirmation of Milestone achievement is administrative only and may not be unreasonably withheld or delayed. If the evidence shows the threshold met and sustained and the Board has not confirmed within 10 Business Days, the Milestone is deemed achieved.
+124: 8.7	Once a Milestone is confirmed or deemed achieved, Davin shall effect the relevant share transfer within 5 Business Days in the same manner as clause 7.5.
+126: 9.	MILESTONE SHORTFALL — NEAR-MISS VESTING
+127: 9.1	This clause applies equally to all three Milestone Tranches.
+128: 9.2	STEP 1 — EXTENSION ELIGIBILITY (measured at the Milestone Deadline): if total AUM is at least 80% of the relevant target, Simon automatically receives a single 6-month extension for that tranche. If AUM is below 80% at the Milestone Deadline, the tranche lapses immediately and no extension is granted.
+129: 9.3	STEP 2 — FULL VESTING: if AUM reaches 100% of the target at any point during the 6-month extension, the full 10% tranche vests and is transferred to Simon within 5 Business Days.
+130: 9.4	STEP 3 — PRO-RATA VESTING: if, at the end of the 6-month extension, AUM is at least 80% but below 100% of the target, Simon vests a pro-rata portion = (AUM at extension end ÷ Milestone target) × 10%. Example: R45m of R50m target (90%) → Simon vests 9%; the residual 1% remains with Davin.
+131: 9.5	STEP 4 — LAPSE: if, at the end of the extension, AUM has fallen below 80% of the target, the tranche lapses in full and the shares remain with Davin. Simon retains all previously vested tranches and his Founding Shares.
+132: 9.6	If a Milestone Deadline is extended under clause 9.2, the deadlines of all subsequent tranches are extended by the same period, because tranches must be achieved in sequence.
+134: 10.	INVESTOR CAPITAL AND DILUTION OF EARN-IN
+135: 10.1	The Parties acknowledge that a marketing investor may be introduced to provide Year 1 working capital in exchange for equity.
+136: 10.2	By agreement between the Parties, any marketing investor equity shall be carved exclusively from Simon’s 30% earn-in pool — not from Davin’s 60%, and not from Simon’s Founding Shares. Davin’s 60% and Simon’s 10% founding equity are unaffected by any investor dilution.
+137: 10.3	The AUM Milestone targets (R50m / R100m / R200m) are not affected by investor dilution. Only the equity reward per tranche reduces proportionally. For example, with a 15% investor: each tranche becomes approximately 5% (Simon’s maximum earn-in reduces from 30% to 15%).
+138: 10.4	No investor equity may be issued without Simon’s prior written consent, which shall not be unreasonably withheld.
+140: 11.	TRANSFER RESTRICTIONS AND PRE-EMPTIVE RIGHTS
+141: 11.1	No Shareholder may Transfer any Ordinary Shares to a third party without first offering them to the other Shareholder(s) at the same price and on the same terms (right of first refusal).
+142: 11.2	The selling Shareholder shall give written notice of the proposed Transfer, including the price, terms and identity of the proposed transferee. The non-selling Shareholder has 20 Business Days to accept the offer in writing.
+143: 11.3	If the non-selling Shareholder does not accept within 20 Business Days, the selling Shareholder may proceed with the Transfer to the third party at no less than the offered price and on no better terms, within 60 days of the notice.
+144: 11.4	PRE-EMPTIVE SUBSCRIPTION RIGHTS. If the Company proposes to issue new shares, each Shareholder has a pro-rata right of first offer to subscribe for new shares at the same price as the incoming subscriber (not a full ratchet or weighted-average anti-dilution).
+145: 11.5	ANTI-CIRCUMVENTION. No shares or options may be issued to Davin, his associates or staff below independently-determined fair value for the purpose of diluting Simon, without Simon’s written consent.
+146: 11.6	Permitted transfers to a holding company, trust or family member of a Shareholder are allowed without pre-emptive rights, provided the transferee signs a deed of adherence to this Agreement.
+148: 12.	GOOD LEAVER, BAD LEAVER AND MUTUAL PROTECTIONS
+149: 12.1	RECIPROCAL APPLICATION. The Good Leaver and Bad Leaver principles apply EQUALLY and RECIPROCALLY to both Davin and Simon. Each reference to a Party ‘leaving’ means that Party ceasing to be actively involved in the Company. Neither Party enjoys protections the other does not.
+150: 12.2	GOOD LEAVER. A Party is a Good Leaver if they leave or are removed by reason of:
+151: 12.2.1	death or permanent total disability;
+152: 12.2.2	retirement at or after age 65;
+153: 12.2.3	removal or termination without cause or material breach by the other Party;
+154: 12.2.4	constructive dismissal or a material reduction of their agreed role;
+155: 12.2.5	the other Party or the Company failing to provide agreed support;
+156: 12.2.6	loss of FSP/JR status not caused by the departing Party; or
+157: 12.2.7	material breach of this Agreement by the other Party.
+158: 12.3	GOOD LEAVER CONSEQUENCE. A Good Leaver retains all vested/earned Ordinary Shares. Simon’s unearned tranches at the time of exit follow the shortfall mechanism in clause 9.
+159: 12.4	BAD LEAVER. A Party is a Bad Leaver ONLY on:
+160: 12.4.1	proven fraud, theft or dishonesty directed against the Company or the other Party;
+161: 12.4.2	wilful misconduct or gross negligence causing material harm to the Company; or
+162: 12.4.3	a final (non-appealable) regulatory finding against that Party in connection with the Company’s business.
+163: 12.5	BAD LEAVER CONSEQUENCE. For the Bad Leaver:
+164: 12.5.1	any unearned/unvested equity lapses immediately;
+165: 12.5.2	EARNED shares are acquired by the Company or the remaining Shareholder at FAIR MARKET VALUE, EXCEPT where the trigger is fraud, theft or dishonesty, in which case earned shares are acquired at nominal par value of R1.00 per share;
+166: 12.5.3	any forced transfer requires PRIOR INDEPENDENT DETERMINATION by a qualified auditor, expert or arbitrator; and
+167: 12.5.4	NEITHER Party may unilaterally declare the other a Bad Leaver. A declaration is of no effect until confirmed by independent determination or arbitration.
+168: 12.6	ANTI-RECLASSIFICATION. Neither Party’s shares may be reclassified, converted, recharacterised (including into any share-incentive or employee scheme), diluted, cancelled, repurchased or otherwise expropriated without that Party’s prior written consent. Any purported action in breach is void.
+169: 12.7	FOUNDER CONTINUITY. If Davin exits as a Good Leaver (including death or incapacity), Simon shall retain full access to all IP, systems and credentials under clause 16 to enable continued operation of the Company.
+170: 12.8	RESTRAINT ON COMPETING RE-LAUNCH. A Party who exits as a Bad Leaver, or whose earned shares are bought back under clause 12.5.2, shall not, for 24 months within the Republic of South Africa, directly or indirectly re-launch, replicate or operate the LTH PVR strategy or a materially similar Bitcoin DCA strategy under any other name, and shall not use the Company’s confidential information or IP to do so.
+171: 12.9	CLAWBACK. Clawback of equity applies only to losses caused by a Party’s wilful misconduct, fraud, gross negligence or proven regulatory breach. Reciprocally, if a Party’s or the Company’s acts or omissions cause loss of JR/FSP status or material damage to client relationships, the other Party is treated as a Good Leaver.
+172: 12.10	VALUATION. Where fair market value must be determined for a buyout, it shall be determined by a mutually agreed independent auditor. If not agreed within 10 Business Days, either Party may apply to the AFSA Arbitration Foundation to appoint a suitably qualified expert. The expert’s determination is final and binding.
+173: 13.	DRAG-ALONG AND TAG-ALONG RIGHTS
+174: 13.1	DRAG-ALONG. If Davin and/or his associates receive a bona fide offer from an independent third party to acquire 75% or more of the Ordinary Shares, Davin may require Simon to sell his pro-rata shares to the same acquirer on the SAME price and terms. Simon’s drag obligations are subject to:
+175: 13.1.1	cash-equivalent consideration (or cash at election if non-cash);
+176: 13.1.2	warranties and representations limited to title and capacity;
+177: 13.1.3	release from any guarantees or personal liabilities in connection with the Company; and
+178: 13.1.4	no sale to a related party or associate of Davin at an undervalue.
+179: 13.2	TAG-ALONG. If Davin proposes to sell more than 50% of his Ordinary Shares to a third party, Simon has the right (but not the obligation) to include his proportionate share of shares in the sale on equivalent terms and at the same price per share as Davin. Simon must exercise this right within 10 Business Days of receiving written notice of the proposed sale.
+181: 14.	NEW VENTURES AND INNOVATION REVENUE
+182: 14.1	DEFAULT — NEWCO. Any materially new product, business line or revenue stream originated by Simon and separable from the core AUM business shall be developed in a NewCo with a fresh shareholding structure.
+183: 14.2	SIMON’S NEWCO ENTITLEMENT. Subject to clause 14.1, Simon has an automatic right to 20% founding equity in each NewCo and may earn up to 45% in total through an AUM- or revenue-based milestone vesting schedule structured similarly to his BitWealth earn-in. The specific milestone targets are set per venture. The remaining equity and specific targets are negotiated in good faith, with Davin’s 80% interest and 55% ceiling as the counterpart.
+184: 14.3	WHO DECIDES. The Board (with Davin’s control vote) decides whether a new idea is pursued inside BitWealth or via a NewCo.
+185: 14.4	EXCEPTION — INSIDE BITWEALTH. Where ALL of the following apply, a Simon-originated non-AUM revenue stream may be kept inside BitWealth:
+186: 14.4.1	Simon personally originates a genuinely new, NON-AUM revenue stream (not performance, platform, management or exchange fees on managed assets);
+187: 14.4.2	the Board decides to keep it inside BitWealth; and
+188: 14.4.3	Simon actively leads the commercial and business-development delivery of that stream (concept origination, client/partner relationships, go-to-market, sales and revenue growth), but is NOT required to perform IT development, engineering, product build or technical operations.
+189: 14.5	INNOVATION REVENUE SHARE. Where clause 14.4 applies, Simon receives a ring-fenced Innovation Revenue Share of 10% of the NET revenue of that specific stream only, for a period of 48 months from first revenue, payable only while Simon actively leads the stream, with the stream separately accounted and auditable.
+190: 14.6	RING-FENCE. The Innovation Revenue Share applies ONLY to the specific new non-AUM stream. It NEVER touches AUM-based revenue (performance, platform, management or exchange fees) from any client.
+191: 14.7	STACKING. The Innovation Revenue Share stacks on Simon’s equity dividend: Simon first receives 10% of net stream revenue, then his equity % of the residual 90%. The effective formula is: Simon’s total = 10% + (equity% × 90%).
+192: 14.8	RECIPROCITY. The same framework applies to Davin-originated ventures. Simon has no Innovation Revenue Share claim over a stream he did not originate and does not actively lead.
+193: 14.9	ANTI-CIRCUMVENTION. Neither Party may re-label core AUM revenue as a ‘new stream’ to avoid the other’s legitimate share. Characterisation disputes go to independent expert determination.
+194: 14.10	IP IN NEW STREAMS. All IP created in connection with any new revenue stream or NewCo vests in the Company (or NewCo), not in Simon or Davin personally.
+196: 15.	INTELLECTUAL PROPERTY, ACCESS AND BUSINESS CONTINUITY
+197: 15.1	All IP (including the LTH PVR strategy, algorithm, source code, platform, data, trade marks and branding) is and remains the sole property of the Company. No right to use the IP is granted to any Party personally.
+198: 15.2	IP ACCESS ON SIGNING. Upon the Commencement Date, Davin shall provide Simon with full access to all IP, systems and credentials used to operate the Company, including: source code and repositories; email and web-hosting environment; production database; Research Bitcoin data feed/account; the Administration UI; VALR exchange API and sub-account administration; and all related logins and documentation. Such access is maintained for the duration of Simon’s shareholding.
+199: 15.3	BUSINESS CONTINUITY. The Parties shall explore and implement continuity measures including: a technical shadow or second engineer; key-man life and disability insurance; documented operational runbooks; secure credential vaulting with emergency (‘break-glass’) access for Simon; source-code escrow; and regular data backups and disaster recovery. The Parties target implementation within 6 months of the Commencement Date.
+200: 15.4	IP PROTECTION. The Parties will jointly investigate additional protection for the LTH PVR strategy, including trade-secret protection, copyright in source code, trade-mark registration and (subject to independent patent attorney advice) patent protection in applicable jurisdictions.
+202: 16.	CONFIDENTIALITY AND NON-SOLICITATION
+203: 16.1	Each Party shall keep strictly confidential all non-public information regarding the other Party, the Company, its strategy, clients, technology and finances. Confidentiality obligations survive termination of this Agreement.
+204: 16.2	NON-SOLICITATION. For 12 months following a Party’s exit from the Company, that Party shall not, within South Africa:
+205: 16.2.1	solicit or approach any client of the Company with whom that Party had a material dealing, for the purpose of moving their assets to a competitor; or
+206: 16.2.2	solicit or induce any employee, contractor or key person of the Company to leave their engagement.
+207: 16.3	The Parties acknowledge that the Company’s client list and technology are legitimate protectable interests justifying the above restraints. The Parties agree that these restraints are reasonable in scope, duration and area.
+209: 17.	DIVIDENDS
+210: 17.1	The declaration and payment of dividends is at the discretion of the Board, subject to the Companies Act solvency and liquidity requirements.
+211: 17.2	Any dividend declared shall be paid to all Shareholders pro-rata to their Ordinary Shareholding at the record date.
+212: 17.3	The Parties acknowledge that the Company is in an early growth phase and that retained earnings should generally be reinvested in the business during the first three years. After that, dividends shall be considered annually based on cashflow, growth requirements and working capital needs.
+214: 18.	DEADLOCK AND DISPUTE RESOLUTION
+215: 18.1	GOOD FAITH RESOLUTION. If a dispute or disagreement arises between the Parties, they shall use good faith efforts to resolve it within 10 Business Days of either Party giving written notice of the dispute.
+216: 18.2	ESCALATION. If not resolved within 10 Business Days, either Party may escalate to arbitration under clause 18.3.
+217: 18.3	ARBITRATION. Any unresolved dispute shall be referred to binding arbitration in Johannesburg under the AFSA Arbitration Foundation of Southern Africa Rules. The arbitrator shall be an attorney or advocate of at least 10 years’ standing with experience in commercial/corporate law, appointed by agreement or, failing agreement within 5 Business Days, by the AFSA Chairman. The decision is final and binding. This clause does not preclude urgent court applications.
+218: 18.4	CONFIDENTIALITY. All dispute resolution proceedings and outcomes are confidential between the Parties.
+220: 19.	FSP AND REGULATORY MATTERS
+221: 19.1	The Company renders financial services as a Juristic Representative of Finova (Pty) Ltd (FSP No. 21095) under the FAIS Act. The Parties acknowledges that the JR arrangement is subject to regulatory approval and ongoing compliance, and that loss of JR status would materially impact the Company.
+222: 19.2	FEE TRANSPARENCY. The Company shall share a full fee/profitability model with Simon showing net economics after the Finova revenue share (20% of performance fees + 50% of platform fees + 50% of management fees + 25% of exchange fee rebate; no fixed monthly hosting).
+223: 19.3	The Parties agree that decisions regarding FSP/JR arrangement, primary exchange or custody are operational matters within Davin’s authority, subject to the anti-prejudice covenant in clause 3.7 and Reserved Matters at clause 3.5.
+225: 20.	GENERAL PROVISIONS
+226: 20.1	GOVERNING LAW. This Agreement is governed by the law of the Republic of South Africa.
+227: 20.2	ENTIRE AGREEMENT. This Agreement, together with its Annexures, constitutes the entire agreement between the Parties regarding its subject matter and supersedes all prior negotiations, term sheets and heads of terms.
+228: 20.3	AMENDMENTS. No amendment is valid unless in writing and signed by all Parties. Schedule-only amendments (e.g. Annexure updates) require signatures of all Shareholders.
+229: 20.4	NO WAIVER. Failure to enforce any provision does not constitute a waiver. A waiver is only effective if given in writing.
+230: 20.5	SEVERABILITY. If any provision is unlawful or unenforceable, it is severed and the remainder continues in force.
+231: 20.6	NOTICES. Notices must be in writing, delivered by email (with read receipt) or registered post to the addresses recorded in the signature block. Email notices are deemed received when sent during Business Hours on a Business Day.
+232: 20.7	COSTS. Each Party bears its own legal and other costs of negotiating and executing this Agreement unless otherwise agreed.
+233: 20.8	COUNTERPARTS. This Agreement may be signed in counterparts, each of which constitutes an original, and all together constitute one agreement.
+234: 20.9	DOMICILIA. The Parties choose the following as their domicilia for notices:
+235: Davin: 89 Bloekom Curve, Terenure ext. 16, Kempton Park, 1619 | Email: davin.gaier@bitwealth.com
+236: Simon: [Simon’s residential address to insert] | Email: [email to insert]
+237: Company: 89 Bloekom Curve, Terenure ext. 16, Kempton Park, 1619 | Email: info@bitwealth.co.za
+238: 20.10	DEED OF ADHERENCE. Any person who acquires shares in the Company must, as a condition of the transfer, sign a deed of adherence confirming they are bound by this Agreement in the capacity of a Shareholder.
+239: SIGNATURES
+240: SIGNED BY THE PARTIES at the places and on the dates indicated below, each signatory warranting full authority:
+242: FOR AND ON BEHALF OF BITWEALTH ASSET MANAGERS (PTY) LTD AND IN HIS PERSONAL CAPACITY AS FOUNDER
+245: Signed: __________________________		Date: __________________________
+246: Full Name: Davin Harald Gaier
+247: Capacity: Managing Director / Founder
+248: At: __________________________
+249: Email: davin.gaier@bitwealth.co.za
+252: Witness 1: ______________________		Witness 2: ______________________
+254: SIMON HENRY NEWBOLD HOBDAY IN HIS PERSONAL CAPACITY AS NON-EXECUTIVE DIRECTOR OF BUSINESS DEVELOPMENT
+257: Signed: __________________________		Date: __________________________
+258: Full Name: Simon Henry Newbold Hobday
+259: Capacity: Non-Executive Director of Business Development
+260: At: __________________________
+261: Email: [simon's email to insert]
+264: Witness 1: ______________________		Witness 2: ______________________
+268: ANNEXURE A — CAP TABLE AT EACH STAGE
+269: Stage 1 — On Signing (Founding 10%)
+270: Stage 2 — Post Tranche 1 (R50m AUM)
+271: Stage 3 — Post Tranche 2 (R100m AUM)
+272: Stage 4 — Full Earn-In (R200m AUM)
+274: ANNEXURE B — MILESTONE SCHEDULE AND EXTENSION TRACKER
+275: To be updated by the Company’s Secretary each time a Milestone is achieved, extended or lapses. A copy is to be provided to both Shareholders.
+277: ANNEXURE C — INTRODUCED CLIENT REGISTER (FORMAT)
+278: Maintained by the Company. Updated within 5 Business Days of first meaningful contact. Disputes resolved by the Board; failing which by independent expert.
+
+=== TABLES ===
+
+--- TABLE 0 ---
+Tranche | AUM Target | Equity | Milestone Deadline | Target Date
+Tranche 1 | R50 000 000 | +10% (→20%) | 24 months from Commencement | ~August 2028
+Tranche 2 | R100 000 000 | +10% (→30%) | 48 months from Commencement | ~ August 2030
+Tranche 3 | R200 000 000 | +10% (→40%) | 72 months from Commencement | ~ August 2032
+
+--- TABLE 1 ---
+Shareholder | Shares | % Holding | Change | Notes
+Davin Harald Gaier | 900 | 90% | −100 | IP contributor; technology
+Simon Henry Newbold Hobday | 100 | 10% | +100 | Founding grant; nil consideration
+TOTAL | 1,000 | 100% | — | 
+
+--- TABLE 2 ---
+Shareholder | Shares | % Holding | Change | Notes
+Davin Harald Gaier | 800 | 80% | −100 | Transfers from own holding
+Simon Henry Newbold Hobday | 200 | 20% | +100 | Tranche 1 earned
+TOTAL | 1,000 | 100% | — | 
+
+--- TABLE 3 ---
+Shareholder | Shares | % Holding | Change | Notes
+Davin Harald Gaier | 700 | 70% | −100 | Transfers from own holding
+Simon Henry Newbold Hobday | 300 | 30% | +100 | Tranche 2 earned
+TOTAL | 1,000 | 100% | — | 
+
+--- TABLE 4 ---
+Shareholder | Shares | % Holding | Change | Notes
+Davin Harald Gaier | 600 | 60% | −100 | Final if all milestones met
+Simon Henry Newbold Hobday | 400 | 40% | +100 | Full earn-in — maximum
+TOTAL | 1,000 | 100% | — | 
+
+--- TABLE 5 ---
+Tranche | Target | Deadline | AUM@Deadline | Extension? | AUM@Ext.End | Outcome
+Tranche 1 | R50m | ~Aug 2028 | ... | ... | ... | ...
+Tranche 2 | R100m | ~Aug 2030 | ... | ... | ... | ...
+Tranche 3 | R200m | ~Aug 2032 | ... | ... | ... | ...
+
+--- TABLE 6 ---
+Date Logged | Client Ref (POPIA) | Introduced By | First Contact | Status | Notes
+... | ... | ... | ... | ... | ...
+... | ... | ... | ... | ... | ...
