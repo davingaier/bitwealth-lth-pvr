@@ -139,9 +139,13 @@ Deno.serve(async (req) => {
     }
 
     // Create VALR subaccount label
-    // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars)
+    // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars),
+    // so sanitise the WHOLE label — customer names can contain hyphens/apostrophes (e.g. "Robert-Reece").
     const strategyName = strategy.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
-    const label = `${customer.first_names} ${customer.last_name} ${strategyName}`;
+    const label = `${customer.first_names} ${customer.last_name} ${strategyName}`
+      .replace(/[^A-Za-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     let subaccountId: string;
 

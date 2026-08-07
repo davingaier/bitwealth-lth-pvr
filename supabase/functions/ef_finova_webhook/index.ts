@@ -250,6 +250,23 @@ Deno.serve(async (req: Request) => {
 
       const alreadyEmailed = existingFinova?.register_email_sent_at != null;
       if (!alreadyEmailed) {
+        // Friendly strategy name for the {{strategy_name}} placeholder.
+        let strategyName = "BitWealth";
+        try {
+          const { data: cs } = await sb
+            .from("customer_strategies")
+            .select("strategy_code")
+            .eq("customer_id", customerId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (cs?.strategy_code) {
+            const { data: s } = await sb
+              .from("strategies").select("name").eq("strategy_code", cs.strategy_code).maybeSingle();
+            strategyName = s?.name || cs.strategy_code;
+          }
+        } catch { /* keep default */ }
+
         const websiteUrl = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
         const registrationUrl =
           `${websiteUrl}/register.html?customer_id=${customerId}&email=${encodeURIComponent(customer.email ?? "")}`;
@@ -264,6 +281,7 @@ Deno.serve(async (req: Request) => {
               to_email: customer.email,
               data: {
                 first_name: customer.first_names,
+                strategy_name: strategyName,
                 registration_url: registrationUrl,
                 website_url: "https://bitwealth.co.za",
               },
