@@ -1669,6 +1669,8 @@
 
             <div class="cm-modal-footer">
               <button type="button" id="cmEditorArchive" class="btn" style="background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;">Archive Client</button>
+              <button type="button" id="cmRejectKycBtn" class="btn" style="background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;">Reject KYC</button>
+              <button type="button" id="cmReinviteKycBtn" class="btn btn-secondary-sm">Re-invite KYC</button>
               <div style="flex:1;"></div>
               <button type="button" data-close-editor class="btn btn-secondary-sm">Cancel</button>
               <button type="submit" id="cmEditorSave" class="btn btn-primary-sm">Save Changes</button>
@@ -6143,6 +6145,37 @@
       </div>
     </div>
 
+    <!-- Finova KYC Card -->
+    <div class="card" id="finovaKycCard">
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
+        <h3 style="margin:0;">Finova KYC</h3>
+        <div style="margin-left:auto;">
+          <button id="finovaKycRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+        </div>
+      </div>
+      <p class="small-muted" style="margin-bottom:.75rem;">
+        Clients in the Finova/KYCDD onboarding. The webhook only reports successes — if you are BCC’d on a Finova rejection email, use <strong>Reject</strong> to offboard the client (sets status to inactive). <strong>Re-invite</strong> returns them to KYC.
+      </p>
+      <div class="table-scroll">
+        <table id="finovaKycTable">
+          <thead>
+            <tr>
+              <th style="min-width:150px;">Customer</th>
+              <th style="min-width:90px;">Reg. status</th>
+              <th style="min-width:90px;">Finova</th>
+              <th style="min-width:60px;">Risk</th>
+              <th style="min-width:120px;">Invited</th>
+              <th style="min-width:120px;">Completed</th>
+              <th style="min-width:150px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="finovaKycBody">
+            <tr><td colspan="7" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ── ATMS Monitoring Alerts Card ──────────────────────────────────────── -->
     <div class="card" id="atmsAlertsCard">
       <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.5rem;">
@@ -9664,6 +9697,57 @@
       if (linkBtn && !linkBtn._bound) {
         linkBtn.addEventListener('click', () => cmSyncBankFromValr());
         linkBtn._bound = true;
+      }
+      const rejBtn = document.getElementById('cmRejectKycBtn');
+      if (rejBtn && !rejBtn._bound) {
+        rejBtn.addEventListener('click', cmRejectKyc);
+        rejBtn._bound = true;
+      }
+      const reinvBtn = document.getElementById('cmReinviteKycBtn');
+      if (reinvBtn && !reinvBtn._bound) {
+        reinvBtn.addEventListener('click', cmReinviteKyc);
+        reinvBtn._bound = true;
+      }
+    }
+
+    // Manual Finova KYC reject / re-invite from the customer editor.
+    async function cmRejectKyc(){
+      const id = cmEditorState.customerId;
+      if (!id) { cmEditorAlert('error', 'Open an existing client first.'); return; }
+      if (!confirm('Reject this client\u2019s KYC and set them to inactive?')) return;
+      const reason = prompt('Optional reason (for audit), or leave blank:') || null;
+      const btn = document.getElementById('cmRejectKycBtn');
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Rejecting\u2026'; }
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const { data, error } = await supabaseClient.rpc('finova_reject_kyc', { p_customer_id: Number(id), p_reason: reason, p_admin_email: session?.user?.email || 'admin' });
+        if (error || !data?.success) throw new Error(error?.message || data?.error || 'Reject failed');
+        cmEditorAlert('success', 'KYC rejected. Client set to inactive.');
+        cmEditorState.profile = await cmFetchFullProfile(Number(id));
+        cmFillEditor(cmEditorState.profile);
+      } catch (err) {
+        cmEditorAlert('error', 'Reject failed: ' + (err.message || err));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Reject KYC'; }
+      }
+    }
+    async function cmReinviteKyc(){
+      const id = cmEditorState.customerId;
+      if (!id) { cmEditorAlert('error', 'Open an existing client first.'); return; }
+      if (!confirm('Re-invite this client to KYC? They will return to \u2018kyc\u2019 status.')) return;
+      const btn = document.getElementById('cmReinviteKycBtn');
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Working\u2026'; }
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const { data, error } = await supabaseClient.rpc('finova_reinvite_kyc', { p_customer_id: Number(id), p_admin_email: session?.user?.email || 'admin' });
+        if (error || !data?.success) throw new Error(error?.message || data?.error || 'Re-invite failed');
+        cmEditorAlert('success', 'Client re-invited to KYC (status: kyc).');
+        cmEditorState.profile = await cmFetchFullProfile(Number(id));
+        cmFillEditor(cmEditorState.profile);
+      } catch (err) {
+        cmEditorAlert('error', 'Re-invite failed: ' + (err.message || err));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Re-invite KYC'; }
       }
     }
 
@@ -19551,6 +19635,69 @@ self.onmessage = function(e) {
     // Expose for debugging
     window.loadEmailTemplates = loadTemplates;
     window.openEmailTemplateEditor = openEditor;
+  })();
+  </script>
+
+  <script>
+  (function(){
+    // Finova KYC admin list: monitor onboarding + manual reject / re-invite.
+    function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmtDate(d){ if(!d) return '\u2014'; try { return new Date(d).toLocaleDateString('en-ZA',{dateStyle:'medium'}); } catch { return String(d); } }
+    function pill(s){
+      const map={invited:'#6c757d',in_progress:'#0074D9',passed:'#28a745',review:'#f39c12',rejected:'#dc3545',error:'#dc3545'};
+      const c=map[s]||'#6c757d';
+      return `<span style="background:${c};color:#fff;padding:2px 8px;border-radius:10px;font-size:.75rem;white-space:nowrap;">${esc(s||'\u2014')}</span>`;
+    }
+    async function adminEmail(){ try{ const {data:{session}}=await window.supabaseClient.auth.getSession(); return session?.user?.email||'admin'; }catch{ return 'admin'; } }
+    async function load(){
+      const body=document.getElementById('finovaKycBody'); if(!body) return;
+      body.innerHTML='<tr><td colspan="7" class="muted">Loading\u2026</td></tr>';
+      const { data, error } = await window.supabaseClient.rpc('list_finova_kyc');
+      if(error){ body.innerHTML=`<tr><td colspan="7" class="muted">Error: ${esc(error.message)}</td></tr>`; return; }
+      if(!data || !data.length){ body.innerHTML='<tr><td colspan="7" class="muted">No Finova KYC records yet.</td></tr>'; return; }
+      body.innerHTML=data.map(r=>{
+        const rejected=r.finova_status==='rejected';
+        const actions=rejected
+          ? `<button class="btn btn-secondary-sm" data-reinvite="${r.customer_id}">Re-invite</button>`
+          : `<button class="btn" data-reject="${r.customer_id}" style="background:#fee2e2;color:#7f1d1d;border:1px solid #fecaca;padding:.35rem .75rem;">Reject</button>`;
+        const risk=r.client_risk_score!=null?esc(r.client_risk_score):'\u2014';
+        const note=rejected && r.rejection_reason ? `<div class="small-muted">Reason: ${esc(r.rejection_reason)}</div>` : '';
+        return `<tr>
+          <td>#${r.customer_id} · ${esc(r.customer_name)}<div class="small-muted">${esc(r.email||'')}</div>${note}</td>
+          <td>${esc(r.registration_status||'\u2014')}</td>
+          <td>${pill(r.finova_status)}</td>
+          <td>${risk}</td>
+          <td>${fmtDate(r.invited_at)}</td>
+          <td>${fmtDate(r.completed_at)}</td>
+          <td>${actions}</td>
+        </tr>`;
+      }).join('');
+    }
+    async function onClick(e){
+      const rej=e.target.getAttribute&&e.target.getAttribute('data-reject');
+      const rei=e.target.getAttribute&&e.target.getAttribute('data-reinvite');
+      if(rej){
+        if(!confirm('Reject this client\u2019s KYC and set them to inactive?')) return;
+        const reason=prompt('Optional reason (for audit), or leave blank:')||null;
+        e.target.disabled=true;
+        const { data, error } = await window.supabaseClient.rpc('finova_reject_kyc',{ p_customer_id:Number(rej), p_reason:reason, p_admin_email:await adminEmail() });
+        if(error||!data?.success){ alert('Reject failed: '+(error?.message||data?.error||'unknown')); e.target.disabled=false; return; }
+        load();
+      } else if(rei){
+        if(!confirm('Re-invite this client to KYC? They will return to \u2018kyc\u2019 status.')) return;
+        e.target.disabled=true;
+        const { data, error } = await window.supabaseClient.rpc('finova_reinvite_kyc',{ p_customer_id:Number(rei), p_admin_email:await adminEmail() });
+        if(error||!data?.success){ alert('Re-invite failed: '+(error?.message||data?.error||'unknown')); e.target.disabled=false; return; }
+        load();
+      }
+    }
+    function init(){
+      if(!document.getElementById('finovaKycCard')) return;
+      document.getElementById('finovaKycRefreshBtn')?.addEventListener('click', load);
+      document.getElementById('finovaKycBody')?.addEventListener('click', onClick);
+      load();
+    }
+    const t=setInterval(()=>{ if(window.supabaseClient){ clearInterval(t); init(); } }, 400);
   })();
   </script>
 

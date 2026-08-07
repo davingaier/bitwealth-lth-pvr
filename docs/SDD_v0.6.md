@@ -3,11 +3,40 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-07 (v0.6.153)
+**Last updated:** 2026-08-07 (v0.6.154)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.154 – Finova KYC: manual reject / re-invite (webhook is success-only)
+**Date:** 2026-08-07  
+**Status:** ✅ DEPLOYED (2 migrations / 3 RPCs + admin UI)
+
+**Motivation.** The Finova/KYCDD webhook fires **only on successful KYC completion**, so BitWealth never receives a signal for a failed or rejected verification. As a workaround, Finova BCCs **admin@bitwealth.co.za** on all client emails triggered in KYCDD, so the admin is notified of a rejection out-of-band. This change adds an admin-driven **Reject KYC** (and reversible **Re-invite KYC**) capability.
+
+**Behaviour (confirmed with product owner):**
+- Reject → `customer_details.registration_status = 'inactive'` (+ `customer_status = 'Inactive'`) and `kyc_finova.finova_status = 'rejected'` with optional reason.
+- No client email is sent (Finova already emails the client).
+- Reversible: **Re-invite** returns the client to `registration_status = 'kyc'` and `kyc_finova.finova_status = 'invited'`, clearing the rejection and the `register_email_sent_at` guard so a subsequent pass re-sends the registration email.
+
+**Backend (migrations applied via MCP):**
+- `20260807_finova_kyc_reject_reinvite`: adds `rejected_at`, `rejected_by`, `rejection_reason` to `public.kyc_finova`; creates `public.finova_reject_kyc(p_customer_id, p_reason, p_admin_email)` and `public.finova_reinvite_kyc(p_customer_id, p_admin_email)` (both `SECURITY DEFINER`, granted to `authenticated`).
+- `20260807_finova_kyc_list_reader`: `public.list_finova_kyc()` `SECURITY DEFINER` reader (joins `customer_details`) — required because `kyc_finova` has RLS enabled with no policies.
+
+**Admin UI (`ui/Advanced BTC DCA Strategy.html`):**
+- New **Finova KYC** card (`#finovaKycCard`) listing each client's Finova status, risk score, invited/completed dates, and a Reject/Re-invite action per row (self-contained module reading `list_finova_kyc`).
+- **Reject KYC / Re-invite KYC** buttons added to the Customer Editor footer, wired through `cmBindEditorButtons` to the same RPCs using the editor's current customer.
+
+**Related fix (VALR subaccount, same context).** During the E2E test the VALR subaccount for the same client also failed because the subaccount **label was not sanitised** (see v0.6.153) — that is now fixed and the client progressed to `deposit`.
+
+**Files/objects changed:**
+- `supabase/migrations/20260807_finova_kyc_reject_reinvite.sql`, `20260807_finova_kyc_list_reader.sql`
+- `public.finova_reject_kyc`, `public.finova_reinvite_kyc`, `public.list_finova_kyc`
+- `ui/Advanced BTC DCA Strategy.html` — Finova KYC card + editor Reject/Re-invite buttons
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.153 – Finova E2E test fixes: register email, VALR subaccount label, failure alerts
 **Date:** 2026-08-07  
