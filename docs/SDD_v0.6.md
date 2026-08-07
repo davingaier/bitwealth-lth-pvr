@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-07-31 (v0.6.152)
+**Last updated:** 2026-08-07 (v0.6.153)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.153 – Finova E2E test fixes: register email, VALR subaccount label, failure alerts
+**Date:** 2026-08-07  
+**Status:** ✅ DEPLOYED (2 edge functions + email template + admin retry)
+
+**Context.** First full end-to-end test of the Finova KYCDD integration (v0.6.152) with a live client (customer 60). The Finova webhook fired correctly: KYC fields and documents landed, KYC was marked verified, the registration email was sent, the client registered, and `ef_customer_register` auto-advanced them to `setup`. Three issues were found and fixed.
+
+#### Fix 1 — Registration email: `{{strategy_name}}` not rendering
+The `kyc_portal_registration` email is now sent by `ef_finova_webhook` (on `step='passed'`), which passed only `first_name`/`registration_url`/`website_url`, so `{{strategy_name}}` printed literally. **Fix:** the webhook now resolves the client's strategy (`customer_strategies.strategy_code` → `strategies.name`) and passes `strategy_name` in the email data.
+
+#### Fix 2 — Registration email: remove KYC-upload wording
+Because Finova now performs KYC, the template's document-upload copy was obsolete. The `email_templates.body_html` for `kyc_portal_registration` was updated:
+- Header "📋 KYC Registration" → "📋 Portal Registration".
+- Removed the "Upload your KYC documents for verification" list item.
+- Replaced the "⚠️ Important: … upload 4 KYC documents …" box with "✅ Good news: Your identity verification is already complete. Simply create your portal account below to get started."
+- "Once your KYC documentation has been verified (usually within 24 hours), we'll send you the banking details …" → "Once your account is set up, we'll send you the banking details …".
+
+#### Fix 3 — VALR subaccount not created (label sanitisation)
+`ef_valr_create_subaccount` built the subaccount label as `${first_names} ${last_name} ${strategy}` = "Robert-Reece North LTH PVR". VALR labels permit only letters, digits and spaces, but the client's name contained a **hyphen** ("Robert-Reece"), so VALR rejected the request. Only the strategy code's underscores were being sanitised, not the name. **Fix:** the whole label is now sanitised — `.replace(/[^A-Za-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()` → "Robert Reece North LTH PVR". (General gotcha: South African names are frequently hyphenated/apostrophed; always sanitise the full label.)
+
+#### Fix 4 — Alert on subaccount-creation failure
+`ef_valr_create_subaccount` previously returned the VALR error only to the admin UI and logged nothing, so failures were invisible in `public.alert_events` (which is why Fix 3's failure left no alert). It now calls `logAlert(..., "error", ...)` on both the VALR API-error path and the missing-subaccount-ID path, with `customer_id`, `label`, and the VALR status/body in context.
+
+**Files/objects changed:**
+- `supabase/functions/ef_finova_webhook/index.ts` — resolves and passes `strategy_name` to the registration email
+- `supabase/functions/ef_valr_create_subaccount/index.ts` — full-label sanitisation + `error` alerts on failure
+- `public.email_templates` (`kyc_portal_registration`) — KYC-upload wording removed
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.152 – Finova KYCDD onboarding integration (KYC-first flow)
 **Date:** 2026-07-31  

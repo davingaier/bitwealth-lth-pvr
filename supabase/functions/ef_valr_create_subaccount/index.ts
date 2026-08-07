@@ -191,7 +191,17 @@ Deno.serve(async (req) => {
           requestLabel: label,
           requestPath: path
         });
-        
+
+        await logAlert(
+          supabase,
+          "ef_valr_create_subaccount",
+          "error",
+          `VALR subaccount creation failed (${valrResponse.status} ${valrResponse.statusText})`,
+          { customer_id, label, valr_status: valrResponse.status, valr_body: errorText.slice(0, 500) },
+          customer.org_id,
+          customer_id
+        );
+
         return new Response(
           JSON.stringify({ 
             error: `VALR API error: ${valrResponse.status} ${valrResponse.statusText}`,
@@ -207,6 +217,15 @@ Deno.serve(async (req) => {
 
       if (!subaccountId) {
         console.error("No subaccount ID in VALR response:", valrData);
+        await logAlert(
+          supabase,
+          "ef_valr_create_subaccount",
+          "error",
+          "VALR did not return a subaccount ID",
+          { customer_id, label, valr_response: valrData },
+          customer.org_id,
+          customer_id
+        );
         return new Response(
           JSON.stringify({ error: "VALR did not return subaccount ID", valr_response: valrData }),
           { status: 500, headers: corsHeaders }
