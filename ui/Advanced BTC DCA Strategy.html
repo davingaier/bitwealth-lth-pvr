@@ -9566,7 +9566,13 @@
       const el = form.querySelector(`[name="${name}"]`);
       if(!el) return;
       if(el.tagName === 'SELECT'){
-        el.value = value === null || value === undefined ? '' : String(value);
+        const v = value === null || value === undefined ? '' : String(value);
+        // Add a matching option when the stored value isn't a preset (e.g. KYC
+        // field values that arrive from Finova rather than our fixed dropdown).
+        if (v && !Array.from(el.options).some(o => o.value === v)) {
+          el.add(new Option(v, v));
+        }
+        el.value = v;
       } else if(el.type === 'date'){
         el.value = value ? String(value).slice(0,10) : '';
       } else {

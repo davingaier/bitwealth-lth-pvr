@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-07 (v0.6.154)
+**Last updated:** 2026-08-09 (v0.6.155)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.155 – Finova KYC data fixes: SA ID leading zeros, source-of-income document, editor dropdown
+**Date:** 2026-08-09  
+**Status:** ✅ DEPLOYED (1 migration + edge function + admin UI + data backfill)
+
+Three follow-up issues found while reviewing customer 60's imported KYC data.
+
+#### Fix 1 — SA ID number lost its leading zeros
+`customer_details.id_number` was a **numeric** column, so a 13-digit SA ID such as `0005035092088` was stored as `5035092088` (leading zeros dropped); the webhook also coerced it with `Number()`. SA ID numbers are identifiers, not quantities, so they must be **text**.
+- Migration `id_number_to_text`: dropped the dependent `public.v_fic_kyc_completeness` view (it references `id_number` only via `IS NOT NULL`), `ALTER COLUMN id_number TYPE text`, recreated the view verbatim, and restored its grants.
+- `ef_finova_webhook` (`finova.ts`) now stores the SA ID as text.
+- Customer 60 backfilled from `kyc_finova.last_payload` → `0005035092088`.
+- (Gotcha: store national/SA ID numbers as text — leading zeros are significant.)
+
+#### Fix 2 — "Source of Income" showed "Not uploaded"
+Finova does not provide a standalone source-of-income **document**; source of income is a **field** (`source_s_of_income`, e.g. "Salary") evidenced by the full **Client KYC report**. The webhook left `kyc_source_of_income_doc_url` null, so the admin editor showed "Not uploaded". The webhook now sets `kyc_source_of_income_doc_url` (and its timestamp) to the stored **KYC report** URL. Customer 60 backfilled.
+
+#### Fix 3 — Editor source-of-income dropdown displayed blank
+The editor's "Source of income" `<select>` has a fixed option list (our legacy six values), so a Finova value like "Salary" rendered as blank. `cmSetField` now **adds a matching option on the fly** when a stored select value isn't already a preset — a general fix for any KYC field whose value comes from Finova rather than our dropdown.
+
+**Files/objects changed:**
+- `supabase/migrations/20260809_id_number_to_text.sql`
+- `public.customer_details.id_number` (numeric → text) + `public.v_fic_kyc_completeness` (recreated)
+- `supabase/functions/ef_finova_webhook/finova.ts`, `index.ts`
+- `ui/Advanced BTC DCA Strategy.html` — `cmSetField` dynamic-option handling
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.154 – Finova KYC: manual reject / re-invite (webhook is success-only)
 **Date:** 2026-08-07  

@@ -78,7 +78,7 @@ export function mapFinovaToCustomer(p: Record<string, unknown>): Record<string, 
   const idRaw = asText(p["ClientID/Passport"]);
   if (idRaw) {
     if (/^\d{13}$/.test(idRaw)) {
-      patch["id_number"] = Number(idRaw);
+      patch["id_number"] = idRaw; // text — a numeric column drops SA-ID leading zeros
       patch["id_type"] = "SA ID";
     } else {
       patch["id_passport_number"] = idRaw;

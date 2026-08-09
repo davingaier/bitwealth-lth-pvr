@@ -164,6 +164,14 @@ Deno.serve(async (req: Request) => {
       if (url) docArchive[field] = url;
     }
 
+    // Finova has no standalone source-of-income document; the source of income is a
+    // field (kyc_source_of_income) evidenced by the KYC report. Point the
+    // source-of-income document at that report so the admin UI shows it.
+    if (customerPatch["kyc_finova_report_url"]) {
+      customerPatch["kyc_source_of_income_doc_url"] = customerPatch["kyc_finova_report_url"];
+      customerPatch["kyc_source_of_income_doc_uploaded_at"] = now;
+    }
+
     if (p["client_id"]) customerPatch["finova_client_id"] = p["client_id"];
 
     // 6. Apply customer_details patch.
