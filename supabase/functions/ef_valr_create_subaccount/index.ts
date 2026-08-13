@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     // Get customer details
     const { data: customer, error: customerError } = await supabase
       .from("customer_details")
-      .select("customer_id, first_names, last_name, email, registration_status, org_id")
+      .select("customer_id, first_names, last_name, email, registration_status, org_id, display_name")
       .eq("customer_id", customer_id)
       .single();
 
@@ -140,9 +140,10 @@ Deno.serve(async (req) => {
 
     // Create VALR subaccount label
     // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars),
-    // so sanitise the WHOLE label — customer names can contain hyphens/apostrophes (e.g. "Robert-Reece").
+    // so sanitise the WHOLE label — names can contain hyphens/apostrophes and entities have no personal name.
     const strategyName = strategy.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
-    const label = `${customer.first_names} ${customer.last_name} ${strategyName}`
+    const clientLabel = customer.display_name || [customer.first_names, customer.last_name].filter(Boolean).join(' ');
+    const label = `${clientLabel} ${strategyName}`
       .replace(/[^A-Za-z0-9 ]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();

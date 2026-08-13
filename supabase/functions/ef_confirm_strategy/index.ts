@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     // Get customer details
     const { data: customer, error: customerError } = await supabase
       .from("customer_details")
-      .select("customer_id, first_names, last_name, email, registration_status, org_id")
+      .select("customer_id, first_names, last_name, email, registration_status, org_id, client_type, entity_name, display_name")
       .eq("customer_id", customer_id)
       .single();
 
@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
         strategy_code: strategy_code,
         strategy_version_id: strategyVersion.strategy_version_id,
         status: "pending", // Will become 'active' when funds deposited
-        label: `${customer.first_names} ${customer.last_name} - ${strategy.name}`,
+        label: `${customer.display_name || [customer.first_names, customer.last_name].filter(Boolean).join(" ")} - ${strategy.name}`,
       };
       if (strategy_variation_id) insertPayload.strategy_variation_id = strategy_variation_id;
       if (platform_fee_rate != null) insertPayload.platform_fee_rate = platform_fee_rate;
@@ -283,7 +283,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           template_key: "kyc_finova_invite",
           to_email: customer.email,
-          data: { first_name: customer.first_names, website_url: "https://bitwealth.co.za" },
+          data: { first_name: customer.first_names || customer.entity_name || customer.display_name, website_url: "https://bitwealth.co.za" },
         }),
       });
 

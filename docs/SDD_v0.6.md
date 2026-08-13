@@ -3,11 +3,38 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-09 (v0.6.155)
+**Last updated:** 2026-08-13 (v0.6.156)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.156 – Entity onboarding (Phase 0: data model) + entity-aware strategy/VALR
+**Date:** 2026-08-13  
+**Status:** 🚧 IN PROGRESS (Phase 0 deployed; later phases pending)
+
+**Motivation.** Extend client onboarding (previously individual-only) to support **entity** clients — companies (Pty Ltd), trusts, close corporations, partnerships, and NPOs — with per-director KYC captured through the existing Finova/KYCDD workflow.
+
+**Finova mechanics (confirmed 2026-08-13).** The entity onboarding uses the **same invite URL/workflow**; `what_type_of_client_are_you` branches it. Finova returns a **single combined payload** containing the entity **plus its directors** (directors are KYC subjects captured within the entity workflow — they have **no separate UUID and no agreement in their own capacity**; the mandate is with the entity). The entity's completer can share the workflow to other directors to fill in their details. `"Passed KYC"` = entity completion (the webhook gate); `"Post Data Collection"` = a director sub-step (informational). Failures remain a terminal `"Failed KYC"` step with no success-webhook (handled by the admin BCC + manual reject).
+
+**Phase 0 (deployed) — data model (`20260813_entity_onboarding_phase0`):**
+- `public.customer_details`: added `client_type` (`individual`|`entity`, default `individual`) + entity columns (`entity_name`, `entity_type`, `entity_registration_number`, `entity_vat_number`, `entity_country_of_incorporation`, `entity_tax_number`, `nature_of_business`, `industry`, `government_tenders`, `number_of_directors`, `largest_shareholder`, `largest_shareholder_holding`) + a trigger-maintained `display_name` (entity name for entities, else "First Last"). `first_names`/`last_name` relaxed to nullable.
+- New `public.client_related_persons`: directors / trustees / members / beneficial owners / authorised reps, each with person KYC fields, re-hosted KYC document URLs, and per-director Finova KYC status. `kyc_finova` is unchanged (one row per customer); director KYC status lives on `client_related_persons`.
+- RPCs (SECURITY DEFINER): `list_entity_directors`, `upsert_entity_director`, `delete_entity_director`.
+
+**Entity-aware backend (deployed):** `ef_confirm_strategy` and `ef_valr_create_subaccount` now use `display_name`/`entity_name` for the strategy label, VALR subaccount label, and the KYC-invite email.
+
+**Remaining phases (planned):** admin Customer Editor entity tab + directors panel; website expression-of-interest entity toggle; `ef_finova_webhook` entity + nested-director mapping (finalised once a sample entity payload confirms the director JSON nesting — captured via a test entity run and `kyc_finova.last_payload`); entity portal (single authorised-rep login); statements/Finova-KYC-list entity support; `display_name` adoption across name-building views/RPCs.
+
+**Future enhancement — multiple director logins.** For now, an entity has a **single authorised-representative** portal login. Allowing **multiple directors to each have a login** to the entity portal is deferred as a future enhancement (a BitWealth-side product decision, decoupled from Finova KYC): it requires an auth-user→entity mapping (via `client_related_persons.auth_user_id`/`can_login`) plus multi-user RLS on the entity's data.
+
+**Files/objects changed:**
+- `supabase/migrations/20260813_entity_onboarding_phase0.sql`
+- `public.customer_details` (client_type/entity cols/display_name), `public.client_related_persons` (new), `list_entity_directors`/`upsert_entity_director`/`delete_entity_director`
+- `supabase/functions/ef_confirm_strategy/index.ts`, `supabase/functions/ef_valr_create_subaccount/index.ts`
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.155 – Finova KYC data fixes: SA ID leading zeros, source-of-income document, editor dropdown
 **Date:** 2026-08-09  
