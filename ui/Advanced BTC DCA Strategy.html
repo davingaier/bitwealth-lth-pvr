@@ -9822,6 +9822,7 @@
     async function cmRenderDirectors(customerId){
       const body = document.getElementById('cmDirectorsBody');
       if(!body) return;
+      const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       if(!customerId){ body.innerHTML = '<tr><td colspan="5" class="muted">Save the entity first, then add directors.</td></tr>'; return; }
       body.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
       const { data, error } = await supabaseClient.rpc('list_entity_directors', { p_customer_id: Number(customerId) });
