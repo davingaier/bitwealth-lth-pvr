@@ -1428,6 +1428,7 @@
           <div id="cmEditorAlert" style="display:none;margin:.5rem 1.25rem;padding:.6rem .9rem;border-radius:8px;border:1px solid;font-size:.9rem;"></div>
           <nav class="cm-tabstrip" id="cmEditorTabs" role="tablist">
             <button type="button" class="cm-tabbtn cm-tabbtn--active" data-tab="personal">Personal</button>
+            <button type="button" class="cm-tabbtn" data-tab="entity" id="cmEntityTabBtn" style="display:none;">Entity &amp; Directors</button>
             <button type="button" class="cm-tabbtn" data-tab="kyc">KYC &amp; Documents</button>
             <button type="button" class="cm-tabbtn" data-tab="banking">Banking</button>
             <button type="button" class="cm-tabbtn" data-tab="exchange">Exchange / VALR</button>
@@ -1440,6 +1441,12 @@
             <!-- =============== Personal =============== -->
             <section class="cm-tabpanel cm-tabpanel--active" data-panel="personal">
               <div class="cm-grid">
+                <label><span class="label-line">Client type <span class="req">*</span></span>
+                  <select name="client_type" id="cmClientType">
+                    <option value="individual">Individual</option>
+                    <option value="entity">Entity</option>
+                  </select>
+                </label>
                 <label><span class="label-line">First names <span class="req">*</span></span><input name="first_names" data-cm-required /></label>
                 <label><span class="label-line">Middle name</span><input name="middle_name" /></label>
                 <label><span class="label-line">Last name <span class="req">*</span></span><input name="last_name" data-cm-required /></label>
@@ -1458,6 +1465,70 @@
                 <label><span class="label-line">Secondary nationality</span><input name="nationality_secondary" /></label>
                 <label><span class="label-line">Occupation</span><input name="occupation" /></label>
                 <label><span class="label-line">Tax number</span><input name="tax_number" /></label>
+              </div>
+            </section>
+
+            <!-- =============== Entity & Directors =============== -->
+            <section class="cm-tabpanel" data-panel="entity">
+              <div class="cm-grid">
+                <label><span class="label-line">Entity name <span class="req">*</span></span><input name="entity_name" /></label>
+                <label><span class="label-line">Entity type</span>
+                  <select name="entity_type">
+                    <option value="">--</option>
+                    <option value="company">Company (Pty Ltd)</option>
+                    <option value="trust">Trust</option>
+                    <option value="close_corporation">Close Corporation</option>
+                    <option value="partnership">Partnership</option>
+                    <option value="npo">Non-profit / other</option>
+                  </select>
+                </label>
+                <label><span class="label-line">Registration number</span><input name="entity_registration_number" /></label>
+                <label><span class="label-line">VAT number</span><input name="entity_vat_number" /></label>
+                <label><span class="label-line">Country of incorporation</span><input name="entity_country_of_incorporation" /></label>
+                <label><span class="label-line">Entity tax number</span><input name="entity_tax_number" /></label>
+                <label><span class="label-line">Nature of business</span><input name="nature_of_business" /></label>
+                <label><span class="label-line">Industry</span><input name="industry" /></label>
+                <label><span class="label-line">Government tenders</span><input name="government_tenders" /></label>
+                <label><span class="label-line">Number of directors</span><input name="number_of_directors" type="number" /></label>
+                <label><span class="label-line">Largest shareholder</span><input name="largest_shareholder" /></label>
+                <label><span class="label-line">Largest shareholder holding</span><input name="largest_shareholder_holding" /></label>
+              </div>
+              <div style="margin-top:1rem;">
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;">
+                  <strong style="font-size:.95rem;">Directors / Related Persons</strong>
+                  <button type="button" id="cmAddDirectorBtn" class="btn btn-secondary-sm" style="margin-left:auto;">+ Add Director</button>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Name</th><th>ID / Passport</th><th>Role</th><th>KYC</th><th>Actions</th></tr></thead>
+                    <tbody id="cmDirectorsBody"><tr><td colspan="5" class="muted">Save the entity first, then add directors.</td></tr></tbody>
+                  </table>
+                </div>
+                <div id="cmDirForm" style="display:none;border:1px solid #dee2e6;border-radius:6px;padding:.75rem;margin-top:.5rem;">
+                  <input type="hidden" id="cmDirRpId" />
+                  <div class="cm-grid">
+                    <label><span class="label-line">First names</span><input id="cmDirFirst" /></label>
+                    <label><span class="label-line">Last name</span><input id="cmDirLast" /></label>
+                    <label><span class="label-line">Role</span>
+                      <select id="cmDirRole">
+                        <option value="director">Director</option>
+                        <option value="authorized_representative">Authorised representative</option>
+                        <option value="beneficial_owner">Beneficial owner</option>
+                        <option value="shareholder">Shareholder</option>
+                        <option value="trustee">Trustee</option>
+                        <option value="member">Member</option>
+                        <option value="partner">Partner</option>
+                      </select>
+                    </label>
+                    <label><span class="label-line">ID / Passport</span><input id="cmDirId" /></label>
+                    <label><span class="label-line">Email</span><input id="cmDirEmail" type="email" /></label>
+                    <label><span class="label-line">Nationality</span><input id="cmDirNationality" /></label>
+                  </div>
+                  <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+                    <button type="button" id="cmDirSaveBtn" class="btn btn-primary-sm">Save Director</button>
+                    <button type="button" id="cmDirCancelBtn" class="btn btn-secondary-sm">Cancel</button>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -3163,7 +3234,7 @@
           if (error) throw error;
           allCustomers = (data || []).map(c => ({
             id: c.customer_id,
-            name: `${c.first_names || ''} ${c.last_name || ''}`.trim() || '(unnamed)',
+            name: c.display_name || `${c.first_names || ''} ${c.last_name || ''}`.trim() || '(unnamed)',
             email: c.email || '',
             status: c.registration_status || 'unknown',
           }));
@@ -8211,7 +8282,7 @@
         customersCache=list;
 
         const opts=['<option value="">Select customer…</option>'].concat(
-          active.map(r=>'<option value="'+String(r.customer_id)+'">'+r.last_name+', '+r.first_names+'</option>')
+          active.map(r=>'<option value="'+String(r.customer_id)+'">'+(r.display_name || ((r.last_name||'')+', '+(r.first_names||'')))+'</option>')
         ).join('');
 
         if(sel){
@@ -9432,7 +9503,8 @@
     /* Two-button entry on main page → Picker modal (search/list) → Editor modal (7 tabs).
        Backed by public.customer_details + customer_strategies + exchange_accounts. */
     const CM_MODAL_FIELDS = {
-      personal: ['first_names','middle_name','last_name','date_of_birth','gender','email','phone_country_code','cellphone_number','country_of_residence','country_of_origin','nationality','nationality_secondary','occupation','tax_number'],
+      personal: ['client_type','first_names','middle_name','last_name','date_of_birth','gender','email','phone_country_code','cellphone_number','country_of_residence','country_of_origin','nationality','nationality_secondary','occupation','tax_number'],
+      entity:   ['entity_name','entity_type','entity_registration_number','entity_vat_number','entity_country_of_incorporation','entity_tax_number','nature_of_business','industry','government_tenders','number_of_directors','largest_shareholder','largest_shareholder_holding'],
       kyc:      ['id_type','id_number','id_passport_number','id_issuing_country','id_issue_date','id_expiry_date','kyc_source_of_income'],
       portal:   ['registration_status','customer_status'],
       compliance:['is_pep','pep_details','fic_source_of_funds','compliance_frozen','compliance_frozen_note','is_test'],
@@ -9597,8 +9669,9 @@
       bank = bank || {};
 
       // Personal + KYC + Portal + Compliance + a few from customer_details
-      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
+      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.entity, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
         .forEach(k => cmSetField(k, cust[k]));
+      cmApplyClientType();
 
       // Banking (from public.bank_accounts) — most fields are read-only displays
       // populated from the latest VALR sync; only bank_account_type remains an
@@ -9714,6 +9787,95 @@
         reinvBtn.addEventListener('click', cmReinviteKyc);
         reinvBtn._bound = true;
       }
+      const addDirBtn = document.getElementById('cmAddDirectorBtn');
+      if (addDirBtn && !addDirBtn._bound) { addDirBtn.addEventListener('click', () => cmShowDirectorForm(null)); addDirBtn._bound = true; }
+      const dirSaveBtn = document.getElementById('cmDirSaveBtn');
+      if (dirSaveBtn && !dirSaveBtn._bound) { dirSaveBtn.addEventListener('click', cmSaveDirector); dirSaveBtn._bound = true; }
+      const dirCancelBtn = document.getElementById('cmDirCancelBtn');
+      if (dirCancelBtn && !dirCancelBtn._bound) { dirCancelBtn.addEventListener('click', () => { document.getElementById('cmDirForm').style.display='none'; }); dirCancelBtn._bound = true; }
+      const dirBody = document.getElementById('cmDirectorsBody');
+      if (dirBody && !dirBody._bound) {
+        dirBody.addEventListener('click', (e) => {
+          const edit = e.target.getAttribute && e.target.getAttribute('data-dir-edit');
+          const del  = e.target.getAttribute && e.target.getAttribute('data-dir-del');
+          if(edit){ try { cmShowDirectorForm(JSON.parse(edit)); } catch(_){} }
+          else if(del){ cmDeleteDirector(del); }
+        });
+        dirBody._bound = true;
+      }
+      const ctSel = document.querySelector('#cmEditorForm [name="client_type"]');
+      if (ctSel && !ctSel._bound) { ctSel.addEventListener('change', cmApplyClientType); ctSel._bound = true; }
+    }
+
+    // ---- Entity client-type + directors (Phase 1) ----
+    function cmApplyClientType(){
+      const ct = document.querySelector('#cmEditorForm [name="client_type"]')?.value || 'individual';
+      const isEntity = ct === 'entity';
+      const entityBtn = document.getElementById('cmEntityTabBtn');
+      if(entityBtn) entityBtn.style.display = isEntity ? '' : 'none';
+      ['first_names','last_name','cellphone_number'].forEach(n => {
+        const el = document.querySelector(`#cmEditorForm [name="${n}"]`);
+        if(el){ if(isEntity) el.removeAttribute('data-cm-required'); else el.setAttribute('data-cm-required',''); }
+      });
+      if(isEntity) cmRenderDirectors(cmEditorState.customerId);
+    }
+    async function cmRenderDirectors(customerId){
+      const body = document.getElementById('cmDirectorsBody');
+      if(!body) return;
+      if(!customerId){ body.innerHTML = '<tr><td colspan="5" class="muted">Save the entity first, then add directors.</td></tr>'; return; }
+      body.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+      const { data, error } = await supabaseClient.rpc('list_entity_directors', { p_customer_id: Number(customerId) });
+      if(error){ body.innerHTML = `<tr><td colspan="5" class="muted">Error: ${escapeHtml(error.message)}</td></tr>`; return; }
+      if(!data || !data.length){ body.innerHTML = '<tr><td colspan="5" class="muted">No directors yet.</td></tr>'; return; }
+      body.innerHTML = data.map(d => {
+        const name = [d.first_names, d.last_name].filter(Boolean).join(' ') || '—';
+        const idv = d.id_number || d.id_passport_number || '';
+        const payload = JSON.stringify({ id:d.related_person_id, first:d.first_names, last:d.last_name, role:d.role, idn:idv, email:d.email, nat:d.nationality });
+        return `<tr>
+          <td>${escapeHtml(name)}</td>
+          <td>${escapeHtml(idv||'—')}</td>
+          <td>${escapeHtml(d.role||'director')}</td>
+          <td>${escapeHtml(d.finova_status||'—')}</td>
+          <td>
+            <button type="button" class="btn btn-secondary-sm" data-dir-edit='${escapeHtml(payload)}'>Edit</button>
+            <button type="button" class="btn btn-secondary-sm" data-dir-del="${d.related_person_id}" style="background:#fee2e2;color:#7f1d1d;">Delete</button>
+          </td></tr>`;
+      }).join('');
+    }
+    function cmShowDirectorForm(dir){
+      const f = document.getElementById('cmDirForm'); if(!f) return;
+      f.style.display = '';
+      document.getElementById('cmDirRpId').value = dir?.id || '';
+      document.getElementById('cmDirFirst').value = dir?.first || '';
+      document.getElementById('cmDirLast').value = dir?.last || '';
+      document.getElementById('cmDirRole').value = dir?.role || 'director';
+      document.getElementById('cmDirId').value = (dir?.idn && dir.idn!=='—') ? dir.idn : '';
+      document.getElementById('cmDirEmail').value = dir?.email || '';
+      document.getElementById('cmDirNationality').value = dir?.nat || '';
+    }
+    async function cmSaveDirector(){
+      const cid = cmEditorState.customerId;
+      if(!cid){ cmEditorAlert('error','Save the entity first, then add directors.'); return; }
+      const rpid = document.getElementById('cmDirRpId').value;
+      const idv = document.getElementById('cmDirId').value.trim();
+      const data = {
+        first_names: document.getElementById('cmDirFirst').value.trim() || null,
+        last_name: document.getElementById('cmDirLast').value.trim() || null,
+        role: document.getElementById('cmDirRole').value,
+        email: document.getElementById('cmDirEmail').value.trim() || null,
+        nationality: document.getElementById('cmDirNationality').value.trim() || null,
+      };
+      if(idv){ if(/^\d{13}$/.test(idv)){ data.id_number = idv; data.id_type='SA ID'; } else { data.id_passport_number = idv; data.id_type='Passport'; } }
+      const { error } = await supabaseClient.rpc('upsert_entity_director', { p_customer_id: Number(cid), p_data: data, p_related_person_id: rpid ? Number(rpid) : null });
+      if(error){ cmEditorAlert('error','Save director failed: '+error.message); return; }
+      document.getElementById('cmDirForm').style.display = 'none';
+      cmRenderDirectors(cid);
+    }
+    async function cmDeleteDirector(rpid){
+      if(!confirm('Delete this director?')) return;
+      const { error } = await supabaseClient.rpc('delete_entity_director', { p_related_person_id: Number(rpid) });
+      if(error){ cmEditorAlert('error','Delete failed: '+error.message); return; }
+      cmRenderDirectors(cmEditorState.customerId);
     }
 
     // Manual Finova KYC reject / re-invite from the customer editor.
@@ -9893,14 +10055,18 @@
       cmEditorAlertHide();
       cmEditorPlanSwitchNote = null;
       const payload = cmCollectEditorPayload();
-      // Required fields
-      if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email||'').trim() || !String(payload.cellphone_number||'').trim()){
+      // Required fields (client-type-aware)
+      if(payload.client_type === 'entity'){
+        if(!String(payload.entity_name||'').trim() || !String(payload.email||'').trim()){
+          throw new Error('Entity name and email are required.');
+        }
+      } else if(!String(payload.first_names||'').trim() || !String(payload.last_name||'').trim() || !String(payload.email||'').trim() || !String(payload.cellphone_number||'').trim()){
         throw new Error('First name, last name, email, and cellphone are required.');
       }
 
       // 1) Build customer_details patch
       const custPatch = {};
-      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
+      [...CM_MODAL_FIELDS.personal, ...CM_MODAL_FIELDS.entity, ...CM_MODAL_FIELDS.kyc, ...CM_MODAL_FIELDS.portal, ...CM_MODAL_FIELDS.compliance, ...CM_MODAL_FIELDS.strategyOnDetails]
         .forEach(k => { if(k in payload) custPatch[k] = payload[k] === '' ? null : payload[k]; });
       // Numerics already coerced
       // Trim strings
@@ -18718,7 +18884,7 @@ self.onmessage = function(e) {
 
         return `<tr>
           <td style="text-align:left;">
-            <strong>${r.first_names} ${r.last_name}</strong><br>
+            <strong>${r.display_name || ((r.first_names||'') + ' ' + (r.last_name||''))}</strong>${r.client_type === 'entity' ? ' <span style="font-size:.7rem;background:#e0e7ff;border:1px solid #c7d2fe;border-radius:4px;padding:0 5px;">Entity</span>' : ''}<br>
             <span style="font-size:.75rem;color:#6b7280;">${r.email || ''}</span>
           </td>
           <td>${scoreBar(r.fic_completeness_score, r.fic_completeness_max)}</td>

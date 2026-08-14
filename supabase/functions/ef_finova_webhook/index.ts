@@ -16,6 +16,8 @@ import { getServiceClient } from "./client.ts";
 import {
   verifyFinovaSignature, mapFinovaToCustomer,
   PRIMARY_DOCS, ARCHIVE_DOCS, PROFILE_KEYS, isFinovaDoc, type FinovaDoc,
+  isEntity, mapFinovaEntity, mapFinovaDirector,
+  ENTITY_PRIMARY_DOCS, ENTITY_ARCHIVE_DOCS, DIRECTOR_DOCS,
 } from "./finova.ts";
 
 const CORS = {
@@ -121,7 +123,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: customer, error: custErr } = await sb
     .from("customer_details")
-    .select("customer_id, org_id, email, first_names, last_name, registration_status")
+    .select("customer_id, org_id, email, first_names, last_name, registration_status, client_type, entity_name, display_name")
     .eq("customer_id", customerId)
     .single();
   if (custErr || !customer) {
@@ -133,14 +135,17 @@ Deno.serve(async (req: Request) => {
   try {
     const step = typeof p["step"] === "string" ? (p["step"] as string) : null;
     const now = new Date().toISOString();
+    const entity = isEntity(p);
 
-    // 4. Field mapping.
-    const customerPatch = mapFinovaToCustomer(p);
+    // 4. Field mapping (entity company fields vs individual person fields).
+    const customerPatch = entity ? mapFinovaEntity(p) : mapFinovaToCustomer(p);
 
     // 5. Documents — download immediately (Finova links expire ~15 min).
     const bankPatch: Record<string, unknown> = {};
     const docArchive: Record<string, string> = {};
-    for (const d of PRIMARY_DOCS) {
+    const primaryDocs = entity ? ENTITY_PRIMARY_DOCS : PRIMARY_DOCS;
+    const archiveDocs = entity ? ENTITY_ARCHIVE_DOCS : ARCHIVE_DOCS;
+    for (const d of primaryDocs) {
       const val = p[d.field];
       if (!isFinovaDoc(val)) continue;
       const url = await storeDoc(sb, customerId, d.field, val);
@@ -157,7 +162,7 @@ Deno.serve(async (req: Request) => {
         if (d.uploadedAt) bankPatch[d.uploadedAt] = now;
       }
     }
-    for (const field of ARCHIVE_DOCS) {
+    for (const field of archiveDocs) {
       const val = p[field];
       if (!isFinovaDoc(val)) continue;
       const url = await storeDoc(sb, customerId, field, val);
@@ -178,6 +183,42 @@ Deno.serve(async (req: Request) => {
     if (Object.keys(customerPatch).length) {
       const { error } = await sb.from("customer_details").update(customerPatch).eq("customer_id", customerId);
       if (error) throw new Error(`customer_details update: ${error.message}`);
+    }
+
+    // 6b. Entity directors -> client_related_persons (idempotent on finova_client_id).
+    if (entity && Array.isArray(p["directors"])) {
+      const directors = p["directors"] as unknown[];
+      for (let i = 0; i < directors.length; i++) {
+        const draw = directors[i];
+        if (!draw || typeof draw !== "object") continue;
+        const d = draw as Record<string, unknown>;
+        const rec = mapFinovaDirector(d);
+        rec["org_id"] = customer.org_id;
+        rec["customer_id"] = customerId;
+
+        const dkey = typeof d["client_id"] === "string" && d["client_id"] ? d["client_id"] as string : `idx${i}`;
+        for (const dd of DIRECTOR_DOCS) {
+          const dval = d[dd.field];
+          if (!isFinovaDoc(dval)) continue;
+          const durl = await storeDoc(sb, customerId, `director_${dkey}_${dd.field}`, dval as FinovaDoc);
+          if (durl) rec[dd.column] = durl;
+        }
+
+        let existingId: number | null = null;
+        if (rec["finova_client_id"]) {
+          const { data: ex } = await sb.from("client_related_persons")
+            .select("related_person_id")
+            .eq("customer_id", customerId)
+            .eq("finova_client_id", rec["finova_client_id"])
+            .maybeSingle();
+          existingId = ex?.related_person_id ?? null;
+        }
+        if (existingId) {
+          await sb.from("client_related_persons").update({ ...rec, updated_at: now }).eq("related_person_id", existingId);
+        } else {
+          await sb.from("client_related_persons").insert(rec);
+        }
+      }
     }
 
     // 7. Bank details -> bank_accounts (upsert the active primary row).
@@ -288,7 +329,7 @@ Deno.serve(async (req: Request) => {
               template_key: "kyc_portal_registration",
               to_email: customer.email,
               data: {
-                first_name: customer.first_names,
+                first_name: customer.first_names || customer.entity_name || customer.display_name,
                 strategy_name: strategyName,
                 registration_url: registrationUrl,
                 website_url: "https://bitwealth.co.za",

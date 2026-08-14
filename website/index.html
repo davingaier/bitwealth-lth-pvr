@@ -331,11 +331,48 @@
                 <form id="prospectForm" class="prospect-form">
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="firstName">First Name *</label>
+                            <label for="clientType">I am applying as *</label>
+                            <select id="clientType" name="clientType" required>
+                                <option value="individual">An Individual</option>
+                                <option value="entity">A Company / Trust / Other Entity</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="entityFields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="entityName">Entity Name *</label>
+                                <input type="text" id="entityName" name="entityName" placeholder="e.g. Acme Holdings (Pty) Ltd">
+                            </div>
+                            <div class="form-group">
+                                <label for="entityType">Entity Type *</label>
+                                <select id="entityType" name="entityType">
+                                    <option value="">Select Type</option>
+                                    <option value="company">Company (Pty) Ltd</option>
+                                    <option value="close_corporation">Close Corporation</option>
+                                    <option value="trust">Trust</option>
+                                    <option value="partnership">Partnership</option>
+                                    <option value="npo">Non-Profit Organisation</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="entityRegistrationNumber">Registration Number</label>
+                                <input type="text" id="entityRegistrationNumber" name="entityRegistrationNumber" placeholder="e.g. 2020/123456/07">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName"><span class="ct-label-first">First Name</span> *</label>
                             <input type="text" id="firstName" name="firstName" required>
                         </div>
                         <div class="form-group">
-                            <label for="surname">Surname *</label>
+                            <label for="surname"><span class="ct-label-last">Surname</span> *</label>
                             <input type="text" id="surname" name="surname" required>
                         </div>
                     </div>
@@ -495,6 +532,24 @@
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
         
+        // Individual / Entity toggle
+        (function () {
+            const clientTypeSel = document.getElementById('clientType');
+            const entityFields = document.getElementById('entityFields');
+            const firstLabel = document.querySelector('.ct-label-first');
+            const lastLabel = document.querySelector('.ct-label-last');
+            function applyClientType() {
+                const isEntity = clientTypeSel.value === 'entity';
+                entityFields.style.display = isEntity ? '' : 'none';
+                document.getElementById('entityName').required = isEntity;
+                document.getElementById('entityType').required = isEntity;
+                if (firstLabel) firstLabel.textContent = isEntity ? 'Contact First Name' : 'First Name';
+                if (lastLabel) lastLabel.textContent = isEntity ? 'Contact Surname' : 'Surname';
+            }
+            clientTypeSel.addEventListener('change', applyClientType);
+            applyClientType();
+        })();
+        
         document.getElementById('prospectForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -502,7 +557,9 @@
             const formMessage = document.getElementById('formMessage');
             
             // Get form values
+            const clientType = document.getElementById('clientType').value;
             const formData = {
+                client_type: clientType,
                 first_names: document.getElementById('firstName').value.trim(),
                 last_name: document.getElementById('surname').value.trim(),
                 email: document.getElementById('email').value.trim().toLowerCase(),
@@ -513,6 +570,17 @@
                 monthly_investment_amount_range: document.getElementById('monthlyAmount').value,
                 prospect_message: document.getElementById('message').value.trim()
             };
+            
+            if (clientType === 'entity') {
+                formData.entity_name = document.getElementById('entityName').value.trim();
+                formData.entity_type = document.getElementById('entityType').value;
+                formData.entity_registration_number = document.getElementById('entityRegistrationNumber').value.trim();
+                if (!formData.entity_name || !formData.entity_type) {
+                    formMessage.className = 'form-message error';
+                    formMessage.textContent = 'Please enter your entity name and type.';
+                    return;
+                }
+            }
             
             // Validate at least one investment amount
             if (!formData.upfront_investment_amount_range && !formData.monthly_investment_amount_range) {

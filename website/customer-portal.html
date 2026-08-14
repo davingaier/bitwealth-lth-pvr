@@ -1040,11 +1040,19 @@
                 
                 customerData = customerList[0];
                 
+                // Resolve a display name (entities have no first/last name)
+                const isEntityCustomer = customerData.client_type === 'entity';
+                const portalDisplayName = (customerData.display_name
+                    || customerData.entity_name
+                    || `${customerData.first_names || ''} ${customerData.last_name || ''}`).trim();
+                
                 // Update header with customer name
-                document.getElementById('customerName').textContent = `${customerData.first_names} ${customerData.last_name}`;
+                document.getElementById('customerName').textContent = portalDisplayName;
                 
                 // Set user avatar initials
-                const initials = (customerData.first_names?.[0] || '') + (customerData.last_name?.[0] || '');
+                const initials = isEntityCustomer
+                    ? (customerData.entity_name || 'E').replace(/[^A-Za-z0-9]/g, '').slice(0, 2)
+                    : (customerData.first_names?.[0] || '') + (customerData.last_name?.[0] || '');
                 document.getElementById('userAvatar').textContent = initials.toUpperCase();
 
                 // Load onboarding status
@@ -1093,7 +1101,7 @@
                     const banner = document.createElement('div');
                     banner.id = 'adminPreviewBanner';
                     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);color:#000;text-align:center;padding:10px 16px;font-weight:600;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);';
-                    banner.innerHTML = `👁️ Admin Preview — Viewing as <strong>${customerData.first_names} ${customerData.last_name}</strong> (#${customerData.customer_id}) &nbsp;|&nbsp; <a href="javascript:window.close()" style="color:#000;text-decoration:underline;">Close</a>`;
+                    banner.innerHTML = `👁️ Admin Preview — Viewing as <strong>${portalDisplayName}</strong> (#${customerData.customer_id}) &nbsp;|&nbsp; <a href="javascript:window.close()" style="color:#000;text-decoration:underline;">Close</a>`;
                     document.body.prepend(banner);
                     // Push page content down to avoid overlap
                     document.querySelector('.dashboard-container').style.marginTop = '44px';
@@ -1944,10 +1952,12 @@
                 // Calculate expected filename (SDD convention)
                 const lastDay = new Date(year, month, 0).getDate();
                 const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-                const lastName = customerData.last_name.replace(/\s+/g, '_');
-                const firstNames = customerData.first_names.replace(/\s+/g, '_');
+                const isEntityStmt = customerData.client_type === 'entity';
+                const nameToken = isEntityStmt
+                    ? (customerData.display_name || customerData.entity_name || 'entity').replace(/\s+/g, '_')
+                    : `${(customerData.last_name || '').replace(/\s+/g, '_')}_${(customerData.first_names || '').replace(/\s+/g, '_')}`;
                 const monthPadded = String(month).padStart(2, '0');
-                const filename = `${endDate}_${lastName}_${firstNames}_statement_M${monthPadded}_${year}.pdf`;
+                const filename = `${endDate}_${nameToken}_statement_M${monthPadded}_${year}.pdf`;
                 const storagePath = `${ORG_ID}/customer-${customerData.customer_id}/${filename}`;
 
                 // Try to get existing statement from storage bucket

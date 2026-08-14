@@ -25,6 +25,10 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const {
+      client_type,
+      entity_name,
+      entity_type,
+      entity_registration_number,
       first_names,
       last_name,
       email,
@@ -36,10 +40,19 @@ serve(async (req) => {
       prospect_message,
     } = body;
 
+    const isEntity = client_type === "entity";
+
     // Validate required fields
     if (!first_names || !last_name || !email) {
       return new Response(
         JSON.stringify({ error: "Missing required fields: first_names, last_name, email" }),
+        { status: 400, headers: CORS }
+      );
+    }
+
+    if (isEntity && (!entity_name || !entity_type)) {
+      return new Response(
+        JSON.stringify({ error: "Missing required entity fields: entity_name, entity_type" }),
         { status: 400, headers: CORS }
       );
     }
@@ -111,6 +124,10 @@ serve(async (req) => {
       .from("customer_details")
       .insert({
         org_id: ORG_ID,
+        client_type: isEntity ? "entity" : "individual",
+        entity_name: isEntity ? entity_name : null,
+        entity_type: isEntity ? entity_type : null,
+        entity_registration_number: isEntity ? (entity_registration_number || null) : null,
         first_names,
         last_name,
         email: email.toLowerCase(),
@@ -158,6 +175,9 @@ serve(async (req) => {
     }
 
     // Send notification email to admin
+    const entityNote = isEntity
+      ? `ENTITY APPLICATION — ${entity_name} (${entity_type}${entity_registration_number ? ", reg " + entity_registration_number : ""}). Contact person: ${customer.first_names} ${customer.last_name}.\n\n`
+      : "";
     const adminEmailData = {
       first_name: customer.first_names,
       surname: customer.last_name,
@@ -167,7 +187,7 @@ serve(async (req) => {
       country: country || "",
       upfront_investment_amount_range: upfront_investment_amount_range || "Not specified",
       monthly_investment_amount_range: monthly_investment_amount_range || "Not specified",
-      message: prospect_message || "No message provided",
+      message: entityNote + (prospect_message || "No message provided"),
       created_at: new Date().toISOString(),
       admin_portal_url: ADMIN_PORTAL_URL,
     };

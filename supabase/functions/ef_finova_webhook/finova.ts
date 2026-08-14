@@ -131,3 +131,110 @@ export const PROFILE_KEYS = [
   "employer_name", "employer_nature_of_business", "department", "JobDescription", "title",
   "place_of_birth", "country_of_birth",
 ];
+
+// ── Entity support ────────────────────────────────────────────────────────────
+// A single combined payload carries the entity (company fields at top level +
+// za_company_details) plus a `directors` array. Directors are KYC subjects with
+// no separate uuid; the mandate is with the entity.
+export function isEntity(p: Record<string, unknown>): boolean {
+  return String(p["what_type_of_client_are_you"] ?? "").toLowerCase() === "entity"
+    || Array.isArray(p["directors"]);
+}
+
+// Entity company fields -> customer_details entity columns.
+export function mapFinovaEntity(p: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  const set = (col: string, val: unknown) => { if (val != null && val !== "") patch[col] = val; };
+
+  set("entity_name", asText(p["name"]));
+  set("entity_registration_number", asText(p["entity_number"]));
+  set("entity_vat_number", asText(p["vat_number"]));
+  set("entity_country_of_incorporation", iso2ToName(p["country_of_incorporation"]));
+  set("entity_tax_number", asText(p["income_tax_number"]));
+  set("nature_of_business", asText(p["nature_of_business"]));
+  set("industry", asText(p["industry"]));
+  set("government_tenders", asText(p["government_tenders"]));
+  const nd = Number(p["number_of_directors"]);
+  if (Number.isFinite(nd)) patch["number_of_directors"] = nd;
+  set("largest_shareholder", asText(p["largest_shareholder"]));
+  set("largest_shareholder_holding", asText(p["largest_shareholder_holding"]));
+
+  // Company registered address (structured, top level).
+  set("address_line1", asText(p["address_line1"]));
+  set("address_line2", asText(p["address_line2"]));
+  set("address_line3", asText(p["address_level1"]));
+  set("city", asText(p["address_level2"]));
+  set("province", asText(p["province"]));
+  set("postal_code", asText(p["postal_code"]));
+
+  const phone = splitPhone(p["company_telephone_mobile"]);
+  set("phone_country_code", phone.code);
+  set("phone_number", phone.number);
+
+  set("source_of_funds", asText(p["source_of_funds"]));
+  set("source_of_wealth", asText(p["source_of_wealth"]));
+  set("kyc_source_of_income", asText(p["source_s_of_income"]));
+
+  return patch;
+}
+
+// One director object -> client_related_persons columns.
+export function mapFinovaDirector(d: Record<string, unknown>): Record<string, unknown> {
+  const rec: Record<string, unknown> = { role: "director" };
+  const set = (col: string, val: unknown) => { if (val != null && val !== "") rec[col] = val; };
+
+  set("title", asText(d["title"]));
+  set("first_names", asText(d["given_name"]));
+  set("last_name", asText(d["family_name"]));
+  set("gender", asText(d["gender"]));
+  set("date_of_birth", asText(d["date_of_birth"]));
+  set("marital_status", asText(d["marital_status"]));
+  set("nationality", iso2ToName(d["nationality"]));
+  set("country_of_residence", iso2ToName(d["country"]));
+  set("place_of_birth", asText(d["place_of_birth"]));
+  set("country_of_birth", iso2ToName(d["country_of_birth"]));
+  set("occupation", asText(d["occupation"]));
+  set("job_description", asText(d["JobDescription"]));
+  set("department", asText(d["department"]));
+  set("employer_name", asText(d["employer_name"]));
+  set("employer_nature_of_business", asText(d["employer_nature_of_business"]));
+  set("tax_number", asText(d["sa_income_tax_no"]));
+  set("registered_for_tax_other", asText(d["registered_for_tax_in_other_countries"]));
+  set("source_of_funds", asText(d["source_of_funds"]));
+  set("source_of_income", asText(d["source_s_of_income"]));
+  set("source_of_wealth", asText(d["source_of_wealth"]));
+  set("address_line1", asText(d["address_line1"]));
+  set("address_line2", asText(d["address_line2"]));
+  set("address_line3", asText(d["address_level1"]));
+  set("city", asText(d["address_level2"]));
+  set("province", asText(d["province"]));
+  set("postal_code", asText(d["postal_code"]));
+  set("country", iso2ToName(d["country"]));
+
+  const idRaw = asText(d["ClientID/Passport"]);
+  if (idRaw) {
+    if (/^\d{13}$/.test(idRaw)) { rec["id_number"] = idRaw; rec["id_type"] = "SA ID"; }
+    else { rec["id_passport_number"] = idRaw; rec["id_type"] = "Passport"; }
+  }
+
+  set("finova_client_id", asText(d["client_id"]));
+  set("finova_status", asText(d["step"]));
+  if (d["complyadvantage_mesh_screening"] != null) rec["screening"] = d["complyadvantage_mesh_screening"];
+  return rec;
+}
+
+// Entity documents that map to a customer_details / bank_accounts column.
+export const ENTITY_PRIMARY_DOCS: Array<{ field: string; column: string; uploadedAt?: string; target: "customer" | "bank" }> = [
+  { field: "identity_document",        column: "kyc_id_document_url",   uploadedAt: "kyc_id_uploaded_at",            target: "customer" },
+  { field: "proof_of_address",         column: "kyc_proof_address_url", uploadedAt: "kyc_proof_address_uploaded_at", target: "customer" },
+  { field: "client_kyc_report",        column: "kyc_finova_report_url",                                             target: "customer" },
+  { field: "banking_documents_entity", column: "bank_confirmation_url", uploadedAt: "bank_confirmation_uploaded_at", target: "bank" },
+];
+export const ENTITY_ARCHIVE_DOCS = ["finova_entities_mandate", "bitwealth_entity_annexure"];
+
+// Per-director documents -> client_related_persons columns.
+export const DIRECTOR_DOCS: Array<{ field: string; column: string }> = [
+  { field: "identity_document",   column: "kyc_id_document_url" },
+  { field: "sa_id_card_backside", column: "kyc_id_backside_url" },
+  { field: "proof_of_address",    column: "kyc_proof_address_url" },
+];

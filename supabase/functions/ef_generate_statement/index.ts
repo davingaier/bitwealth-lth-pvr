@@ -170,7 +170,7 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const { data: customer, error: customerErr } = await supabase
     .schema("public")
     .from("customer_details")
-    .select("customer_id, first_names, last_name, email, org_id, trade_start_date, account_model")
+    .select("customer_id, first_names, last_name, email, org_id, trade_start_date, account_model, client_type, entity_name, display_name")
     .eq("customer_id", customerId)
     .single();
   if (customerErr || !customer) throw new Error(`Customer ${customerId} not found`);
@@ -638,16 +638,22 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
   const showChart = sparkLthPoints.length >= 2 || sparkStdPoints.length >= 2;
 
   // ── Filename + storage path ────────────────────────────────────────
-  const lastName = String(customer.last_name ?? "").replace(/\s+/g, "_");
-  const firstNames = String(customer.first_names ?? "").replace(/\s+/g, "_");
+  const isEntityCustomer = customer.client_type === "entity";
+  const displayName = String(
+    customer.display_name || customer.entity_name ||
+    `${customer.first_names ?? ""} ${customer.last_name ?? ""}`
+  ).trim();
+  const nameToken = isEntityCustomer
+    ? (customer.display_name || customer.entity_name || "entity").replace(/\s+/g, "_")
+    : `${String(customer.last_name ?? "").replace(/\s+/g, "_")}_${String(customer.first_names ?? "").replace(/\s+/g, "_")}`;
   const monthPadded = String(month).padStart(2, "0");
-  const filename = `${endStr}_${lastName}_${firstNames}_statement_M${monthPadded}_${year}.pdf`;
+  const filename = `${endStr}_${nameToken}_statement_M${monthPadded}_${year}.pdf`;
   const storagePath = `${orgId}/customer-${customerId}/${filename}`;
 
   const outperfPp = itdRoi - stdItdRoi;
 
   const data: StatementData = {
-    customer_name: `${customer.first_names} ${customer.last_name}`.trim(),
+    customer_name: displayName,
     customer_id: customerId,
     period_label: `1 – ${periodEnd.getUTCDate()} ${MONTH_NAMES[monthIdx]} ${year}`,
     generated_at: fmtTimestampUtc(new Date()),

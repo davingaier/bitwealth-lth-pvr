@@ -3,11 +3,40 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-13 (v0.6.156)
+**Last updated:** 2026-08-14 (v0.6.157)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.157 – Entity onboarding (Phases 1–7): admin editor, website, webhook, portal, statements, display_name
+**Date:** 2026-08-14  
+**Status:** ✅ COMPLETE (all core phases deployed; entity FIC-completeness scoring rubric deferred)
+
+**Summary.** Completed the entity onboarding build begun in v0.6.156. Entities can now be captured from the public website, are processed end-to-end by the Finova webhook (entity fields + nested directors), are fully manageable in the admin editor, appear correctly named across all admin lists and the customer portal, and receive entity-headed statements.
+
+**Phase 1 — admin Customer Editor (admin UI, local file).** Added a `client_type` selector to the Personal tab and a new **"Entity & Directors"** tab (hidden for individuals) with company fields + a Directors table/form wired to `list_entity_directors`/`upsert_entity_director`/`delete_entity_director`. `cmApplyClientType` toggles the tab and relaxes personal-required validation; `CM_MODAL_FIELDS.entity` is included in the fill/save spreads; `cmFetchFullProfile` already uses `select('*')` so entity columns flow automatically.
+
+**Phase 2 — website expression-of-interest.** `website/index.html` `#prospectForm` gained an Individual/Entity toggle (`#clientType`) that reveals entity fields (name/type/registration number) and relabels the name fields to "Contact". `ef_prospect_submit` now accepts and stores `client_type` + entity fields and prefixes the admin notification email with an ENTITY note.
+
+**Phase 4 — Finova webhook entity mapping (deployed & validated).** `ef_finova_webhook`/`finova.ts`: `isEntity()`, `mapFinovaEntity()` → entity columns, `mapFinovaDirector()` → `client_related_persons` (idempotent on `(customer_id, finova_client_id)`), entity/director document sets re-hosted to storage, gate on the entity `step==='passed'`. Validated against a test entity (customer 61, 2 directors).
+
+**Phase 5 — customer portal.** `customer-portal.html` resolves a `portalDisplayName` (`display_name`||`entity_name`||first+last) for the header, avatar initials, and admin-preview banner; statement filename uses an entity-aware name token matching the server.
+
+**Phase 6 — statements.** `ef_generate_statement` selects `client_type`/`entity_name`/`display_name`, sets `customer_name` to the display name, and builds the filename with an entity-aware name token (entity: slug of display/entity name; individual: `last_first`) that matches the portal client-side.
+
+**Phase 7 — display_name adoption.** `list_finova_kyc`, `list_customers`, and `list_customers_for_admin_picker` recreated to return `display_name` (+ `client_type`); `v_fic_kyc_completeness` view extended with `client_type`/`entity_name`/`display_name`. Admin reports picker, history picker, and FIC screen now render `display_name` with an "Entity" badge.
+
+**Deferred.** Entity **FIC-completeness scoring** still uses the individual rubric (DOB/ID/etc.), so entities score low — a proper entity rubric (directors screened, mandate, registration docs) is a future enhancement. Statement PDF shows the entity name only (no reg#/VAT line). Multiple-director portal logins remain deferred (single authorised-rep login, per v0.6.156).
+
+**Files/objects changed:**
+- `ui/Advanced BTC DCA Strategy.html` (entity tab + directors panel; picker/history/FIC display_name)
+- `website/index.html` (entity toggle), `website/customer-portal.html` (display name + statement filename)
+- `supabase/functions/ef_prospect_submit/index.ts`, `supabase/functions/ef_finova_webhook/*`, `supabase/functions/ef_generate_statement/index.ts`
+- RPCs `list_finova_kyc`, `list_customers`, `list_customers_for_admin_picker`; view `v_fic_kyc_completeness`
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.156 – Entity onboarding (Phase 0: data model) + entity-aware strategy/VALR
 **Date:** 2026-08-13  
