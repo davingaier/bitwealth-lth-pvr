@@ -131,6 +131,19 @@ Deno.serve(async (req: Request) => {
       return { ok: response.ok, status: response.status, text };
     };
 
+    // Break-glass "apply now": force-regenerate today's decisions first so a manual
+    // bear-pause release (which patched customer_state_daily) is reflected before the
+    // intents/execute steps run, even though today's HOLD decisions already exist.
+    if (body.regenerate_decisions === true) {
+      try {
+        const r = await callEf("ef_generate_decisions");
+        results.push({ step: "ef_generate_decisions:forced", status: r.status, success: r.ok, response: r.text.substring(0, 200) });
+        stepOrder[0].status = true; // already run; let the step loop skip it
+      } catch (err) {
+        results.push({ step: "ef_generate_decisions:forced", success: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     for (const step of stepOrder) {
       if (step.status === true) {
         results.push({ step: step.name, skipped: true, reason: "already complete" });

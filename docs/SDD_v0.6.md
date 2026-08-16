@@ -3,11 +3,58 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-16 (v0.6.159)
+**Last updated:** 2026-08-16 (v0.6.160)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.160 – Bear-market pause "break glass" manual override (Admin UI)
+**Date:** 2026-08-16  
+**Status:** ✅ DEPLOYED (migration + ef_resume_pipeline + Admin UI)
+
+Adds an admin control to manually **release** (or **re-arm**) the latching `bear_pause`
+across all live LTH_PVR customers — for when BTC turns structurally bullish *before* price
+reaches the −1.0σ exit band. `bear_pause` is a latching state machine in
+`customer_state_daily`, re-derived each run by `decideTrade()` from the previous day's state +
+price; patching the recent rows to `false` makes the next `ef_generate_decisions` run keep it
+false (it cannot re-latch until price > +2.0σ again — the intended behaviour), so a one-shot
+force-release is sufficient.
+
+**Backend (migration `bear_pause_break_glass`):**
+- `lth_pvr.bear_pause_overrides` — audit table (org, action, performed_by, reason, btc_price,
+  affected_customers, apply_mode).
+- `lth_pvr.v_bear_pause_status` — per-live-customer pause state + latest price / exit (−1.0σ) /
+  re-latch (+2.0σ) bands, for the panel.
+- `lth_pvr.admin_release_bear_pause(p_org, p_by, p_reason, p_apply_mode)` and
+  `admin_rearm_bear_pause(p_org, p_by, p_reason)` — SECURITY DEFINER, guarded by
+  `p_org IN (SELECT my_orgs())` and a mandatory reason. They set `bear_pause` (release=false /
+  rearm=true) + reset retrace flags on `customer_state_daily` rows `date >= CURRENT_DATE-2` for
+  live+active customers, and write the audit row. **They do NOT touch `ledger_lines`/`balances_daily`.**
+
+**Pipeline (`ef_resume_pipeline`):** accepts `{ regenerate_decisions: true }`, which force-runs
+`ef_generate_decisions` (server-side, CORS-safe) before the intents/execute steps so an
+“apply now” release is reflected even though today's HOLD decisions already exist.
+
+**Admin UI (`ui/Advanced BTC DCA Strategy.html`):** “🚨 Bear Market Pause — Break Glass” card
+showing paused count + BTC vs. exit band, with three actions behind a confirmation modal that
+requires a typed reason **and** typing RELEASE/REARM:
+- **Release & Apply Now** — RPC (`immediate`) then `ef_resume_pipeline({regenerate_decisions:true})`
+  → a BUY can execute this run (within the 03:00–17:00 UTC window).
+- **Release (Next Run)** — RPC (`next_run`) only; takes effect on the next scheduled run.
+- **Re-arm Pause** — RPC then regenerate (flips decisions back to HOLD; cannot unwind an
+  already-executed buy).
+
+Market-wide by design (pause is price-driven; all live customers share the Progressive
+variation). Re-latching at a genuine future +2.0σ top is unaffected.
+
+**Files/objects changed:**
+- migration `bear_pause_break_glass` (table + view + 2 RPCs)
+- `supabase/functions/ef_resume_pipeline/index.ts` — `regenerate_decisions` flag (deployed)
+- `ui/Advanced BTC DCA Strategy.html` — Break Glass card + confirmation modal
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.159 – Root cause of the "Excess ZAR→USDT" alert: single pending resolver
 **Date:** 2026-08-16  

@@ -5373,10 +5373,165 @@
         if (usdpcBtn) usdpcBtn.addEventListener('click', ()=>openModal('usdpc'));
         tabZar.addEventListener('click', ()=>{ if(currentTab!=='zar'){ setTab('zar'); refresh(); }});
         tabUsdpc.addEventListener('click', ()=>{ if(currentTab!=='usdpc'){ setTab('usdpc'); refresh(); }});
-        custSel.addEventListener('change', ()=>{ currentCustomer = custSel.value; render(); });
-        closeBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e)=>{ if(e.target===modal) closeModal(); });
-        document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.style.display==='flex') closeModal(); });
+      })();
+      </script>
+
+      <!-- Bear Market Pause — Break Glass -->
+      <div class="card" id="bearPauseCard" style="border:1px solid #b45309;">
+        <h3>🚨 Bear Market Pause — Break Glass</h3>
+        <p class="small-muted">Manually release (or re-arm) the latching bear-market pause for <b>all live customers</b>. Use only when BTC has structurally turned bullish <i>before</i> price reached the −1.0σ exit band. Every action is logged with your reason.</p>
+        <div id="bpStatus" style="display:grid;gap:.5rem;margin-bottom:1rem;">
+          <div class="small-muted">Loading pause status…</div>
+        </div>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
+          <button id="bpReleaseNowBtn" type="button" class="btn btn-secondary-sm" style="background:#b45309;color:#fff;">🚨 Release &amp; Apply Now</button>
+          <button id="bpReleaseNextBtn" type="button" class="btn btn-secondary-sm">Release (Next Run)</button>
+          <button id="bpRearmBtn" type="button" class="btn btn-secondary-sm">↩︎ Re-arm Pause</button>
+          <button id="bpRefreshBtn" type="button" class="btn btn-secondary-sm">↺ Refresh</button>
+          <span id="bpMessage" style="font-size:.85rem;color:#6c757d;"></span>
+        </div>
+        <div id="bpLastAction" style="font-size:.78rem;color:#6b7280;margin-top:.6rem;"></div>
+      </div>
+
+      <!-- Break Glass confirmation modal -->
+      <div id="bpConfirmModal" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#0f1729;color:#e5e7eb;border:1px solid #b45309;border-radius:12px;max-width:540px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid #1f2a44;display:flex;justify-content:space-between;align-items:center;">
+            <h3 id="bpConfirmTitle" style="margin:0;font-size:1.05rem;color:#f59e0b;">🚨 Confirm</h3>
+            <button id="bpConfirmClose" type="button" class="btn btn-secondary-sm">Close</button>
+          </div>
+          <div style="padding:1.1rem 1.25rem;display:grid;gap:.85rem;">
+            <div id="bpConfirmBody" style="font-size:.9rem;line-height:1.45;"></div>
+            <label style="font-size:.82rem;color:#9ca3af;">Reason (required, audited):
+              <textarea id="bpReason" rows="2" style="width:100%;margin-top:.3rem;background:#0b1220;color:#e5e7eb;border:1px solid #1f2a44;border-radius:6px;padding:.4rem;"></textarea>
+            </label>
+            <label style="font-size:.82rem;color:#9ca3af;">Type <b id="bpConfirmWord">RELEASE</b> to confirm:
+              <input id="bpConfirmInput" type="text" autocomplete="off" style="width:100%;margin-top:.3rem;background:#0b1220;color:#e5e7eb;border:1px solid #1f2a44;border-radius:6px;padding:.4rem;">
+            </label>
+            <div style="display:flex;gap:.6rem;justify-content:flex-end;">
+              <button id="bpConfirmCancel" type="button" class="btn btn-secondary-sm">Cancel</button>
+              <button id="bpConfirmGo" type="button" class="btn btn-secondary-sm" style="background:#b45309;color:#fff;" disabled>Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <script>
+      (function(){
+        const card = document.getElementById('bearPauseCard');
+        if (!card) return;
+        const statusEl = document.getElementById('bpStatus');
+        const msgEl    = document.getElementById('bpMessage');
+        const lastEl   = document.getElementById('bpLastAction');
+        const modal    = document.getElementById('bpConfirmModal');
+        const titleEl  = document.getElementById('bpConfirmTitle');
+        const bodyEl   = document.getElementById('bpConfirmBody');
+        const wordEl   = document.getElementById('bpConfirmWord');
+        const reasonEl = document.getElementById('bpReason');
+        const inputEl  = document.getElementById('bpConfirmInput');
+        const goBtn    = document.getElementById('bpConfirmGo');
+
+        let pending = null; // { action:'release'|'rearm', mode:'immediate'|'next_run', word }
+
+        function esc(v){ if(v==null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function fmtUsd(n){ return '$' + Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+        function orgId(){ return window.currentOrgId || (window.appState && window.appState.org_id) || null; }
+
+        async function loadStatus(){
+          if (typeof supabaseClient === 'undefined' || !supabaseClient){ statusEl.innerHTML = '<div class="small-muted">Loading Supabase client…</div>'; return; }
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (!session?.user){ statusEl.innerHTML = '<div class="small-muted">Please sign in to view pause status.</div>'; return; }
+          try {
+            const { data, error } = await supabaseClient.schema('lth_pvr').from('v_bear_pause_status').select('*').order('customer_id');
+            if (error){ statusEl.innerHTML = '<div style="color:#dc3545;">Error: '+esc(error.message)+'</div>'; return; }
+            if (!data || !data.length){ statusEl.innerHTML = '<div class="small-muted">No live customers.</div>'; return; }
+            const paused = data.filter(r => r.bear_pause).length;
+            const px = Number(data[0].btc_price), exit = Number(data[0].exit_price), enter = Number(data[0].enter_price);
+            const above = px - exit;
+            const summary = `<div style="font-size:.9rem;"><b>${paused}/${data.length}</b> live customer(s) paused · BTC <b>${fmtUsd(px)}</b> · exit −1.0σ <b>${fmtUsd(exit)}</b> `
+              + (above >= 0 ? `(<span style="color:#f59e0b;">${fmtUsd(above)} above exit</span>)` : `(<span style="color:#28a745;">below exit</span>)`)
+              + ` · re-latch +2.0σ ${fmtUsd(enter)}</div>`;
+            const rows = data.map(r => `<div style="display:flex;justify-content:space-between;font-size:.82rem;border-bottom:1px solid var(--border,#e9ecef);padding:.15rem 0;">
+                <span>${esc((r.first_names||'')+' '+(r.last_name||''))} <span style="color:#9ca3af;">#${r.customer_id}</span></span>
+                <span style="font-weight:600;color:${r.bear_pause?'#dc3545':'#28a745'};">${r.bear_pause?'PAUSED':'active'}</span></div>`).join('');
+            statusEl.innerHTML = summary + '<div style="margin-top:.4rem;">' + rows + '</div>';
+          } catch(e){ statusEl.innerHTML = '<div style="color:#dc3545;">'+esc(e.message)+'</div>'; }
+
+          try {
+            const { data: last } = await supabaseClient.schema('lth_pvr').from('bear_pause_overrides').select('*').order('performed_at',{ascending:false}).limit(1);
+            if (last && last[0]){ const o = last[0];
+              lastEl.textContent = `Last action: ${o.action}${o.apply_mode?(' ('+o.apply_mode+')'):''} by ${o.performed_by||'?'} at ${new Date(o.performed_at).toLocaleString('en-ZA')} — “${o.reason||''}”`;
+            } else lastEl.textContent = '';
+          } catch(_e){}
+        }
+
+        function updateGo(){ goBtn.disabled = !(pending && reasonEl.value.trim().length >= 3 && inputEl.value.trim().toUpperCase() === pending.word); }
+
+        function openConfirm(action, mode){
+          if (!orgId()){ msgEl.textContent = 'No org selected.'; msgEl.style.color='#dc3545'; return; }
+          pending = { action, mode, word: action === 'release' ? 'RELEASE' : 'REARM' };
+          if (action === 'release' && mode === 'immediate'){
+            titleEl.textContent = '🚨 Release Bear Pause & Apply Now';
+            bodyEl.innerHTML = 'This will turn the bear-market pause <b>OFF</b> for all live customers and <b>immediately regenerate today\u2019s decisions and run the pipeline</b> — a BUY may execute within the trade window (03:00–17:00 UTC). This moves real funds.';
+          } else if (action === 'release'){
+            titleEl.textContent = 'Release Bear Pause (Next Run)';
+            bodyEl.innerHTML = 'This will turn the bear-market pause <b>OFF</b> for all live customers. It takes effect on the <b>next scheduled pipeline run</b> (no trade is triggered now).';
+          } else {
+            titleEl.textContent = '↩︎ Re-arm Bear Pause';
+            bodyEl.innerHTML = 'This re-enables the bear-market pause for all live customers and regenerates today\u2019s decisions back to HOLD. Note: this cannot unwind a buy that has already executed.';
+          }
+          wordEl.textContent = pending.word;
+          reasonEl.value = ''; inputEl.value = '';
+          goBtn.disabled = true;
+          modal.style.display = 'flex';
+        }
+        function closeConfirm(){ modal.style.display = 'none'; pending = null; }
+
+        async function execute(){
+          if (!pending) return;
+          const org = orgId();
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          const by = session?.user?.email || 'admin';
+          const reason = reasonEl.value.trim();
+          const p = pending;
+          closeConfirm();
+          msgEl.style.color = '#007bff';
+          msgEl.textContent = p.action === 'rearm' ? 'Re-arming…' : 'Releasing…';
+          try {
+            const rpc = p.action === 'rearm' ? 'admin_rearm_bear_pause' : 'admin_release_bear_pause';
+            const args = p.action === 'rearm'
+              ? { p_org: org, p_by: by, p_reason: reason }
+              : { p_org: org, p_by: by, p_reason: reason, p_apply_mode: p.mode };
+            const { data, error } = await supabaseClient.schema('lth_pvr').rpc(rpc, args);
+            if (error) throw error;
+            // Apply now (release immediate OR any re-arm) → regenerate + run pipeline server-side.
+            const applyNow = (p.action === 'rearm') || (p.action === 'release' && p.mode === 'immediate');
+            if (applyNow){
+              msgEl.textContent = 'Applying to pipeline…';
+              const { error: rErr } = await supabaseClient.functions.invoke('ef_resume_pipeline', { body: { regenerate_decisions: true } });
+              if (rErr) throw rErr;
+            }
+            msgEl.style.color = '#28a745';
+            msgEl.textContent = p.action === 'rearm'
+              ? '✅ Pause re-armed.'
+              : (p.mode === 'immediate' ? '✅ Released — pipeline regenerating (watch decisions/orders).' : '✅ Released — applies on the next scheduled run.');
+            await loadStatus();
+          } catch(e){
+            msgEl.style.color = '#dc3545';
+            msgEl.textContent = 'Failed: ' + (e.message || e);
+          }
+        }
+
+        document.getElementById('bpReleaseNowBtn').addEventListener('click', ()=>openConfirm('release','immediate'));
+        document.getElementById('bpReleaseNextBtn').addEventListener('click', ()=>openConfirm('release','next_run'));
+        document.getElementById('bpRearmBtn').addEventListener('click', ()=>openConfirm('rearm','immediate'));
+        document.getElementById('bpRefreshBtn').addEventListener('click', loadStatus);
+        document.getElementById('bpConfirmClose').addEventListener('click', closeConfirm);
+        document.getElementById('bpConfirmCancel').addEventListener('click', closeConfirm);
+        reasonEl.addEventListener('input', updateGo);
+        inputEl.addEventListener('input', updateGo);
+        goBtn.addEventListener('click', execute);
+        modal.addEventListener('click', (e)=>{ if(e.target===modal) closeConfirm(); });
+        setTimeout(loadStatus, 800);
       })();
       </script>
 
