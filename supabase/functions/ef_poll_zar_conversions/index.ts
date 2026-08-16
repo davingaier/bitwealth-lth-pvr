@@ -69,10 +69,12 @@ async function recordFill(
   await sb
     .from("pending_zar_conversions")
     .update({
+      // Mark the fill for the UI only. Resolution (converted_at/remaining_amount)
+      // is owned by ef_sync's zar_withdrawal FIFO trigger when it books the
+      // conversion from VALR history; pre-resolving here made ef_sync see no open
+      // pending and mis-flag every conversion as "excess". status='filled' hides
+      // the row from the pending UI in the meantime.
       status: "filled",
-      converted_amount: fillQty,
-      remaining_amount: 0,
-      converted_at: new Date().toISOString(),
       order_id: valrOrderId,
       order_type: orderType,
       error_message: null,

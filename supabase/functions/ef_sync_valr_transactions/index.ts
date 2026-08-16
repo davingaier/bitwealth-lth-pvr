@@ -658,31 +658,38 @@ Deno.serve(async (req) => {
                   });
 
                   // The excess alert is meant to flag ZAR converted with NO
-                  // tracked pending deposit at all (a genuine external/legacy
-                  // deposit). But ef_convert_zar_to_usdt marks the pending
+                  // tracked pending deposit (a genuine external/legacy deposit).
+                  // But ef_convert_zar_to_usdt marks the pending
                   // remaining_amount=0/converted_at when it PLACES the conversion,
-                  // and leaves the USDT credit-leg booking to this function on a
-                  // later run. So the FIFO loop above (which only considers
-                  // remaining_amount>0.01) legitimately finds nothing and every
-                  // normal conversion looks "orphaned" here — firing a noisy info
-                  // alert once per conversion. Suppress it when a recently-
-                  // converted pending matches this conversion's ZAR total (within
-                  // 1%); the orphan USDT deposit is still booked above either way.
-                  // We intentionally do NOT re-link the deposit to that pending —
-                  // the resolution trigger would double-decrement remaining_amount
-                  // (see the R7000 pending stuck at a negative remaining).
-                  const { data: matchedConverted } = await supabase
-                    .from("pending_zar_conversions")
-                    .select("id")
-                    .eq("customer_id", customerId)
-                    .not("converted_at", "is", null)
-                    .gte("converted_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-                    .gte("zar_amount", totalZar * 0.99)
-                    .lte("zar_amount", totalZar * 1.01)
-                    .limit(1);
+                  // before this function books the credit leg — so the FIFO loop
+                  // above finds nothing and every normal conversion (including
+                  // split/partial ones where one deposit converts in several VALR
+                  // txs) looks "orphaned". Suppress when the customer's recent
+                  // conversions are covered by their recently-CONVERTED tracked
+                  // deposits; still alert when conversions genuinely exceed tracked
+                  // deposits. The orphan USDT deposit is still booked above either
+                  // way. We do NOT re-link to the pending — the resolution trigger
+                  // would double-decrement remaining_amount.
+                  const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                  const [depRes, convRes] = await Promise.all([
+                    supabase.from("pending_zar_conversions")
+                      .select("zar_amount")
+                      .eq("customer_id", customerId)
+                      .gte("converted_at", sinceIso),
+                    supabase.from("exchange_funding_events")
+                      .select("amount, metadata")
+                      .eq("customer_id", customerId)
+                      .eq("kind", "zar_withdrawal")
+                      .gte("occurred_at", sinceIso),
+                  ]);
+                  const depTotal = (depRes.data || []).reduce((s, r) => s + Number(r.zar_amount || 0), 0);
+                  const convTotal = (convRes.data || [])
+                    .filter(r => r.metadata && r.metadata.conversion_to)
+                    .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+                  const coveredByTrackedDeposits = convTotal <= depTotal * 1.01 + 0.01;
 
-                  if (matchedConverted && matchedConverted.length > 0) {
-                    console.log(`  ℹ️  Excess R${remainingZar.toFixed(2)} matches a recently-converted pending (ef_convert booked ahead of sync) — booking orphan deposit, suppressing alert`);
+                  if (coveredByTrackedDeposits) {
+                    console.log(`  ℹ️  Excess R${remainingZar.toFixed(2)} covered by tracked converted deposits (conversions ${convTotal.toFixed(2)} <= deposits ${depTotal.toFixed(2)}) — booking orphan deposit, suppressing alert`);
                   } else {
                     console.warn(`  ⚠️  Excess conversion detected: R${remainingZar.toFixed(2)} without matching pending deposit`);
                     await logAlert(
@@ -770,9 +777,10 @@ Deno.serve(async (req) => {
                     split_part: `${allocationIdx} of ${allocations.length}`,
                   };
                   
-                  if (allocation.zar_deposit_id) {
-                    allocationMetadata.zar_deposit_id = allocation.zar_deposit_id;
-                  }
+                  // NOT tagging zar_deposit_id: the zar_withdrawal FIFO trigger
+                  // (Path 2) is the single pending resolver. Tagging it here would
+                  // also fire the USDT-deposit trigger (Path 1) and double-decrement.
+                  void allocation.zar_deposit_id;
                   
                   // Create funding event for this allocation
                   const allocationIdempotencyKey = allocations.length > 1

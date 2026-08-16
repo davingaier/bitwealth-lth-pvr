@@ -3,11 +3,86 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-14 (v0.6.157)
+**Last updated:** 2026-08-16 (v0.6.159)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.159 – Root cause of the "Excess ZAR→USDT" alert: single pending resolver
+**Date:** 2026-08-16  
+**Status:** ✅ DEPLOYED (poller + ef_sync + trigger)
+
+Eliminates the source of the recurring "Excess ZAR→USDT conversion" false positive (v0.6.151 /
+v0.6.158 suppressed the *symptom*). Root cause: **pending resolution was owned by three
+mechanisms** that fought each other:
+1. `ef_poll_zar_conversions` pre-resolved the pending (`remaining_amount=0`, `converted_at`) the
+   moment the conversion order filled;
+2. `ef_sync_valr_transactions`'s FIFO allocation loop tagged `zar_deposit_id` on the USDT
+   deposit → fired trigger **Path 1**;
+3. the `zar_withdrawal` leg fired trigger **Path 2** (FIFO), which also fired for *fiat*
+   withdrawals.
+Because the poller resolved first, `ef_sync` later saw no pending with `remaining > 0.01` and
+flagged every conversion as "excess"; naively re-enabling the triggers instead double-decremented
+`remaining_amount` (the historical R7000 = `-6999.92`).
+
+**Key safety fact:** pending resolution never feeds `ledger_lines` / `balances_daily` — the money
+is booked purely from the funding events — so this only affects pending-table bookkeeping and the
+pending UI (which hides `status='filled'` rows regardless).
+
+**Fix — make Path 2 the single resolver:**
+1. `ef_poll_zar_conversions.recordFill` sets `status='filled'` only; it no longer writes
+   `converted_amount` / `remaining_amount` / `converted_at`. The pending stays open until
+   `ef_sync` books the conversion (UI hides it via the `status='filled'` filter meanwhile).
+2. `ef_sync` no longer tags `zar_deposit_id` on conversion deposits, so trigger Path 1 stays
+   dormant and cannot clash with Path 2.
+3. Trigger `on_zar_consumption_resolve_pending` Path 2 now requires `metadata ? 'conversion_to'`,
+   so it resolves only ZAR→USDT/BTC conversion drains — a fiat bank withdrawal can no longer
+   FIFO-consume an open deposit pending during the poll→sync window. (Retains the v0.6.151 Path 1
+   `converted_at` guard + `GREATEST(0, …)` clamps.)
+With this, `ef_sync`'s FIFO allocation finds the open pending, so `remainingZar = 0` and the
+excess branch is never entered; Path 2 resolves the pending correctly, including split/partial
+conversions. The v0.6.158 cumulative-coverage suppression is retained as a defence-in-depth net.
+
+Verified post-deploy: 0 negative-remaining rows, 0 filled-but-unresolved pendings, Path 2 guard
+present. Behaviour applies to the next conversion onward.
+
+**Files/objects changed:**
+- `supabase/functions/ef_poll_zar_conversions/index.ts` — stop pre-resolving the pending
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — stop tagging `zar_deposit_id`
+- `lth_pvr.on_zar_consumption_resolve_pending` — Path 2 restricted to conversion drains
+  (migration `zar_pending_single_resolver_path2`)
+- `docs/SDD_v0.6.md` — this entry
+
+---
+
+### v0.6.158 – "Excess ZAR→USDT conversion" false-positive: handle split/partial conversions
+**Date:** 2026-08-16  
+**Status:** ✅ DEPLOYED (ef_sync_valr_transactions)
+
+Refines the v0.6.151 excess-alert suppression, which only matched a **single** converted
+pending whose `zar_amount` ≈ the per-conversion total (±1%). When one deposit is converted in
+**multiple** VALR transactions (customer 49 / Tremyne: R200,000 deposit → R158,169.06 +
+R41,830.94), no single chunk matches the R200,000 pending, so both chunks fired the info
+alert again. Root cause is unchanged: `ef_convert_zar_to_usdt` zeroes the pending
+(`remaining_amount=0`, `converted_at`) when it *places* the conversion, so by the time
+`ef_sync` books the credit legs the FIFO loop finds nothing to allocate against.
+
+**Fix:** suppress the excess alert when the customer's recent (7-day) ZAR conversions are
+**covered by** their recently-converted tracked deposits — i.e.
+`Σ conversions ≤ Σ converted-pending zar_amount × 1.01`. This handles split/partial conversions
+(cumulative rather than one-to-one) while still alerting when conversions genuinely exceed
+tracked deposits. The orphan USDT deposit is still booked; the pending is still not re-linked
+(would double-decrement `remaining_amount`). Verified for customer 49: deposits_7d 200,000 vs
+conversions_7d 199,999.99 → suppressed. The two live false-positive alerts were resolved.
+
+**Files/objects changed:**
+- `supabase/functions/ef_sync_valr_transactions/index.ts` — cumulative deposit-coverage
+  suppression (deployed)
+- `public.alert_events` — resolved the two R41,830.94 / R158,169.06 false positives
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.157 – Entity onboarding (Phases 1–7): admin editor, website, webhook, portal, statements, display_name
 **Date:** 2026-08-14  
