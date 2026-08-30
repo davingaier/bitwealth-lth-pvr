@@ -1050,6 +1050,7 @@
     <a href="#onchain-charts-module">On-Chain Charts</a>
     <a href="#compliance-module">🛡️ Compliance<span class="alert-badge zero" id="complianceBadge" style="background:#dc2626;">0</span></a>
     <a href="#support-module">🛟 Support<span class="alert-badge zero" id="supportBadge">0</span></a>
+    <a href="#partners-module">🤝 Partners<span class="alert-badge zero" id="partnersBadge">0</span></a>
     <a href="#admin-module">Administration<span class="alert-badge zero" id="alertBadge">0</span></a>
     <span class="nav-right">
       <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
@@ -19746,7 +19747,14 @@ self.onmessage = function(e) {
 
     async function authHeaders() {
       if (!window.supabaseClient) throw new Error("Supabase client not ready");
-      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      let { data: { session } } = await window.supabaseClient.auth.getSession();
+      // getSession() returns the stored token even when it has expired, so on page
+      // load we can race the background refresh and send a dead JWT (gateway 401).
+      const expiresSoon = session?.expires_at && (session.expires_at * 1000 - Date.now() < 60_000);
+      if (!session?.access_token || expiresSoon) {
+        const { data: refreshed } = await window.supabaseClient.auth.refreshSession();
+        session = refreshed?.session ?? session;
+      }
       if (!session?.access_token) throw new Error("Not signed in");
       return {
         "Content-Type": "application/json",
@@ -20122,7 +20130,12 @@ self.onmessage = function(e) {
     }
 
     async function callAdminFn(payload){
-      const { data:{ session } } = await window.supabaseClient.auth.getSession();
+      let { data:{ session } } = await window.supabaseClient.auth.getSession();
+      const expiresSoon = session?.expires_at && (session.expires_at * 1000 - Date.now() < 60_000);
+      if(!session?.access_token || expiresSoon){
+        const { data: refreshed } = await window.supabaseClient.auth.refreshSession();
+        session = refreshed?.session ?? session;
+      }
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_admin_partner_users`, {
         method:'POST',
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}` },
