@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getOrderSummaryByCustomerOrderId, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
 import type { ValrRequestCredentials } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
-import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
 
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -121,7 +121,7 @@ Deno.serve(async (_req: Request)=>{
       try {
         const creds = await resolveCustomerCredentials(supabase, intent.customer_id);
         subaccountId = creds.subaccountId;
-        credentials = creds.accountModel === "api" ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret } : null;
+        credentials = toRequestCredentials(creds);
         credentialCache.set(o.exchange_account_id, { subaccountId, credentials });
       } catch (credErr) {
         console.error(`ef_poll_orders: credential resolution failed for customer ${intent.customer_id}:`, credErr);

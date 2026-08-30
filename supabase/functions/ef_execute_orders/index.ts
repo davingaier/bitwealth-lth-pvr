@@ -1,7 +1,7 @@
 import { getServiceClient } from "./client.ts";
 import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
-import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
+import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
 import { USDPC_PAIR } from "../_shared/usdpc.ts";
 
 // Poll just-placed USDPC conversion MARKET order(s) until they reach a FINAL
@@ -107,13 +107,13 @@ Deno.serve(async ()=>{
         errorCount++;
         continue;
       }
-      // Look up VALR credentials for this customer (supports both subaccount and API model)
+      // Look up VALR credentials for this customer (subaccount, API and Finova omnibus models)
       let subaccountId: string | null = null;
       let credentials: { apiKey: string; apiSecret: string } | null = null;
       try {
         const creds = await resolveCustomerCredentials(sb, i.customer_id);
         subaccountId = creds.subaccountId;
-        credentials = creds.accountModel === "api" ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret } : null;
+        credentials = toRequestCredentials(creds);
       } catch (credErr) {
         const errMsg = credErr instanceof Error ? credErr.message : String(credErr);
         console.error(`Credential resolution failed for customer ${i.customer_id}:`, errMsg);

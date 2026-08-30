@@ -216,6 +216,12 @@ Deno.serve(async (req) => {
           gate: "subaccount_missing",
         }, 400);
       }
+    } else if (customer.account_model === "finova_omnibus") {
+      // Finova links the bank inside their own VALR account via the partner portal.
+      return json({
+        error: "This client is held in Finova's omnibus account. Bank linking is performed by Finova in the partner portal, not by BitWealth.",
+        gate: "partner_managed",
+      }, 400);
     } else if (customer.account_model === "api") {
       if (!ea.api_key_vault_id) {
         return json({

@@ -501,7 +501,19 @@ export async function withdrawFeeFromCustomerAccount(
     );
   }
 
-  // ── 4. API model: VALR crypto withdrawal to BitWealth wallet ──────────────
+  // ── 4. Partner omnibus: fees sweep to the partner's main account ──────────
+  // Finova-issued keys carry Transfer but never Withdraw, so the API-model
+  // crypto-withdrawal path below would always fail. Refuse explicitly until the
+  // partner fee sweep is built rather than emitting a misleading VALR error.
+  if (creds.accountModel === "finova_omnibus") {
+    return {
+      success: false,
+      errorMessage:
+        "Fee transfer for Finova-omnibus customers is not implemented yet — fees accrue but are not swept.",
+    };
+  }
+
+  // ── 5. API model: VALR crypto withdrawal to BitWealth wallet ──────────────
   // Pre-insert the pending log row here (subaccount path above does its own
   // logging via transferToMainAccount). from_subaccount_id is null for API
   // model customers (column is nullable).

@@ -14,14 +14,18 @@ export function getZarDepositDetectedAdminEmail(
   customerId: number,
   zarAmount: string,
   detectedAt: string | Date,
-  accountModel: "subaccount" | "api",
+  accountModel: "subaccount" | "api" | "finova_omnibus",
   zarBalance: string,
   usdtBalance: string,
   adminUrl: string,
 ): { html: string; text: string } {
   const detectedDate = typeof detectedAt === "string" ? new Date(detectedAt) : detectedAt;
   const formattedDate = detectedDate.toLocaleString("en-ZA", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const modelLabel = accountModel === "api" ? "🔑 API Model" : "🏦 Subaccount Model";
+  const modelLabel = accountModel === "api"
+    ? "🔑 API Model"
+    : accountModel === "finova_omnibus"
+      ? "🤝 Finova Omnibus"
+      : "🏦 Subaccount Model";
 
   const html = `
 <!DOCTYPE html>

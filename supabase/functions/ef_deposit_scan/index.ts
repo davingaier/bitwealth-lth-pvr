@@ -207,9 +207,12 @@ Deno.serve(async (req) => {
       if (!customer) continue;
 
       try {
-        // Resolve credentials via vault (API model) or env (subaccount model)
+        // Resolve credentials via vault (API / Finova omnibus) or env (subaccount model)
         const creds = await resolveCustomerCredentials(sbLthPvr, customer.customer_id);
-        const modelLabel = creds.accountModel === "api" ? "API-model" : `subaccount ${creds.subaccountId}`;
+        // Own-account models see their own isolated ZAR balance; subaccount-model
+        // customers share the master account and are handled by the VALR tx sync.
+        const ownsAccountBalances = creds.accountModel !== "subaccount";
+        const modelLabel = ownsAccountBalances ? `${creds.accountModel}-model` : `subaccount ${creds.subaccountId}`;
         console.log(`Checking balances for customer ${customer.customer_id} (${modelLabel})`);
 
         const balances = await getBalances(creds.apiKey, creds.apiSecret, creds.subaccountId);
@@ -225,9 +228,9 @@ Deno.serve(async (req) => {
           const available = parseFloat(bal.available || "0");
           return available > 0 && bal.currency === "ZAR";
         });
-        if (zarBalance && creds.accountModel === "api") {
+        if (zarBalance && ownsAccountBalances) {
           const zarAmount = parseFloat(zarBalance.available);
-          console.log(`ZAR balance detected for API-model customer ${customer.customer_id}: R${zarAmount.toFixed(2)}`);
+          console.log(`ZAR balance detected for ${creds.accountModel}-model customer ${customer.customer_id}: R${zarAmount.toFixed(2)}`);
           // Create a zar_deposit funding event — the DB trigger auto-creates pending_zar_conversions
           try {
             const zarIdempotencyKey = `ZAR_DEPOSIT_SCAN:${customer.customer_id}:${new Date().toISOString().split('T')[0]}`;
@@ -390,7 +393,7 @@ Deno.serve(async (req) => {
           // For API-model customers, query VALR transaction history to find ZAR→crypto conversions
           // This captures exchange fees, ZAR amounts, and conversion rates
           let conversionDetails = new Map();
-          if (creds.accountModel === "api") {
+          if (ownsAccountBalances) {
             try {
               conversionDetails = await getConversionDetails(creds.apiKey, creds.apiSecret);
               if (conversionDetails.size > 0) {

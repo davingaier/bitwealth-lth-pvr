@@ -197,7 +197,11 @@ async function buildStatementData(a: BuildArgs): Promise<BuildResult> {
     ? new Date(customer.trade_start_date + "T00:00:00Z")
     : (strategy.created_at ? new Date(strategy.created_at) : periodStart);
   const accountModel = String(customer.account_model ?? "subaccount").toLowerCase();
-  const exchangeLabel = accountModel === "api" ? "VALR (API)" : "VALR (subaccount)";
+  const exchangeLabel = accountModel === "api"
+    ? "VALR (API)"
+    : accountModel === "finova_omnibus"
+      ? "VALR (Finova omnibus)"
+      : "VALR (subaccount)";
 
   // ── Balances (opening = last row ≤ prev-month-end; closing = last row ≤ end) ──
   const { data: openingBal } = await supabase
