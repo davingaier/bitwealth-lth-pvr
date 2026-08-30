@@ -15,6 +15,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { getAccountBalances } from "../_shared/valrClient.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +37,10 @@ Deno.serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return json({ ok: false, error: "Server not configured" }, 500);
+
+  const sbAuth = createClient(url, key);
+  const caller = await requireOrgAdmin(sbAuth, req, key);
+  if (!caller.ok) return json({ ok: false, error: caller.error }, caller.status);
 
   let customerId: number | null = null;
   try {

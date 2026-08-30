@@ -270,6 +270,14 @@ Deno.serve(async (req) => {
   const firstName: string = customer.first_names ?? "Customer";
   const customerEmail: string = customer.email;
 
+  // Partner-custody clients pay out via a manual VALR fiat withdrawal performed by
+  // the partner, so on-chain sends are not available to them.
+  if (customer.account_model === "finova_omnibus" && currency !== "ZAR") {
+    return json({
+      error: "Only ZAR withdrawals to your bank account are available on this account. Cryptocurrency cannot be sent to an external wallet.",
+    }, 400);
+  }
+
   // ── Step 4: Load exchange_accounts (bank details for ZAR) ─────────────────
   const { data: exAcct } = await sb
     .schema("public")

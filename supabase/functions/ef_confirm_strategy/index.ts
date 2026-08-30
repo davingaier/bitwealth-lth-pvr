@@ -7,6 +7,7 @@
 // Deployed with: --no-verify-jwt
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -53,6 +54,11 @@ Deno.serve(async (req) => {
         "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
       },
     });
+  }
+
+  const caller = await requireOrgAdmin(supabase, req, supabaseKey!);
+  if (!caller.ok) {
+    return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: corsHeaders });
   }
 
   try {

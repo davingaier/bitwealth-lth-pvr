@@ -77,6 +77,16 @@ Deno.serve(async (req) => {
     console.log("Starting VALR transaction sync...");
     console.log("Org ID:", orgId);
 
+    // Optional single-customer scope, used for on-demand reconciliation
+    // (e.g. right after a partner declares a withdrawal complete).
+    let onlyCustomerId: number | null = null;
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        if (body?.customer_id) onlyCustomerId = Number(body.customer_id);
+      } catch { /* no body — full sync */ }
+    }
+
     // Load all customers in this org. We deliberately do NOT filter by
     // registration_status here — once a customer has a live VALR subaccount
     // and an active exchange_accounts row, we must keep ingesting their
@@ -84,10 +94,13 @@ Deno.serve(async (req) => {
     // crypto that lands in their wallet silently disappears from our books.
     // The downstream filter on exchange_accounts.status = 'active' is the
     // authoritative gate for whether the account is operational.
-    const { data: customers, error: customerError } = await supabase.schema("public")
+    let customerQuery = supabase.schema("public")
       .from("customer_details")
       .select("customer_id, first_names, last_name, email, customer_status, registration_status")
       .eq("org_id", orgId);
+    if (onlyCustomerId) customerQuery = customerQuery.eq("customer_id", onlyCustomerId);
+
+    const { data: customers, error: customerError } = await customerQuery;
 
     if (customerError) {
       console.error("Error loading customers:", customerError);

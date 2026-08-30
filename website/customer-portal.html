@@ -606,10 +606,10 @@
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
                                     <input type="radio" name="wdType" value="ZAR" checked onchange="switchWithdrawalType('ZAR')" style="accent-color: var(--gold);"> 🏦 ZAR to bank account
                                 </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
+                                <label id="wdTypeBtcOption" style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
                                     <input type="radio" name="wdType" value="BTC" onchange="switchWithdrawalType('BTC')" style="accent-color: var(--gold);"> ₿ BTC to address
                                 </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
+                                <label id="wdTypeUsdtOption" style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); font-size: 14px;">
                                     <input type="radio" name="wdType" value="USDT" onchange="switchWithdrawalType('USDT')" style="accent-color: var(--gold);"> 💵 USDT to TRC-20 address
                                 </label>
                             </div>
@@ -2579,6 +2579,15 @@
                 if (wdErr) throw wdErr;
                 currentWithdrawals = withdrawals || [];
                 renderWithdrawalHistory(currentWithdrawals);
+
+                // Partner-custody clients pay out via a manual bank transfer by the FSP,
+                // so on-chain sends are not offered to them.
+                if (customerData?.account_model === 'finova_omnibus') {
+                    ['wdTypeBtcOption', 'wdTypeUsdtOption'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                }
 
                 // Default to ZAR form
                 switchWithdrawalType('ZAR');

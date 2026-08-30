@@ -24,6 +24,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import {
   renderStatementHtml,
   StatementData,
@@ -769,6 +770,29 @@ serve(async (req) => {
         JSON.stringify({ error: "Missing or invalid parameters: customer_id, year, month (1-12)" }),
         { status: 400, headers: { ...CORS, "Content-Type": "application/json" } },
       );
+    }
+
+    // Statements contain full financial history, so the caller must be an admin,
+    // an internal service call, or the customer the statement belongs to.
+    const authClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const caller = await requireOrgAdmin(authClient, req, SERVICE_ROLE_KEY);
+    if (!caller.ok) {
+      let selfService = false;
+      if (caller.status === 403 && caller.email) {
+        const { data: owner } = await authClient
+          .from("customer_details")
+          .select("customer_id")
+          .eq("customer_id", customer_id)
+          .ilike("email", caller.email)
+          .maybeSingle();
+        selfService = !!owner;
+      }
+      if (!selfService) {
+        return new Response(JSON.stringify({ error: caller.error }), {
+          status: caller.status,
+          headers: { ...CORS, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const built = await buildStatementData({

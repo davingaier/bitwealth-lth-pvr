@@ -1,6 +1,9 @@
 // ef_valr_subaccounts / index.ts
 // Lists your VALR sub-accounts so you can see subaccountId / label / etc.
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+
 const API_BASE = Deno.env.get("VALR_API_BASE") ?? "https://api.valr.com";
 
 // --- HMAC helper (same logic as your existing valrClient.ts) ---
@@ -69,6 +72,18 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const SB_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+  const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (SB_URL && SB_KEY) {
+    const caller = await requireOrgAdmin(createClient(SB_URL, SB_KEY), req, SB_KEY);
+    if (!caller.ok) {
+      return new Response(JSON.stringify({ error: caller.error }), {
+        status: caller.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
   }
 
   try {

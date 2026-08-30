@@ -3,6 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendHTMLEmail } from "../_shared/smtp.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("Secret Key");
@@ -42,6 +43,13 @@ function htmlToPlainText(html: string): string {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
+  }
+
+  // Without this, anyone holding the public publishable key could send mail as BitWealth.
+  const authClient = createClient(SUPABASE_URL!, SECRET_KEY!);
+  const caller = await requireOrgAdmin(authClient, req, SECRET_KEY ?? "");
+  if (!caller.ok) {
+    return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: CORS });
   }
 
   // Hoisted so the outer catch can include them in the failure log row.

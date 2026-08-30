@@ -21,6 +21,7 @@
  */
 
 import { getServiceClient } from "./client.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import { runSimulation, SimulationResult, CIBandData, StrategyConfig } from "../_shared/lth_pvr_simulator.ts";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
@@ -38,6 +39,15 @@ Deno.serve(async (req) => {
   
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
+
+  const _svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const _caller = await requireOrgAdmin(sb, req, _svcKey);
+  if (!_caller.ok) {
+    return new Response(JSON.stringify({ error: _caller.error }), {
+      status: _caller.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   
   if (!org_id) {
     return new Response(

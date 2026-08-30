@@ -94,6 +94,7 @@ type CustomerCtx = {
   withdrawalType: "normal" | "fast";
   creds: { apiKey: string; apiSecret: string };
   subaccountId: string | null;
+  partnerCustody: boolean;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ async function loadCustomerCtx(row: Row): Promise<CustomerCtx | null> {
   const { data: cust } = await sb
     .schema("public")
     .from("customer_details")
-    .select("customer_id, email, first_names")
+    .select("customer_id, email, first_names, account_model")
     .eq("customer_id", row.customer_id)
     .single();
 
@@ -143,7 +144,22 @@ async function loadCustomerCtx(row: Row): Promise<CustomerCtx | null> {
     withdrawalType: "normal",
     creds,
     subaccountId,
+    partnerCustody: cust?.account_model === "finova_omnibus",
   };
+}
+
+// Partner-custody keys carry no Withdraw permission, so once the ZAR is sitting in
+// the client's subaccount we hand off to the partner instead of paying out.
+async function markAwaitingPartner(row: Row, extras: Record<string, unknown> = {}) {
+  await sbLthPvr
+    .from("withdrawal_requests")
+    .update({
+      status: "awaiting_partner",
+      partner_notified_at: new Date().toISOString(),
+      processed_at: new Date().toISOString(),
+      ...extras,
+    })
+    .eq("request_id", row.request_id);
 }
 
 async function markPayingOut(row: Row, valrWithdrawalId: string | undefined, extras: Record<string, unknown> = {}) {
@@ -260,7 +276,9 @@ async function processCryptoPending(row: Row, ctx: CustomerCtx) {
 async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
   trace.push(`zar_pending:start targetZar=${row.amount_zar}`);
   const targetZar = Number(row.amount_zar ?? 0);
-  if (!ctx.bankValrId || targetZar <= 0) {
+  // bank_valr_id is only needed when WE dispatch the payout; for partner custody the
+  // partner performs the fiat withdrawal from their own VALR account.
+  if ((!ctx.bankValrId && !ctx.partnerCustody) || targetZar <= 0) {
     trace.push(`zar_pending:missing_bank_or_amount bank=${ctx.bankValrId} target=${targetZar}`);
     return await markFailed(row, ctx, "Missing bank_valr_id or amount_zar");
   }
@@ -333,6 +351,11 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
   // Skip straight to fiat withdrawal and mark paying_out. processZarConverting
   // will not be called because the row will not be in 'converting' state.
   if (sourceAsset === "ZAR") {
+    if (ctx.partnerCustody) {
+      await markAwaitingPartner(row, { source_asset: "ZAR", net_amount: targetZar });
+      trace.push(`zar_pending:handed_to_partner target=${targetZar.toFixed(2)}`);
+      return;
+    }
     const wdCustomerOrderId = `wd-fiat-${row.request_id}`;
     try {
       const wdRes: any = TEST_MODE
@@ -477,7 +500,7 @@ async function processZarPending(row: Row, ctx: CustomerCtx, trace: string[]) {
 
 // ZAR path step 2: converting → paying_out (check fills, dispatch fiat withdraw)
 async function processZarConverting(row: Row, ctx: CustomerCtx) {
-  if (!ctx.bankValrId) return await markFailed(row, ctx, "Missing bank_valr_id at converting stage");
+  if (!ctx.bankValrId && !ctx.partnerCustody) return await markFailed(row, ctx, "Missing bank_valr_id at converting stage");
 
   const checkLeg = async (
     customerOrderId: string | null,
@@ -544,16 +567,24 @@ async function processZarConverting(row: Row, ctx: CustomerCtx) {
 
     try {
       const fast = ctx.withdrawalType === "fast";
-      const wdRes: any = TEST_MODE
-        ? { id: `test-zar-${row.request_id}` }
-        : await zarWithdraw(ctx.bankValrId, payoutZar.toFixed(2), fast, ctx.subaccountId, ctx.creds);
-      await markPayingOut(row, wdRes?.id ?? wdRes?.withdrawalId, {
+      const conversionExtras = {
         usdt_sold:                usdtRes.fillQty ?? 0,
         btc_sold:                 btcRes.fillQty  ?? 0,
         zar_received_from_usdt:   zarFromUsdt,
         zar_received_from_btc:    zarFromBtc,
         conversion_status:        "filled",
-      });
+      };
+
+      if (ctx.partnerCustody) {
+        await markAwaitingPartner(row, { ...conversionExtras, net_amount: payoutZar });
+        console.log(`\u{1F91D} ZAR ready for partner payout: ${row.request_id} R${payoutZar.toFixed(2)}`);
+        return;
+      }
+
+      const wdRes: any = TEST_MODE
+        ? { id: `test-zar-${row.request_id}` }
+        : await zarWithdraw(ctx.bankValrId, payoutZar.toFixed(2), fast, ctx.subaccountId, ctx.creds);
+      await markPayingOut(row, wdRes?.id ?? wdRes?.withdrawalId, conversionExtras);
       console.log(`💸 ZAR withdraw dispatched: ${row.request_id} R${payoutZar.toFixed(2)}`);
     } catch (e) {
       await markFailed(row, ctx, `ZAR fiat withdraw failed: ${(e as Error).message}`);

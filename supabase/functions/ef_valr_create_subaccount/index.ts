@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -57,6 +58,11 @@ Deno.serve(async (req) => {
   // CORS headers
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const caller = await requireOrgAdmin(supabase, req, supabaseKey!);
+  if (!caller.ok) {
+    return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: corsHeaders });
   }
 
   try {

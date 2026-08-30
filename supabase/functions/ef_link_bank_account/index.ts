@@ -18,6 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { signVALR } from "../_shared/valr.ts";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -163,6 +164,9 @@ function summariseBank(b: any) {
 // are no longer accepted from the caller — they are pulled from VALR.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
+  const caller = await requireOrgAdmin(sb, req, SUPABASE_KEY);
+  if (!caller.ok) return json({ error: caller.error }, caller.status);
 
   try {
     const body = await req.json().catch(() => ({}));

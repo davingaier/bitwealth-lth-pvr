@@ -85,8 +85,13 @@
     <div class="pp-panel" data-panel="withdrawals">
         <div class="card">
             <h3>Withdrawals awaiting payout</h3>
-            <p class="muted">Client withdrawals converted to ZAR and waiting for Finova to pay out from the client's subaccount.</p>
-            <div class="alert info" style="margin-top:14px;margin-bottom:0;">This section is being finalised and will be enabled shortly.</div>
+            <p class="muted">BitWealth has already converted the client's holdings to ZAR inside their subaccount. Withdraw the exact amount shown to the client's linked bank account, then mark it complete with your payment reference.</p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+            <table>
+                <thead><tr><th>Client</th><th>Subaccount</th><th>Amount to pay</th><th>Ready since</th><th>Status</th><th></th></tr></thead>
+                <tbody id="ppWdBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+            </table>
         </div>
     </div>
 
@@ -153,6 +158,28 @@
     </div>
 </div>
 
+<div class="modal-bg" id="ppWdModalBg">
+    <div class="modal">
+        <h3>Confirm payout</h3>
+        <p class="muted" id="ppWdClient"></p>
+        <div id="ppWdAlert"></div>
+        <div class="alert info" style="margin-top:14px;">
+            Withdraw <strong id="ppWdAmount"></strong> from <strong id="ppWdSub"></strong> to the client's linked bank account in VALR, then record the reference below.
+        </div>
+        <form id="ppWdForm">
+            <div class="fld">
+                <label for="fWdRef">Your payment reference</label>
+                <input type="text" id="fWdRef" required>
+                <div class="help">Required so BitWealth can reconcile the payout against VALR.</div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+                <button type="button" class="pp-btn" id="ppWdCancel">Cancel</button>
+                <button type="submit" class="btn-primary" id="ppWdBtn">Mark as paid</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
@@ -177,6 +204,7 @@ document.querySelectorAll('.pp-tab').forEach(btn => btn.addEventListener('click'
     btn.classList.add('active');
     document.querySelector(`.pp-panel[data-panel="${btn.dataset.tab}"]`).classList.add('active');
     if (btn.dataset.tab === 'audit') loadAudit();
+    if (btn.dataset.tab === 'withdrawals') loadWithdrawals();
 }));
 
 document.getElementById('ppLogout').addEventListener('click', async () => {
@@ -269,6 +297,78 @@ document.getElementById('ppSubmitForm').addEventListener('submit', async (e) => 
         modalAlert(esc(err.message || 'Network error.'), 'err');
     } finally {
         btn.disabled = false; btn.textContent = 'Verify & Submit';
+    }
+});
+
+let activeWithdrawal = null;
+const fmtZar = (n) => 'R ' + Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function loadWithdrawals() {
+    const body = document.getElementById('ppWdBody');
+    const { data, error } = await sb.rpc('partner_list_withdrawals', { p_include_closed: true });
+    if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No withdrawals awaiting payout.</td></tr>'; return; }
+
+    body.innerHTML = data.map(w => {
+        const awaiting = w.status === 'awaiting_partner';
+        const label = awaiting ? 'awaiting payout' : w.status === 'paying_out' ? 'confirming' : w.status;
+        const cls = awaiting ? 'pending' : w.status === 'completed' ? 'verified' : 'submitted';
+        return `<tr>
+            <td><strong>${esc(w.client_name)}</strong><div class="muted">Client #${w.customer_id}</div></td>
+            <td><code>${esc(w.subaccount_name || '—')}</code></td>
+            <td><strong>${fmtZar(w.amount_zar)}</strong></td>
+            <td class="muted">${fmtDate(w.ready_at)}</td>
+            <td><span class="pill ${cls}">${esc(label)}</span>
+                ${w.partner_reference ? `<div class="muted">ref ${esc(w.partner_reference)}</div>` : ''}</td>
+            <td style="text-align:right;">${awaiting ? `<button class="btn-primary" data-wd="${w.request_id}">Mark as paid</button>` : ''}</td>
+        </tr>`;
+    }).join('');
+
+    body.querySelectorAll('[data-wd]').forEach(b => b.addEventListener('click', () => {
+        const w = data.find(x => x.request_id === b.dataset.wd);
+        activeWithdrawal = w;
+        document.getElementById('ppWdAlert').innerHTML = '';
+        document.getElementById('ppWdClient').textContent = `${w.client_name} — client #${w.customer_id}`;
+        document.getElementById('ppWdAmount').textContent = fmtZar(w.amount_zar);
+        document.getElementById('ppWdSub').textContent = w.subaccount_name || 'the client subaccount';
+        document.getElementById('fWdRef').value = '';
+        document.getElementById('ppWdModalBg').classList.add('open');
+    }));
+}
+
+document.getElementById('ppWdCancel').addEventListener('click', () => {
+    document.getElementById('ppWdModalBg').classList.remove('open');
+    activeWithdrawal = null;
+});
+
+document.getElementById('ppWdForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeWithdrawal) return;
+    const btn = document.getElementById('ppWdBtn');
+    btn.disabled = true; btn.textContent = 'Confirming…';
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_partner_complete_withdrawal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+            body: JSON.stringify({
+                request_id: activeWithdrawal.request_id,
+                partner_reference: document.getElementById('fWdRef').value.trim(),
+            }),
+        });
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+            document.getElementById('ppWdAlert').innerHTML = `<div class="alert err">${esc(result.error || 'Failed.')}</div>`;
+            return;
+        }
+        document.getElementById('ppWdModalBg').classList.remove('open');
+        globalAlert(esc(result.message), result.settled ? 'ok' : 'info');
+        activeWithdrawal = null;
+        await loadWithdrawals();
+    } catch (err) {
+        document.getElementById('ppWdAlert').innerHTML = `<div class="alert err">${esc(err.message || 'Network error.')}</div>`;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Mark as paid';
     }
 });
 
