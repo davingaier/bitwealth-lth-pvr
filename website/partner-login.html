@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Portal Login - BitWealth</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
+    <style>
+        .login-container { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:40px 20px; background:var(--bg-dark); }
+        .login-card { background:var(--bg-card); border-radius:16px; box-shadow:var(--shadow-lg); max-width:460px; width:100%; padding:44px; }
+        .login-header { text-align:center; margin-bottom:28px; }
+        .login-header h1 { font-size:30px; margin-bottom:6px; background:var(--gradient-gold); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .login-header p { color:var(--text-secondary); }
+        .form-group { margin-bottom:18px; }
+        .form-group label { display:block; margin-bottom:8px; color:var(--text-primary); font-weight:500; }
+        .form-group input { width:100%; padding:12px 16px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:8px; color:var(--text-primary); font-size:16px; }
+        .form-group input:focus { outline:none; border-color:var(--gold); }
+        .btn-login { width:100%; padding:15px; font-size:16px; font-weight:600; background:var(--gradient-gold); color:var(--bg-dark); border:none; border-radius:8px; cursor:pointer; margin-top:18px; }
+        .btn-login:disabled { opacity:.6; cursor:not-allowed; }
+        .form-message { padding:12px; border-radius:8px; margin-bottom:18px; text-align:center; display:none; font-size:14px; }
+        .form-message.success { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); color:#22c55e; display:block; }
+        .form-message.error { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); color:#ef4444; display:block; }
+        .form-message.info { background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.3); color:#60a5fa; display:block; }
+        .step { display:none; }
+        .step.active { display:block; }
+        .qr-wrap { text-align:center; margin:18px 0; }
+        .qr-wrap img { background:#fff; padding:12px; border-radius:10px; max-width:220px; }
+        .secret-code { font-family:monospace; font-size:13px; word-break:break-all; color:var(--text-secondary); background:rgba(255,255,255,.05); padding:10px; border-radius:6px; margin-top:10px; }
+        .otp-input { letter-spacing:.4em; text-align:center; font-size:22px !important; font-family:monospace; }
+        .hint { font-size:13px; color:var(--text-secondary); line-height:1.6; }
+    </style>
+</head>
+<body>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h1>BitWealth</h1>
+            <p>Partner Portal</p>
+        </div>
+
+        <div id="formMessage" class="form-message"></div>
+
+        <!-- Step 1: password -->
+        <form id="loginStep" class="step active">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" id="loginBtn" class="btn-login">Log In</button>
+            <p class="hint" style="margin-top:16px;text-align:center;">
+                <a href="#" id="forgotLink" style="color:var(--gold);">Forgot password?</a>
+            </p>
+        </form>
+
+        <!-- Step 2: enrol MFA (first login) -->
+        <div id="enrolStep" class="step">
+            <p class="hint">Two-factor authentication is required. Scan this code with an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password), then enter the 6-digit code.</p>
+            <div class="qr-wrap"><img id="qrImage" alt="Authenticator QR code"></div>
+            <p class="hint">Can't scan? Enter this key manually:</p>
+            <div class="secret-code" id="totpSecret"></div>
+            <form id="enrolForm">
+                <div class="form-group" style="margin-top:18px;">
+                    <label for="enrolCode">6-digit code</label>
+                    <input type="text" id="enrolCode" class="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
+                </div>
+                <button type="submit" id="enrolBtn" class="btn-login">Verify &amp; Continue</button>
+            </form>
+        </div>
+
+        <!-- Step 3: MFA challenge (subsequent logins) -->
+        <div id="challengeStep" class="step">
+            <p class="hint">Enter the 6-digit code from your authenticator app.</p>
+            <form id="challengeForm">
+                <div class="form-group" style="margin-top:18px;">
+                    <label for="challengeCode">6-digit code</label>
+                    <input type="text" id="challengeCode" class="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
+                </div>
+                <button type="submit" id="challengeBtn" class="btn-login">Verify</button>
+            </form>
+        </div>
+
+        <!-- Step 4: set a new password (recovery link) -->
+        <div id="setPasswordStep" class="step">
+            <p class="hint">Choose a password for your BitWealth Partner Portal account.</p>
+            <form id="setPasswordForm">
+                <div class="form-group" style="margin-top:18px;">
+                    <label for="newPassword">New password</label>
+                    <input type="password" id="newPassword" autocomplete="new-password" minlength="12" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm password</label>
+                    <input type="password" id="confirmPassword" autocomplete="new-password" minlength="12" required>
+                </div>
+                <button type="submit" id="setPasswordBtn" class="btn-login">Save password</button>
+                <p class="hint" style="margin-top:12px;">Minimum 12 characters.</p>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const PORTAL = 'partner-portal.html';
+const msgEl = document.getElementById('formMessage');
+let enrolFactorId = null;
+
+function show(step) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(step).classList.add('active');
+}
+function msg(text, type) {
+    msgEl.className = 'form-message ' + (type || '');
+    msgEl.textContent = text || '';
+    if (!text) msgEl.style.display = 'none';
+}
+
+async function assuranceLevel() {
+    const { data } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    return data || {};
+}
+
+// Routes the user to enrolment, challenge or the portal based on their MFA state.
+async function routeAfterAuth() {
+    const { data: whoami, error } = await sb.rpc('partner_whoami');
+    const row = Array.isArray(whoami) ? whoami[0] : whoami;
+
+    const { data: factorData } = await sb.auth.mfa.listFactors();
+    const verified = (factorData?.totp || []).filter(f => f.status === 'verified');
+    const aal = await assuranceLevel();
+
+    if (verified.length === 0) {
+        // partner_whoami is RLS-safe but returns nothing at aal1; check membership after MFA instead.
+        await startEnrolment();
+        return;
+    }
+    if (aal.currentLevel !== 'aal2') {
+        show('challengeStep');
+        msg('Two-factor verification required.', 'info');
+        document.getElementById('challengeCode').focus();
+        return;
+    }
+    if (error || !row) {
+        await sb.auth.signOut();
+        msg('This account does not have partner portal access.', 'error');
+        show('loginStep');
+        return;
+    }
+    window.location.href = PORTAL;
+}
+
+async function startEnrolment() {
+    msg('', '');
+    // Clear abandoned unverified factors, which would otherwise block a fresh enrolment.
+    const { data: existing } = await sb.auth.mfa.listFactors();
+    for (const f of (existing?.all || []).filter(x => x.status !== 'verified')) {
+        await sb.auth.mfa.unenroll({ factorId: f.id });
+    }
+    const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'BitWealth Partner Portal' });
+    if (error) { msg(error.message, 'error'); return; }
+    enrolFactorId = data.id;
+    document.getElementById('qrImage').src = data.totp.qr_code;
+    document.getElementById('totpSecret').textContent = data.totp.secret;
+    show('enrolStep');
+    msg('Set up two-factor authentication to continue.', 'info');
+}
+
+document.getElementById('loginStep').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = 'Logging in…'; msg('', '');
+    const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('email').value.trim().toLowerCase(),
+        password: document.getElementById('password').value,
+    });
+    btn.disabled = false; btn.textContent = 'Log In';
+    if (error) { msg(error.message, 'error'); return; }
+    await routeAfterAuth();
+});
+
+document.getElementById('enrolForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('enrolBtn');
+    btn.disabled = true; btn.textContent = 'Verifying…';
+    const code = document.getElementById('enrolCode').value.trim();
+    const { data: ch, error: chErr } = await sb.auth.mfa.challenge({ factorId: enrolFactorId });
+    if (chErr) { msg(chErr.message, 'error'); btn.disabled = false; btn.textContent = 'Verify & Continue'; return; }
+    const { error } = await sb.auth.mfa.verify({ factorId: enrolFactorId, challengeId: ch.id, code });
+    btn.disabled = false; btn.textContent = 'Verify & Continue';
+    if (error) { msg('That code was not accepted. Please try again.', 'error'); return; }
+    await routeAfterAuth();
+});
+
+document.getElementById('challengeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('challengeBtn');
+    btn.disabled = true; btn.textContent = 'Verifying…';
+    const { data: factorData } = await sb.auth.mfa.listFactors();
+    const factor = (factorData?.totp || []).find(f => f.status === 'verified');
+    if (!factor) { await startEnrolment(); btn.disabled = false; btn.textContent = 'Verify'; return; }
+    const { data: ch, error: chErr } = await sb.auth.mfa.challenge({ factorId: factor.id });
+    if (chErr) { msg(chErr.message, 'error'); btn.disabled = false; btn.textContent = 'Verify'; return; }
+    const { error } = await sb.auth.mfa.verify({
+        factorId: factor.id, challengeId: ch.id,
+        code: document.getElementById('challengeCode').value.trim(),
+    });
+    btn.disabled = false; btn.textContent = 'Verify';
+    if (error) { msg('That code was not accepted. Please try again.', 'error'); return; }
+    await routeAfterAuth();
+});
+
+document.getElementById('setPasswordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = document.getElementById('newPassword').value;
+    if (pw !== document.getElementById('confirmPassword').value) { msg('Passwords do not match.', 'error'); return; }
+    const btn = document.getElementById('setPasswordBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false; btn.textContent = 'Save password';
+    if (error) { msg(error.message, 'error'); return; }
+    msg('Password saved.', 'success');
+    await routeAfterAuth();
+});
+
+document.getElementById('forgotLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    if (!email) { msg('Enter your email address first, then click again.', 'error'); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+    msg(error ? error.message : 'If that address has partner access, a reset link is on its way.', error ? 'error' : 'success');
+});
+
+(async function init() {
+    // Recovery/invite links land here with a session but no password set yet.
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    if (hash.get('type') === 'recovery' || hash.get('type') === 'invite') {
+        show('setPasswordStep');
+        return;
+    }
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) await routeAfterAuth();
+})();
+</script>
+</body>
+</html>

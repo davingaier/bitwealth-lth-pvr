@@ -102,6 +102,7 @@
     body:has(#backtest-module:target) nav a[href="#backtest-module"],
     body:has(#finance-module:target) nav a[href="#finance-module"],
     body:has(#admin-module:target) nav a[href="#admin-module"],
+    body:has(#partners-module:target) nav a[href="#partners-module"],
     body:has(#compliance-module:target) nav a[href="#compliance-module"]{
       border-bottom:2px solid var(--series-btc-price);
       color:var(--series-btc-price);
@@ -549,6 +550,7 @@
     body:has(#backtest-module:target) nav a[href="#backtest-module"],
     body:has(#finance-module:target) nav a[href="#finance-module"],
     body:has(#admin-module:target) nav a[href="#admin-module"],
+    body:has(#partners-module:target) nav a[href="#partners-module"],
     body:has(#optimizer-module:target) nav a[href="#optimizer-module"],
     body:has(#compliance-module:target) nav a[href="#compliance-module"]{
       background:var(--brand-soft);
@@ -1639,7 +1641,7 @@
                 </label>
                 <label><span class="label-line">Account model</span>
                   <select name="account_model">
-                    <option value="omnibus">Omnibus</option><option value="subaccount">Subaccount</option>
+                    <option value="subaccount">Subaccount</option><option value="api">API Model</option><option value="finova_omnibus">Finova Omnibus</option>
                   </select>
                 </label>
                 <label><span class="label-line">Trade start date</span><input name="trade_start_date" type="date" /></label>
@@ -5034,6 +5036,50 @@
       </div>
     </div>
     
+    <!-- ===================== Partners (Finova omnibus) ===================== -->
+    <div id="partners-module" class="module">
+      <h2>🤝 Partners</h2>
+
+      <div class="card" style="max-width:1400px;">
+        <h3 style="margin-top:0;">Partner Portal Logins</h3>
+        <p class="small-muted">Finova staff who can log in to the partner portal. Two-factor authentication is mandatory — a new user must set a password and enrol an authenticator app before they can see any client data.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin:.75rem 0;">
+          <label>Full name<input id="pnNewName" type="text" placeholder="Jane Smith" /></label>
+          <label>Email<input id="pnNewEmail" type="email" placeholder="jane@finova.co.za" /></label>
+          <label>Partner<input id="pnNewCode" type="text" value="finova" /></label>
+          <label>Role
+            <select id="pnNewRole">
+              <option value="both" selected>Both (submit + authorise)</option>
+              <option value="submitter">Submitter only</option>
+              <option value="authoriser">Authoriser only</option>
+            </select>
+          </label>
+          <button class="btn btn-primary" id="pnCreateBtn" type="button">Create login</button>
+          <button class="btn" id="pnRefreshBtn" type="button">Refresh</button>
+        </div>
+        <div id="pnMsg"></div>
+        <table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Partner</th><th>Role</th><th>Status</th><th>Last action</th><th>Actions</th></tr></thead>
+          <tbody id="pnUsersBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" style="max-width:1400px;">
+        <h3 style="margin-top:0;">Subaccount Requests</h3>
+        <p class="small-muted">Provisioning tasks queued for the partner. Raised automatically when a Finova-custody client reaches VALR Setup.</p>
+        <div style="margin:.5rem 0;">
+          <label style="display:inline-flex;align-items:center;gap:.4rem;">
+            <input type="checkbox" id="pnReqShowAll" checked /> Include completed
+          </label>
+          <button class="btn" id="pnReqRefreshBtn" type="button" style="margin-left:.5rem;">Refresh</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>Client</th><th>Type</th><th>Subaccount name</th><th>ZAR ref</th><th>Status</th><th>Requested</th><th>Verified</th></tr></thead>
+          <tbody id="pnReqBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ===================== Support (admin inbox) ===================== -->
     <div id="support-module" class="module">
       <h2>🛟 Support Inbox</h2>
@@ -6592,6 +6638,11 @@
             // Admin module client illustration status
             if (currentHash === '#admin-module' && typeof window.loadClientIllustrationStatus === 'function') {
               window.loadClientIllustrationStatus();
+            }
+
+            // Partners module
+            if (currentHash === '#partners-module' && typeof window.loadPartners === 'function') {
+              window.loadPartners();
             }
             
             // Customer Maintenance module data
@@ -13544,6 +13595,7 @@
                         style="padding:.25rem .4rem;font-size:.8em;border:1px solid #cbd5e0;border-radius:4px;">
                   <option value="subaccount" selected>🏦 Subaccount</option>
                   <option value="api">🔑 API Model</option>
+                  <option value="finova_omnibus">🤝 Finova Omnibus</option>
                 </select>
                 <button class="btn btn-primary-sm" 
                         onclick="window.verifyKycId(${customer.customer_id}, '${customer.first_names}', '${customer.last_name}')"
@@ -13560,7 +13612,11 @@
     // Global function for onclick (exposed to window)
     window.verifyKycId = async function(customerId, firstName, lastName) {
       const selectedModel = document.getElementById(`kycModelSelect_${customerId}`)?.value || 'subaccount';
-      const modelLabel = selectedModel === 'api' ? 'API Model (🔑 customer provides VALR API keys)' : 'Subaccount Model (🏦 BitWealth manages VALR subaccount)';
+      const modelLabel = selectedModel === 'api'
+        ? 'API Model (🔑 customer provides VALR API keys)'
+        : selectedModel === 'finova_omnibus'
+          ? 'Finova Omnibus (🤝 Finova creates the subaccount and supplies the API key)'
+          : 'Subaccount Model (🏦 BitWealth manages VALR subaccount)';
 
       const confirmed = confirm(
         `Verify ID document for ${firstName} ${lastName} (Customer ${customerId})?\n\n` +
@@ -13570,7 +13626,9 @@
         `• Record verification timestamp and your admin email\n` +
         (selectedModel === 'subaccount'
           ? `• Automatically create VALR subaccount\n• Move customer to Milestone 4 (VALR Setup)`
-          : `• Move customer to Milestone 4 (VALR Setup)\n• Customer will be prompted to supply their VALR API keys`)
+          : selectedModel === 'finova_omnibus'
+            ? `• Move customer to Milestone 4 (VALR Setup)\n• Queue a subaccount request for Finova in the Partner Portal`
+            : `• Move customer to Milestone 4 (VALR Setup)\n• Customer will be prompted to supply their VALR API keys`)
       );
 
       if (!confirmed) return;
@@ -13600,6 +13658,24 @@
         if (selectedModel === 'api') {
           // API model: no subaccount needed — customer will supply API keys in setup step
           showMessage(`✓ ID verified for ${firstName} ${lastName} (API Model). Customer moved to VALR Setup — they must supply their VALR API keys.`, 'success');
+          await loadPendingKyc();
+          if (typeof window.loadSetupCustomers === 'function') {
+            await window.loadSetupCustomers();
+          }
+          return;
+        }
+
+        if (selectedModel === 'finova_omnibus') {
+          // Finova creates the subaccount manually; a DB trigger queues the request.
+          const { data: reqRow } = await supabaseClient
+            .from('subaccount_requests')
+            .select('suggested_subaccount_name')
+            .eq('customer_id', customerId)
+            .eq('request_type', 'provision')
+            .in('status', ['pending', 'submitted'])
+            .maybeSingle();
+          const nameHint = reqRow?.suggested_subaccount_name ? ` Subaccount name for Finova: "${reqRow.suggested_subaccount_name}".` : '';
+          showMessage(`✓ ID verified for ${firstName} ${lastName} (Finova Omnibus). Request queued for Finova in the Partner Portal.${nameHint}`, 'success');
           await loadPendingKyc();
           if (typeof window.loadSetupCustomers === 'function') {
             await window.loadSetupCustomers();
@@ -20026,6 +20102,140 @@ self.onmessage = function(e) {
       load();
     }
     const t=setInterval(()=>{ if(window.supabaseClient){ clearInterval(t); init(); } }, 400);
+  })();
+  </script>
+
+  <!-- ===================== Partners module ===================== -->
+  <script>
+  (function(){
+    const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmt = (d) => d ? new Date(d).toLocaleString('en-ZA', { dateStyle:'medium', timeStyle:'short' }) : '—';
+    const $ = (id) => document.getElementById(id);
+
+    function msg(text, kind){
+      const el = $('pnMsg'); if(!el) return;
+      if(!text){ el.innerHTML = ''; return; }
+      const bg = kind === 'error' ? '#fee2e2' : kind === 'warn' ? '#fef3c7' : '#dcfce7';
+      const fg = kind === 'error' ? '#991b1b' : kind === 'warn' ? '#92400e' : '#166534';
+      el.innerHTML = `<div style="background:${bg};color:${fg};padding:.6rem .8rem;border-radius:6px;margin:.5rem 0;font-size:.88rem;">${esc(text)}</div>`;
+    }
+
+    async function callAdminFn(payload){
+      const { data:{ session } } = await window.supabaseClient.auth.getSession();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_admin_partner_users`, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}` },
+        body: JSON.stringify(payload),
+      });
+      return { ok: res.ok, body: await res.json() };
+    }
+
+    async function loadUsers(){
+      const body = $('pnUsersBody'); if(!body) return;
+      const { data, error } = await window.supabaseClient.rpc('admin_list_partner_users');
+      if(error){ body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${esc(error.message)}</td></tr>`; return; }
+      if(!data || !data.length){ body.innerHTML = '<tr><td colspan="7" class="muted">No partner logins yet.</td></tr>'; return; }
+      body.innerHTML = data.map(u => `<tr>
+        <td>${esc(u.full_name || '—')}</td>
+        <td>${esc(u.email)}</td>
+        <td>${esc(u.partner_code)}</td>
+        <td>${esc(u.role)}</td>
+        <td>${u.is_active
+              ? '<span class="status-pill filled">Active</span>'
+              : `<span class="status-pill warn">Disabled</span><br><span style="font-size:.72rem;color:#9ca3af;">${fmt(u.disabled_at)}</span>`}</td>
+        <td style="font-size:.82rem;">${fmt(u.last_action_at)}</td>
+        <td>
+          <button class="btn btn-secondary-sm" data-pn-pw="${esc(u.email)}">Reset password</button>
+          <button class="btn btn-secondary-sm" data-pn-mfa="${u.user_id}">Reset 2FA</button>
+          <button class="btn btn-secondary-sm" data-pn-toggle="${u.user_id}" data-active="${u.is_active}"
+                  style="${u.is_active ? 'background:#fee2e2;color:#7f1d1d;' : ''}">${u.is_active ? 'Disable' : 'Enable'}</button>
+        </td></tr>`).join('');
+    }
+
+    async function loadRequests(){
+      const body = $('pnReqBody'); if(!body) return;
+      const includeClosed = $('pnReqShowAll')?.checked !== false;
+      const { data, error } = await window.supabaseClient.rpc('admin_list_subaccount_requests', { p_include_closed: includeClosed });
+      if(error){ body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${esc(error.message)}</td></tr>`; return; }
+      if(!data || !data.length){ body.innerHTML = '<tr><td colspan="7" class="muted">No subaccount requests.</td></tr>'; return; }
+      const pill = (s) => {
+        const cls = s === 'verified' ? 'filled' : s === 'rejected' ? 'critical' : s === 'submitted' ? 'warn' : '';
+        return `<span class="status-pill ${cls}">${esc(s)}</span>`;
+      };
+      body.innerHTML = data.map(r => `<tr>
+        <td style="text-align:left;"><strong>${esc(r.client_name)}</strong><br><span style="font-size:.75rem;color:#6b7280;">#${r.customer_id}</span></td>
+        <td>${r.request_type === 'bank_relink' ? 'Bank re-link' : 'Provision'}</td>
+        <td style="text-align:left;"><code style="font-size:.82rem;">${esc(r.submitted_subaccount_name || r.suggested_subaccount_name || '—')}</code></td>
+        <td>${esc(r.zar_deposit_reference || '—')}</td>
+        <td>${pill(r.status)}${r.verification_error ? `<br><span style="font-size:.72rem;color:#b91c1c;">${esc(r.verification_error)}</span>` : ''}</td>
+        <td style="font-size:.82rem;">${fmt(r.requested_at)}</td>
+        <td style="font-size:.82rem;">${fmt(r.verified_at)}</td>
+      </tr>`).join('');
+
+      const pending = data.filter(r => r.status === 'pending' || r.status === 'submitted').length;
+      const badge = $('partnersBadge');
+      if(badge){ badge.textContent = String(pending); badge.classList.toggle('zero', pending === 0); }
+    }
+
+    async function createUser(){
+      const email = $('pnNewEmail')?.value.trim().toLowerCase();
+      if(!email){ msg('Enter an email address.', 'error'); return; }
+      const btn = $('pnCreateBtn'); btn.disabled = true;
+      msg('Creating login…');
+      const { ok, body } = await callAdminFn({
+        action:'create', email,
+        full_name: $('pnNewName')?.value.trim() || null,
+        partner_code: $('pnNewCode')?.value.trim() || 'finova',
+        role: $('pnNewRole')?.value || 'both',
+      });
+      btn.disabled = false;
+      if(!ok || !body.success){ msg(body.error || 'Could not create login.', 'error'); return; }
+      msg(body.invite_email_sent
+        ? `Login created for ${email}. They have been emailed a link to set a password.`
+        : `Login created for ${email}, but the invite email failed (${body.invite_error || 'unknown'}). Use "Reset password" to retry.`,
+        body.invite_email_sent ? 'ok' : 'warn');
+      $('pnNewName').value = ''; $('pnNewEmail').value = '';
+      await loadUsers();
+    }
+
+    async function onUsersClick(ev){
+      const btn = ev.target.closest('button'); if(!btn) return;
+      if(btn.dataset.pnPw){
+        const { ok, body } = await callAdminFn({ action:'reset_password', email: btn.dataset.pnPw });
+        msg(ok && body.success ? `Password reset email sent to ${btn.dataset.pnPw}.` : (body.error || 'Failed.'), ok ? 'ok' : 'error');
+        return;
+      }
+      if(btn.dataset.pnMfa){
+        if(!confirm('Reset two-factor authentication for this user?\n\nThey will be signed out and must re-enrol an authenticator app on next login.')) return;
+        const { ok, body } = await callAdminFn({ action:'reset_mfa', user_id: btn.dataset.pnMfa });
+        msg(ok && body.success ? `2FA reset (${body.factors_removed} factor(s) removed).` : (body.error || 'Failed.'), ok ? 'ok' : 'error');
+        return;
+      }
+      if(btn.dataset.pnToggle){
+        const active = btn.dataset.active === 'true';
+        if(active && !confirm('Disable this partner login?\n\nThey will be signed out immediately and lose portal access.')) return;
+        const { ok, body } = await callAdminFn({ action: active ? 'disable' : 'enable', user_id: btn.dataset.pnToggle });
+        msg(ok && body.success ? (active ? 'Login disabled.' : 'Login enabled.') : (body.error || 'Failed.'), ok ? 'ok' : 'error');
+        await loadUsers();
+      }
+    }
+
+    window.loadPartners = async function(){
+      await Promise.all([loadUsers(), loadRequests()]);
+    };
+
+    function init(){
+      if(!document.getElementById('partners-module')) return;
+      $('pnCreateBtn')?.addEventListener('click', createUser);
+      $('pnRefreshBtn')?.addEventListener('click', loadUsers);
+      $('pnReqRefreshBtn')?.addEventListener('click', loadRequests);
+      $('pnReqShowAll')?.addEventListener('change', loadRequests);
+      $('pnUsersBody')?.addEventListener('click', onUsersClick);
+      // Badge should reflect the queue even when the tab has not been opened.
+      loadRequests();
+    }
+    const pnTimer = setInterval(()=>{ if(window.supabaseClient){ clearInterval(pnTimer); init(); } }, 400);
   })();
   </script>
 

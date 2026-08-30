@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Portal - BitWealth</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
+    <style>
+        body { background:var(--bg-dark); color:var(--text-primary); }
+        .pp-header { display:flex; align-items:center; justify-content:space-between; padding:16px 28px; background:var(--bg-card); border-bottom:1px solid rgba(255,255,255,.08); position:sticky; top:0; z-index:20; }
+        .pp-brand { font-size:20px; font-weight:700; background:var(--gradient-gold); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .pp-brand span { display:block; font-size:12px; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary); font-weight:400; }
+        .pp-user { display:flex; align-items:center; gap:14px; font-size:14px; color:var(--text-secondary); }
+        .pp-btn { padding:8px 14px; border-radius:7px; border:1px solid rgba(255,255,255,.15); background:transparent; color:var(--text-primary); cursor:pointer; font-size:13px; }
+        .pp-btn:hover { background:rgba(255,255,255,.06); }
+        .pp-wrap { max-width:1100px; margin:0 auto; padding:28px 20px 60px; }
+        .pp-tabs { display:flex; gap:8px; margin-bottom:22px; flex-wrap:wrap; }
+        .pp-tab { padding:10px 18px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background:transparent; color:var(--text-secondary); cursor:pointer; font-size:14px; font-weight:500; }
+        .pp-tab.active { background:var(--gradient-gold); color:var(--bg-dark); border-color:transparent; font-weight:600; }
+        .pp-panel { display:none; }
+        .pp-panel.active { display:block; }
+        .card { background:var(--bg-card); border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:22px; margin-bottom:18px; }
+        .card h3 { margin:0 0 6px; font-size:17px; }
+        .muted { color:var(--text-secondary); font-size:13.5px; line-height:1.6; }
+        table { width:100%; border-collapse:collapse; font-size:14px; }
+        th { text-align:left; padding:10px 12px; color:var(--text-secondary); font-weight:600; border-bottom:1px solid rgba(255,255,255,.1); font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; }
+        td { padding:12px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:middle; }
+        .pill { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+        .pill.pending { background:#78350f; color:#fcd34d; }
+        .pill.submitted { background:#1e3a8a; color:#93c5fd; }
+        .pill.verified { background:#064e3b; color:#6ee7b7; }
+        .pill.rejected { background:#7f1d1d; color:#fca5a5; }
+        .name-copy { display:flex; align-items:center; gap:8px; }
+        .name-copy code { background:rgba(255,255,255,.07); padding:5px 9px; border-radius:6px; font-size:13px; }
+        .btn-primary { padding:9px 16px; border:none; border-radius:7px; background:var(--gradient-gold); color:var(--bg-dark); font-weight:600; cursor:pointer; font-size:13.5px; }
+        .btn-primary:disabled { opacity:.55; cursor:not-allowed; }
+        .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:50; align-items:flex-start; justify-content:center; overflow-y:auto; padding:40px 16px; }
+        .modal-bg.open { display:flex; }
+        .modal { background:var(--bg-card); border-radius:14px; max-width:600px; width:100%; padding:28px; }
+        .modal h3 { margin-top:0; }
+        .fld { margin-bottom:15px; }
+        .fld label { display:block; margin-bottom:6px; font-size:13.5px; font-weight:500; }
+        .fld input[type=text], .fld input[type=password] { width:100%; padding:11px 13px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:7px; color:var(--text-primary); font-size:14.5px; }
+        .fld .help { font-size:12.5px; color:var(--text-secondary); margin-top:5px; line-height:1.5; }
+        .checkrow { display:flex; gap:10px; align-items:flex-start; background:rgba(255,255,255,.04); padding:13px; border-radius:8px; }
+        .checkrow input { margin-top:3px; }
+        .alert { padding:12px 14px; border-radius:8px; font-size:13.5px; margin-bottom:15px; line-height:1.55; }
+        .alert.err { background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3); color:#fca5a5; }
+        .alert.ok { background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.3); color:#86efac; }
+        .alert.warn { background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); color:#fcd34d; }
+        .alert.info { background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); color:#93c5fd; }
+        .empty { text-align:center; padding:34px; color:var(--text-secondary); font-size:14px; }
+    </style>
+</head>
+<body>
+<div class="pp-header">
+    <div class="pp-brand">BitWealth<span>Partner Portal</span></div>
+    <div class="pp-user"><span id="ppWho">…</span><button class="pp-btn" id="ppLogout">Log out</button></div>
+</div>
+
+<div class="pp-wrap">
+    <div id="ppGlobal"></div>
+
+    <div class="pp-tabs">
+        <button class="pp-tab active" data-tab="requests">Subaccount Requests</button>
+        <button class="pp-tab" data-tab="withdrawals">Withdrawals</button>
+        <button class="pp-tab" data-tab="audit">Activity Log</button>
+    </div>
+
+    <div class="pp-panel active" data-panel="requests">
+        <div class="card">
+            <h3>Subaccount requests</h3>
+            <p class="muted">Create the VALR subaccount using the exact name shown, link the client's bank account to it, then submit the details below. VALR allows only letters, numbers and spaces in subaccount names.</p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+            <table>
+                <thead><tr><th>Client</th><th>Subaccount name to create</th><th>Requested</th><th>Status</th><th></th></tr></thead>
+                <tbody id="ppReqBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pp-panel" data-panel="withdrawals">
+        <div class="card">
+            <h3>Withdrawals awaiting payout</h3>
+            <p class="muted">Client withdrawals converted to ZAR and waiting for Finova to pay out from the client's subaccount.</p>
+            <div class="alert info" style="margin-top:14px;margin-bottom:0;">This section is being finalised and will be enabled shortly.</div>
+        </div>
+    </div>
+
+    <div class="pp-panel" data-panel="audit">
+        <div class="card">
+            <h3>Activity log</h3>
+            <p class="muted">Every action taken in this portal by your team.</p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+            <table>
+                <thead><tr><th>When</th><th>User</th><th>Action</th><th>Client</th><th>Detail</th></tr></thead>
+                <tbody id="ppAuditBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal-bg" id="ppModalBg">
+    <div class="modal">
+        <h3 id="ppModalTitle">Submit subaccount details</h3>
+        <p class="muted" id="ppModalClient"></p>
+        <div id="ppModalAlert"></div>
+        <form id="ppSubmitForm" style="margin-top:18px;">
+            <div class="fld">
+                <label for="fSubName">Subaccount name</label>
+                <input type="text" id="fSubName" required>
+                <div class="help">Must match the name requested by BitWealth exactly.</div>
+            </div>
+            <div class="fld">
+                <label for="fZarRef">ZAR deposit reference</label>
+                <input type="text" id="fZarRef" required>
+                <div class="help">The reference the client must use when depositing ZAR into this subaccount. BitWealth cannot read this from VALR, so it is required.</div>
+            </div>
+            <div class="fld">
+                <label for="fSubId">Subaccount ID <span class="muted">(optional)</span></label>
+                <input type="text" id="fSubId">
+                <div class="help">Helps us reconcile transactions. Leave blank if not readily available.</div>
+            </div>
+            <div class="fld">
+                <label for="fKeyName">API key name</label>
+                <input type="text" id="fKeyName" required>
+            </div>
+            <div class="fld">
+                <label for="fKey">API key</label>
+                <input type="password" id="fKey" autocomplete="off" required>
+                <div class="help">Permissions must be View, Trade and Transfer. A key with Withdraw permission will be rejected.</div>
+            </div>
+            <div class="fld">
+                <label for="fSecret">API secret</label>
+                <input type="password" id="fSecret" autocomplete="off" required>
+                <div class="help">Stored encrypted and never displayed again.</div>
+            </div>
+            <div class="fld">
+                <div class="checkrow">
+                    <input type="checkbox" id="fBankLinked" required>
+                    <label for="fBankLinked" style="margin:0;font-weight:400;">I confirm the client's bank account has been linked to this subaccount in VALR.</label>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px;">
+                <button type="button" class="pp-btn" id="ppCancel">Cancel</button>
+                <button type="submit" class="btn-primary" id="ppSubmitBtn">Verify &amp; Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const LOGIN = 'partner-login.html';
+
+let activeRequest = null;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate = (d) => d ? new Date(d).toLocaleString('en-ZA', { dateStyle:'medium', timeStyle:'short' }) : '—';
+
+function globalAlert(html, kind) {
+    document.getElementById('ppGlobal').innerHTML = html ? `<div class="alert ${kind||'info'}">${html}</div>` : '';
+}
+function modalAlert(html, kind) {
+    document.getElementById('ppModalAlert').innerHTML = html ? `<div class="alert ${kind||'err'}">${html}</div>` : '';
+}
+
+document.querySelectorAll('.pp-tab').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.pp-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pp-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`.pp-panel[data-panel="${btn.dataset.tab}"]`).classList.add('active');
+    if (btn.dataset.tab === 'audit') loadAudit();
+}));
+
+document.getElementById('ppLogout').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    window.location.href = LOGIN;
+});
+
+async function loadRequests() {
+    const body = document.getElementById('ppReqBody');
+    const { data, error } = await sb.rpc('partner_list_requests', { p_include_closed: true });
+    if (error) { body.innerHTML = `<tr><td colspan="5" class="empty">Could not load requests: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No subaccount requests.</td></tr>'; return; }
+
+    body.innerHTML = data.map(r => {
+        const open = r.status === 'pending' || r.status === 'submitted';
+        const typeLabel = r.request_type === 'bank_relink' ? ' <span class="muted">(bank re-link)</span>' : '';
+        return `<tr>
+            <td><strong>${esc(r.client_name)}</strong>${typeLabel}<div class="muted">Client #${r.customer_id}</div></td>
+            <td><div class="name-copy"><code>${esc(r.suggested_subaccount_name || '—')}</code>
+                <button class="pp-btn" data-copy="${esc(r.suggested_subaccount_name || '')}">Copy</button></div></td>
+            <td class="muted">${fmtDate(r.requested_at)}</td>
+            <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span>
+                ${r.verification_error ? `<div class="muted" style="color:#fca5a5;margin-top:5px;">${esc(r.verification_error)}</div>` : ''}</td>
+            <td style="text-align:right;">${open ? `<button class="btn-primary" data-open="${r.request_id}">Submit details</button>` : ''}</td>
+        </tr>`;
+    }).join('');
+
+    body.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(b.dataset.copy);
+        b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1400);
+    }));
+    body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
+        openModal(data.find(x => x.request_id === b.dataset.open));
+    }));
+}
+
+function openModal(req) {
+    activeRequest = req;
+    modalAlert('', '');
+    document.getElementById('ppModalClient').textContent = `${req.client_name} — client #${req.customer_id}`;
+    document.getElementById('fSubName').value = req.suggested_subaccount_name || '';
+    document.getElementById('fZarRef').value = req.zar_deposit_reference || '';
+    document.getElementById('fSubId').value = '';
+    document.getElementById('fKeyName').value = req.api_key_name || '';
+    document.getElementById('fKey').value = '';
+    document.getElementById('fSecret').value = '';
+    document.getElementById('fBankLinked').checked = false;
+    if (req.verification_error) modalAlert(esc(req.verification_error), 'err');
+    document.getElementById('ppModalBg').classList.add('open');
+}
+function closeModal() {
+    document.getElementById('ppModalBg').classList.remove('open');
+    activeRequest = null;
+}
+document.getElementById('ppCancel').addEventListener('click', closeModal);
+document.getElementById('ppModalBg').addEventListener('click', (e) => { if (e.target.id === 'ppModalBg') closeModal(); });
+
+document.getElementById('ppSubmitForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeRequest) return;
+    const btn = document.getElementById('ppSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Verifying with VALR…';
+    modalAlert('', '');
+
+    const { data: { session } } = await sb.auth.getSession();
+    try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_partner_submit_subaccount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+            body: JSON.stringify({
+                request_id: activeRequest.request_id,
+                subaccount_name: document.getElementById('fSubName').value.trim(),
+                subaccount_id: document.getElementById('fSubId').value.trim(),
+                zar_deposit_reference: document.getElementById('fZarRef').value.trim(),
+                api_key_name: document.getElementById('fKeyName').value.trim(),
+                api_key: document.getElementById('fKey').value.trim(),
+                api_secret: document.getElementById('fSecret').value.trim(),
+                bank_link_confirmed: document.getElementById('fBankLinked').checked,
+            }),
+        });
+        const result = await res.json();
+        if (!res.ok || !result.success) { modalAlert(esc(result.error || 'Submission failed.'), 'err'); return; }
+
+        const warn = (result.warnings || []).length
+            ? `<div class="alert warn" style="margin-top:10px;">${result.warnings.map(esc).join('<br>')}</div>` : '';
+        closeModal();
+        globalAlert(`Subaccount verified and linked for client #${result.customer_id}.${warn}`, 'ok');
+        await loadRequests();
+    } catch (err) {
+        modalAlert(esc(err.message || 'Network error.'), 'err');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Verify & Submit';
+    }
+});
+
+async function loadAudit() {
+    const body = document.getElementById('ppAuditBody');
+    const { data, error } = await sb.rpc('partner_list_audit_log', { p_limit: 200 });
+    if (error) { body.innerHTML = `<tr><td colspan="5" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No activity recorded yet.</td></tr>'; return; }
+    body.innerHTML = data.map(r => `<tr>
+        <td class="muted">${fmtDate(r.created_at)}</td>
+        <td>${esc(r.actor_email || '—')}</td>
+        <td>${esc(r.action)}</td>
+        <td>${r.customer_id ? '#' + r.customer_id : '—'}</td>
+        <td class="muted">${esc(r.detail ? JSON.stringify(r.detail).slice(0, 160) : '')}</td>
+    </tr>`).join('');
+}
+
+(async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = LOGIN; return; }
+
+    const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== 'aal2') { window.location.href = LOGIN; return; }
+
+    const { data: whoami } = await sb.rpc('partner_whoami');
+    const me = Array.isArray(whoami) ? whoami[0] : whoami;
+    if (!me) { await sb.auth.signOut(); window.location.href = LOGIN; return; }
+
+    document.getElementById('ppWho').textContent = `${me.full_name || me.email} · ${me.partner_code}`;
+    await loadRequests();
+})();
+</script>
+</body>
+</html>

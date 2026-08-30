@@ -29,6 +29,7 @@ interface ConfirmStrategyRequest {
   customer_id: number;
   strategy_code: string;
   strategy_variation_id?: string;
+  account_model?: string;
   platform_fee_rate?: number;
   platform_fee_schedule?: string;
   performance_fee_rate?: number;
@@ -39,6 +40,8 @@ interface ConfirmStrategyRequest {
   usdpc_enabled?: boolean;
   admin_email?: string;
 }
+
+const ALLOWED_ACCOUNT_MODELS = ["subaccount", "api", "finova_omnibus"];
 
 Deno.serve(async (req) => {
   // CORS headers
@@ -54,7 +57,7 @@ Deno.serve(async (req) => {
 
   try {
     const body: ConfirmStrategyRequest = await req.json();
-    const { customer_id, strategy_code, strategy_variation_id, admin_email,
+    const { customer_id, strategy_code, strategy_variation_id, admin_email, account_model,
             platform_fee_rate, platform_fee_schedule,
             performance_fee_rate, performance_fee_schedule, usdpc_enabled,
             fee_plan, management_fee_rate, management_fee_schedule } = body;
@@ -63,6 +66,15 @@ Deno.serve(async (req) => {
     if (!customer_id || !strategy_code) {
       return new Response(
         JSON.stringify({ error: "Missing required fields: customer_id, strategy_code" }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (account_model && !ALLOWED_ACCOUNT_MODELS.includes(account_model)) {
+      return new Response(
+        JSON.stringify({
+          error: `Invalid account_model '${account_model}'. Allowed: ${ALLOWED_ACCOUNT_MODELS.join(", ")}.`,
+        }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -232,12 +244,15 @@ Deno.serve(async (req) => {
       console.log(`Created new customer_strategy ${customer_strategy_id} for customer ${customer_id}`);
     }
 
-    // Update customer status to 'kyc' (Milestone 3)
+    // Update customer status to 'kyc' (Milestone 3). Custody is chosen here so the
+    // whole downstream chain (subaccount provisioning, credentials, withdrawals)
+    // knows which account the client's assets will live in.
+    const customerUpdate: Record<string, unknown> = { registration_status: "kyc" };
+    if (account_model) customerUpdate.account_model = account_model;
+
     const { error: updateError } = await supabase
       .from("customer_details")
-      .update({
-        registration_status: "kyc",
-      })
+      .update(customerUpdate)
       .eq("customer_id", customer_id);
 
     if (updateError) {
