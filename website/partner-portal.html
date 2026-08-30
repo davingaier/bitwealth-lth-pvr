@@ -180,7 +180,7 @@ document.querySelectorAll('.pp-tab').forEach(btn => btn.addEventListener('click'
 }));
 
 document.getElementById('ppLogout').addEventListener('click', async () => {
-    await sb.auth.signOut();
+    await sb.auth.signOut({ scope: 'local' });
     window.location.href = LOGIN;
 });
 
@@ -295,7 +295,7 @@ async function loadAudit() {
 
     const { data: whoami } = await sb.rpc('partner_whoami');
     const me = Array.isArray(whoami) ? whoami[0] : whoami;
-    if (!me) { await sb.auth.signOut(); window.location.href = LOGIN; return; }
+    if (!me) { await sb.auth.signOut({ scope: 'local' }); window.location.href = LOGIN; return; }
 
     document.getElementById('ppWho').textContent = `${me.full_name || me.email} · ${me.partner_code}`;
     await loadRequests();

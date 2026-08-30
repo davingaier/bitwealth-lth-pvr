@@ -10704,7 +10704,7 @@
       if (signInBtn && !signInBtn._bound){ signInBtn.addEventListener('click', doLogin); signInBtn._bound = true; }
       if (signOutBtn && !signOutBtn._bound){
         signOutBtn.addEventListener('click', async ()=>{
-          await window.supabaseClient.auth.signOut();
+          await window.supabaseClient.auth.signOut({ scope: 'local' });
           flipUI(null);
         });
         signOutBtn._bound = true;
@@ -19770,6 +19770,9 @@ self.onmessage = function(e) {
         body: JSON.stringify({ action, ...payload }),
       });
       const out = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        throw new Error("Your session is no longer valid — please sign out and sign in again.");
+      }
       if (!res.ok) throw new Error(out?.error || `HTTP ${res.status}`);
       return out;
     }
@@ -20245,7 +20248,9 @@ self.onmessage = function(e) {
       $('pnReqRefreshBtn')?.addEventListener('click', loadRequests);
       $('pnReqShowAll')?.addEventListener('change', loadRequests);
       $('pnUsersBody')?.addEventListener('click', onUsersClick);
-      // Badge should reflect the queue even when the tab has not been opened.
+      // Load both immediately: the hash router may already have fired before this
+      // script registered window.loadPartners.
+      loadUsers();
       loadRequests();
     }
     const pnTimer = setInterval(()=>{ if(window.supabaseClient){ clearInterval(pnTimer); init(); } }, 400);

@@ -952,7 +952,9 @@
             if (el) el.style.display = 'flex';
         }
         async function idleSignOut() {
-            try { await sb.auth.signOut(); } catch (_) {}
+            // Local scope only: the default revokes every session for this user on
+            // every device and origin, which would also log them out of other tabs.
+            try { await sb.auth.signOut({ scope: 'local' }); } catch (_) {}
             window.location.href = 'login.html?reason=idle';
         }
         function bindIdleListeners() {
@@ -2160,7 +2162,7 @@
                 window.history.back();
                 return;
             }
-            await sb.auth.signOut();
+            await sb.auth.signOut({ scope: 'local' });
             window.location.href = 'login.html';
         }
 
