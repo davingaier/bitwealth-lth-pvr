@@ -8,6 +8,7 @@
 // Deployed with: JWT verification ENABLED (called from authenticated customer portal)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -63,6 +64,13 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: CORS_HEADERS });
   }
 
+  // Identify the caller before touching the request body. A 403 here means a
+  // valid non-admin user, who may still be the owning customer — decided below.
+  const caller = await requireOrgAdmin(supabase, req, supabaseKey!);
+  if (!caller.ok && caller.status !== 403) {
+    return jsonResponse({ error: caller.error }, caller.status);
+  }
+
   try {
     const body: UploadKycDocumentsRequest = await req.json();
     const {
@@ -107,6 +115,16 @@ Deno.serve(async (req) => {
 
     if (customerError || !customer) {
       return jsonResponse({ error: "Customer not found" }, 404);
+    }
+
+    // KYC documents are sensitive identity data: only the customer themselves,
+    // an org admin, or an internal service call may upload against this record.
+    if (!caller.ok) {
+      const isOwner = !!caller.email &&
+        caller.email.toLowerCase() === (customer.email ?? "").toLowerCase();
+      if (!isOwner) {
+        return jsonResponse({ error: caller.error }, caller.status);
+      }
     }
 
     if (customer.registration_status !== "kyc") {

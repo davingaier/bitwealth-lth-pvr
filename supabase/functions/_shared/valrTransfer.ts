@@ -288,6 +288,123 @@ const VALR_API_URL_TRANSFER =
   "https://api.valr.com";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// sweepFeeToPartnerMain
+//
+// Finova-custody clients sit in a subaccount of Finova's VALR omnibus account.
+// Their API key carries View + Trade + Transfer but never Withdraw, so fees are
+// moved to Finova's primary account (toId 0) and invoiced to Finova monthly
+// rather than withdrawn to a BitWealth wallet.
+//
+// The transfer is signed with the CLIENT's own subaccount key. resolveCustomerCredentials
+// returns subaccountId=null for this model (the key is already scoped), so the
+// numeric fromId is read from exchange_accounts.subaccount_id.
+// ─────────────────────────────────────────────────────────────────────────────
+async function sweepFeeToPartnerMain(
+  sb: any,
+  customerId: number,
+  currency: string,
+  amount: number,
+  ledgerId: string | null,
+  transferType: string,
+  creds: { apiKey: string; apiSecret: string },
+): Promise<{ success: boolean; errorMessage?: string; transferId?: string }> {
+  const { data: strat } = await sb
+    .schema("public")
+    .from("customer_strategies")
+    .select("exchange_account_id")
+    .eq("customer_id", customerId)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: ea } = strat?.exchange_account_id
+    ? await sb
+        .schema("public")
+        .from("exchange_accounts")
+        .select("org_id, subaccount_id, label")
+        .eq("exchange_account_id", strat.exchange_account_id)
+        .maybeSingle()
+    : { data: null };
+
+  if (!ea?.subaccount_id) {
+    // Finova supplies the subaccount ID only optionally at provisioning.
+    return {
+      success: false,
+      errorMessage:
+        "Cannot sweep fee: this client's VALR subaccount ID is unknown. Ask the partner to supply it in the portal.",
+    };
+  }
+
+  const { data: logRow } = await sb
+    .from("valr_transfer_log")
+    .insert({
+      org_id: ea.org_id,
+      customer_id: customerId,
+      transfer_type: transferType,
+      currency,
+      amount,
+      from_subaccount_id: String(ea.subaccount_id),
+      to_account: "partner_main",
+      ledger_id: ledgerId,
+      status: "pending",
+    })
+    .select("transfer_id")
+    .maybeSingle();
+
+  const fail = async (msg: string, raw?: unknown) => {
+    if (logRow?.transfer_id) {
+      await sb.from("valr_transfer_log")
+        .update({ status: "failed", error_message: msg, valr_response: raw ?? null })
+        .eq("transfer_id", logRow.transfer_id);
+    }
+    return { success: false, errorMessage: msg };
+  };
+
+  try {
+    const path = "/v1/account/subaccounts/transfer";
+    // Subaccount IDs exceed 2^53, so build the body by hand rather than via
+    // JSON.stringify, which would corrupt the digits.
+    const bodyString = `{"fromId":${ea.subaccount_id},"toId":0,"currencyCode":"${currency}","amount":"${amount.toString()}","allowBorrow":false}`;
+
+    const timestamp = Date.now().toString();
+    const signature = await signVALR(timestamp, "POST", path, bodyString, creds.apiSecret);
+
+    const res = await fetch(`${VALR_API_URL_TRANSFER}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-VALR-API-KEY": creds.apiKey,
+        "X-VALR-SIGNATURE": signature,
+        "X-VALR-TIMESTAMP": timestamp,
+      },
+      body: bodyString,
+    });
+
+    const text = await res.text();
+    let parsed: unknown = {};
+    if (text?.trim()) { try { parsed = JSON.parse(text); } catch { parsed = { raw_response: text }; } }
+
+    if (!res.ok) {
+      const msg = `VALR partner fee transfer failed (${res.status}): ${text.slice(0, 300)}`;
+      await logAlert(sb, "sweepFeeToPartnerMain", "error", msg,
+        { customer_id: customerId, currency, amount, subaccount_id: String(ea.subaccount_id) },
+        ea.org_id, customerId);
+      return await fail(msg, parsed);
+    }
+
+    if (logRow?.transfer_id) {
+      await sb.from("valr_transfer_log")
+        .update({ status: "completed", completed_at: new Date().toISOString(), valr_response: parsed })
+        .eq("transfer_id", logRow.transfer_id);
+    }
+
+    return { success: true, transferId: logRow?.transfer_id };
+  } catch (e) {
+    return await fail(`Partner fee transfer error: ${(e as Error).message}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ensureIdleUsdt
 //
 // USDPC-enabled customers keep idle cash in the USDPC yield stablecoin, so their
@@ -502,15 +619,10 @@ export async function withdrawFeeFromCustomerAccount(
   }
 
   // ── 4. Partner omnibus: fees sweep to the partner's main account ──────────
-  // Finova-issued keys carry Transfer but never Withdraw, so the API-model
-  // crypto-withdrawal path below would always fail. Refuse explicitly until the
-  // partner fee sweep is built rather than emitting a misleading VALR error.
+  // Finova-issued keys carry Transfer but never Withdraw, so instead of a crypto
+  // withdrawal we move the fee to Finova's primary account and invoice them monthly.
   if (creds.accountModel === "finova_omnibus") {
-    return {
-      success: false,
-      errorMessage:
-        "Fee transfer for Finova-omnibus customers is not implemented yet — fees accrue but are not swept.",
-    };
+    return await sweepFeeToPartnerMain(sb, customerId, currency, amount, ledgerId, transferType, creds);
   }
 
   // ── 5. API model: VALR crypto withdrawal to BitWealth wallet ──────────────
