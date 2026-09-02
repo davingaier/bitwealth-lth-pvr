@@ -70,19 +70,12 @@ async function valrPrivate(
 function parsePermissions(data: unknown): {
   hasView: boolean; hasTrade: boolean; hasWithdraw: boolean; hasLinkBank: boolean;
 } {
-  // VALR returns an array of key objects; each has a "permissions" array of strings.
-  // We look for strings matching required permissions (case-insensitive).
+  // GET /v1/account/api-keys/current returns ONE object: { label, permissions: string[], isSubAccount, ... }
   const matches = (perm: string, ...targets: string[]) =>
     targets.some(t => perm.toLowerCase().includes(t.toLowerCase()));
 
-  const perms: string[] = [];
-  if (Array.isArray(data)) {
-    for (const key of data as Record<string, unknown>[]) {
-      if (Array.isArray(key.permissions)) {
-        perms.push(...(key.permissions as string[]));
-      }
-    }
-  }
+  const obj = (data ?? {}) as Record<string, unknown>;
+  const perms: string[] = Array.isArray(obj.permissions) ? (obj.permissions as string[]) : [];
   return {
     hasView:      perms.some(p => matches(p, "view")),
     hasTrade:     perms.some(p => matches(p, "trade")),
@@ -152,7 +145,7 @@ Deno.serve(async (req) => {
     let permissions = { hasView: false, hasTrade: false, hasWithdraw: false, hasLinkBank: false };
     const permWarnings: string[] = [];
     try {
-      const permResult = await valrPrivate("GET", "/v1/account/api-keys", api_key, api_secret);
+      const permResult = await valrPrivate("GET", "/v1/account/api-keys/current", api_key, api_secret);
       if (permResult.ok) {
         permissions = parsePermissions(permResult.data);
         if (!permissions.hasView)     permWarnings.push("View permission missing");

@@ -60,23 +60,49 @@ async function valrGet(path: string, apiKey: string, apiSecret: string) {
   return { ok: res.ok, status: res.status, data };
 }
 
-/** VALR returns an array of key objects each carrying a `permissions` string array. */
+/**
+ * GET /v1/account/api-keys/current returns a single object:
+ *   { label, permissions: string[], addedAt, isSubAccount, ... }
+ * Permission strings are VALR's exact labels, e.g. "View access", "Trade",
+ * "Withdraw", "Internal Transfer", "Link bank account".
+ */
 function readPermissions(data: unknown) {
-  const perms: string[] = [];
-  if (Array.isArray(data)) {
-    for (const key of data as Record<string, unknown>[]) {
-      if (Array.isArray(key.permissions)) perms.push(...(key.permissions as string[]));
-    }
-  }
+  const obj = (data ?? {}) as Record<string, unknown>;
+  const perms: string[] = Array.isArray(obj.permissions) ? (obj.permissions as string[]) : [];
   const has = (...needles: string[]) =>
     perms.some((p) => needles.some((n) => p.toLowerCase().includes(n.toLowerCase())));
   return {
     known: perms.length > 0,
     view: has("view"),
     trade: has("trade"),
-    transfer: has("transfer"),
+    transfer: has("internal transfer", "transfer"),
     withdraw: has("withdraw"),
+    isSubAccount: obj.isSubAccount === true,
+    label: typeof obj.label === "string" ? obj.label : null,
   };
+}
+
+/**
+ * The subaccount ID is needed later to sweep fees, but VALR exposes no endpoint
+ * that reveals it to a subaccount-scoped key. Try the primary-only listing anyway
+ * and match on label — it succeeds only if the key turns out to be primary-scoped.
+ * Returns null when it cannot be determined; the caller treats that as non-fatal.
+ */
+async function discoverSubaccountId(
+  apiKey: string,
+  apiSecret: string,
+  subaccountName: string,
+): Promise<string | null> {
+  try {
+    const res = await valrGet("/v1/account/subaccounts", apiKey, apiSecret);
+    if (!res.ok || !Array.isArray(res.data)) return null;
+    const wanted = subaccountName.trim().toLowerCase();
+    const match = (res.data as Array<{ id?: string; label?: string }>)
+      .find((a) => (a.label ?? "").trim().toLowerCase() === wanted);
+    return match?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -168,7 +194,7 @@ Deno.serve(async (req) => {
   }
 
   // 2. Permission policy: View + Trade required, Withdraw forbidden.
-  const permResult = await valrGet("/v1/account/api-keys", api_key!.trim(), api_secret!.trim());
+  const permResult = await valrGet("/v1/account/api-keys/current", api_key!.trim(), api_secret!.trim());
   const perms = readPermissions(permResult.data);
   const warnings: string[] = [];
 
@@ -176,15 +202,26 @@ Deno.serve(async (req) => {
     if (perms.withdraw) {
       return await fail("This key has the Withdraw permission. For client protection BitWealth will not store a key that can withdraw funds — please recreate it with View, Trade and Transfer only.", 422);
     }
+    // A primary-account key would give BitWealth access to Finova's entire omnibus.
+    if (!perms.isSubAccount) {
+      return await fail("This key belongs to your primary account, not to the client's subaccount. Please create the key on the subaccount itself so its access is limited to this client.", 422);
+    }
     if (!perms.view) return await fail("This key is missing the View permission.");
     if (!perms.trade) return await fail("This key is missing the Trade permission.");
-    if (!perms.transfer) warnings.push("Transfer permission not detected — fee sweeps to the Finova main account will fail until it is added.");
+    if (!perms.transfer) warnings.push("Internal Transfer permission not detected — fee sweeps to the Finova main account will fail until it is added.");
   } else {
     warnings.push("VALR did not report this key's permissions, so they could not be verified automatically.");
   }
 
   if (subaccount_name!.trim() !== (reqRow.suggested_subaccount_name ?? "").trim()) {
     warnings.push(`Subaccount name differs from the requested "${reqRow.suggested_subaccount_name}".`);
+  }
+
+  // Best-effort: Finova is not asked for the subaccount ID, so try to derive it.
+  const discoveredId = subaccount_id?.trim() ||
+    await discoverSubaccountId(api_key!.trim(), api_secret!.trim(), subaccount_name!.trim());
+  if (!discoveredId) {
+    warnings.push("Subaccount ID could not be determined automatically; BitWealth will resolve it before the first fee sweep.");
   }
 
   // 3. Vault + link + close the request atomically.
@@ -194,7 +231,7 @@ Deno.serve(async (req) => {
     p_api_key: api_key!.trim(),
     p_api_secret: api_secret!.trim(),
     p_subaccount_name: subaccount_name!.trim(),
-    p_subaccount_id: subaccount_id?.trim() || null,
+    p_subaccount_id: discoveredId,
     p_zar_deposit_ref: zar_deposit_reference!.trim(),
     p_api_key_name: api_key_name!.trim(),
     p_bank_valr_id: bank_valr_id?.trim() || null,
