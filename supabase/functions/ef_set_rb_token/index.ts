@@ -5,10 +5,11 @@
 // band when auto-renewal has failed).
 //
 // Behaviour:
-//   - Requires a signed-in user with role 'admin' in org_members.
+//   - Requires a signed-in user with role 'admin' or 'owner' in org_members.
 //   - POST body: { token: string, org_id?: uuid }
-//   - Persists the token in lth_pvr.rb_api_token with
-//     issued_at = today (UTC), expires_at = today + 90 days.
+//   - Validates the token against RB's /v2/info/user_info and persists it in
+//     lth_pvr.rb_api_token with RB's own api_key_expires_at and the absolute
+//     web_reauth_required_at (falls back to today + 90 days if the probe fails).
 //   - NEVER returns the token value in the response.
 //   - Emits an `info` alert on success and an `error` alert on
 //     failure (component = "ef_set_rb_token") via the shared
@@ -101,7 +102,7 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: "token must be a non-empty string of at least 20 characters" });
   }
 
-  // ---- AuthZ: caller must be an admin in this org ----
+  // ---- AuthZ: caller must be an admin/owner in this org ----
   const { data: memberRow, error: memberErr } = await sb
     .schema("public")
     .from("org_members")
@@ -114,8 +115,9 @@ Deno.serve(async (req: Request) => {
     await logAlert(sb, "error", `org_members lookup failed: ${memberErr.message}`, { org_id: orgIdInput, user_id: userId }, orgIdInput);
     return json(500, { error: "membership check failed" });
   }
-  if (!memberRow || String(memberRow.role).toLowerCase() !== "admin") {
-    return json(403, { error: "admin role required" });
+  // Matches the codebase-wide convention in _shared/adminAuth.ts.
+  if (!memberRow || !["admin", "owner"].includes(String(memberRow.role).toLowerCase())) {
+    return json(403, { error: "admin or owner role required" });
   }
 
   // ---- Persist ----

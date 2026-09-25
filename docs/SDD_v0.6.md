@@ -3,11 +3,70 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-08-16 (v0.6.160)
+**Last updated:** 2026-09-25 (v0.6.161)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.161 – RB token ABSOLUTE expiry (`token_abs_expired`) — outage + hardening
+**Date:** 2026-09-25  
+**Status:** ✅ DEPLOYED (migrations + ef_renew_rb_token + ef_set_rb_token + Admin UI)
+
+**Incident.** From 00:00 UTC on 2026-09-25 every Research Bitcoin call failed with
+`HTTP 401 {"reason":"token_abs_expired"}` — 19 occurrences on `ef_fetch_rb_bands` plus one on
+`ef_fetch_onchain_pvr`. No RB bands ⇒ no decisions ⇒ the whole daily pipeline stalled, with the
+30-minute RB guard retrying indefinitely.
+
+**Root cause.** RB issues **two independent expiries** and we only ever tracked one:
+
+| Field | Behaviour | Value at failure |
+|---|---|---|
+| `api_key_expires_at` | rolling; extended by `POST /v2/auth/renew` | 2026-12-11 — looked healthy |
+| `web_reauth_required_at` | **absolute; renewal CANNOT extend it** | had just passed |
+
+`ef_renew_rb_token` read only `api_key_expires_at`, so the 2026-09-12 renewal logged
+“renewed successfully, new expiry 2026-12-11” and the Admin panel displayed a green
+“77 days” while the key was already dead. RB's docs state renewals are permitted only
+“within the configured renewal window **and before the absolute renewal deadline**”, and
+`/v2/auth/renew` is their *only* Authentication endpoint — there is no API to mint a key from
+scratch. A manual **Generate New API Key** on the RB website is therefore unavoidable roughly
+once per absolute-deadline cycle; everything in between stays automated.
+
+**Backend hardening:**
+- Migration `add_rb_token_web_reauth_required_at` — adds `lth_pvr.rb_api_token.web_reauth_required_at timestamptz`.
+- Migration `rb_token_status_expose_web_reauth` — `lth_pvr.get_rb_token_status()` now also returns
+  `web_reauth_required_at` + `days_until_reauth`. It was a `SECURITY DEFINER` function returning
+  **every** org's row unfiltered; now guarded by `org_id IN (SELECT id FROM public.my_orgs())`,
+  `REVOKE ALL … FROM PUBLIC`, `GRANT EXECUTE TO authenticated`.
+- `ef_renew_rb_token` — probes `GET /v2/info/user_info` (tier-0, header `X-API-Token`) on every run
+  to sync **both** deadlines into the DB; alerts `warn` at ≤14 days and `critical` at ≤3 days before
+  the absolute deadline; on a live `token_abs_expired` emits an explicit remediation alert instead of
+  a generic fetch failure. Persists `web_reauth_required_at` on successful renewal.
+- `ef_set_rb_token` — validates the pasted token against `/v2/info/user_info`, stores RB's real
+  `api_key_expires_at` / `web_reauth_required_at` instead of assuming +90 days, and rejects a token RB
+  won't accept. **AuthZ bug fixed:** it required the literal role `admin`, locking out the org `owner`
+  (403 “admin role required”) — now `role IN ('admin','owner')`, matching `_shared/adminAuth.ts`.
+
+**Admin UI (`ui/Advanced BTC DCA Strategy.html`):**
+- New **Re-Auth Deadline (absolute)** tile on the RB token card (green >14 d, amber ≤14 d, red ≤3 d).
+  The old panel showed only the rolling expiry, which is what made the failure invisible.
+- **Bug fixed:** `saveRbToken()` referenced `SUPABASE_URL`, which is declared separately inside several
+  sibling IIFEs and is **not** global — Save Token threw `ReferenceError: SUPABASE_URL is not defined`
+  before the fetch fired. Now uses a module-local `RB_SB_URL`.
+
+**API notes.** RB data endpoints authenticate with header `X-API-Token`; only `/v2/auth/renew` uses
+`Authorization: Bearer`. Generating a new key **invalidates the existing one immediately** — there is
+no overlap window, so paste it into the Admin panel promptly.
+
+**Files/objects changed:**
+- migrations `add_rb_token_web_reauth_required_at`, `rb_token_status_expose_web_reauth`
+- `supabase/functions/ef_renew_rb_token/index.ts` (deployed `--no-verify-jwt`)
+- `supabase/functions/ef_set_rb_token/index.ts` (deployed, JWT verified)
+- `ui/Advanced BTC DCA Strategy.html` — RB token card + `rbTokenModule()`
+- `docs/SDD_v0.6.md` — this entry
+
+---
 
 ### v0.6.160 – Bear-market pause "break glass" manual override (Admin UI)
 **Date:** 2026-08-16  
@@ -5576,12 +5635,13 @@ supabase functions deploy ef_execute_public_backtests --project-ref wqnmxpooabme
 
 - **`lth_pvr.rb_bands_daily`** – Identical schema to `ci_bands_daily`. Populated daily by `ef_fetch_rb_bands`. Seeded with historical data (2010-07-17 → present) copied directly from `ci_bands_daily` for historical accuracy; new rows from 2026-03-28 onwards are computed via the hybrid Welford formula.
 - **`lth_pvr.rb_bands_state`** – Welford running state for the LTH market-cap series. Columns: `org_id` (PK), `pvr_mean`, `pvr_std`, `mc_n`, `mc_mean`, `mc_m2`, `seeded_at`, `last_date`. Seeded from CI's known constants (pvr_mean=0.8726, pvr_std=0.9661, mc_n=5734, cum_std≈$453.7B) so the hybrid formula remains calibrated to CI.
-- **`lth_pvr.rb_api_token`** – Stores the Research Bitcoin API token with expiry metadata. Columns: `org_id` (PK), `token`, `issued_at`, `expires_at`, `updated_at`. Tokens expire every 90 days and are renewed automatically by `ef_renew_rb_token`.
+- **`lth_pvr.rb_api_token`** – Stores the Research Bitcoin API token with expiry metadata. Columns: `org_id` (PK), `token`, `issued_at`, `expires_at`, `web_reauth_required_at`, `updated_at`. The rolling `expires_at` is renewed automatically by `ef_renew_rb_token`; `web_reauth_required_at` is RB's absolute deadline and requires a manual key regeneration on the RB website (see v0.6.161).
 
 #### 2. New edge functions
 
 - **`ef_fetch_rb_bands`** – Daily RB-sourced band computation. Reads token from `rb_api_token`, fetches 3 RB endpoints (`supply_lth`, `realized_price_lth`, `price`) via CSV API, updates Welford state in `rb_bands_state`, computes all 10 band prices, upserts to `rb_bands_daily`. Formula: `price_at_X = (pvr_target × cum_std + lth_rc) / lth_supply`. Validated to <0.3% of CI values.
-- **`ef_renew_rb_token`** – Daily token renewal check. If `expires_at ≤ today + 7 days` (RB API enforces a 7-day server-side renewal window; earlier attempts return HTTP 403), calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <token>`, stores new token + new expiry (today + 90 days) in `rb_api_token`, logs `info` alert on success or `critical` alert on failure.
+- **`ef_renew_rb_token`** – Daily token renewal check. Probes `GET /v2/info/user_info` to sync both the rolling `expires_at` and the absolute `web_reauth_required_at`. If `expires_at ≤ today + 6 days` (RB enforces a server-side renewal window; earlier attempts return HTTP 403), calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <token>`, stores the new token + RB-reported expiries in `rb_api_token`, logs `info` alert on success or `critical` alert on failure. Alerts ahead of the absolute deadline, which renewal cannot extend.
+- **`ef_set_rb_token`** – Admin/owner-only manual token replacement (JWT verified). Validates against `/v2/info/user_info`, stores RB's real expiries. Required after the absolute re-auth deadline passes.
 
 #### 3. New cron jobs (all use `lth_pvr.call_edge()`)
 
@@ -12035,8 +12095,8 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 
 - **`lth_pvr.rb_api_token`** *(added 2026-03-28)*
   - Stores the Research Bitcoin API token with expiry metadata
-  - Columns: `org_id` (PK), `token` text, `issued_at` date, `expires_at` date, `updated_at` timestamptz
-  - Tokens expire every 90 days; auto-renewed by `ef_renew_rb_token` within **7-day** window before expiry (RB API rejects renewal attempts earlier than 7 days with HTTP 403)
+  - Columns: `org_id` (PK), `token` text, `issued_at` date, `expires_at` date, `web_reauth_required_at` timestamptz *(added 2026-09-25)*, `updated_at` timestamptz
+  - **Two independent expiries.** `expires_at` is the rolling one auto-renewed by `ef_renew_rb_token` within a **6-day** window. `web_reauth_required_at` is RB's **absolute** deadline, which renewal cannot extend — once it passes every RB call returns `HTTP 401 token_abs_expired` and only a fresh key generated on the RB website (pasted via `ef_set_rb_token`) restores service. See v0.6.161.
   - Used by `ef_fetch_rb_bands` instead of env secret (table allows programmatic updates)
 
 - **`lth_pvr.ci_bands_guard_log`**
@@ -12072,12 +12132,19 @@ BitWealth offers a BTC accumulation service based on the **LTH PVR BTC DCA strat
 - **`ef_renew_rb_token`** *(added 2026-03-28)*
   - Scheduled daily at **00:03 UTC** (before band fetches)
   - Reads current token from `rb_api_token`; checks days until expiry
-  - If `expires_at > today + 7 days` → logs info to function console and returns `{skipped: true, reason: "not_due"}` (no alert generated)
-  - If within **7-day** window (or `force: true` in payload) → calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <current_token>`
-  - **Note:** The RB API enforces a strict 7-day server-side window; attempts earlier than 7 days before expiry return HTTP 403 "Token not close to expiry"
-  - On success: stores new token + `expires_at = today + 90 days` in `rb_api_token`, logs `info` alert
+  - **Probes `GET /v2/info/user_info`** (tier-0, header `X-API-Token`) on every run to sync BOTH `expires_at` and the absolute `web_reauth_required_at` from RB, regardless of whether a renewal is due *(added 2026-09-25)*
+  - Alerts `warn` at ≤14 days / `critical` at ≤3 days before the absolute re-auth deadline; on a live `token_abs_expired` returns 401 with an explicit remediation alert
+  - If `expires_at > today + 6 days` → logs info to function console and returns `{skipped: true, reason: "not_due"}` (no alert generated)
+  - If within the **6-day** window (or `force: true` in payload) → calls `POST https://api.researchbitcoin.net/v2/auth/renew` with `Authorization: Bearer <current_token>`
+  - **Note:** The RB API enforces a strict renewal window; attempts at 7+ days before expiry return HTTP 403 "Token not close to expiry", and attempts after the absolute deadline are refused outright
+  - On success: stores new token + RB-reported `expires_at` and `web_reauth_required_at`, logs `info` alert
   - On failure: logs `critical` alert (surfaces in daily digest email), retries next day
-  - First automatic renewal attempt: **2026-06-12** (14 days before 2026-06-26 expiry)
+
+- **`ef_set_rb_token`** *(added 2026-06; hardened 2026-09-25)*
+  - Admin-only manual paste path for when the absolute deadline has passed and auto-renewal cannot recover
+  - JWT-verified; caller must hold `role IN ('admin','owner')` in `org_members` for the target org
+  - Validates the pasted token against `/v2/info/user_info` and persists RB's real `api_key_expires_at` + `web_reauth_required_at` (falls back to today + 90 days only if the probe fails)
+  - Never returns or displays the token value
 
 **Database Functions:**
 - **`lth_pvr.ensure_ci_bands_today()`**
@@ -12870,8 +12937,10 @@ ORDER BY created_at DESC;
 
 **00:03** – Research Bitcoin token renewal check *(added 2026-03-28)*
 - `pg_cron` job `lthpvr_rb_token_renew` calls `ef_renew_rb_token`
-- Silently skips if more than 14 days remain before expiry
-- If within 14-day window: renews token via RB API, stores new token in `rb_api_token`
+- Always probes `/v2/info/user_info` to refresh both the rolling expiry and the absolute `web_reauth_required_at`
+- Silently skips the renewal call if more than 6 days remain before expiry
+- If within the 6-day window: renews token via RB API, stores new token in `rb_api_token`
+- Alerts ahead of the absolute re-auth deadline, which renewal cannot extend (see v0.6.161)
 
 **00:05** – CI bands fetch *(rescheduled from 03:00, 2026-03-28)*
 - `pg_cron` job `lthpvr_ci_fetch` calls `ef_fetch_ci_bands`
@@ -14213,7 +14282,7 @@ async function pollConversionStatus(orderId) {
 | `lth_pvr.ci_bands_daily` | Daily CI LTH PVR bands and BTC price | date, btc_price, price_at_m100..price_at_p250 | ~365 rows/year |
 | `lth_pvr.rb_bands_daily` | Daily RB-sourced LTH PVR bands (parallel run) | date, btc_price, price_at_m100..price_at_p250 | ~365 rows/year |
 | `lth_pvr.rb_bands_state` | Welford running state for RB band computation | org_id, pvr_mean, pvr_std, mc_n, mc_mean, mc_m2 | 1 row |
-| `lth_pvr.rb_api_token` | Research Bitcoin API token + expiry | org_id, token, issued_at, expires_at | 1 row |
+| `lth_pvr.rb_api_token` | Research Bitcoin API token + expiry | org_id, token, issued_at, expires_at, web_reauth_required_at | 1 row |
 | `lth_pvr.decisions_daily` | Per-customer daily decisions | customer_id, trade_date, action, allocation_pct | ~365 rows/customer/year |
 | `lth_pvr.order_intents` | Tradeable order intents | intent_id, portfolio_id, side, amount_usdt | ~365 rows/portfolio/year |
 | `lth_pvr.exchange_orders` | VALR orders | order_id, portfolio_id, status | ~365 rows/portfolio/year |
