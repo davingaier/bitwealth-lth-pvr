@@ -122,9 +122,32 @@ Deno.serve(async (req: Request) => {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const issuedAt = today.toISOString().slice(0, 10);
-  const expiresAt = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
+  let expiresAt = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+  let webReauthAt: string | null = null;
+
+  // Prefer RB's own deadlines over the 90-day assumption. user_info also returns
+  // web_reauth_required_at — the absolute deadline that renewal cannot extend.
+  try {
+    const infoResp = await fetch("https://api.researchbitcoin.net/v2/info/user_info", {
+      headers: { "X-API-Token": newToken },
+    });
+    if (!infoResp.ok) {
+      return json(400, {
+        error: `token rejected by Research Bitcoin (HTTP ${infoResp.status})`,
+      });
+    }
+    const info = (await infoResp.json())?.data ?? {};
+    if (typeof info.api_key_expires_at === "string") {
+      expiresAt = info.api_key_expires_at.slice(0, 10);
+    }
+    if (typeof info.web_reauth_required_at === "string") {
+      webReauthAt = info.web_reauth_required_at;
+    }
+  } catch (e) {
+    await logAlert(sb, "warn", `RB user_info probe failed, falling back to +90 days: ${String((e as Error).message ?? e)}`, { org_id: orgIdInput }, orgIdInput);
+  }
 
   // Try update first; fall back to insert if no row exists yet.
   const { data: existing, error: existErr } = await sb
@@ -147,6 +170,7 @@ Deno.serve(async (req: Request) => {
         token: newToken,
         issued_at: issuedAt,
         expires_at: expiresAt,
+        web_reauth_required_at: webReauthAt,
         updated_at: new Date().toISOString(),
       })
       .eq("org_id", orgIdInput);
@@ -160,6 +184,7 @@ Deno.serve(async (req: Request) => {
         token: newToken,
         issued_at: issuedAt,
         expires_at: expiresAt,
+        web_reauth_required_at: webReauthAt,
       });
     writeErr = error;
   }
@@ -184,6 +209,7 @@ Deno.serve(async (req: Request) => {
       user_id: userId,
       issued_at: issuedAt,
       expires_at: expiresAt,
+      web_reauth_required_at: webReauthAt,
     },
     orgIdInput,
   );
@@ -192,5 +218,6 @@ Deno.serve(async (req: Request) => {
     ok: true,
     issued_at: issuedAt,
     expires_at: expiresAt,
+    web_reauth_required_at: webReauthAt,
   });
 });

@@ -5598,28 +5598,34 @@
           </div>
         </div>
         <p class="small-muted" style="margin-bottom:.75rem;">
-          The RB API token auto-renews daily within a 14-day window. If renewal fails
-          (warn at ≤7 days, critical at ≤1 day), obtain a new token from
-          <a href="https://researchbitcoin.net" target="_blank" rel="noreferrer">researchbitcoin.net</a>
+          The RB API token auto-renews daily within a 14-day window. Renewal only extends the
+          rolling <em>Expires</em> date &mdash; it cannot extend the <strong>Re-Auth Deadline</strong>,
+          which is absolute. Once that passes, every RB fetch fails with <code>token_abs_expired</code>
+          and you must generate a fresh key at
+          <a href="https://api.researchbitcoin.net/v2/token" target="_blank" rel="noreferrer">api.researchbitcoin.net/v2/token</a>
           and paste it below. The token itself is never displayed after submission.
         </p>
 
         <div id="rbTokenStatusBox" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem;">
           <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
             <div class="small-muted" style="font-size:.75rem;">Issued</div>
-            <div id="rbTokenIssuedAt" style="font-weight:600;">–</div>
+            <div id="rbTokenIssuedAt" style="font-weight:600;">&ndash;</div>
           </div>
           <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
             <div class="small-muted" style="font-size:.75rem;">Expires</div>
-            <div id="rbTokenExpiresAt" style="font-weight:600;">–</div>
+            <div id="rbTokenExpiresAt" style="font-weight:600;">&ndash;</div>
           </div>
           <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
             <div class="small-muted" style="font-size:.75rem;">Days Until Expiry</div>
-            <div id="rbTokenDaysLeft" style="font-weight:600;">–</div>
+            <div id="rbTokenDaysLeft" style="font-weight:600;">&ndash;</div>
+          </div>
+          <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
+            <div class="small-muted" style="font-size:.75rem;">Re-Auth Deadline (absolute)</div>
+            <div id="rbTokenReauthAt" style="font-weight:600;">&ndash;</div>
           </div>
           <div style="border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:.6rem .75rem;">
             <div class="small-muted" style="font-size:.75rem;">Last Renewed</div>
-            <div id="rbTokenLastRenewed" style="font-weight:600;">–</div>
+            <div id="rbTokenLastRenewed" style="font-weight:600;">&ndash;</div>
           </div>
         </div>
 
@@ -12429,7 +12435,9 @@
     const issuedEl   = document.getElementById('rbTokenIssuedAt');
     const expiresEl  = document.getElementById('rbTokenExpiresAt');
     const daysEl     = document.getElementById('rbTokenDaysLeft');
+    const reauthEl   = document.getElementById('rbTokenReauthAt');
     const lastEl     = document.getElementById('rbTokenLastRenewed');
+    const RB_SB_URL  = 'https://wqnmxpooabmedvtackji.supabase.co';
 
     if (!refreshBtn || !saveBtn) return;
 
@@ -12477,12 +12485,26 @@
           expiresEl.textContent = '–';
           daysEl.textContent    = 'no token stored';
           daysEl.style.color    = '#ef4444';
+          if (reauthEl) reauthEl.textContent = '–';
           lastEl.textContent    = '–';
           return;
         }
         issuedEl.textContent  = fmtDate(row.issued_at);
         expiresEl.textContent = fmtDate(row.expires_at);
         lastEl.textContent    = fmtTs(row.last_renewed_at);
+        if (reauthEl){
+          const r = Number(row.days_until_reauth);
+          reauthEl.textContent = row.web_reauth_required_at
+            ? `${fmtDate(row.web_reauth_required_at)}${Number.isFinite(r) ? ` (${r} day(s))` : ''}`
+            : 'unknown — run renewal probe';
+          if (Number.isFinite(r)) {
+            if (r <= 3)       reauthEl.style.color = '#ef4444';
+            else if (r <= 14) reauthEl.style.color = '#f59e0b';
+            else              reauthEl.style.color = '#22c55e';
+          } else {
+            reauthEl.style.color = '#f59e0b';
+          }
+        }
         const d = Number(row.days_until_expiry);
         daysEl.textContent    = Number.isFinite(d) ? `${d} day(s)` : '–';
         // Colour-code: <=1 red, <=7 amber, else green
@@ -12532,7 +12554,7 @@
       const originalLabel = saveBtn.textContent;
       saveBtn.textContent = 'Saving…';
       try {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_set_rb_token`, {
+        const resp = await fetch(`${RB_SB_URL}/functions/v1/ef_set_rb_token`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
@@ -12544,7 +12566,7 @@
         if (!resp.ok || body?.error){
           throw new Error(body?.error || `HTTP ${resp.status}`);
         }
-        showMsg('ok', `Token saved. New expiry: ${body.expires_at}.`);
+        showMsg('ok', `Token saved. Expires ${body.expires_at}; re-auth deadline ${body.web_reauth_required_at ? fmtDate(body.web_reauth_required_at) : 'unknown'}.`);
         tokenInput.value = '';
         await loadRbStatus();
       } catch (e){

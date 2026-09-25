@@ -18,8 +18,17 @@
 // attempts renewal when 6 or fewer days remain).
 //
 // RB API response shape (as of 2026-06-20):
-//   { api_key: "new_token", api_key_expires_at: "...", status: "success", ... }
+//   { api_key: "new_token", api_key_expires_at: "...", web_reauth_required_at: "...", status: "success", ... }
 // Note: older response shape used { token: "..." } — both are accepted.
+//
+// CRITICAL: RB enforces TWO independent expiries. `api_key_expires_at` is the
+// rolling one that /v2/auth/renew extends. `web_reauth_required_at` is an
+// ABSOLUTE deadline that renewal CANNOT extend — once it passes, every data
+// call returns HTTP 401 with reason `token_abs_expired` and the only remedy is
+// logging in to the Research Bitcoin website and pasting a fresh token via the
+// Administration module (ef_set_rb_token). This function therefore probes
+// /v2/info/user_info daily to keep both deadlines in sync and alert ahead of
+// the absolute one.
 //
 // Idempotent and safe to call multiple times per day.
 // ===========================================================
@@ -27,6 +36,7 @@
 import { getServiceClient } from "./client.ts";
 
 const RB_RENEW_URL = "https://api.researchbitcoin.net/v2/auth/renew";
+const RB_USER_INFO_URL = "https://api.researchbitcoin.net/v2/info/user_info";
 // The RB API allows renewal only when days_until_expiry < 7 (strictly less than).
 // At exactly 7 days it still returns HTTP 403. Use 6 as the trigger threshold.
 const RENEWAL_WINDOW_DAYS = 6; // start attempting when 6 or fewer days remain
@@ -83,7 +93,7 @@ Deno.serve(async (req: Request) => {
   const { data: tokenRow, error: fetchErr } = await sb
     .schema("lth_pvr")
     .from("rb_api_token")
-    .select("token, issued_at, expires_at")
+    .select("token, issued_at, expires_at, web_reauth_required_at")
     .eq("org_id", org_id)
     .maybeSingle();
 
@@ -109,6 +119,72 @@ Deno.serve(async (req: Request) => {
   console.info(
     `ef_renew_rb_token: expires_at=${tokenRow.expires_at}, days_until_expiry=${daysUntilExpiry}`,
   );
+
+  // ---- Probe RB for the authoritative deadlines -----------------------------
+  // /v2/info/user_info is a tier-0 endpoint that reports both api_key_expires_at
+  // and the absolute web_reauth_required_at. Keeping these in sync locally is the
+  // only way to warn before the absolute deadline kills the whole RB pipeline.
+  let webReauthAt: string | null = tokenRow.web_reauth_required_at ?? null;
+  try {
+    const infoResp = await fetch(RB_USER_INFO_URL, {
+      headers: { "X-API-Token": tokenRow.token },
+    });
+    const infoText = await infoResp.text();
+
+    if (!infoResp.ok) {
+      const absExpired = infoText.includes("token_abs_expired");
+      await logAlert(
+        sb,
+        "critical",
+        absExpired
+          ? "Research Bitcoin token has hit its ABSOLUTE expiry (token_abs_expired). Auto-renewal cannot fix this — sign in at researchbitcoin.net, copy the new API key, and paste it via Administration → Set RB Token."
+          : `Research Bitcoin user_info probe failed: HTTP ${infoResp.status}: ${infoText.slice(0, 200)}`,
+        { org_id, http_status: infoResp.status, abs_expired: absExpired },
+        org_id,
+      );
+      if (absExpired) {
+        return new Response(
+          JSON.stringify({ ok: false, reason: "token_abs_expired" }),
+          { status: 401, headers: { "content-type": "application/json" } },
+        );
+      }
+    } else {
+      const info = JSON.parse(infoText)?.data ?? {};
+      const patch: Record<string, unknown> = {};
+      if (typeof info.web_reauth_required_at === "string") {
+        webReauthAt = info.web_reauth_required_at;
+        patch.web_reauth_required_at = webReauthAt;
+      }
+      if (typeof info.api_key_expires_at === "string") {
+        patch.expires_at = info.api_key_expires_at.slice(0, 10);
+      }
+      if (Object.keys(patch).length > 0) {
+        await sb
+          .schema("lth_pvr")
+          .from("rb_api_token")
+          .update(patch)
+          .eq("org_id", org_id);
+      }
+    }
+  } catch (e) {
+    console.error("ef_renew_rb_token: user_info probe error", e);
+  }
+
+  // ---- Absolute re-auth deadline alerts -------------------------------------
+  if (webReauthAt) {
+    const daysUntilReauth = Math.floor(
+      (new Date(webReauthAt).getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (daysUntilReauth <= 14) {
+      await logAlert(
+        sb,
+        daysUntilReauth <= 3 ? "critical" : "warn",
+        `Research Bitcoin ABSOLUTE re-auth deadline in ${daysUntilReauth} day(s) (${webReauthAt}). Auto-renewal cannot extend this — sign in at researchbitcoin.net and paste the new API key via Administration → Set RB Token before then, or all RB band/PVR fetches will fail with token_abs_expired.`,
+        { org_id, web_reauth_required_at: webReauthAt, days_until_reauth: daysUntilReauth },
+        org_id,
+      );
+    }
+  }
 
   // ---- Proximity alerts -----------------------------------------------------
   // Fire BEFORE the renewal attempt so the admin sees the impending expiry
@@ -205,6 +281,9 @@ Deno.serve(async (req: Request) => {
     newToken = rawToken;
     // Store response expiry for use below (overrides computed newExpiresAt if available)
     (body as Record<string, unknown>)._rbExpiresAt = apiExpiresAt;
+    if (typeof parsed.web_reauth_required_at === "string") {
+      webReauthAt = parsed.web_reauth_required_at;
+    }
   } catch (e) {
     const msg = `RB token renewal failed: ${String((e as Error)?.message ?? e)}`;
     console.error(msg);
@@ -234,6 +313,7 @@ Deno.serve(async (req: Request) => {
       token: newToken,
       issued_at: newIssuedAt,
       expires_at: newExpiresAt,
+      web_reauth_required_at: webReauthAt,
       updated_at: new Date().toISOString(),
     })
     .eq("org_id", org_id);
@@ -272,6 +352,7 @@ Deno.serve(async (req: Request) => {
       ok: true,
       issued_at: newIssuedAt,
       expires_at: newExpiresAt,
+      web_reauth_required_at: webReauthAt,
     }),
     { headers: { "content-type": "application/json" } },
   );
