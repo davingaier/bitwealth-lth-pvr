@@ -43,7 +43,7 @@ async function refreshTrackedAndStream(): Promise<void> {
   currentSymbols = symbols;
   log.info("tracked set changed", { symbols });
   await live.start(symbols, cfg.TA_BOT_TIMEFRAMES);
-  await scheduler.runNow("gap_heal");
+  void scheduler.runNow("gap_heal"); // don't block boot/refresh on a long history walk
 }
 
 async function gapHeal(): Promise<void> {

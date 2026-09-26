@@ -44,6 +44,14 @@ export async function latestConfirmedOpenTime(
   return row?.t ?? undefined;
 }
 
+/** Confirmed candles stored with open_time >= since. */
+export async function confirmedCountSince(exchange: string, symbol: string, tf: Timeframe, since: Date): Promise<number> {
+  const [row] = await db()<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM ta_bot.candles
+    WHERE exchange = ${exchange} AND symbol = ${symbol} AND timeframe = ${tf} AND confirmed AND open_time >= ${since}`;
+  return row?.n ?? 0;
+}
+
 /** Most recent `limit` confirmed candles, ascending. */
 export async function loadCandles(
   exchange: string,

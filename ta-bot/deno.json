@@ -6,7 +6,8 @@
     "test": "deno test --allow-net --allow-env --allow-read worker/",
     "backfill": "deno run --allow-net --allow-env --allow-read --env-file=.env worker/cli/backfill.ts",
     "instruments": "deno run --allow-net --allow-env --allow-read --env-file=.env worker/cli/sync_instruments.ts",
-    "smoke": "deno run --allow-net --allow-env --allow-read --env-file=.env worker/cli/testnet_smoke.ts"
+    "smoke": "deno run --allow-net --allow-env --allow-read --env-file=.env worker/cli/testnet_smoke.ts",
+    "analyze": "deno run --allow-net --allow-env --allow-read --env-file=.env worker/cli/analyze.ts"
   },
   "imports": {
     "postgres": "npm:postgres@3.4.5",

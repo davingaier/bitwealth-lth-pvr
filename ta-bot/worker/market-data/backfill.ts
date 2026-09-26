@@ -1,5 +1,5 @@
 import { TF_MS, type Candle, type ExchangeAdapter, type Timeframe } from "../exchange/types.ts";
-import { latestConfirmedOpenTime, upsertCandles } from "../db/marketData.ts";
+import { confirmedCountSince, latestConfirmedOpenTime, upsertCandles } from "../db/marketData.ts";
 import { logger } from "../log.ts";
 import { sleep } from "../exchange/util.ts";
 
@@ -26,9 +26,15 @@ export async function backfillSymbol(
 ): Promise<BackfillResult> {
   const tfMs = TF_MS[tf];
   const now = Date.now();
+  const windowStart = now - days * 86_400_000;
   const last = await latestConfirmedOpenTime(ex.name, symbol, tf);
-  // Re-fetch the last stored candle too, in case it was written from a partial WS frame.
-  let cursor = last ? last.getTime() : now - days * 86_400_000;
+  // max(open_time) lies when the live stream already wrote today's candle: check coverage of the whole
+  // window and walk it fully (idempotent upserts) if any bars are missing.
+  const expected = Math.floor((now - windowStart) / tfMs) - 2;
+  const have = await confirmedCountSince(ex.name, symbol, tf, new Date(windowStart));
+  const incremental = last !== undefined && have >= expected;
+  let cursor = incremental ? last.getTime() : windowStart;
+  if (!incremental && last) log.info("coverage gap; full walk", { symbol, tf, have, expected });
   const from = new Date(cursor);
   let inserted = 0;
   let lastOpen: Date | undefined;
