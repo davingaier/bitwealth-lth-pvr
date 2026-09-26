@@ -1,0 +1,34 @@
+# fly.toml — BitWealth TA_BOT worker
+# Deploy from this directory:  fly deploy
+# Secrets (never in this file):  fly secrets set DATABASE_URL=... TA_BOT_ORG_ID=...
+app = "bitwealth-ta-bot"
+primary_region = "sin"   # Singapore: closest region to Bybit's matching engine
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HEALTH_PORT = "8080"
+  LOG_LEVEL = "info"
+  TA_BOT_WORKER_ID = "fly-sin-1"
+  BYBIT_PUBLIC_ENV = "mainnet"
+  TA_BOT_TIMEFRAMES = "1m,5m,15m,1h,4h,1d"
+  TA_BOT_BACKFILL_DAYS = '{"1m":7,"5m":30,"15m":90,"1h":365,"4h":730,"1d":1825}'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"     # always-on: this process owns the WebSocket streams
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
