@@ -176,8 +176,20 @@ export interface BybitWallet {
   accountType: string;
   totalEquity: string;
   totalWalletBalance: string;
-  totalAvailableBalance: string;
-  coin: { coin: string; equity: string; walletBalance: string; availableToWithdraw: string }[];
+  totalAvailableBalance: string; // empty string on UTA 2.0
+  totalMarginBalance: string;
+  totalInitialMargin: string;
+  coin: {
+    coin: string;
+    equity: string;
+    walletBalance: string;
+    availableToWithdraw: string;
+    locked: string;
+    totalOrderIM: string;
+    totalPositionIM: string;
+    unrealisedPnl: string;
+    usdValue: string;
+  }[];
 }
 
 export interface BybitPosition {

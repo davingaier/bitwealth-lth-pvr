@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitWealth TA Bot — Chart & Confluence</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { --bg:#0f1419; --panel:#161c24; --border:#243041; --fg:#e6edf3; --muted:#8b98a9; --sup:#22c55e; --res:#ef4444; --accent:#f7931a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 12px 0 0; color:var(--accent); }
+  input,select,button { background:#0b0f14; color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font:inherit; }
+  button { cursor:pointer; } button.primary { background:var(--accent); color:#000; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.5; cursor:default; }
+  main { display:grid; grid-template-columns: 1fr 380px; height: calc(100vh - 54px); }
+  #chart { position:relative; }
+  #chartEl { position:absolute; inset:0; }
+  aside { border-left:1px solid var(--border); background:var(--panel); overflow:auto; padding:12px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 6px; }
+  .bias { padding:10px; border-radius:8px; border:1px solid var(--border); background:#0b0f14; }
+  .bias b.bull { color:var(--sup); } .bias b.bear { color:var(--res); } .bias b.neutral { color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { padding:5px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:500; }
+  tr.zone { cursor:pointer; } tr.zone:hover { background:#1c2531; } tr.zone.sel { background:#22304a; }
+  .tag { display:inline-block; padding:1px 6px; border-radius:10px; font-size:11px; }
+  .tag.support { background:rgba(34,197,94,.15); color:var(--sup); } .tag.resistance { background:rgba(239,68,68,.15); color:var(--res); }
+  .muted { color:var(--muted); } .small { font-size:11px; }
+  #login { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; }
+  #login form { background:var(--panel); padding:24px; border-radius:10px; width:320px; display:flex; flex-direction:column; gap:10px; border:1px solid var(--border); }
+  #status { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:#555; } .dot.ok { background:var(--sup); } .dot.bad { background:var(--res); }
+  #picker { position:relative; } #matches { position:absolute; top:34px; left:0; right:0; background:#0b0f14; border:1px solid var(--border); border-radius:6px; z-index:5; max-height:260px; overflow:auto; display:none; }
+  #matches div { padding:6px 8px; cursor:pointer; } #matches div:hover { background:#1c2531; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:6px; }
+  .legend span::before { content:""; display:inline-block; width:10px; height:3px; margin-right:4px; vertical-align:middle; }
+  .legend .s::before { background:var(--sup);} .legend .r::before { background:var(--res);} .legend .i::before { background:#facc15; }
+</style>
+</head>
+<body>
+<div id="login">
+  <form id="loginForm">
+    <h1 style="margin:0 0 6px;font-size:16px;color:var(--accent)">BitWealth TA Bot — Admin</h1>
+    <input id="email" type="email" placeholder="email" autocomplete="username" required>
+    <input id="password" type="password" placeholder="password" autocomplete="current-password" required>
+    <button class="primary" type="submit">Sign in</button>
+    <div id="loginErr" class="small" style="color:var(--res)"></div>
+  </form>
+</div>
+
+<header>
+  <h1>TA Bot</h1>
+  <div id="picker">
+    <input id="symbol" placeholder="BYBIT:BTCUSDT.P" list="" autocomplete="off" style="width:190px">
+    <div id="matches"></div>
+  </div>
+  <select id="style"><option value="scalp">Scalp (5m)</option><option value="day">Day (1h)</option><option value="swing" selected>Swing (4h)</option></select>
+  <select id="tf"><option>1m</option><option>5m</option><option>15m</option><option>1h</option><option selected>4h</option><option>1d</option></select>
+  <label class="small"><input type="checkbox" id="showLevels"> raw levels</label>
+  <label class="small"><input type="checkbox" id="showWaves" checked> wave labels</label>
+  <button id="reload" class="primary">Load</button>
+  <button id="track" title="Add symbol to the worker's tracked set">Track</button>
+  <span id="status"><span class="dot" id="wdot"></span><span id="wtext">worker: –</span></span>
+  <button id="logout" class="small">Sign out</button>
+</header>
+
+<main>
+  <section id="chart"><div id="chartEl"></div></section>
+  <aside>
+    <h2>Directional bias</h2>
+    <div class="bias" id="bias">–</div>
+    <h2>Confluence zones <span class="muted small" id="runInfo"></span></h2>
+    <table id="zones"><thead><tr><th>Zone</th><th>Score</th><th>Prior*</th><th>Dist</th></tr></thead><tbody></tbody></table>
+    <div class="small muted" style="margin-top:6px">*Uncalibrated prior from confluence score — replaced by fitted probability in Phase 2.</div>
+    <div class="legend"><span class="s">support</span><span class="r">resistance</span><span class="i">invalidation</span></div>
+    <h2>Time windows</h2>
+    <div id="windows" class="small muted">–</div>
+    <h2>Wave count (<span id="waveTf"></span>)</h2>
+    <div id="waves" class="small muted">–</div>
+  </aside>
+</main>
+
+<script>
+(() => {
+  const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+  const PUBLISHABLE_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+  const ORG_ID = 'b0a77009-03b9-44a1-ae1d-34f157d44a8b';
+  const EXCHANGE = 'bybit';
+  const sb = window.supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+
+  const $ = (id) => document.getElementById(id);
+  const fmt = (x, tick) => Number(x).toFixed(Math.max(0, Math.min(8, Math.ceil(-Math.log10(tick || 0.1)))));
+  let chart, candleSeries, priceLines = [], tickSize = 0.1, current = null;
+
+  // ---------------------------------------------------------------- auth
+  async function ensureSession() {
+    const { data: { session } } = await sb.auth.getSession();
+    $('login').style.display = session ? 'none' : 'flex';
+    if (session) boot();
+  }
+  $('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('loginErr').textContent = '';
+    const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+    if (error) { $('loginErr').textContent = error.message; return; }
+    ensureSession();
+  });
+  $('logout').onclick = async () => { await sb.auth.signOut({ scope: 'local' }); location.reload(); };
+
+  async function rpc(fn, args) {
+    const { data, error } = await sb.rpc(fn, args);
+    if (error) throw new Error(`${fn}: ${error.message}`);
+    return data;
+  }
+
+  // ---------------------------------------------------------------- chart
+  function initChart() {
+    if (chart) return;
+    chart = LightweightCharts.createChart($('chartEl'), {
+      layout: { background: { color: '#0f1419' }, textColor: '#c9d1d9' },
+      grid: { vertLines: { color: '#1b2330' }, horzLines: { color: '#1b2330' } },
+      rightPriceScale: { borderColor: '#243041' },
+      timeScale: { borderColor: '#243041', timeVisible: true, secondsVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      autoSize: true,
+    });
+    candleSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
+    });
+  }
+  function clearLines() { for (const l of priceLines) candleSeries.removePriceLine(l); priceLines = []; }
+  function line(price, color, title, style = LightweightCharts.LineStyle.Solid, width = 1) {
+    priceLines.push(candleSeries.createPriceLine({ price, color, lineWidth: width, lineStyle: style, axisLabelVisible: true, title }));
+  }
+
+  function drawZones(zones, selectedId) {
+    clearLines();
+    const shown = zones.slice(0, 12);
+    for (const z of shown) {
+      const col = z.bias === 'support' ? '#22c55e' : '#ef4444';
+      const sel = z.zone_id === selectedId;
+      const title = `${z.bias[0].toUpperCase()} ${Number(z.score).toFixed(2)} · ${Math.round((z.prob_final ?? z.prob_baseline ?? 0) * 100)}%`;
+      line(z.price_low, col, sel ? title : '', LightweightCharts.LineStyle.Dotted, sel ? 2 : 1);
+      line(z.price_high, col, sel ? '' : title, LightweightCharts.LineStyle.Dotted, sel ? 2 : 1);
+    }
+    if ($('showLevels').checked && current?.levels) {
+      for (const l of current.levels) {
+        if (l.level_type === 'invalidation') line((l.price_low + l.price_high) / 2, '#facc15', `INVAL ${l.timeframe}`, LightweightCharts.LineStyle.LargeDashed, 1);
+        else line((l.price_low + l.price_high) / 2, l.level_type === 'support' ? 'rgba(34,197,94,.45)' : 'rgba(239,68,68,.45)', '', LightweightCharts.LineStyle.SparseDotted, 1);
+      }
+    } else if (current?.levels) {
+      for (const l of current.levels.filter((x) => x.level_type === 'invalidation' && x.timeframe === $('tf').value)) {
+        line((l.price_low + l.price_high) / 2, '#facc15', 'INVALIDATION', LightweightCharts.LineStyle.LargeDashed, 1);
+      }
+    }
+  }
+
+  function drawWaves(run) {
+    const tf = $('tf').value;
+    const per = run?.meta?.tools?.elliott_fib?.perTimeframe?.[tf];
+    $('waveTf').textContent = tf;
+    if (!per || !$('showWaves').checked) { candleSeries.setMarkers([]); $('waves').textContent = per ? 'hidden' : 'no count for this timeframe'; return; }
+    const best = per.lower?.best ?? per.higher?.best;
+    if (!best) { candleSeries.setMarkers([]); $('waves').textContent = 'no valid count'; return; }
+    const labels = ['0', '1', '2', '3', '4', '5', 'A', 'B', 'C'];
+    const markers = best.pivots.map((p, i) => ({
+      time: Math.floor(new Date(p.t).getTime() / 1000),
+      position: p.kind === 'H' ? 'aboveBar' : 'belowBar',
+      color: best.direction === 'bullish' ? '#22c55e' : '#ef4444',
+      shape: 'circle', text: labels[i] ?? '?',
+    })).sort((a, b) => a.time - b.time);
+    candleSeries.setMarkers(markers);
+    const alt = (per.lower?.alternatives ?? []).slice(0, 3).map((a) => `${a.direction} ${a.stage} (${a.score})`).join('<br>');
+    $('waves').innerHTML = `<b>${best.direction} ${best.stage}</b> score ${best.score}${best.flags?.length ? ' · ' + best.flags.join(', ') : ''}` +
+      `<br><span class="muted">higher degree: ${per.higher?.best ? per.higher.best.direction + ' ' + per.higher.best.stage : '–'}</span>` +
+      (alt ? `<br><span class="muted">alternatives:<br>${alt}</span>` : '');
+  }
+
+  // ---------------------------------------------------------------- data
+  async function load() {
+    $('reload').disabled = true;
+    try {
+      initChart();
+      const tv = $('symbol').value.trim();
+      const symbol = (tv.includes(':') ? tv.split(':')[1] : tv).replace(/\.P$/i, '').toUpperCase();
+      const style = $('style').value, tf = $('tf').value;
+      const [candles, analysis, inst] = await Promise.all([
+        rpc('ta_bot_candles', { p_org_id: ORG_ID, p_exchange: EXCHANGE, p_symbol: symbol, p_timeframe: tf, p_limit: 1500 }),
+        rpc('ta_bot_latest_analysis', { p_org_id: ORG_ID, p_exchange: EXCHANGE, p_symbol: symbol, p_style: style }),
+        rpc('ta_bot_instruments', { p_org_id: ORG_ID, p_search: null }),
+      ]);
+      tickSize = inst.tracked.find((i) => i.symbol === symbol)?.tick_size ?? 0.1;
+      const prec = Math.max(0, Math.ceil(-Math.log10(tickSize)));
+      candleSeries.applyOptions({ priceFormat: { type: 'price', precision: prec, minMove: tickSize } });
+      candleSeries.setData(candles.map((c) => ({ time: c.time, open: +c.open, high: +c.high, low: +c.low, close: +c.close })));
+      chart.timeScale().fitContent();
+      current = analysis;
+      renderSide(analysis, symbol);
+      drawZones(analysis?.zones ?? [], null);
+      drawWaves(analysis?.run);
+      if (!candles.length) $('runInfo').textContent = 'no candles — is the symbol tracked?';
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      $('reload').disabled = false;
+    }
+  }
+
+  function renderSide(a, symbol) {
+    const tb = $('zones').querySelector('tbody');
+    tb.innerHTML = '';
+    if (!a) { $('bias').textContent = 'No analysis yet for this symbol/style.'; $('runInfo').textContent = ''; $('windows').textContent = '–'; return; }
+    const m = a.run.meta ?? {};
+    const b = m.biases?.elliott_fib;
+    const cls = b?.direction === 'bullish' ? 'bull' : b?.direction === 'bearish' ? 'bear' : 'neutral';
+    $('bias').innerHTML = b
+      ? `<b class="${cls}">${b.direction.toUpperCase()}</b> · confidence ${(b.confidence * 100).toFixed(0)}%` +
+        (b.invalidation ? ` · invalidation <b>${fmt(b.invalidation, tickSize)}</b>` : '') +
+        `<div class="small muted" style="margin-top:4px">${b.rationale}</div>`
+      : 'no bias';
+    $('runInfo').textContent = `${symbol} · ${new Date(a.run.started_at).toLocaleString()} · price ${fmt(m.lastPrice ?? 0, tickSize)}`;
+    const last = m.lastPrice ?? 0;
+    for (const z of a.zones) {
+      const tr = document.createElement('tr');
+      tr.className = 'zone';
+      const dist = last ? ((z.price_low + z.price_high) / 2 - last) / last * 100 : 0;
+      tr.innerHTML = `<td><span class="tag ${z.bias}">${z.bias}</span><br>${fmt(z.price_low, tickSize)} – ${fmt(z.price_high, tickSize)}` +
+        `<div class="small muted">${z.tool_codes.join(', ')}</div></td>` +
+        `<td>${Number(z.score).toFixed(2)}</td><td>${Math.round((z.prob_final ?? z.prob_baseline ?? 0) * 100)}%</td>` +
+        `<td>${dist > 0 ? '+' : ''}${dist.toFixed(2)}%</td>`;
+      tr.title = z.rationale ?? '';
+      tr.onclick = () => { tb.querySelectorAll('tr').forEach((r) => r.classList.remove('sel')); tr.classList.add('sel'); drawZones(a.zones, z.zone_id); };
+      tb.appendChild(tr);
+    }
+    const now = Date.now();
+    const wins = (m.timeWindows ?? []).filter((w) => new Date(w.to).getTime() >= now)
+      .sort((x, y) => new Date(x.from) - new Date(y.from)).slice(0, 6);
+    $('windows').innerHTML = wins.length
+      ? wins.map((w) => `<div>${w.timeframe} · ${new Date(w.from).toLocaleDateString()} → ${new Date(w.to).toLocaleDateString()}<br><span class="muted">${w.label}</span></div>`).join('')
+      : 'none upcoming';
+  }
+
+  async function refreshStatus() {
+    try {
+      const s = await rpc('ta_bot_status', { p_org_id: ORG_ID });
+      const w = s.workers?.[0];
+      const age = w ? (Date.now() - new Date(w.last_seen_at).getTime()) / 1000 : Infinity;
+      $('wdot').className = 'dot ' + (age < 120 ? 'ok' : 'bad');
+      $('wtext').textContent = w ? `worker ${w.worker_id} · ${Math.round(age)}s ago · analyses ${w.meta?.analysis?.completed ?? 0}` : 'worker: none';
+    } catch (e) { $('wdot').className = 'dot bad'; $('wtext').textContent = e.message; }
+  }
+
+  // ---------------------------------------------------------------- picker
+  let searchT;
+  $('symbol').addEventListener('input', () => {
+    clearTimeout(searchT);
+    searchT = setTimeout(async () => {
+      const q = $('symbol').value.trim().replace(/^bybit:/i, '');
+      if (q.length < 2) { $('matches').style.display = 'none'; return; }
+      const r = await rpc('ta_bot_instruments', { p_org_id: ORG_ID, p_search: q });
+      const box = $('matches');
+      box.innerHTML = r.matches.map((m) => `<div data-tv="${m.tv_symbol}">${m.tv_symbol}${m.tracked ? ' <span class="muted small">tracked</span>' : ''}</div>`).join('');
+      box.style.display = r.matches.length ? 'block' : 'none';
+      box.querySelectorAll('div').forEach((d) => d.onclick = () => { $('symbol').value = d.dataset.tv; box.style.display = 'none'; load(); });
+    }, 200);
+  });
+  document.addEventListener('click', (e) => { if (!$('picker').contains(e.target)) $('matches').style.display = 'none'; });
+  $('track').onclick = async () => {
+    const tv = $('symbol').value.trim();
+    const symbol = (tv.includes(':') ? tv.split(':')[1] : tv).replace(/\.P$/i, '').toUpperCase();
+    const r = await rpc('ta_bot_set_tracked', { p_org_id: ORG_ID, p_exchange: EXCHANGE, p_symbol: symbol, p_tracked: true });
+    alert(r.updated ? `${symbol} tracked — the worker backfills history and analyses within a few minutes.` : `${symbol} not found on ${EXCHANGE}`);
+  };
+  $('style').addEventListener('change', () => { $('tf').value = { scalp: '5m', day: '1h', swing: '4h' }[$('style').value]; load(); });
+  $('tf').addEventListener('change', load);
+  $('showLevels').addEventListener('change', () => drawZones(current?.zones ?? [], null));
+  $('showWaves').addEventListener('change', () => drawWaves(current?.run));
+  $('reload').onclick = load;
+
+  async function boot() {
+    initChart();
+    try {
+      const inst = await rpc('ta_bot_instruments', { p_org_id: ORG_ID, p_search: null });
+      if (!$('symbol').value) $('symbol').value = inst.tracked[0]?.tv_symbol ?? 'BYBIT:BTCUSDT.P';
+    } catch (e) { alert(e.message); return; }
+    await load();
+    refreshStatus();
+    setInterval(refreshStatus, 30000);
+  }
+  ensureSession();
+})();
+</script>
+</body>
+</html>

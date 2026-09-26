@@ -10,6 +10,8 @@ import { backfillAll } from "./market-data/backfill.ts";
 import { LiveCandleStream } from "./market-data/live.ts";
 import { Scheduler } from "./scheduler.ts";
 import { startHealthServer } from "./health.ts";
+import { AnalysisScheduler } from "./analysis/scheduler.ts";
+import { registerImplementedTools } from "./tools/registry.ts";
 
 const log = logger("main");
 const cfg = loadConfig();
@@ -18,7 +20,10 @@ setLogLevel(cfg.LOG_LEVEL);
 const publicEx = createExchange("bybit", { testnet: cfg.BYBIT_PUBLIC_ENV === "testnet" });
 const live = new LiveCandleStream(publicEx);
 const scheduler = new Scheduler();
+const analysis = new AnalysisScheduler(publicEx.name, cfg.TA_BOT_ORG_ID);
+live.onCandle((c) => analysis.onCandle(c));
 let currentSymbols: string[] = [];
+let dbReady = false;
 const startedAt = Date.now();
 
 // -------------------------------------------------------------------- jobs
@@ -43,7 +48,8 @@ async function refreshTrackedAndStream(): Promise<void> {
   currentSymbols = symbols;
   log.info("tracked set changed", { symbols });
   await live.start(symbols, cfg.TA_BOT_TIMEFRAMES);
-  void scheduler.runNow("gap_heal"); // don't block boot/refresh on a long history walk
+  // Don't block boot/refresh on a long history walk; analyse once history is in place.
+  void scheduler.runNow("gap_heal").then(() => analysis.enqueueAll(currentSymbols));
 }
 
 async function gapHeal(): Promise<void> {
@@ -67,6 +73,7 @@ async function beat(): Promise<void> {
     symbols: currentSymbols,
     live: live.stats,
     live_stale_ms: staleMs,
+    analysis: analysis.stats,
     jobs: scheduler.snapshot(),
   });
   // A stream that has gone quiet for 3 minutes while symbols are tracked is a real outage.
@@ -79,26 +86,47 @@ scheduler.add({ name: "heartbeat", everyMs: 30_000, run: beat, runOnStart: true 
 scheduler.add({ name: "sync_instruments", everyMs: 6 * 3_600_000, run: syncInstruments, runOnStart: true });
 scheduler.add({ name: "refresh_tracked", everyMs: 60_000, run: refreshTrackedAndStream, runOnStart: false });
 scheduler.add({ name: "gap_heal", everyMs: 5 * 60_000, run: gapHeal, runOnStart: false });
+// Safety net: WS hiccups can miss a close; re-analyse everything hourly regardless.
+scheduler.add({ name: "analysis_sweep", everyMs: 60 * 60_000, run: () => Promise.resolve(analysis.enqueueAll(currentSymbols)) });
 
 // -------------------------------------------------------------------- boot
 async function main(): Promise<void> {
-  log.info("starting", { version: WORKER_VERSION, worker: cfg.TA_BOT_WORKER_ID, publicEnv: cfg.BYBIT_PUBLIC_ENV });
-  await db()`SELECT 1`; // fail fast on bad DATABASE_URL
+  log.info("starting", {
+    version: WORKER_VERSION,
+    worker: cfg.TA_BOT_WORKER_ID,
+    publicEnv: cfg.BYBIT_PUBLIC_ENV,
+    dbHost: new URL(cfg.DATABASE_URL).host,
+  });
 
   startHealthServer(cfg.HEALTH_PORT, () => {
     const staleMs = live.stats.lastFrameAt ? Date.now() - live.stats.lastFrameAt : null;
     return {
-      healthy: currentSymbols.length === 0 || staleMs === null || staleMs < 300_000,
+      healthy: dbReady && (currentSymbols.length === 0 || staleMs === null || staleMs < 300_000),
+      dbReady,
       version: WORKER_VERSION,
       worker: cfg.TA_BOT_WORKER_ID,
       uptime_s: Math.round((Date.now() - startedAt) / 1000),
       symbols: currentSymbols,
       live: live.stats,
+      analysis: analysis.stats,
       jobs: scheduler.snapshot(),
     };
   });
 
+  // Keep the process (and SSH/health) alive while the DB is unreachable; Fly would otherwise crash-loop us.
+  for (let attempt = 1; !dbReady; attempt++) {
+    try {
+      await db()`SELECT 1`;
+      dbReady = true;
+    } catch (e) {
+      log.error("db unreachable", { attempt, err: errMsg(e) });
+      if (attempt >= 20) throw e;
+      await new Promise((r) => setTimeout(r, Math.min(60_000, 5_000 * attempt)));
+    }
+  }
+
   scheduler.start();
+  await registerImplementedTools();
   await refreshTrackedAndStream();
   log.info("ready", { port: cfg.HEALTH_PORT });
 }

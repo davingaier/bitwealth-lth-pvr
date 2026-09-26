@@ -16,7 +16,7 @@ export function db() {
     ssl: "require",
     max: 4,
     idle_timeout: 60,
-    connect_timeout: 15,
+    connect_timeout: 30,
     prepare: false, // required when going through Supavisor transaction pooler
     types: {
       numeric: { to: 1700, from: [1700], serialize: (x: number | string) => String(x), parse: (x: string) => Number(x) },

@@ -93,11 +93,16 @@ export class BybitAdapter implements ExchangeAdapter {
     const res = await this.rest.getWalletBalance("UNIFIED");
     const w = res.list[0];
     if (!w) throw new ExchangeError("Empty wallet response", EXCHANGE);
+    // UTA 2.0 leaves the aggregate fields empty; derive the settle-coin figure from the coin block.
+    const usdt = w.coin.find((c) => c.coin === "USDT");
+    const n = (s: string | undefined) => Number(s) || 0;
+    const available = n(w.totalAvailableBalance) ||
+      (usdt ? Math.max(0, n(usdt.walletBalance) - n(usdt.locked) - n(usdt.totalOrderIM) - n(usdt.totalPositionIM)) : 0);
     return {
       currency: "USDT",
-      equity: Number(w.totalEquity),
-      walletBalance: Number(w.totalWalletBalance),
-      available: Number(w.totalAvailableBalance),
+      equity: n(w.totalEquity),
+      walletBalance: usdt ? n(usdt.walletBalance) + n(usdt.unrealisedPnl) : n(w.totalWalletBalance),
+      available,
       raw: w,
     };
   }
