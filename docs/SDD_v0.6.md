@@ -3,11 +3,119 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-09-25 (v0.6.161)
+**Last updated:** 2026-09-30 (v0.6.162)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.162 – Finova omnibus custody (third account model) + Partner Portal — Phases 0–6 complete
+**Date:** 2026-08-30 → 2026-09-30  
+**Status:** ✅ DEPLOYED — awaiting joint live test with Finova (`docs/Finova_Partner_Portal_Test_Cases.md`)
+
+**What it is.** A third custody model, `customer_details.account_model = 'finova_omnibus'`, chosen per client
+at KYC verification. The client's assets sit in a subaccount of **Finova's** VALR omnibus account. Finova
+creates each subaccount manually and gives BitWealth a key scoped to that subaccount (View + Trade +
+Internal Transfer, **never Withdraw**). Existing `subaccount` / `api` clients are untouched and stay in
+BitWealth's own VALR account. Finova-facing spec: `docs/FINOVA_PARTNER_PORTAL_SPEC.md` (v0.4, agreed
+2026-09-30; Word copy rendered by `tools/render_finova_spec.py`).
+
+**Finova's v0.3 feedback (2026-09-30) incorporated:** permissions accepted; portal users Guy Algeo, Gavin
+McCarter, Robert North (emails outstanding — create via Admin → Partners); notification mailbox
+`bitwealth@finova.co.za`; turnaround 1 business day (subaccounts) / **3** business days (withdrawals);
+Finova generates the ZAR deposit reference while linking the bank (step B); "verify request" added to the
+payout steps; client receives VALR's banking details + the Finova reference.
+
+**Credentials (Phase 1).** `resolveCustomerCredentials()` treats `finova_omnibus` like `api` (vault-decrypted
+key, no `X-VALR-SUB-ACCOUNT-ID`). **Fail-closed fix:** `lth_pvr.get_customer_valr_credentials` and the
+`creds.accountModel === "api" ? … : null` idiom in `ef_execute_orders` / `ef_poll_orders` previously fell
+through to BitWealth's master key for any unknown model; unknown models now raise, via shared
+`toRequestCredentials()`.
+
+**Onboarding (Phase 2).** Trigger `customer_details_raise_subaccount_request` raises a `provision` row in
+`public.subaccount_requests` when a Finova client reaches `setup`. `public.suggested_subaccount_name()` →
+`BW {last} {first}` / `BW {entity}` sanitised to `[A-Za-z0-9 ]` (VALR rejects `_ , . & ( )`).
+
+**Partner portal (Phase 3).** `website/partner-login.html` (password → mandatory TOTP) and
+`website/partner-portal.html` (short URL `bitwealth.co.za/partner`, Netlify redirect). Partner users live in
+`public.partner_users`, **not** `org_members` (which would expose every client). All partner data flows
+through SECURITY DEFINER RPCs gated by `partner_session_ok()` (active partner + `aal2`) and hard-filtered
+to `account_model='finova_omnibus'`. Every action → `public.partner_action_log` (user, time, IP, UA).
+`ef_partner_submit_subaccount` validates the key against VALR (`/v1/account/balances`,
+`/v1/account/api-keys/current`), rejects Withdraw permission, primary-account keys (`isSubAccount=false`)
+and keys already bound to another client, vaults key+secret, sets `deposit_ref`, and on success **(new)**
+moves the client `setup → deposit` and emails template `deposit_instructions_zar_only` (VALR bank details +
+Finova reference, no crypto options). BitWealth admin is emailed on every pass **and** fail. Admin →
+🤝 Partners manages logins (create / reset password / reset 2FA / disable).
+
+**Withdrawals (Phase 4).** ZAR only for Finova clients. `ef_process_withdrawal_queue` converts to ZAR in the
+subaccount then stops at `awaiting_partner`. Finova pays out in VALR and calls
+`ef_partner_complete_withdrawal` (reference mandatory) → `paying_out` + targeted sync; completion only when
+`ef_sync_valr_transactions` sees a matching `FIAT_WITHDRAWAL`. Cron `reconcile_partner_withdrawals`
+(*/15) flags declared-but-unseen payouts `unmatched` + critical alert. **(new)** the sync now matches on
+the net amount Finova was told to pay (gross or net of VALR's fee) and emails the client a "withdrawal
+completed" notice (all account models; idempotent via `client_completed_email_sent_at`).
+
+**Bank re-link (new).** `admin_raise_bank_relink(customer_id)` (Admin → Partners) raises a `bank_relink`
+request; Finova clicks **Confirm re-linked** → `partner_confirm_bank_relink()`. While open, the portal shows
+that client's payouts as *on hold* and `ef_partner_complete_withdrawal` returns 409.
+
+**Fees — invoice-only fallback (Phase 5, decision accepted 2026-09-30).** VALR never reveals a subaccount's
+ID to a subaccount-scoped key and Finova is not asked for it, so `sweepFeeToPartnerMain()` normally cannot
+call `/v1/account/subaccounts/transfer`. When `exchange_accounts.subaccount_id` is null the fee is charged in
+the ledger as usual but logged in `lth_pvr.valr_transfer_log` with `status='deferred'`, `to_account='partner_main'`
+(status CHECK extended). If an ID is ever known the sweep runs and logs `completed`. Results carry
+`partnerCustody: true` so callers never treat these fees as BitWealth main-account funds:
+`ef_convert_platform_fee_btc` skips Finova clients and `ef_transfer_accumulated_fees` skips
+`accumulate_main_account_btc`. `ef_sweep_usdt_to_usdpc` subtracts deferred USDT from the live balance so
+held fees are never swept into USDPC. **Bug fixed:** the sweep wrote a non-existent `valr_response` column
+(now `valr_api_response`).
+
+**Monthly invoice (new).** `ef_partner_fee_invoice` (cron `partner_fee_invoice_monthly`, 1st 06:30 UTC;
+body `{period:'YYYY-MM', dry_run, resend}`) collects the previous month's `partner_main` transfers into
+`public.partner_invoices` (`BW-FINOVA-YYYYMM`, lines + per-currency totals, held count), links the log rows
+(`partner_invoice_id`) and emails Finova. Finova moves held fees in VALR and clicks **Confirm held fees
+transferred** → `partner_confirm_invoice_fees()` flips the deferred rows to `completed`.
+
+**Notifications & SLAs (Phase 6, new).** `public.partners` holds `notify_email` (`bitwealth@finova.co.za`),
+`cc_email` (`support@bitwealth.co.za`) and SLAs (1 / 3 business days), editable in Admin → Partners →
+Partner Settings. `ef_partner_notifications` (cron `partner_notifications`, */10, 60 s pg_net timeout)
+emails one message per new request / bank re-link / awaiting payout and **one** reminder + `warn` alert when
+a task exceeds its SLA (weekdays, SAST). Stamps `partner_email_sent_at` / `partner_reminder_sent_at` only
+after a successful send. Shared helpers in `_shared/partnerEmail.ts`; all sends logged to `email_logs`.
+Emails never contain credentials or bank details.
+
+**Security fixes found during this build:**
+- Supabase default privileges grant `EXECUTE` **directly to `anon`**, so `REVOKE … FROM PUBLIC` left all
+  partner/admin RPCs callable with the public key. Bodies were guarded, but `suggested_subaccount_name()`
+  leaked any client's name by id and `raise_subaccount_request()` let anyone queue partner tasks. Migration
+  `finova_omnibus_revoke_anon_execute` revokes anon everywhere (internal helpers revoked from all roles);
+  verified 401 `42501` with the publishable key.
+- `ef_convert_platform_fee_btc` (places market orders on BitWealth's main account) had no auth — now
+  `requireOrgAdmin`; Admin UI sends the session token.
+- Admin UI called `ef_send_email` with the anon key (rejected since the earlier lockdown) — deposit
+  instruction send/resend fixed to use the session token.
+
+**Admin UI (🤝 Partners):** new cards — Partner Withdrawals, Partner Fee Invoices (Preview / Issue & email /
+Resend), Partner Settings, Raise bank re-link, "Send partner notifications now". Badge counts open requests
++ payouts awaiting Finova.
+
+**Files/objects:**
+- migrations `20260830_finova_omnibus_phase0.sql`, `20260930_finova_omnibus_phase5_6.sql`,
+  `20260930_finova_deposit_instructions_zar_only.sql`, `20260930_finova_omnibus_revoke_anon_execute.sql`
+  (+ phase 1–4 migrations applied via MCP 2026-08-30)
+- new EFs `ef_partner_notifications`, `ef_partner_fee_invoice`; updated `ef_partner_submit_subaccount`,
+  `ef_partner_complete_withdrawal`, `ef_sync_valr_transactions`, `ef_sweep_usdt_to_usdpc`,
+  `ef_convert_platform_fee_btc`, `ef_transfer_accumulated_fees` + redeploys of all `valrTransfer.ts`
+  consumers (all `--no-verify-jwt`, internal auth)
+- `_shared/partnerEmail.ts` (new), `_shared/valrTransfer.ts`
+- `website/partner-portal.html`, `netlify.toml`, `ui/Advanced BTC DCA Strategy.html`
+- `docs/FINOVA_PARTNER_PORTAL_SPEC.md/.docx` (v0.4), `docs/Finova_Partner_Portal_Test_Cases.md/.docx`
+
+**Open items:** Finova user emails; joint live test (sections A–J of the test-case doc); SA public holidays
+are not excluded from SLA business-day counts.
+
+---
 
 ### v0.6.161 – RB token ABSOLUTE expiry (`token_abs_expired`) — outage + hardening
 **Date:** 2026-09-25  

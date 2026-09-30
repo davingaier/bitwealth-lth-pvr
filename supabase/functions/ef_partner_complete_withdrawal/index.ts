@@ -96,6 +96,17 @@ Deno.serve(async (req) => {
     return json({ error: "Forbidden — this client is not held in the partner's omnibus account" }, 403);
   }
 
+  const { data: openRelink } = await sb
+    .from("subaccount_requests")
+    .select("request_id")
+    .eq("customer_id", wr.customer_id)
+    .eq("request_type", "bank_relink")
+    .in("status", ["pending", "submitted"])
+    .limit(1);
+  if (openRelink?.length) {
+    return json({ error: "This withdrawal is on hold: the client's bank account must be re-linked first. Please complete the open bank re-link request, then mark this payout." }, 409);
+  }
+
   const expectedZar = Number(wr.net_amount ?? wr.amount_zar ?? 0);
   const now = new Date().toISOString();
 

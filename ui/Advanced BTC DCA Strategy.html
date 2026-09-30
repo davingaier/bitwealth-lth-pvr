@@ -5078,6 +5078,58 @@
           <thead><tr><th>Client</th><th>Type</th><th>Subaccount name</th><th>ZAR ref</th><th>Status</th><th>Requested</th><th>Verified</th></tr></thead>
           <tbody id="pnReqBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
         </table>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin-top:.9rem;padding-top:.75rem;border-top:1px solid #e5e7eb;">
+          <label>Customer ID<input id="pnRelinkCust" type="number" min="1" placeholder="e.g. 61" style="width:120px;" /></label>
+          <button class="btn" id="pnRelinkBtn" type="button">Raise bank re-link</button>
+          <button class="btn" id="pnNotifyBtn" type="button" title="Normally runs every 10 minutes">Send partner notifications now</button>
+          <span class="small-muted">Use when a Finova client changes bank account — their withdrawals are held until Finova confirms.</span>
+        </div>
+        <div id="pnReqMsg"></div>
+      </div>
+
+      <div class="card" style="max-width:1400px;">
+        <h3 style="margin-top:0;">Partner Withdrawals</h3>
+        <p class="small-muted">ZAR withdrawals for Finova-custody clients. BitWealth converts to ZAR; Finova pays out and marks it paid; BitWealth confirms against VALR.</p>
+        <div style="margin:.5rem 0;">
+          <label style="display:inline-flex;align-items:center;gap:.4rem;">
+            <input type="checkbox" id="pnWdShowAll" checked /> Include completed
+          </label>
+          <button class="btn" id="pnWdRefreshBtn" type="button" style="margin-left:.5rem;">Refresh</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>Client</th><th>Amount</th><th>Status</th><th>Ready since</th><th>Marked paid</th><th>Finova ref</th><th>Reconciliation</th><th>Completed</th></tr></thead>
+          <tbody id="pnWdBody"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" style="max-width:1400px;">
+        <h3 style="margin-top:0;">Partner Fee Invoices</h3>
+        <p class="small-muted">Monthly consolidated invoice to Finova (auto-issued 1st of each month, 06:30 UTC). "Held" fees are still in the client subaccount for Finova to move.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin:.75rem 0;">
+          <label>Period (YYYY-MM)<input id="pnInvPeriod" type="month" /></label>
+          <button class="btn" id="pnInvPreviewBtn" type="button">Preview</button>
+          <button class="btn btn-primary" id="pnInvIssueBtn" type="button">Issue &amp; email</button>
+          <button class="btn" id="pnInvResendBtn" type="button">Resend</button>
+          <button class="btn" id="pnInvRefreshBtn" type="button">Refresh</button>
+        </div>
+        <div id="pnInvMsg"></div>
+        <table class="table">
+          <thead><tr><th>Invoice</th><th>Period</th><th>Lines</th><th>Totals</th><th>Held</th><th>Status</th><th>Emailed</th></tr></thead>
+          <tbody id="pnInvBody"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card" style="max-width:1400px;">
+        <h3 style="margin-top:0;">Partner Settings</h3>
+        <p class="small-muted">Where partner notifications are sent and the agreed turnaround times (business days). A reminder is emailed once when a task exceeds its turnaround.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:end;margin:.75rem 0;">
+          <label>Notification email<input id="pnCfgEmail" type="email" style="width:240px;" /></label>
+          <label>BitWealth copy (CC)<input id="pnCfgCc" type="email" style="width:240px;" /></label>
+          <label>New subaccount SLA<input id="pnCfgSlaProv" type="number" min="1" max="30" style="width:90px;" /></label>
+          <label>Withdrawal SLA<input id="pnCfgSlaWd" type="number" min="1" max="30" style="width:90px;" /></label>
+          <button class="btn btn-primary" id="pnCfgSaveBtn" type="button">Save</button>
+        </div>
+        <div id="pnCfgMsg"></div>
       </div>
     </div>
 
@@ -13053,14 +13105,15 @@
         throw new Error('No BTC to convert');
       }
 
-      // Call ef_convert_platform_fee_btc edge function
+      // Call ef_convert_platform_fee_btc edge function (admin session required)
+      const { data: { session: convSession } } = await supabaseClient.auth.getSession();
       const response = await fetch(
         `${supabaseClient.supabaseUrl}/functions/v1/ef_convert_platform_fee_btc`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            'Authorization': `Bearer ${convSession?.access_token}`
           },
           body: JSON.stringify({
             btc_amount: btcAmount,
@@ -13690,13 +13743,9 @@
 
         if (selectedModel === 'finova_omnibus') {
           // Finova creates the subaccount manually; a DB trigger queues the request.
-          const { data: reqRow } = await supabaseClient
-            .from('subaccount_requests')
-            .select('suggested_subaccount_name')
-            .eq('customer_id', customerId)
-            .eq('request_type', 'provision')
-            .in('status', ['pending', 'submitted'])
-            .maybeSingle();
+          // Table grants are revoked, so read via the admin RPC.
+          const { data: reqRows } = await supabaseClient.rpc('admin_list_subaccount_requests', { p_include_closed: false });
+          const reqRow = (reqRows || []).find(r => r.customer_id === customerId && r.request_type === 'provision');
           const nameHint = reqRow?.suggested_subaccount_name ? ` Subaccount name for Finova: "${reqRow.suggested_subaccount_name}".` : '';
           showMessage(`✓ ID verified for ${firstName} ${lastName} (Finova Omnibus). Request queued for Finova in the Partner Portal.${nameHint}`, 'success');
           await loadPendingKyc();
@@ -14487,11 +14536,12 @@
 
         // Send deposit instructions email with all three options
         const websiteUrl = 'https://bitwealth.co.za';
+        const { data: { session: emailSession } } = await supabaseClient.auth.getSession();
         const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+            'Authorization': `Bearer ${emailSession?.access_token}`
           },
           body: JSON.stringify({
             template_key: 'deposit_instructions',
@@ -14533,14 +14583,15 @@
 
       try {
         const websiteUrl = 'https://bitwealth.co.za';
+        const { data: { session: resendSession } } = await supabaseClient.auth.getSession();
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseClient.supabaseKey}`
+            'Authorization': `Bearer ${resendSession?.access_token}`
           },
           body: JSON.stringify({
-            template_key: 'deposit_instructions',
+            template_key: customer.account_model === 'finova_omnibus' ? 'deposit_instructions_zar_only' : 'deposit_instructions',
             to_email: email,
             data: {
               first_name: customer.first_names,
@@ -20153,6 +20204,33 @@ self.onmessage = function(e) {
       const fg = kind === 'error' ? '#991b1b' : kind === 'warn' ? '#92400e' : '#166534';
       el.innerHTML = `<div style="background:${bg};color:${fg};padding:.6rem .8rem;border-radius:6px;margin:.5rem 0;font-size:.88rem;">${esc(text)}</div>`;
     }
+    function msgIn(id, text, kind){
+      const el = $(id); if(!el) return;
+      if(!text){ el.innerHTML = ''; return; }
+      const bg = kind === 'error' ? '#fee2e2' : kind === 'warn' ? '#fef3c7' : '#dcfce7';
+      const fg = kind === 'error' ? '#991b1b' : kind === 'warn' ? '#92400e' : '#166534';
+      el.innerHTML = `<div style="background:${bg};color:${fg};padding:.6rem .8rem;border-radius:6px;margin:.5rem 0;font-size:.88rem;white-space:pre-wrap;">${esc(text)}</div>`;
+    }
+
+    async function freshToken(){
+      let { data:{ session } } = await window.supabaseClient.auth.getSession();
+      const expiresSoon = session?.expires_at && (session.expires_at * 1000 - Date.now() < 60_000);
+      if(!session?.access_token || expiresSoon){
+        const { data: refreshed } = await window.supabaseClient.auth.refreshSession();
+        session = refreshed?.session ?? session;
+      }
+      return session?.access_token;
+    }
+
+    async function callFn(name, payload){
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${await freshToken()}` },
+        body: JSON.stringify(payload || {}),
+      });
+      let body = {}; try { body = await res.json(); } catch {}
+      return { ok: res.ok, body };
+    }
 
     async function callAdminFn(payload){
       let { data:{ session } } = await window.supabaseClient.auth.getSession();
@@ -20212,8 +20290,115 @@ self.onmessage = function(e) {
       </tr>`).join('');
 
       const pending = data.filter(r => r.status === 'pending' || r.status === 'submitted').length;
+      pendingRequests = pending;
+      updateBadge();
+    }
+
+    let pendingRequests = 0, pendingPayouts = 0;
+    function updateBadge(){
+      const total = pendingRequests + pendingPayouts;
       const badge = $('partnersBadge');
-      if(badge){ badge.textContent = String(pending); badge.classList.toggle('zero', pending === 0); }
+      if(badge){ badge.textContent = String(total); badge.classList.toggle('zero', total === 0); }
+    }
+
+    const zar = (n) => 'R ' + Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits:2, maximumFractionDigits:2 });
+    const amt = (cur, n) => cur === 'BTC' ? `${Number(n||0).toFixed(8)} BTC` : `${Number(n||0).toFixed(2)} ${esc(cur)}`;
+
+    async function loadWithdrawals(){
+      const body = $('pnWdBody'); if(!body) return;
+      const includeClosed = $('pnWdShowAll')?.checked !== false;
+      const { data, error } = await window.supabaseClient.rpc('admin_list_partner_withdrawals', { p_include_closed: includeClosed });
+      if(error){ body.innerHTML = `<tr><td colspan="8" class="muted">Error: ${esc(error.message)}</td></tr>`; return; }
+      pendingPayouts = (data || []).filter(w => w.status === 'awaiting_partner').length;
+      updateBadge();
+      if(!data || !data.length){ body.innerHTML = '<tr><td colspan="8" class="muted">No partner withdrawals.</td></tr>'; return; }
+      const pill = (s) => {
+        const cls = s === 'completed' ? 'filled' : s === 'failed' ? 'critical' : 'warn';
+        return `<span class="status-pill ${cls}">${esc(s)}</span>`;
+      };
+      body.innerHTML = data.map(w => `<tr>
+        <td style="text-align:left;"><strong>${esc(w.client_name)}</strong><br><span style="font-size:.75rem;color:#6b7280;">#${w.customer_id}</span></td>
+        <td>${zar(w.amount_zar)}</td>
+        <td>${pill(w.status)}</td>
+        <td style="font-size:.82rem;">${fmt(w.ready_at)}</td>
+        <td style="font-size:.82rem;">${fmt(w.partner_marked_complete_at)}</td>
+        <td>${esc(w.partner_reference || '—')}</td>
+        <td>${w.reconciliation_status ? `<span class="status-pill ${w.reconciliation_status === 'matched' ? 'filled' : w.reconciliation_status === 'unmatched' ? 'critical' : 'warn'}">${esc(w.reconciliation_status)}</span>` : '—'}</td>
+        <td style="font-size:.82rem;">${fmt(w.completed_at)}</td>
+      </tr>`).join('');
+    }
+
+    async function loadInvoices(){
+      const body = $('pnInvBody'); if(!body) return;
+      const { data, error } = await window.supabaseClient.rpc('admin_list_partner_invoices');
+      if(error){ body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${esc(error.message)}</td></tr>`; return; }
+      if(!data || !data.length){ body.innerHTML = '<tr><td colspan="7" class="muted">No invoices issued yet.</td></tr>'; return; }
+      body.innerHTML = data.map(i => `<tr>
+        <td><strong>${esc(i.invoice_number)}</strong></td>
+        <td style="font-size:.82rem;">${esc(i.period_start)} → ${esc(i.period_end)}</td>
+        <td>${(i.lines || []).length}</td>
+        <td style="font-size:.82rem;">${Object.entries(i.totals || {}).map(([c,t]) => amt(c, t.total)).join('<br>')}</td>
+        <td>${i.held_line_count}</td>
+        <td><span class="status-pill ${i.status === 'fees_confirmed' ? 'filled' : i.held_line_count ? 'warn' : ''}">${esc(i.status)}</span></td>
+        <td style="font-size:.82rem;">${i.sent_at ? fmt(i.sent_at) : `<span style="color:#b91c1c;">${esc(i.email_error || 'not sent')}</span>`}</td>
+      </tr>`).join('');
+    }
+
+    async function runInvoice(mode){
+      const period = $('pnInvPeriod')?.value || undefined;
+      const payload = { period, dry_run: mode === 'preview', resend: mode === 'resend' };
+      msgIn('pnInvMsg', mode === 'preview' ? 'Building preview…' : 'Working…');
+      const { ok, body } = await callFn('ef_partner_fee_invoice', payload);
+      if(!ok || !body.success){ msgIn('pnInvMsg', body.error || 'Failed.', 'error'); return; }
+      if(body.nil){ msgIn('pnInvMsg', body.message, 'warn'); return; }
+      if(body.already_issued){ msgIn('pnInvMsg', `${body.invoice_number} was already issued. Use Resend to email it again.`, 'warn'); return; }
+      if(body.dry_run){
+        const totals = Object.entries(body.totals || {}).map(([c,t]) => `${c}: ${t.total} (held ${t.held})`).join('; ');
+        msgIn('pnInvMsg', `Preview ${body.invoice_number}: ${body.lines.length} line(s), ${body.held_line_count} held. ${totals}`, 'ok');
+        return;
+      }
+      msgIn('pnInvMsg', `${body.invoice_number}: ${body.lines} line(s), ${body.held_line_count} held — ${body.emailed ? 'emailed to Finova' : 'EMAIL FAILED (see alerts)'}.`, body.emailed ? 'ok' : 'error');
+      await loadInvoices();
+    }
+
+    async function loadSettings(){
+      const { data, error } = await window.supabaseClient.rpc('admin_get_partners');
+      if(error){ msgIn('pnCfgMsg', error.message, 'error'); return; }
+      const p = (data || []).find(x => x.partner_code === 'finova');
+      if(!p) return;
+      $('pnCfgEmail').value = p.notify_email || '';
+      $('pnCfgCc').value = p.cc_email || '';
+      $('pnCfgSlaProv').value = p.sla_provision_business_days;
+      $('pnCfgSlaWd').value = p.sla_withdrawal_business_days;
+    }
+
+    async function saveSettings(){
+      const { error } = await window.supabaseClient.rpc('admin_update_partner', {
+        p_partner_code: 'finova',
+        p_notify_email: $('pnCfgEmail').value.trim(),
+        p_cc_email: $('pnCfgCc').value.trim(),
+        p_sla_provision: Number($('pnCfgSlaProv').value) || null,
+        p_sla_withdrawal: Number($('pnCfgSlaWd').value) || null,
+      });
+      msgIn('pnCfgMsg', error ? error.message : 'Partner settings saved.', error ? 'error' : 'ok');
+    }
+
+    async function raiseRelink(){
+      const id = Number($('pnRelinkCust')?.value);
+      if(!id){ msgIn('pnReqMsg', 'Enter a customer ID.', 'error'); return; }
+      if(!confirm(`Raise a bank re-link task for customer #${id}?\n\nFinova will be emailed and this client's withdrawals will be held until Finova confirms.`)) return;
+      const { data, error } = await window.supabaseClient.rpc('admin_raise_bank_relink', { p_customer_id: id });
+      if(error){ msgIn('pnReqMsg', error.message, 'error'); return; }
+      msgIn('pnReqMsg', data.already_open ? 'A re-link task is already open for this client.' : 'Re-link task raised. Finova will be emailed within 10 minutes (or click "Send partner notifications now").', data.already_open ? 'warn' : 'ok');
+      $('pnRelinkCust').value = '';
+      await loadRequests();
+    }
+
+    async function notifyNow(){
+      msgIn('pnReqMsg', 'Sending…');
+      const { ok, body } = await callFn('ef_partner_notifications', {});
+      if(!ok || !body.success){ msgIn('pnReqMsg', body.error || 'Failed.', 'error'); return; }
+      msgIn('pnReqMsg', `Requests notified: ${body.requests_notified}, request reminders: ${body.request_reminders}, withdrawals notified: ${body.withdrawals_notified}, withdrawal reminders: ${body.withdrawal_reminders}${body.failures?.length ? `\nFailures: ${body.failures.join('; ')}` : ''}`, body.failures?.length ? 'warn' : 'ok');
     }
 
     async function createUser(){
@@ -20260,7 +20445,7 @@ self.onmessage = function(e) {
     }
 
     window.loadPartners = async function(){
-      await Promise.all([loadUsers(), loadRequests()]);
+      await Promise.all([loadUsers(), loadRequests(), loadWithdrawals(), loadInvoices(), loadSettings()]);
     };
 
     function init(){
@@ -20270,10 +20455,18 @@ self.onmessage = function(e) {
       $('pnReqRefreshBtn')?.addEventListener('click', loadRequests);
       $('pnReqShowAll')?.addEventListener('change', loadRequests);
       $('pnUsersBody')?.addEventListener('click', onUsersClick);
-      // Load both immediately: the hash router may already have fired before this
+      $('pnRelinkBtn')?.addEventListener('click', raiseRelink);
+      $('pnNotifyBtn')?.addEventListener('click', notifyNow);
+      $('pnWdRefreshBtn')?.addEventListener('click', loadWithdrawals);
+      $('pnWdShowAll')?.addEventListener('change', loadWithdrawals);
+      $('pnInvRefreshBtn')?.addEventListener('click', loadInvoices);
+      $('pnInvPreviewBtn')?.addEventListener('click', () => runInvoice('preview'));
+      $('pnInvIssueBtn')?.addEventListener('click', () => runInvoice('issue'));
+      $('pnInvResendBtn')?.addEventListener('click', () => runInvoice('resend'));
+      $('pnCfgSaveBtn')?.addEventListener('click', saveSettings);
+      // Load everything immediately: the hash router may already have fired before this
       // script registered window.loadPartners.
-      loadUsers();
-      loadRequests();
+      window.loadPartners();
     }
     const pnTimer = setInterval(()=>{ if(window.supabaseClient){ clearInterval(pnTimer); init(); } }, 400);
   })();

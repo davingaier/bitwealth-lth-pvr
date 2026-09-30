@@ -9,6 +9,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { signVALR } from "../_shared/valr.ts";
+import { sendEmail } from "../_shared/smtp.ts";
+import { getWithdrawalOutcomeEmail } from "../_shared/email-templates.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -246,7 +248,7 @@ Deno.serve(async (req) => {
         try {
           const { data: payingOut } = await supabase
             .from("withdrawal_requests")
-            .select("request_id, currency, amount_zar, amount_usdt, valr_withdrawal_id, processed_at, customer_id")
+            .select("request_id, currency, amount_zar, amount_usdt, net_amount, valr_withdrawal_id, processed_at, customer_id, partner_reference, client_completed_email_sent_at")
             .eq("org_id", orgId)
             .eq("customer_id", customerId)
             .eq("status", "paying_out");
@@ -265,8 +267,12 @@ Deno.serve(async (req) => {
                 if (wd.valr_withdrawal_id && tx.additionalInfo?.withdrawalId) {
                   return String(tx.additionalInfo.withdrawalId) === String(wd.valr_withdrawal_id);
                 }
-                const target = Number(wd.amount_zar ?? 0);
-                return Math.abs(parseFloat(tx.debitValue ?? 0) - target) <= 0.5;
+                // Partner payouts are told to pay the NET amount; VALR may report
+                // the debit gross or net of its own withdrawal fee.
+                const debit = parseFloat(tx.debitValue ?? 0);
+                const fee = parseFloat(tx.feeValue ?? 0) || 0;
+                const targets = [Number(wd.amount_zar ?? 0), Number(wd.net_amount ?? 0)].filter((t) => t > 0);
+                return targets.some((t) => Math.abs(debit - t) <= 0.5 || Math.abs(debit - fee - t) <= 0.5);
               } else if (wd.currency === "BTC" || wd.currency === "USDT") {
                 if (txType !== "BLOCKCHAIN_SEND") return false;
                 if (tx.debitCurrency !== wd.currency) return false;
@@ -296,6 +302,30 @@ Deno.serve(async (req) => {
                 { request_id: wd.request_id, customer_id: customerId, currency: wd.currency },
                 orgId, customerId,
               );
+
+              if (customer.email && !wd.client_completed_email_sent_at) {
+                try {
+                  const paid = Number(wd.currency === "ZAR" ? (wd.net_amount ?? wd.amount_zar ?? 0) : (wd.net_amount ?? wd.amount_usdt ?? 0));
+                  const tmpl = getWithdrawalOutcomeEmail(
+                    customer.first_names || "Customer", wd.currency, paid, "completed",
+                    matched.eventAt, undefined, wd.partner_reference ?? matched.additionalInfo?.withdrawalId ?? undefined,
+                  );
+                  const sent = await sendEmail({
+                    to: customer.email,
+                    from: Deno.env.get("FROM_EMAIL") ?? "noreply@bitwealth.co.za",
+                    subject: "Your Withdrawal Has Been Completed — BitWealth",
+                    html: tmpl.html,
+                    text: tmpl.text,
+                  });
+                  if (sent.success) {
+                    await supabase.from("withdrawal_requests")
+                      .update({ client_completed_email_sent_at: new Date().toISOString() })
+                      .eq("request_id", wd.request_id);
+                  }
+                } catch (mailErr) {
+                  console.warn(`  ⚠️  Completion email failed for ${wd.request_id}:`, (mailErr as Error).message);
+                }
+              }
             }
           }
         } catch (settleErr) {

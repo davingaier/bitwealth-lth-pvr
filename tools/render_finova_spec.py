@@ -14,8 +14,9 @@ import sys
 from pathlib import Path
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, RGBColor
+from docx.shared import Cm, Pt, RGBColor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "docs" / "FINOVA_PARTNER_PORTAL_SPEC.md"
@@ -135,11 +136,21 @@ def build(markdown: str) -> Document:
 
 
 def main() -> int:
-    if not SOURCE.exists():
-        print(f"Source not found: {SOURCE}", file=sys.stderr)
+    # Optional: render another markdown doc, e.g. the joint test cases (add --landscape for wide tables).
+    args = [a for a in sys.argv[1:] if a != "--landscape"]
+    source = Path(args[0]) if len(args) > 0 else SOURCE
+    target = Path(args[1]) if len(args) > 1 else TARGET
+    if not source.exists():
+        print(f"Source not found: {source}", file=sys.stderr)
         return 1
-    build(SOURCE.read_text(encoding="utf-8")).save(TARGET)
-    print(f"Wrote {TARGET}")
+    doc = build(source.read_text(encoding="utf-8"))
+    if "--landscape" in sys.argv:
+        section = doc.sections[0]
+        section.orientation = WD_ORIENT.LANDSCAPE
+        section.page_width, section.page_height = section.page_height, section.page_width
+        section.left_margin = section.right_margin = Cm(1.5)
+    doc.save(target)
+    print(f"Wrote {target}")
     return 0
 
 

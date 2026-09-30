@@ -9,6 +9,12 @@
   # This prevents builds when docs, edge functions, or other files are modified
   ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- website/"
 
+# Short address given to Finova for the partner portal.
+[[redirects]]
+  from = "/partner"
+  to = "/partner-login.html"
+  status = 301
+
 [[headers]]
   # Security headers
   for = "/*"

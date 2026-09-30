@@ -152,7 +152,19 @@ Deno.serve(async (req: Request) => {
           apiKey: creds.apiKey,
           apiSecret: creds.apiSecret,
         });
-        const liveUsdt  = pickAvailable(liveBalances as any, "USDT");
+        // Partner-custody fees awaiting Finova's manual transfer are already charged
+        // in the ledger but still physically in the subaccount — never sweep them.
+        let heldFeeUsdt = 0;
+        if (creds.accountModel === "finova_omnibus") {
+          const { data: held } = await sb
+            .from("valr_transfer_log")
+            .select("amount")
+            .eq("customer_id", customer_id)
+            .eq("currency", "USDT")
+            .eq("status", "deferred");
+          heldFeeUsdt = (held ?? []).reduce((s: number, r: { amount: number }) => s + Number(r.amount), 0);
+        }
+        const liveUsdt  = Math.max(0, pickAvailable(liveBalances as any, "USDT") - heldFeeUsdt);
         const liveUsdpc = pickAvailable(liveBalances as any, "USDPC");
         const deltaUsdt  = +(liveUsdt  - dbUsdt).toFixed(8);
         const deltaUsdpc = +(liveUsdpc - dbUsdpc).toFixed(8);

@@ -10,6 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { ADMIN_EMAIL, emailShell, escHtml, sendLoggedEmail } from "../_shared/partnerEmail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -105,6 +106,37 @@ async function discoverSubaccountId(
   }
 }
 
+/** BitWealth is told about every submission outcome, pass or fail. */
+async function notifyBitWealth(
+  customerId: number,
+  clientName: string,
+  outcome: "verified" | "failed",
+  partnerEmail: string,
+  detail: string,
+) {
+  const ok = outcome === "verified";
+  const html = emailShell({
+    title: ok ? "Finova subaccount verified" : "Finova subaccount submission failed",
+    intro: ok
+      ? "Finova submitted a client subaccount and it passed all checks. The client has been moved to Deposit and sent ZAR deposit instructions."
+      : "Finova submitted a client subaccount but it failed verification. Finova has been shown the reason in the portal.",
+    rows: [
+      ["Client", escHtml(clientName)],
+      ["Customer ID", `#${customerId}`],
+      ["Submitted by", escHtml(partnerEmail)],
+      [ok ? "Notes" : "Reason", escHtml(detail || "—")],
+    ],
+    footer: "Internal BitWealth notification.",
+  });
+  await sendLoggedEmail(sb, {
+    to: [ADMIN_EMAIL],
+    subject: `${ok ? "✅" : "❌"} Finova subaccount ${ok ? "verified" : "failed"} — ${clientName} (#${customerId})`,
+    html,
+    templateKey: ok ? "partner_subaccount_verified_admin" : "partner_subaccount_failed_admin",
+    data: { customer_id: customerId, outcome, detail },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -156,17 +188,31 @@ Deno.serve(async (req) => {
 
   const { data: reqRow } = await sb
     .from("subaccount_requests")
-    .select("request_id, customer_id, org_id, partner_code, status, suggested_subaccount_name")
+    .select("request_id, customer_id, org_id, partner_code, request_type, status, suggested_subaccount_name")
     .eq("request_id", request_id)
     .maybeSingle();
 
   if (!reqRow) return json({ error: "Request not found" }, 404);
   if (reqRow.partner_code !== partner.partner_code) return json({ error: "Forbidden — request belongs to another partner" }, 403);
+  if (reqRow.request_type !== "provision") {
+    return json({ error: "This is a bank re-link request — use \"Confirm re-linked\" instead." }, 400);
+  }
   if (!["pending", "submitted"].includes(reqRow.status)) {
     return json({ error: `This request is already '${reqRow.status}' and cannot be resubmitted.` }, 409);
   }
 
   const customerId: number = reqRow.customer_id;
+  const { data: cust } = await sb
+    .from("customer_details")
+    .select("customer_id, email, first_names, last_name, display_name, registration_status, account_model")
+    .eq("customer_id", customerId)
+    .maybeSingle();
+  if (cust?.account_model !== "finova_omnibus") {
+    return json({ error: "Forbidden — this client is not held in the partner's omnibus account" }, 403);
+  }
+  const clientName = cust.display_name ||
+    [cust.first_names, cust.last_name].filter(Boolean).join(" ") || `Client ${customerId}`;
+
   const fail = async (reason: string, status = 422) => {
     await sb.from("subaccount_requests")
       .update({ status: "submitted", verification_error: reason, submitted_at: new Date().toISOString(), submitted_by: user.id, updated_at: new Date().toISOString() })
@@ -177,6 +223,7 @@ Deno.serve(async (req) => {
       entity_id: request_id, customer_id: customerId, detail: { reason },
       ip_address: req.headers.get("x-forwarded-for"), user_agent: req.headers.get("user-agent"),
     });
+    await notifyBitWealth(customerId, clientName, "failed", partner.email, reason);
     return json({ error: reason }, status);
   };
 
@@ -218,11 +265,9 @@ Deno.serve(async (req) => {
   }
 
   // Best-effort: Finova is not asked for the subaccount ID, so try to derive it.
+  // Unknown is the normal case — fees then fall back to invoice-only (see valrTransfer.ts).
   const discoveredId = subaccount_id?.trim() ||
     await discoverSubaccountId(api_key!.trim(), api_secret!.trim(), subaccount_name!.trim());
-  if (!discoveredId) {
-    warnings.push("Subaccount ID could not be determined automatically; BitWealth will resolve it before the first fee sweep.");
-  }
 
   // 3. Vault + link + close the request atomically.
   const { data: stored, error: storeErr } = await sb.rpc("store_partner_subaccount_credentials", {
@@ -253,9 +298,47 @@ Deno.serve(async (req) => {
     partner_user_id: user.id, partner_code: partner.partner_code,
     action: "submit_subaccount", entity_type: "subaccount_request",
     entity_id: request_id, customer_id: customerId,
-    detail: { subaccount_name: subaccount_name!.trim(), api_key_name: api_key_name!.trim(), warnings },
+    detail: { subaccount_name: subaccount_name!.trim(), api_key_name: api_key_name!.trim(), warnings, subaccount_id_known: !!discoveredId },
     ip_address: req.headers.get("x-forwarded-for"), user_agent: req.headers.get("user-agent"),
   });
+
+  // The client can now fund the account: move them to Deposit and send ZAR-only
+  // instructions (VALR's banking details + the reference Finova generated).
+  let depositEmailSent = false;
+  if (cust.registration_status === "setup") {
+    await sb.from("customer_details").update({ registration_status: "deposit" }).eq("customer_id", customerId);
+  }
+  if (cust.email && ["setup", "deposit"].includes(cust.registration_status ?? "")) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_KEY}` },
+        body: JSON.stringify({
+          template_key: "deposit_instructions_zar_only",
+          to_email: cust.email,
+          data: {
+            first_name: cust.first_names || clientName,
+            deposit_ref: zar_deposit_reference!.trim(),
+            website_url: "https://bitwealth.co.za",
+          },
+        }),
+      });
+      depositEmailSent = res.ok;
+      if (!res.ok) {
+        await logAlert(sb, "ef_partner_submit_subaccount", "error",
+          `Deposit instructions email failed for customer ${customerId} (HTTP ${res.status})`,
+          { customer_id: customerId, body: (await res.text()).slice(0, 300) }, reqRow.org_id, customerId);
+      }
+    } catch (e) {
+      await logAlert(sb, "ef_partner_submit_subaccount", "error",
+        `Deposit instructions email error for customer ${customerId}: ${(e as Error).message}`,
+        { customer_id: customerId }, reqRow.org_id, customerId);
+    }
+  }
+
+  await notifyBitWealth(customerId, clientName, "verified", partner.email,
+    [warnings.join(" "), depositEmailSent ? "Deposit instructions emailed to client." : "Deposit instructions email NOT sent — check alerts."]
+      .filter(Boolean).join(" "));
 
   await logAlert(sb, "ef_partner_submit_subaccount", "info",
     `Finova subaccount verified and linked for customer ${customerId}`,

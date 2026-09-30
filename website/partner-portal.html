@@ -32,6 +32,12 @@
         .pill.submitted { background:#1e3a8a; color:#93c5fd; }
         .pill.verified { background:#064e3b; color:#6ee7b7; }
         .pill.rejected { background:#7f1d1d; color:#fca5a5; }
+        .pill.held { background:#78350f; color:#fcd34d; }
+        .steps { margin:10px 0 0; padding-left:20px; color:var(--text-secondary); font-size:13.5px; line-height:1.75; }
+        .steps strong { color:var(--text-primary); }
+        .inv-lines { display:none; background:rgba(255,255,255,.03); }
+        .inv-lines.open { display:table-row; }
+        .inv-lines table { font-size:13px; }
         .name-copy { display:flex; align-items:center; gap:8px; }
         .name-copy code { background:rgba(255,255,255,.07); padding:5px 9px; border-radius:6px; font-size:13px; }
         .btn-primary { padding:9px 16px; border:none; border-radius:7px; background:var(--gradient-gold); color:var(--bg-dark); font-weight:600; cursor:pointer; font-size:13.5px; }
@@ -66,13 +72,20 @@
     <div class="pp-tabs">
         <button class="pp-tab active" data-tab="requests">Subaccount Requests</button>
         <button class="pp-tab" data-tab="withdrawals">Withdrawals</button>
+        <button class="pp-tab" data-tab="invoices">Fee Invoices</button>
         <button class="pp-tab" data-tab="audit">Activity Log</button>
     </div>
 
     <div class="pp-panel active" data-panel="requests">
         <div class="card">
             <h3>Subaccount requests</h3>
-            <p class="muted">Create the VALR subaccount using the exact name shown, link the client's bank account to it, then submit the details below. VALR allows only letters, numbers and spaces in subaccount names.</p>
+            <p class="muted">For each new client, complete all three parts before submitting:</p>
+            <ol class="steps">
+                <li><strong>Create the subaccount</strong> in VALR using the exact name shown (use the Copy button). VALR allows only letters, numbers and spaces.</li>
+                <li><strong>Link the client's bank account</strong> to the subaccount and <strong>generate the ZAR deposit reference</strong>.</li>
+                <li><strong>Create an API key on the subaccount</strong> with View, Trade and Internal Transfer only (never Withdraw), then click <em>Submit details</em>.</li>
+            </ol>
+            <p class="muted" style="margin-top:10px;"><em>Bank re-link</em> requests appear when a client changes bank account: update the linked account in VALR, then click <em>Confirm re-linked</em>. The client's withdrawals are held until you do.</p>
         </div>
         <div class="card" style="padding:0;overflow:hidden;">
             <table>
@@ -85,12 +98,30 @@
     <div class="pp-panel" data-panel="withdrawals">
         <div class="card">
             <h3>Withdrawals awaiting payout</h3>
-            <p class="muted">BitWealth has already converted the client's holdings to ZAR inside their subaccount. Withdraw the exact amount shown to the client's linked bank account, then mark it complete with your payment reference.</p>
+            <p class="muted">BitWealth has already applied fees and converted the client's holdings to ZAR inside their subaccount.</p>
+            <ol class="steps">
+                <li>Perform your normal internal authorisation and <strong>verify the request</strong>.</li>
+                <li>In VALR, withdraw the <strong>exact amount shown</strong> from the subaccount to the client's linked bank account.</li>
+                <li>Click <em>Mark as paid</em> and enter your payment reference. BitWealth then confirms the payout against VALR and notifies the client.</li>
+            </ol>
         </div>
         <div class="card" style="padding:0;overflow:hidden;">
             <table>
                 <thead><tr><th>Client</th><th>Subaccount</th><th>Amount to pay</th><th>Ready since</th><th>Status</th><th></th></tr></thead>
                 <tbody id="ppWdBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pp-panel" data-panel="invoices">
+        <div class="card">
+            <h3>Monthly fee invoices</h3>
+            <p class="muted">BitWealth's fees for Finova-custody clients, issued on the 1st of each month. Fees marked <em>Held in subaccount</em> are still in the client's subaccount: transfer each one to Finova's main account in VALR, then click <em>Confirm held fees transferred</em>.</p>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+            <table>
+                <thead><tr><th>Invoice</th><th>Period</th><th>Total due</th><th>Held fees</th><th>Status</th><th></th></tr></thead>
+                <tbody id="ppInvBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -102,8 +133,8 @@
         </div>
         <div class="card" style="padding:0;overflow:hidden;">
             <table>
-                <thead><tr><th>When</th><th>User</th><th>Action</th><th>Client</th><th>Detail</th></tr></thead>
-                <tbody id="ppAuditBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+                <thead><tr><th>When</th><th>User</th><th>Action</th><th>Client</th><th>IP address</th><th>Detail</th></tr></thead>
+                <tbody id="ppAuditBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -123,12 +154,7 @@
             <div class="fld">
                 <label for="fZarRef">ZAR deposit reference</label>
                 <input type="text" id="fZarRef" required>
-                <div class="help">The reference the client must use when depositing ZAR into this subaccount. BitWealth cannot read this from VALR, so it is required.</div>
-            </div>
-            <div class="fld">
-                <label for="fSubId">Subaccount ID <span class="muted">(optional)</span></label>
-                <input type="text" id="fSubId">
-                <div class="help">Helps us reconcile transactions. Leave blank if not readily available.</div>
+                <div class="help">The reference you generated in VALR when linking the client's bank account. The client must use it when depositing ZAR. BitWealth cannot read this from VALR, so it is required.</div>
             </div>
             <div class="fld">
                 <label for="fKeyName">API key name</label>
@@ -137,7 +163,7 @@
             <div class="fld">
                 <label for="fKey">API key</label>
                 <input type="password" id="fKey" autocomplete="off" required>
-                <div class="help">Permissions must be View, Trade and Transfer. A key with Withdraw permission will be rejected.</div>
+                <div class="help">Created on the client's subaccount with View, Trade and Internal Transfer. A key with Withdraw permission, or a key on your primary account, will be rejected.</div>
             </div>
             <div class="fld">
                 <label for="fSecret">API secret</label>
@@ -147,7 +173,7 @@
             <div class="fld">
                 <div class="checkrow">
                     <input type="checkbox" id="fBankLinked" required>
-                    <label for="fBankLinked" style="margin:0;font-weight:400;">I confirm the client's bank account has been linked to this subaccount in VALR.</label>
+                    <label for="fBankLinked" style="margin:0;font-weight:400;">I confirm the client's bank account has been linked to this subaccount in VALR and the ZAR deposit reference above was generated for it.</label>
                 </div>
             </div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px;">
@@ -164,7 +190,7 @@
         <p class="muted" id="ppWdClient"></p>
         <div id="ppWdAlert"></div>
         <div class="alert info" style="margin-top:14px;">
-            Withdraw <strong id="ppWdAmount"></strong> from <strong id="ppWdSub"></strong> to the client's linked bank account in VALR, then record the reference below.
+            After your normal internal authorisation and verification, withdraw <strong id="ppWdAmount"></strong> from <strong id="ppWdSub"></strong> to the client's linked bank account in VALR, then record the reference below.
         </div>
         <form id="ppWdForm">
             <div class="fld">
@@ -205,6 +231,7 @@ document.querySelectorAll('.pp-tab').forEach(btn => btn.addEventListener('click'
     document.querySelector(`.pp-panel[data-panel="${btn.dataset.tab}"]`).classList.add('active');
     if (btn.dataset.tab === 'audit') loadAudit();
     if (btn.dataset.tab === 'withdrawals') loadWithdrawals();
+    if (btn.dataset.tab === 'invoices') loadInvoices();
 }));
 
 document.getElementById('ppLogout').addEventListener('click', async () => {
@@ -220,7 +247,11 @@ async function loadRequests() {
 
     body.innerHTML = data.map(r => {
         const open = r.status === 'pending' || r.status === 'submitted';
-        const typeLabel = r.request_type === 'bank_relink' ? ' <span class="muted">(bank re-link)</span>' : '';
+        const relink = r.request_type === 'bank_relink';
+        const typeLabel = relink ? ' <span class="muted">(bank re-link)</span>' : '';
+        const action = !open ? ''
+            : relink ? `<button class="btn-primary" data-relink="${r.request_id}">Confirm re-linked</button>`
+            : `<button class="btn-primary" data-open="${r.request_id}">Submit details</button>`;
         return `<tr>
             <td><strong>${esc(r.client_name)}</strong>${typeLabel}<div class="muted">Client #${r.customer_id}</div></td>
             <td><div class="name-copy"><code>${esc(r.suggested_subaccount_name || '—')}</code>
@@ -228,7 +259,7 @@ async function loadRequests() {
             <td class="muted">${fmtDate(r.requested_at)}</td>
             <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span>
                 ${r.verification_error ? `<div class="muted" style="color:#fca5a5;margin-top:5px;">${esc(r.verification_error)}</div>` : ''}</td>
-            <td style="text-align:right;">${open ? `<button class="btn-primary" data-open="${r.request_id}">Submit details</button>` : ''}</td>
+            <td style="text-align:right;">${action}</td>
         </tr>`;
     }).join('');
 
@@ -239,6 +270,19 @@ async function loadRequests() {
     body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
         openModal(data.find(x => x.request_id === b.dataset.open));
     }));
+    body.querySelectorAll('[data-relink]').forEach(b => b.addEventListener('click', async () => {
+        const r = data.find(x => x.request_id === b.dataset.relink);
+        if (!confirm(`Confirm that ${r.client_name}'s new bank account has been linked to subaccount "${r.suggested_subaccount_name}" in VALR?`)) return;
+        b.disabled = true;
+        const { data: res, error } = await sb.rpc('partner_confirm_bank_relink', { p_request_id: r.request_id });
+        if (error || !res?.success) {
+            globalAlert(esc(error?.message || 'Could not confirm the re-link.'), 'err');
+            b.disabled = false;
+            return;
+        }
+        globalAlert(`Bank re-link confirmed for client #${r.customer_id}. Their withdrawals are released.`, 'ok');
+        await loadRequests();
+    }));
 }
 
 function openModal(req) {
@@ -247,7 +291,6 @@ function openModal(req) {
     document.getElementById('ppModalClient').textContent = `${req.client_name} — client #${req.customer_id}`;
     document.getElementById('fSubName').value = req.suggested_subaccount_name || '';
     document.getElementById('fZarRef').value = req.zar_deposit_reference || '';
-    document.getElementById('fSubId').value = '';
     document.getElementById('fKeyName').value = req.api_key_name || '';
     document.getElementById('fKey').value = '';
     document.getElementById('fSecret').value = '';
@@ -277,7 +320,6 @@ document.getElementById('ppSubmitForm').addEventListener('submit', async (e) => 
             body: JSON.stringify({
                 request_id: activeRequest.request_id,
                 subaccount_name: document.getElementById('fSubName').value.trim(),
-                subaccount_id: document.getElementById('fSubId').value.trim(),
                 zar_deposit_reference: document.getElementById('fZarRef').value.trim(),
                 api_key_name: document.getElementById('fKeyName').value.trim(),
                 api_key: document.getElementById('fKey').value.trim(),
@@ -291,7 +333,7 @@ document.getElementById('ppSubmitForm').addEventListener('submit', async (e) => 
         const warn = (result.warnings || []).length
             ? `<div class="alert warn" style="margin-top:10px;">${result.warnings.map(esc).join('<br>')}</div>` : '';
         closeModal();
-        globalAlert(`Subaccount verified and linked for client #${result.customer_id}.${warn}`, 'ok');
+        globalAlert(`Subaccount verified and linked for client #${result.customer_id}. The client has been sent deposit instructions.${warn}`, 'ok');
         await loadRequests();
     } catch (err) {
         modalAlert(esc(err.message || 'Network error.'), 'err');
@@ -311,16 +353,18 @@ async function loadWithdrawals() {
 
     body.innerHTML = data.map(w => {
         const awaiting = w.status === 'awaiting_partner';
-        const label = awaiting ? 'awaiting payout' : w.status === 'paying_out' ? 'confirming' : w.status;
-        const cls = awaiting ? 'pending' : w.status === 'completed' ? 'verified' : 'submitted';
+        const held = awaiting && w.relink_pending;
+        const label = held ? 'on hold — bank re-link' : awaiting ? 'awaiting payout' : w.status === 'paying_out' ? 'confirming' : w.status;
+        const cls = held ? 'held' : awaiting ? 'pending' : w.status === 'completed' ? 'verified' : 'submitted';
         return `<tr>
             <td><strong>${esc(w.client_name)}</strong><div class="muted">Client #${w.customer_id}</div></td>
             <td><code>${esc(w.subaccount_name || '—')}</code></td>
             <td><strong>${fmtZar(w.amount_zar)}</strong></td>
             <td class="muted">${fmtDate(w.ready_at)}</td>
             <td><span class="pill ${cls}">${esc(label)}</span>
-                ${w.partner_reference ? `<div class="muted">ref ${esc(w.partner_reference)}</div>` : ''}</td>
-            <td style="text-align:right;">${awaiting ? `<button class="btn-primary" data-wd="${w.request_id}">Mark as paid</button>` : ''}</td>
+                ${w.partner_reference ? `<div class="muted">ref ${esc(w.partner_reference)}</div>` : ''}
+                ${held ? '<div class="muted">Complete the bank re-link request first.</div>' : ''}</td>
+            <td style="text-align:right;">${awaiting && !held ? `<button class="btn-primary" data-wd="${w.request_id}">Mark as paid</button>` : ''}</td>
         </tr>`;
     }).join('');
 
@@ -375,15 +419,73 @@ document.getElementById('ppWdForm').addEventListener('submit', async (e) => {
 async function loadAudit() {
     const body = document.getElementById('ppAuditBody');
     const { data, error } = await sb.rpc('partner_list_audit_log', { p_limit: 200 });
-    if (error) { body.innerHTML = `<tr><td colspan="5" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
-    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No activity recorded yet.</td></tr>'; return; }
+    if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No activity recorded yet.</td></tr>'; return; }
     body.innerHTML = data.map(r => `<tr>
         <td class="muted">${fmtDate(r.created_at)}</td>
         <td>${esc(r.actor_email || '—')}</td>
         <td>${esc(r.action)}</td>
         <td>${r.customer_id ? '#' + r.customer_id : '—'}</td>
+        <td class="muted">${esc(r.ip_address || '—')}</td>
         <td class="muted">${esc(r.detail ? JSON.stringify(r.detail).slice(0, 160) : '')}</td>
     </tr>`).join('');
+}
+
+const fmtAmt = (cur, n) => cur === 'BTC'
+    ? `${Number(n || 0).toFixed(8)} BTC`
+    : `${Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${esc(cur)}`;
+
+async function loadInvoices() {
+    const body = document.getElementById('ppInvBody');
+    const { data, error } = await sb.rpc('partner_list_invoices');
+    if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
+    if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No invoices issued yet.</td></tr>'; return; }
+
+    body.innerHTML = data.map(inv => {
+        const totals = Object.entries(inv.totals || {}).map(([c, t]) => fmtAmt(c, t.total)).join('<br>') || '—';
+        const needsConfirm = inv.status === 'issued' && inv.held_line_count > 0;
+        const statusPill = inv.status === 'fees_confirmed'
+            ? '<span class="pill verified">held fees transferred</span>'
+            : needsConfirm ? '<span class="pill held">held fees outstanding</span>' : '<span class="pill submitted">issued</span>';
+        const lines = (inv.lines || []).map(l => `<tr>
+            <td>${esc(l.date)}</td><td>${esc(l.client_name)} <span class="muted">#${l.customer_id}</span></td>
+            <td><code>${esc(l.subaccount)}</code></td><td>${esc(l.fee_type)}</td>
+            <td style="text-align:right;">${fmtAmt(l.currency, l.amount)}</td>
+            <td>${l.held ? '<span class="pill held">held in subaccount</span>' : '<span class="muted">in Finova main account</span>'}</td>
+        </tr>`).join('');
+        return `<tr>
+            <td><strong>${esc(inv.invoice_number)}</strong><div class="muted">${fmtDate(inv.sent_at)}</div></td>
+            <td class="muted">${esc(inv.period_start)} → ${esc(inv.period_end)}</td>
+            <td>${totals}</td>
+            <td>${inv.held_line_count}</td>
+            <td>${statusPill}</td>
+            <td style="text-align:right;white-space:nowrap;">
+                <button class="pp-btn" data-inv-view="${inv.invoice_id}">Details</button>
+                ${needsConfirm ? `<button class="btn-primary" data-inv-confirm="${inv.invoice_id}">Confirm held fees transferred</button>` : ''}
+            </td>
+        </tr>
+        <tr class="inv-lines" id="inv-${inv.invoice_id}"><td colspan="6">
+            <table><thead><tr><th>Date</th><th>Client</th><th>Subaccount</th><th>Fee</th><th style="text-align:right;">Amount</th><th>Location</th></tr></thead>
+            <tbody>${lines}</tbody></table>
+        </td></tr>`;
+    }).join('');
+
+    body.querySelectorAll('[data-inv-view]').forEach(b => b.addEventListener('click', () => {
+        document.getElementById(`inv-${b.dataset.invView}`).classList.toggle('open');
+    }));
+    body.querySelectorAll('[data-inv-confirm]').forEach(b => b.addEventListener('click', async () => {
+        const inv = data.find(x => x.invoice_id === b.dataset.invConfirm);
+        if (!confirm(`Confirm that all ${inv.held_line_count} held fee(s) on ${inv.invoice_number} have been transferred from the client subaccounts to Finova's main account?`)) return;
+        b.disabled = true;
+        const { data: res, error: e } = await sb.rpc('partner_confirm_invoice_fees', { p_invoice_id: inv.invoice_id });
+        if (e || !res?.success) {
+            globalAlert(esc(e?.message || 'Could not confirm.'), 'err');
+            b.disabled = false;
+            return;
+        }
+        globalAlert(`Thank you — ${res.held_fees_confirmed} held fee(s) on ${esc(inv.invoice_number)} confirmed as transferred.`, 'ok');
+        await loadInvoices();
+    }));
 }
 
 (async function init() {

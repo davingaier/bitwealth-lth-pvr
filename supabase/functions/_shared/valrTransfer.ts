@@ -20,6 +20,10 @@ export interface TransferResult {
   transferId?: string; // UUID from valr_transfer_log
   valrResponse?: any;
   errorMessage?: string;
+  /** Partner custody only: fee charged but left in the subaccount for the partner to move (invoice-only). */
+  deferred?: boolean;
+  /** Fee went to (or stays with) the partner — never BitWealth's main account. */
+  partnerCustody?: boolean;
 }
 
 /**
@@ -298,6 +302,11 @@ const VALR_API_URL_TRANSFER =
 // The transfer is signed with the CLIENT's own subaccount key. resolveCustomerCredentials
 // returns subaccountId=null for this model (the key is already scoped), so the
 // numeric fromId is read from exchange_accounts.subaccount_id.
+//
+// VALR does not reveal a subaccount's ID to a subaccount-scoped key and Finova is
+// not asked for it, so the ID is usually unknown. In that case the fee is recorded
+// as 'deferred' (invoice-only): it stays in the client's subaccount, is listed as
+// "held" on the monthly partner invoice, and Finova moves it and confirms in the portal.
 // ─────────────────────────────────────────────────────────────────────────────
 async function sweepFeeToPartnerMain(
   sb: any,
@@ -307,7 +316,7 @@ async function sweepFeeToPartnerMain(
   ledgerId: string | null,
   transferType: string,
   creds: { apiKey: string; apiSecret: string },
-): Promise<{ success: boolean; errorMessage?: string; transferId?: string }> {
+): Promise<TransferResult> {
   const { data: strat } = await sb
     .schema("public")
     .from("customer_strategies")
@@ -326,13 +335,31 @@ async function sweepFeeToPartnerMain(
         .maybeSingle()
     : { data: null };
 
-  if (!ea?.subaccount_id) {
-    // Finova supplies the subaccount ID only optionally at provisioning.
-    return {
-      success: false,
-      errorMessage:
-        "Cannot sweep fee: this client's VALR subaccount ID is unknown. Ask the partner to supply it in the portal.",
-    };
+  if (!ea) {
+    return { success: false, errorMessage: `No exchange account linked for customer ${customerId}` };
+  }
+
+  if (!ea.subaccount_id) {
+    const { data: deferredRow, error: deferErr } = await sb
+      .from("valr_transfer_log")
+      .insert({
+        org_id: ea.org_id,
+        customer_id: customerId,
+        transfer_type: transferType,
+        currency,
+        amount,
+        from_subaccount_id: null,
+        to_account: "partner_main",
+        ledger_id: ledgerId,
+        status: "deferred",
+        error_message: "Held in client subaccount — invoiced to partner for manual transfer",
+      })
+      .select("transfer_id")
+      .maybeSingle();
+    if (deferErr) {
+      return { success: false, errorMessage: `Could not record deferred partner fee: ${deferErr.message}` };
+    }
+    return { success: true, deferred: true, partnerCustody: true, transferId: deferredRow?.transfer_id };
   }
 
   const { data: logRow } = await sb
@@ -354,7 +381,7 @@ async function sweepFeeToPartnerMain(
   const fail = async (msg: string, raw?: unknown) => {
     if (logRow?.transfer_id) {
       await sb.from("valr_transfer_log")
-        .update({ status: "failed", error_message: msg, valr_response: raw ?? null })
+        .update({ status: "failed", error_message: msg, valr_api_response: raw ?? null })
         .eq("transfer_id", logRow.transfer_id);
     }
     return { success: false, errorMessage: msg };
@@ -394,11 +421,11 @@ async function sweepFeeToPartnerMain(
 
     if (logRow?.transfer_id) {
       await sb.from("valr_transfer_log")
-        .update({ status: "completed", completed_at: new Date().toISOString(), valr_response: parsed })
+        .update({ status: "completed", completed_at: new Date().toISOString(), valr_api_response: parsed })
         .eq("transfer_id", logRow.transfer_id);
     }
 
-    return { success: true, transferId: logRow?.transfer_id };
+    return { success: true, partnerCustody: true, transferId: logRow?.transfer_id };
   } catch (e) {
     return await fail(`Partner fee transfer error: ${(e as Error).message}`);
   }

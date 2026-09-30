@@ -7,6 +7,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -83,6 +84,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Places market orders on BitWealth's main account, so it must never be publicly callable.
+    const caller = await requireOrgAdmin(createClient(supabaseUrl!, supabaseKey!), req, supabaseKey!);
+    if (!caller.ok) {
+      return new Response(JSON.stringify({ success: false, error: caller.error }), {
+        status: caller.status,
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    }
+
     console.log("[ef_convert_platform_fee_btc] Starting BTC → USDT conversion for platform fees");
 
     // Parse request body
@@ -102,6 +112,23 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[ef_convert_platform_fee_btc] Converting ${btcAmount} BTC to USDT (customer: ${customerId || 'N/A'})`);
+
+    // Finova-custody fees go to Finova's account (or stay in the client subaccount),
+    // never to BitWealth's main account — selling here would sell BitWealth's own BTC.
+    if (customerId) {
+      const { data: cust } = await supabase
+        .schema("public")
+        .from("customer_details")
+        .select("account_model")
+        .eq("customer_id", customerId)
+        .maybeSingle();
+      if (cust?.account_model === "finova_omnibus") {
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, reason: "partner custody — fee not held in BitWealth main account" }),
+          { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+    }
 
     // Place MARKET order to sell BTC → USDT
     const { orderResult, customerOrderId } = await placeMarketOrder("SELL", "BTCUSDT", btcAmount);

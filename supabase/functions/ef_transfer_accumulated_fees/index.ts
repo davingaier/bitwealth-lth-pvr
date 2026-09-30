@@ -202,7 +202,9 @@ Deno.serve(async () => {
           totalBtcTransferred += accumBtc;
 
           // Check if transferred amount >= CONVERSION minimum
-          if (accumBtc >= minConversionBtc) {
+          if (btcResult.partnerCustody) {
+            console.log(`[ef_transfer_accumulated_fees] Partner-custody fee for customer ${customerId} — not held in BitWealth main account, no conversion`);
+          } else if (accumBtc >= minConversionBtc) {
             // Trigger auto-conversion to USDT
             console.log(
               `[ef_transfer_accumulated_fees] ${accumBtc} BTC >= conversion threshold (${minConversionBtc}), triggering BTC→USDT conversion`,
