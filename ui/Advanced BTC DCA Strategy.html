@@ -20183,7 +20183,9 @@ self.onmessage = function(e) {
       if(!document.getElementById('finovaKycCard')) return;
       document.getElementById('finovaKycRefreshBtn')?.addEventListener('click', load);
       document.getElementById('finovaKycBody')?.addEventListener('click', onClick);
-      load();
+      // RPC is not executable by anon, so wait for a signed-in session.
+      window.supabaseClient.auth.getSession().then(({ data }) => { if(data?.session) load(); });
+      window.supabaseClient.auth.onAuthStateChange((evt) => { if(evt === 'SIGNED_IN') setTimeout(load, 0); });
     }
     const t=setInterval(()=>{ if(window.supabaseClient){ clearInterval(t); init(); } }, 400);
   })();
@@ -20445,6 +20447,9 @@ self.onmessage = function(e) {
     }
 
     window.loadPartners = async function(){
+      // Partner/admin RPCs are not executable by anon — skip until signed in.
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if(!session) return;
       await Promise.all([loadUsers(), loadRequests(), loadWithdrawals(), loadInvoices(), loadSettings()]);
     };
 
@@ -20467,6 +20472,7 @@ self.onmessage = function(e) {
       // Load everything immediately: the hash router may already have fired before this
       // script registered window.loadPartners.
       window.loadPartners();
+      window.supabaseClient.auth.onAuthStateChange((evt) => { if(evt === 'SIGNED_IN') setTimeout(() => window.loadPartners(), 0); });
     }
     const pnTimer = setInterval(()=>{ if(window.supabaseClient){ clearInterval(pnTimer); init(); } }, 400);
   })();
