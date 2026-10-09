@@ -3,11 +3,69 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-09-30 (v0.6.162)
+**Last updated:** 2026-10-09 (v0.6.163)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.163 – Customer 49 incidents: ZAR conversion, deposit emails, USDPC sweep + Admin UI 401s
+**Date:** 2026-10-01 → 2026-10-09  
+**Status:** ✅ DEPLOYED
+
+Four production fixes, three of them found from customer 49's R200,000 ZAR deposit on 2026-10-08.
+
+**1. ZAR→USDT MARKET fallback sized off stale data (`ef_poll_zar_conversions`).**
+The post-only LIMIT (03:33 UTC) part-filled R315.75 at 03:38:53, was cancelled as stale at 03:39:03,
+and the MARKET fallback at 03:40:02 was placed for **R200,000** — but only R199,684.25 remained, so VALR
+returned `Insufficient Balance`. `remaining_amount` is only reduced when `ef_sync_valr_transactions` books
+the partial fill (03:41:59, two minutes later). `handleMarketPending` now reads live available ZAR and
+spends `floor(min(remaining_amount, live ZAR), cents)`; below VALR's R10 minimum it logs a `warn` and
+waits. The failed row was reset to `pending` (R315.75 converted / R199,684.25 remaining) for a manual retry.
+
+**2. Deposit notification emails lost / silently rejected.**
+- At 00:00:07 UTC the Supabase gateway returned **502** for both `ef_send_email` calls made by
+  `ef_sync_valr_transactions` for the deposit (customer `subsequent_deposit_notification` and admin
+  `funds_deposited_admin_notification`). The function never booted, so no `email_logs` row was written,
+  and the sync only `console.error`ed. Sporadic 502s were also seen on other functions around the
+  00:00 UTC cron burst.
+- New `_shared/sendTemplateEmail.ts`: calls `ef_send_email` with the **service role key** and retries up
+  to 3× on 5xx/network errors (2 s, 4 s back-off). `ef_sync_valr_transactions` uses it for both deposit
+  emails and raises an `error` alert if the send ultimately fails.
+- **Latent bug since the v0.6.162 `ef_send_email` lockdown:** five call sites forwarded the caller's
+  `Authorization` header, which `requireOrgAdmin` rejects (cron sends none; customers send a non-admin
+  token). Fixed to use the service key: `ef_deposit_scan` (first-deposit admin + welcome emails — these
+  were **always** failing; now via `sendTemplateEmail` with alerts), `ef_upload_kyc_documents` (KYC upload
+  admin notice), `ef_fee_monthly_close`, `ef_auto_convert_btc_to_usdt`.
+- Note: templates `monthly_fee_invoice_admin` and `btc_conversion_approval` do not exist in
+  `public.email_templates`, so those two sends still 404 until templates are created.
+- The missed admin notification for customer 49 was re-sent manually.
+
+**3. USDPC sweep silently stranded 10,000 USDT (`ef_sweep_usdt_to_usdpc`).**
+Sweep intents used `idempotency_key = sha256(org|customer|DATE|USDPC_SWEEP|chunk)` with
+`.upsert(onConflict: idempotency_key)`. The pipeline re-runs the sweep every 30 minutes, so a later
+same-day run **overwrote an earlier, already-executed intent** (amount 18.97 → 10,000). Executed intents
+are never re-run, so chunk 1 of the 04:30 UTC sweep (10,000 of 11,975.39 USDT) was never placed; chunk 2
+(1,975.39) swept normally. An upsert on a deterministic key is not “no-op if exists” — it mutates history.
+Now: a customer is skipped while a `pending` `usdpc_sweep` intent exists for today, and every run uses a
+unique key (`…|chunk|RUN|<ms>` / `…|FORCE|<ms>`). Idle USDT is therefore swept on any pipeline run, not
+only the first of the day. The corrupted intent's amount was restored to 18.97 (ledger was built from
+fills and was always correct); the stranded USDT sweeps on the next run.
+
+**4. Admin UI 401 noise (2026-10-01).** After v0.6.162 revoked `anon` EXECUTE on partner/admin RPCs, the
+Partners module and Finova KYC card fired their RPCs on page load before sign-in → six 401s in the console.
+Both now load only when a session exists and reload on `SIGNED_IN` (deferred with `setTimeout`, since
+calling auth methods inside `onAuthStateChange` can deadlock supabase-js).
+
+**Files changed:**
+- `supabase/functions/ef_poll_zar_conversions/index.ts`
+- `supabase/functions/_shared/sendTemplateEmail.ts` (new)
+- `supabase/functions/ef_sync_valr_transactions/index.ts`, `ef_deposit_scan`, `ef_upload_kyc_documents`
+  (deployed with JWT verification), `ef_fee_monthly_close`, `ef_auto_convert_btc_to_usdt`
+- `supabase/functions/ef_sweep_usdt_to_usdpc/index.ts`, `ef_resume_pipeline/index.ts` (comment only)
+- `ui/Advanced BTC DCA Strategy.html` — Partners module + Finova KYC card loaders
+
+---
 
 ### v0.6.162 – Finova omnibus custody (third account model) + Partner Portal — Phases 0–6 complete
 **Date:** 2026-08-30 → 2026-09-30  
@@ -2283,7 +2341,7 @@ Constants: `STALE_LIMIT_MS = 5 min`, `PRICE_MOVE_LIMIT = 0.0025`.
 
 **`handleLimitPlaced`:** calls `getOpenOrders`. If not resting → check summary → `recordFill` or `market_pending`. If still resting → check stale (≥ 5 min since `limit_placed_at`) OR adverse (best bid > `limit_price × 1.0025`) → cancel + confirm via open-orders loop (6 retries) → `market_pending`.
 
-**`handleMarketPending`:** places market order via `placeMarketOrderByQuote` → `status = 'market_placed'` → `confirmMarketFill(rounds=3)`.
+**`handleMarketPending`:** reads live available ZAR and places a market order via `placeMarketOrderByQuote` for `floor(min(remaining_amount, live ZAR))` (a cancelled LIMIT may have part-filled before `remaining_amount` is synced; skips with a `warn` below R10) → `status = 'market_placed'` → `confirmMarketFill(rounds=3)`. *(v0.6.163)*
 
 **`handleMarketPlaced`:** `confirmMarketFill(rounds=1)`.
 

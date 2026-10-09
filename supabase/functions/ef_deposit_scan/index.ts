@@ -9,6 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -308,27 +309,25 @@ Deno.serve(async (req) => {
           // Send admin notification email
           const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
           try {
-            await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": req.headers.get("authorization") || "",
+            const adminSent = await sendTemplateEmail({
+              template_key: "funds_deposited_admin_notification",
+              to_email: adminEmail,
+              data: {
+                first_name: customer.first_names,
+                last_name: customer.last_name,
+                customer_id: customer.customer_id,
+                email: customer.email,
+                balances: balances
+                  .filter((b: any) => parseFloat(b.available || "0") > 0)
+                  .map((b: any) => `${b.currency}: ${b.available}`)
+                  .join(", "),
               },
-              body: JSON.stringify({
-                template_key: "funds_deposited_admin_notification",
-                to_email: adminEmail,
-                data: {
-                  first_name: customer.first_names,
-                  last_name: customer.last_name,
-                  customer_id: customer.customer_id,
-                  email: customer.email,
-                  balances: balances
-                    .filter((b: any) => parseFloat(b.available || "0") > 0)
-                    .map((b: any) => `${b.currency}: ${b.available}`)
-                    .join(", "),
-                },
-              }),
             });
+            if (!adminSent.ok) {
+              await logAlert(sbLthPvr, "ef_deposit_scan", "error",
+                `Admin activation-deposit email failed for customer ${customer.customer_id}: HTTP ${adminSent.status}`,
+                { customer_id: customer.customer_id, status: adminSent.status, error: adminSent.error });
+            }
           } catch (emailError) {
             console.error(`Error sending admin email to ${adminEmail}:`, emailError);
           }
@@ -350,32 +349,24 @@ Deno.serve(async (req) => {
               day: "numeric" 
             });
             
-            const custEmailResp = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": req.headers.get("authorization") || "",
+            const custSent = await sendTemplateEmail({
+              template_key: "registration_complete_welcome",
+              to_email: customer.email,
+              data: {
+                first_name: customer.first_names,
+                amount: depositAmount,
+                asset: depositAsset,
+                deposit_date: depositDate,
+                portal_url: `${websiteUrl}/customer-portal.html`,
+                website_url: websiteUrl,
               },
-              body: JSON.stringify({
-                template_key: "registration_complete_welcome",
-                to_email: customer.email,
-                data: {
-                  first_name: customer.first_names,
-                  amount: depositAmount,
-                  asset: depositAsset,
-                  deposit_date: depositDate,
-                  portal_url: `${websiteUrl}/customer-portal.html`,
-                  website_url: websiteUrl,
-                },
-              }),
             });
 
-            if (!custEmailResp.ok) {
-              const errBody = await custEmailResp.text();
-              console.error(`Customer welcome email failed: HTTP ${custEmailResp.status} ${errBody}`);
+            if (!custSent.ok) {
+              console.error(`Customer welcome email failed: HTTP ${custSent.status} ${custSent.error}`);
               await logAlert(sbLthPvr, "ef_deposit_scan", "error",
-                `Customer welcome email failed for customer ${customer.customer_id}: HTTP ${custEmailResp.status}`,
-                { customer_id: customer.customer_id, email: customer.email, status: custEmailResp.status, body: errBody.slice(0, 500) });
+                `Customer welcome email failed for customer ${customer.customer_id}: HTTP ${custSent.status}`,
+                { customer_id: customer.customer_id, email: customer.email, status: custSent.status, body: (custSent.error ?? "").slice(0, 500) });
             }
           } catch (emailError) {
             console.error("Error sending customer email:", emailError);

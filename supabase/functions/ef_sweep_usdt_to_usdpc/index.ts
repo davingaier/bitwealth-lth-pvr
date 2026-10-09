@@ -211,15 +211,25 @@ Deno.serve(async (req: Request) => {
       // VALR caps a single USDPC BUY at ~10 000 USDT (quote). Split larger
       // sweeps into multiple intents, each its own market order.
       const chunks = splitConversionAmount(sweepUsdt, cfg.maxQuoteUsdt, 2);
-      // A forced manual sweep gets a unique key suffix so it never upsert-collides
-      // with the customer's already-executed daily sweep intents (same
-      // org/customer/date/chunk). The daily run keeps the deterministic key.
-      const forceTag = force ? `|FORCE|${Date.now()}` : "";
+      // Per-run key: a date-only key let later runs overwrite an already-executed intent, stranding that chunk.
+      const { data: inflight } = await sb
+        .from("order_intents")
+        .select("intent_id")
+        .eq("customer_id", customer_id)
+        .eq("trade_date", todayStr)
+        .eq("reason", "usdpc_sweep")
+        .eq("status", "pending")
+        .limit(1);
+      if (inflight?.length) {
+        skipped++;
+        continue;
+      }
+      const runTag = `|${force ? "FORCE" : "RUN"}|${Date.now()}`;
       let chunkErr = false;
       for (let ci = 0; ci < chunks.length; ci++) {
         const chunkUsdt = chunks[ci];
         if (!(chunkUsdt > 0)) continue;
-        const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP", String(ci) + forceTag].join("|");
+        const keyParts = [org_id, customer_id.toString(), todayStr, "USDPC_SWEEP", String(ci) + runTag].join("|");
         const keyHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyParts));
         const idKey = Array.from(new Uint8Array(keyHash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 

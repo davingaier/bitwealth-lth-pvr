@@ -177,7 +177,8 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": req.headers.get("authorization") || "",
+          // Customer token would be rejected by ef_send_email (admin/service only).
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         },
         body: JSON.stringify({
           template_key: "kyc_documents_uploaded_notification",

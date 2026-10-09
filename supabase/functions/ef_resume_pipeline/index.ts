@@ -193,7 +193,7 @@ Deno.serve(async (req: Request) => {
     // USDT belonging to USDPC-enabled customers into USDPC. The sweep creates
     // BUY conversion intents which are then executed, polled and booked by a
     // second execute -> poll -> post_ledger pass. All four functions are
-    // idempotent (one sweep intent per customer/day; fill -> ledger keyed on
+    // idempotent (at most one in-flight sweep per customer; fill -> ledger keyed on
     // ref_fill_id), so this is safe to re-run on repeated resume calls.
     if (!mainPipelineFailed) {
       const sweepSequence = [

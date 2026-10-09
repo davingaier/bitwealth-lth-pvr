@@ -11,6 +11,7 @@ import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { signVALR } from "../_shared/valr.ts";
 import { sendEmail } from "../_shared/smtp.ts";
 import { getWithdrawalOutcomeEmail } from "../_shared/email-templates.ts";
+import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -1225,31 +1226,28 @@ Deno.serve(async (req) => {
                     day: "numeric" 
                   });
 
-                  const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "Authorization": `Bearer ${supabaseKey}`,
-                    },
-                    body: JSON.stringify({
-                      template_key: "subsequent_deposit_notification",
+                  const sent = await sendTemplateEmail({
+                    template_key: "subsequent_deposit_notification",
+                    to_email: customer.email,
+                    data: {
+                      first_name: customer.first_names,
+                      amount: Math.abs(amount).toFixed(8),
+                      asset: currency,
+                      deposit_date: depositDate,
+                      portal_url: "https://bitwealth.co.za/customer-portal.html",
+                      website_url: "https://bitwealth.co.za",
                       to_email: customer.email,
-                      data: {
-                        first_name: customer.first_names,
-                        amount: Math.abs(amount).toFixed(8),
-                        asset: currency,
-                        deposit_date: depositDate,
-                        portal_url: "https://bitwealth.co.za/customer-portal.html",
-                        website_url: "https://bitwealth.co.za",
-                        to_email: customer.email,
-                      },
-                    }),
+                    },
                   });
 
-                  if (emailResponse.ok) {
+                  if (sent.ok) {
                     console.log(`  📧 Sent deposit notification email to ${customer.email}`);
                   } else {
-                    console.error(`  Failed to send deposit email: ${await emailResponse.text()}`);
+                    console.error(`  Failed to send deposit email: ${sent.status} ${sent.error}`);
+                    await logAlert(supabase, "ef_sync_valr_transactions", "error",
+                      `Customer deposit email failed after ${sent.attempts} attempts (HTTP ${sent.status})`,
+                      { customer_id: customer.customer_id, transaction_id: transactionId, amount, currency, error: sent.error },
+                      orgId, customer.customer_id);
                   }
                 } catch (emailError) {
                   console.error(`  Error sending deposit email:`, emailError);
@@ -1267,30 +1265,27 @@ Deno.serve(async (req) => {
                 try {
                   const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 
-                  const adminEmailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "Authorization": `Bearer ${supabaseKey}`,
-                    },
-                    body: JSON.stringify({
-                      template_key: "funds_deposited_admin_notification",
+                  const adminSent = await sendTemplateEmail({
+                    template_key: "funds_deposited_admin_notification",
+                    to_email: adminEmail,
+                    data: {
+                      first_name: customer.first_names,
+                      last_name: customer.last_name ?? "",
+                      customer_id: customer.customer_id,
+                      email: customer.email,
+                      balances: `${currency}: ${Math.abs(amount).toFixed(8)}`,
                       to_email: adminEmail,
-                      data: {
-                        first_name: customer.first_names,
-                        last_name: customer.last_name ?? "",
-                        customer_id: customer.customer_id,
-                        email: customer.email,
-                        balances: `${currency}: ${Math.abs(amount).toFixed(8)}`,
-                        to_email: adminEmail,
-                      },
-                    }),
+                    },
                   });
 
-                  if (adminEmailResponse.ok) {
+                  if (adminSent.ok) {
                     console.log(`  📧 Sent admin deposit notification to ${adminEmail}`);
                   } else {
-                    console.error(`  Failed to send admin deposit email: ${await adminEmailResponse.text()}`);
+                    console.error(`  Failed to send admin deposit email: ${adminSent.status} ${adminSent.error}`);
+                    await logAlert(supabase, "ef_sync_valr_transactions", "error",
+                      `Admin deposit notification failed after ${adminSent.attempts} attempts (HTTP ${adminSent.status}) — ${currency} ${Math.abs(amount)} from customer ${customer.customer_id}`,
+                      { customer_id: customer.customer_id, transaction_id: transactionId, amount, currency, error: adminSent.error },
+                      orgId, customer.customer_id);
                   }
                 } catch (adminEmailError) {
                   console.error(`  Error sending admin deposit email:`, adminEmailError);
