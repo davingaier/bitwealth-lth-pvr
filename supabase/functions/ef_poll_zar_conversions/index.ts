@@ -17,9 +17,11 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import {
+  getAccountBalances,
   getOrderBook,
   getOpenOrders,
   getOrderSummaryByCustomerOrderId,
+  pickAvailable,
   placeMarketOrderByQuote,
   cancelOrderById,
 } from "../_shared/valrClient.ts";
@@ -37,6 +39,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "lth_pvr" } 
 
 const STALE_LIMIT_MS  = 5 * 60 * 1000; // 5 min before LIMIT → MARKET fallback
 const PRICE_MOVE_LIMIT = 0.0025;       // 0.25% adverse upward bid move triggers early cancel
+const MIN_MARKET_ZAR  = 10;            // VALR USDTZAR minQuoteAmount
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -228,8 +231,28 @@ async function handleLimitPlaced(conv: Conversion, subaccountId: string | null, 
 // ── Handle a 'market_pending' conversion: place the MARKET BUY ───────────────
 async function handleMarketPending(conv: Conversion, subaccountId: string | null, creds: Creds) {
   const pair = conv.pair ?? "USDTZAR";
-  const zarAmount = Number(conv.remaining_amount ?? conv.zar_amount);
+  const recordedRemaining = Number(conv.remaining_amount ?? conv.zar_amount);
   const mktOrderId = `zar-conv-mkt-${conv.id}`;
+
+  // A cancelled LIMIT may have part-filled moments earlier, and remaining_amount is
+  // only updated later by ef_sync — so cap the spend at the ZAR VALR actually holds.
+  let liveZar: number;
+  try {
+    liveZar = pickAvailable(await getAccountBalances(subaccountId, creds), "ZAR");
+  } catch (e) {
+    console.warn(`[${conv.id}] balance check failed, retrying next run: ${(e as Error).message}`);
+    return;
+  }
+  const zarAmount = Math.floor(Math.min(recordedRemaining, liveZar) * 100) / 100;
+  if (zarAmount < MIN_MARKET_ZAR) {
+    await logAlert(
+      sb, "ef_poll_zar_conversions", "warn",
+      `MARKET fallback skipped: only R${liveZar.toFixed(2)} ZAR available (recorded remaining R${recordedRemaining.toFixed(2)})`,
+      { conversion_id: conv.id, customer_id: conv.customer_id, live_zar: liveZar, recorded_remaining: recordedRemaining },
+      ORG_ID, conv.customer_id,
+    );
+    return;
+  }
 
   try {
     await placeMarketOrderByQuote(pair, "BUY", zarAmount.toFixed(2), mktOrderId, subaccountId, creds);
