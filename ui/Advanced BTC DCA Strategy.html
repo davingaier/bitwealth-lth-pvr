@@ -4596,6 +4596,7 @@
           <label for="btStrategySelect"><strong>Strategy:</strong></label>
           <select id="btStrategySelect">
             <option value="LTH_PVR" selected>LTH PVR BTC DCA (current strategy)</option>
+            <option value="STH_CB">STH Cost Basis BTC Strategy (MVP)</option>
             <option value="ADV_DCA" disabled>Advanced BTC DCA (coming soon)</option>
           </select>
 
@@ -4655,6 +4656,7 @@
             <option value="holdings" selected>Back-test holdings</option>
             <option value="nav_signals">NAV with Buy/Sell/Hold</option>
             <option value="nav_positions">NAV with Position Sizes</option>
+            <option value="cb_signals" data-strategy="STH_CB" hidden>Price vs STH Cost Basis (signals)</option>
             <option value="comp_value">Comparison – Portfolio Value</option>
             <option value="comp_roi">Comparison – ROI</option>
             <option value="comp_agr">Comparison – Annualised Growth</option>
@@ -4662,10 +4664,55 @@
 
           <!-- Band source (CI vs RB on-chain bands) -->
           <label for="btBandSource"><strong>Band source:</strong></label>
-          <select id="btBandSource" class="band-source-select" title="On-chain band source: RB (Research Bitcoin, live default) or CI (CryptoQuant, frozen historical)">
+          <select id="btBandSource" class="band-source-select" title="On-chain band source: RB (Research Bitcoin, live default) or CI (CryptoQuant, frozen historical). For STH_CB runs this applies to the companion LTH PVR benchmark run.">
             <option value="rb" selected>RB – Research Bitcoin (live default)</option>
             <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
           </select>
+
+          <!-- STH Cost Basis strategy parameters (shown only for STH_CB) -->
+          <div id="btSthCbParams" style="display:none;">
+            <label for="btCbCapBuy"><strong>Capitulation buy (% of STH CB):</strong></label>
+            <input id="btCbCapBuy" type="number" min="10" max="99" step="1" value="70" title="R1: deploy all cash when price ≤ this % of the STH cost basis (ChartInspect default 70%)">
+
+            <label for="btCbCapExit"><strong>Capitulation exit (% of STH CB):</strong></label>
+            <input id="btCbCapExit" type="number" min="50" max="200" step="1" value="100" title="R2: sell all BTC when price ≥ this % of the STH cost basis (default 100% = touches the line)">
+
+            <label for="btCbTrendEnter"><strong>Trend entry (% of STH CB):</strong></label>
+            <input id="btCbTrendEnter" type="number" min="100" max="200" step="1" value="105" title="R3: deploy all cash when price ≥ this % of the STH cost basis (default 105%)">
+
+            <label for="btCbTrendExit"><strong>Trend exit (% of STH CB):</strong></label>
+            <input id="btCbTrendExit" type="number" min="50" max="100" step="1" value="95" title="R3 exit: sell all BTC when price ≤ this % of the STH cost basis (ChartInspect default 95%)">
+
+            <label for="btCbMomoEnabled"><strong>Momentum-gated sells:</strong></label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
+              <input id="btCbMomoEnabled" type="checkbox" checked title="Defer a sell until ROC(n) ≤ threshold (momentum has turned)">
+              <span>Enabled</span>
+            </label>
+
+            <label for="btCbMomoLen"><strong>Momentum ROC length (days):</strong></label>
+            <input id="btCbMomoLen" type="number" min="1" max="60" step="1" value="5">
+
+            <label for="btCbMomoThr"><strong>Momentum threshold (%):</strong></label>
+            <input id="btCbMomoThr" type="number" min="-50" max="50" step="0.1" value="0" title="Sell allowed once ROC(n) ≤ this value">
+
+            <label><strong>Apply momentum gate to:</strong></label>
+            <div style="display:flex;gap:1rem;align-items:center;font-weight:400;">
+              <label style="display:flex;align-items:center;gap:.35rem;font-weight:400;"><input id="btCbMomoCap" type="checkbox" checked> Capitulation exit (R2)</label>
+              <label style="display:flex;align-items:center;gap:.35rem;font-weight:400;"><input id="btCbMomoTrend" type="checkbox" checked> Trend exit (R3)</label>
+            </div>
+
+            <label for="btCbExecLag"><strong>Execution timing:</strong></label>
+            <select id="btCbExecLag">
+              <option value="1" selected>Next-day fill (signal D, fill D+1 — matches live pipeline)</option>
+              <option value="0">Same-day fill (ChartInspect style)</option>
+            </select>
+
+            <label for="btCbIncludeLth"><strong>LTH PVR benchmark overlay:</strong></label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
+              <input id="btCbIncludeLth" type="checkbox" checked title="Also run the production LTH PVR variation over the same window / contributions / fees and overlay it on the comparison charts">
+              <span>Run companion LTH PVR (production) back-test</span>
+            </label>
+          </div>
 
           <!-- Actions / messages -->
           <div class="bt-form-actions">
@@ -6896,12 +6943,20 @@
 
     /* ---------- Reports state & charts ---------- */
     /* ---------- Back-Testing (bt*) state & charts (cloned) ---------- */
-    let btCurrentRunId = null;      // latest bt_run_id from ef_bt_execute
-    let btAdvData = null;           // LTH PVR results: lth_pvr_bt.bt_results_daily
-    let btStdData = null;           // Standard DCA results: lth_pvr_bt.bt_std_dca_balances
-    let btHodlData = null;          // HODL benchmark results: lth_pvr_bt.bt_hodl_balances
+    let btCurrentRunId = null;      // latest bt_run_id from ef_bt_execute / ef_sth_cb_bt_execute
+    let btAdvData = null;           // Strategy results: lth_pvr_bt.bt_results_daily or sth_cb_bt.bt_results_daily
+    let btStdData = null;           // Standard DCA results
+    let btHodlData = null;          // HODL benchmark results
+    let btActiveStrategy = 'LTH_PVR'; // 'LTH_PVR' | 'STH_CB' — which engine produced btAdvData
+    let btLthBenchRunId = null;     // STH_CB only: companion lth_pvr_bt run (production variation)
+    let btLthBenchData = null;      // STH_CB only: companion LTH PVR daily rows for overlay
     let btCurrentReportType = 'holdings';
     let btChartInstance = null;
+
+    const BT_STRATEGY_LABELS = { LTH_PVR: 'LTH PVR DCA', STH_CB: 'STH Cost Basis' };
+    function btStrategyLabel(){ return BT_STRATEGY_LABELS[btActiveStrategy] || btActiveStrategy; }
+    // Companion LTH PVR series is only meaningful when the primary run is STH_CB
+    function btBenchRows(){ return (btActiveStrategy === 'STH_CB' && Array.isArray(btLthBenchData) && btLthBenchData.length) ? btLthBenchData : null; }
 
     function btDestroyChart() {
       // Destroy our tracked instance
@@ -7023,6 +7078,13 @@
         renderBTNavSignalsChart(btAdvData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'nav_positions'){
         renderBTNavPositionsChart(btAdvData || [], btCurrentRunId);
+      } else if (btCurrentReportType === 'cb_signals'){
+        if (btActiveStrategy !== 'STH_CB'){
+          btCurrentReportType = 'holdings';
+          const sel = document.getElementById('btReportTypeSelect'); if (sel) sel.value = 'holdings';
+          return renderBtReportForCurrentState();
+        }
+        renderBTCbSignalsChart(btAdvData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'comp_value'){
         renderBTCompPortfolioValueChart(btAdvData || [], btStdData || [], btHodlData || [], btCurrentRunId);
       } else if (btCurrentReportType === 'comp_roi'){
@@ -7035,9 +7097,10 @@
     function btSetReportTitle(btRunId){
       const el = document.getElementById('btReportTitle');
       if (!el) return;
+      const name = btActiveStrategy === 'STH_CB' ? 'STH Cost Basis BTC Strategy' : 'LTH PVR BTC DCA';
       el.textContent = btRunId
-        ? `LTH PVR BTC DCA Back-Test (Run #${btRunId})`
-        : 'LTH PVR BTC DCA Back-Test';
+        ? `${name} Back-Test (Run #${btRunId})`
+        : `${name} Back-Test`;
     }
 
     function btSetResetZoomEnabled(on){const b=document.getElementById('btResetZoomBtn'); if(b) b.disabled=!on;}
@@ -7140,12 +7203,27 @@
       return { data: all, error: null };
     }
 
-    // Single entry-point: load data for bt_run_id and refresh chart + table
-    async function btLoadAndRenderFromRun(btRunId){
+    // --- STH_CB loaders: sth_cb_bt is service-role only; reads go through public RPCs ---
+    async function loadSthCbRpc(fnName, btRunId){
+      if (!supabaseClient) return { data: [], error: { message: 'Supabase not available' } };
+      if (!btRunId)        return { data: [], error: null };
+      const { data, error } = await supabaseClient.rpc(fnName, { p_bt_run_id: btRunId });
+      return { data: data || [], error };
+    }
+    const loadSthCbResults        = (id) => loadSthCbRpc('sth_cb_bt_get_results_daily', id);
+    const loadSthCbStdDcaResults  = (id) => loadSthCbRpc('sth_cb_bt_get_std_dca_balances', id);
+    const loadSthCbHodlResults    = (id) => loadSthCbRpc('sth_cb_bt_get_hodl_balances', id);
+
+    // Single entry-point: load data for bt_run_id and refresh chart + table.
+    // opts.strategy: 'LTH_PVR' (default) | 'STH_CB'; opts.lthBenchRunId: companion lth_pvr_bt run for STH_CB overlays.
+    async function btLoadAndRenderFromRun(btRunId, opts = {}){
       btCurrentRunId = btRunId;
+      btActiveStrategy = opts.strategy || 'LTH_PVR';
+      btLthBenchRunId = btActiveStrategy === 'STH_CB' ? (opts.lthBenchRunId || null) : null;
       btAdvData = null;
       btStdData = null;
       btHodlData = null;
+      btLthBenchData = null;
 
       btDestroyChart();
       btSetCanvasVisible(false);
@@ -7162,14 +7240,18 @@
       clearInlineError(errId);
 
       try {
-        const [lthRes, stdRes, hodlRes] = await Promise.all([
-          loadBtLthPvrResults(btRunId),
-          loadBtStdDcaResults(btRunId),
-          loadBtHodlResults(btRunId)
+        const isSth = btActiveStrategy === 'STH_CB';
+        const [lthRes, stdRes, hodlRes, benchRes, runRes] = await Promise.all([
+          isSth ? loadSthCbResults(btRunId)       : loadBtLthPvrResults(btRunId),
+          isSth ? loadSthCbStdDcaResults(btRunId) : loadBtStdDcaResults(btRunId),
+          isSth ? loadSthCbHodlResults(btRunId)   : loadBtHodlResults(btRunId),
+          (isSth && btLthBenchRunId) ? loadBtLthPvrResults(btLthBenchRunId) : Promise.resolve({ data: [], error: null }),
+          isSth ? supabaseClient.rpc('sth_cb_bt_get_run', { p_bt_run_id: btRunId }) : Promise.resolve({ data: null, error: null })
         ]);
+        if (isSth && runRes?.data?.params) window.btLastSthCbParams = runRes.data.params;
 
         if (lthRes.error) {
-          showInlineError(errId, lthRes.error.message || 'Could not load LTH PVR back-test results.');
+          showInlineError(errId, lthRes.error.message || `Could not load ${btStrategyLabel()} back-test results.`);
         }
         if (stdRes.error) {
           showInlineError(errId, stdRes.error.message || 'Could not load Standard DCA back-test results.');
@@ -7178,10 +7260,14 @@
           // HODL is informational — don't block the UI if it's missing on legacy runs.
           console.warn('Could not load HODL benchmark results:', hodlRes.error);
         }
+        if (benchRes.error) {
+          console.warn('Could not load companion LTH PVR benchmark results:', benchRes.error);
+        }
 
         btAdvData  = lthRes.data  || [];
         btStdData  = stdRes.data  || [];
         btHodlData = hodlRes.data || [];
+        btLthBenchData = benchRes.data || [];
 
       } catch (e) {
         console.error('Error loading back-test results:', e);
@@ -7196,6 +7282,7 @@
       window.btAdvData = btAdvData;
       window.btStdData = btStdData;
       window.btHodlData = btHodlData;
+      window.btLthBenchData = btLthBenchData;
     }
 
     async function loadBtAdvTransactions(customerId){
@@ -7234,9 +7321,14 @@
       const contribFeeEl  = document.getElementById('btContribFeePct');
       const runBtn        = document.getElementById('btRunBtn');
 
-      // Force strategy to LTH PVR for now (ADV DCA is "coming soon")
+      // Strategy selector drives which parameter block / chart types are visible
       if (strategySel) {
-        strategySel.value = 'LTH_PVR';
+        if (!['LTH_PVR','STH_CB'].includes(strategySel.value)) strategySel.value = 'LTH_PVR';
+        if (!strategySel._bound){
+          strategySel.addEventListener('change', btOnStrategyChange);
+          strategySel._bound = true;
+        }
+        btOnStrategyChange();
       }
 
       // Defaults, only if the user hasn’t already typed something
@@ -7252,6 +7344,89 @@
         });
         runBtn._bound = true;
       }
+    }
+
+    // Toggle STH_CB parameter block, strategy note and strategy-specific chart types
+    function btOnStrategyChange(){
+      const strategySel = document.getElementById('btStrategySelect');
+      const strategy = strategySel ? strategySel.value : 'LTH_PVR';
+      const panel = document.getElementById('btSthCbParams');
+      if (panel) panel.classList.toggle('is-visible', strategy === 'STH_CB');
+      const note = document.getElementById('btStrategyNote');
+      if (note) {
+        note.textContent = strategy === 'STH_CB'
+          ? 'STH Cost Basis strategy: all-in at ≤70% of the STH cost basis or ≥105% (trend); all-out at the cost basis (capitulation hold) or ≤95% (trend hold). Sells can be deferred until momentum turns. Back-tester only — no live pipeline yet.'
+          : 'Advanced BTC DCA back-testing is coming soon. Currently the LTH PVR BTC DCA and STH Cost Basis strategies are available.';
+      }
+      const reportSel = document.getElementById('btReportTypeSelect');
+      if (reportSel) {
+        Array.from(reportSel.options).forEach(o => {
+          const only = o.dataset.strategy;
+          if (!only) return;
+          const show = only === strategy;
+          o.hidden = !show;
+          o.disabled = !show;
+        });
+        if (reportSel.selectedOptions[0]?.disabled) {
+          reportSel.value = 'holdings';
+          btCurrentReportType = 'holdings';
+        }
+      }
+    }
+
+    // Read the STH_CB parameter block into the bt_params shape expected by ef_sth_cb_bt_execute
+    function btReadSthCbParams(){
+      const num = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : def; };
+      const chk = (id, def) => { const el = document.getElementById(id); return el ? !!el.checked : def; };
+      return {
+        cap_buy_ratio:      num('btCbCapBuy', 70) / 100,
+        cap_exit_ratio:     num('btCbCapExit', 100) / 100,
+        trend_enter_ratio:  num('btCbTrendEnter', 105) / 100,
+        trend_exit_ratio:   num('btCbTrendExit', 95) / 100,
+        momo_enabled:       chk('btCbMomoEnabled', true),
+        momo_len:           Math.max(1, Math.trunc(num('btCbMomoLen', 5))),
+        momo_thr:           num('btCbMomoThr', 0) / 100,
+        momo_on_cap_exit:   chk('btCbMomoCap', true),
+        momo_on_trend_exit: chk('btCbMomoTrend', true),
+        execution_lag_days: (document.getElementById('btCbExecLag')?.value === '0') ? 0 : 1,
+        include_lth_benchmark: chk('btCbIncludeLth', true)
+      };
+    }
+
+    // Create an LTH PVR run (lth_pvr_bt.bt_runs + bt_params) and return its bt_run_id.
+    // Shared by the plain LTH PVR flow and the STH_CB companion benchmark run.
+    async function btCreateLthPvrRun(orgId, common, bandSource){
+      const btDb = supabaseClient.schema('lth_pvr_bt');
+      const { data: runRow, error: runErr } = await btDb
+        .from('bt_runs')
+        .insert({ org_id: orgId, status: 'running', band_source: bandSource })
+        .select('bt_run_id')
+        .single();
+      if (runErr) throw runErr;
+      const bt_run_id = runRow?.bt_run_id;
+      if (!bt_run_id) throw new Error('Back-test run did not return a bt_run_id.');
+
+      const { error: paramsErr } = await btDb
+        .from('bt_params')
+        .insert({
+          bt_run_id,
+          start_date:            common.startDate,
+          end_date:              common.endDate,
+          upfront_contrib_usdt:  common.upfront,
+          monthly_contrib_usdt:  common.monthly,
+          maker_bps_trade:       common.maker_bps_trade,
+          maker_bps_contrib:     common.maker_bps_contrib,
+          platform_fee_pct:      common.platformFeePct,
+          performance_fee_pct:   common.performanceFeePct,
+          fee_plan:              common.feePlan,
+          management_fee_pct:    common.managementFeePct,
+          usdpc_enabled:                common.usdpcEnabled,
+          usdpc_apy_percent:            common.usdpcApyPercent,
+          usdpc_conversion_fee_percent: common.usdpcConvFeePercent
+          // B1–B11 + momentum / gating stay on DB defaults (= production Progressive variation)
+        });
+      if (paramsErr) throw paramsErr;
+      return bt_run_id;
     }
 
     async function handleBtRunClick(){
@@ -7280,8 +7455,8 @@
       const runBtn        = document.getElementById('btRunBtn');
 
       const strategy = strategySel ? (strategySel.value || 'LTH_PVR') : 'LTH_PVR';
-      if (strategy !== 'LTH_PVR'){
-        showInlineError(errId, 'Only "LTH PVR BTC DCA" is supported right now.');
+      if (strategy !== 'LTH_PVR' && strategy !== 'STH_CB'){
+        showInlineError(errId, 'Only "LTH PVR BTC DCA" and "STH Cost Basis" are supported right now.');
         return;
       }
 
@@ -7299,7 +7474,9 @@
       }
 
       if (new Date(startDate) < new Date('2015-01-04')){
-        showInlineError(errId, 'Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).');
+        showInlineError(errId, strategy === 'STH_CB'
+          ? 'Start Date cannot be earlier than 2015-01-04 (kept consistent with the LTH PVR back-tester).'
+          : 'Start Date cannot be earlier than 2015-01-04 (BTC did not breach the -1.0σ buy band before then).');
         return;
       }
 
@@ -7344,62 +7521,84 @@
       }
 
       try{
-        // 1) Create bt_runs row
-        // One helper at the top of handleBtRunClick (or outside, reused):
-        const btDb = supabaseClient.schema('lth_pvr_bt');
-
-        // Band source: 'ci' (default) or 'rb'  (Day 3 of CI->RB migration)
+        // Band source: 'rb' (live default) or 'ci' (frozen historical)
         const bandSourceEl = document.getElementById('btBandSource');
-        const bandSource = (bandSourceEl?.value === 'rb') ? 'rb' : 'ci';
+        const bandSource = (bandSourceEl?.value === 'ci') ? 'ci' : 'rb';
 
-        // Then use btDb for all lth_pvr_bt tables:
-        const { data: runRow, error: runErr } = await btDb
-          .from('bt_runs')                     // ✅ table name only
-          .insert({
-            org_id:        orgId,
-            status:        'running',
-            band_source:   bandSource
-          })
-          .select('bt_run_id')
-          .single();
+        // Common contribution / fee settings shared by both engines
+        const common = {
+          startDate, endDate, upfront, monthly, maker_bps_trade, maker_bps_contrib,
+          platformFeePct:      parseFloat(document.getElementById('btPlatformFeePct')?.value || 0.75) / 100,
+          performanceFeePct:   parseFloat(document.getElementById('btPerformanceFeePct')?.value || 10) / 100,
+          feePlan:             document.getElementById('btFeePlan')?.value || 'management',
+          managementFeePct:    parseFloat(document.getElementById('btManagementFeePct')?.value || 1.0) / 100,
+          usdpcEnabled:        document.getElementById('btUsdpcEnabled')?.checked ?? true,
+          usdpcApyPercent:     parseFloat(document.getElementById('btUsdpcApy')?.value || 10),
+          usdpcConvFeePercent: parseFloat(document.getElementById('btUsdpcConvFee')?.value || 0.1)
+        };
 
+        if (strategy === 'STH_CB'){
+          // ── STH Cost Basis: ef_sth_cb_bt_execute owns run creation; optional companion LTH PVR run ──
+          const sth = btReadSthCbParams();
+          let lthRunId = null;
+          if (sth.include_lth_benchmark){
+            lthRunId = await btCreateLthPvrRun(orgId, common, bandSource);
+          }
+          const params = {
+            org_id: orgId,
+            start_date: startDate, end_date: endDate,
+            upfront_contrib_usdt: upfront, monthly_contrib_usdt: monthly,
+            maker_bps_trade, maker_bps_contrib,
+            fee_plan: common.feePlan,
+            platform_fee_pct: common.platformFeePct,
+            management_fee_pct: common.managementFeePct,
+            performance_fee_pct: common.performanceFeePct,
+            usdpc_enabled: common.usdpcEnabled,
+            usdpc_apy_percent: common.usdpcApyPercent,
+            usdpc_conversion_fee_percent: common.usdpcConvFeePercent,
+            cap_buy_ratio: sth.cap_buy_ratio, cap_exit_ratio: sth.cap_exit_ratio,
+            trend_enter_ratio: sth.trend_enter_ratio, trend_exit_ratio: sth.trend_exit_ratio,
+            momo_enabled: sth.momo_enabled, momo_len: sth.momo_len, momo_thr: sth.momo_thr,
+            momo_on_cap_exit: sth.momo_on_cap_exit, momo_on_trend_exit: sth.momo_on_trend_exit,
+            execution_lag_days: sth.execution_lag_days
+          };
+          const label = `STH_CB ${startDate}..${endDate} cap ${Math.round(sth.cap_buy_ratio*100)}/${Math.round(sth.cap_exit_ratio*100)} trend ${Math.round(sth.trend_enter_ratio*100)}/${Math.round(sth.trend_exit_ratio*100)}${sth.momo_enabled ? ` momo ROC${sth.momo_len}≤${(sth.momo_thr*100).toFixed(1)}%` : ''} lag ${sth.execution_lag_days}`;
 
-        if (runErr) throw runErr;
-        const bt_run_id = runRow.bt_run_id;
-        if (!bt_run_id){
-          throw new Error('Back-test run did not return a bt_run_id.');
+          // Fire both engines in parallel; companion failures must not block the STH_CB result
+          const [sthRes, lthRes] = await Promise.all([
+            supabaseClient.functions.invoke('ef_sth_cb_bt_execute', { body: { params, label, lth_pvr_bt_run_id: lthRunId } }),
+            lthRunId ? supabaseClient.functions.invoke('ef_bt_execute', { body: { bt_run_id: lthRunId, band_source: bandSource } })
+                     : Promise.resolve({ data: null, error: null })
+          ]);
+          if (sthRes.error) {
+            let detail = sthRes.error.message || 'STH_CB back-test failed.';
+            try { const ctx = await sthRes.error.context?.json?.(); if (ctx?.error) detail = ctx.error; } catch(_) {}
+            throw new Error(detail);
+          }
+          if (lthRes.error) {
+            console.warn('Companion LTH PVR benchmark run failed:', lthRes.error);
+            showInlineError('btReportsError', 'Companion LTH PVR benchmark run failed — showing STH_CB without the LTH PVR overlay.');
+            lthRunId = null;
+          }
+          const bt_run_id = sthRes.data?.bt_run_id;
+          if (!bt_run_id) throw new Error('STH_CB back-test did not return a bt_run_id.');
+
+          window.btCurrentRunId = bt_run_id;
+          btCurrentRunId = bt_run_id;
+          window.btLastSthCbSummary = sthRes.data?.summary || null;
+          window.btLastSthCbParams = params;
+
+          await btLoadAndRenderFromRun(bt_run_id, { strategy: 'STH_CB', lthBenchRunId: lthRunId });
+
+          const s = sthRes.data?.summary?.sth_cb;
+          const extra = s ? ` — ${s.trades} round-trip trades, ${s.pct_time_in_market}% time in market, final NAV ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(s.final_nav_usd)}` : '';
+          showInlineError(errId, `STH_CB back-test completed (Run #${bt_run_id})${extra}.`);
+          return;
         }
 
-        // 2) Create bt_params row for this run (in lth_pvr_bt schema)
-        const platformFeePct = parseFloat(document.getElementById('btPlatformFeePct')?.value || 0.75) / 100;
-        const performanceFeePct = parseFloat(document.getElementById('btPerformanceFeePct')?.value || 10) / 100;
-        const feePlan = document.getElementById('btFeePlan')?.value || 'management';
-        const managementFeePct = parseFloat(document.getElementById('btManagementFeePct')?.value || 1.0) / 100;
-        const usdpcEnabled = document.getElementById('btUsdpcEnabled')?.checked ?? true;
-        const usdpcApyPercent = parseFloat(document.getElementById('btUsdpcApy')?.value || 10);
-        const usdpcConvFeePercent = parseFloat(document.getElementById('btUsdpcConvFee')?.value || 0.1);
-        
-        const { error: paramsErr } = await btDb
-          .from('bt_params')
-          .insert({
-          bt_run_id,
-          start_date:            startDate,
-          end_date:              endDate,
-          upfront_contrib_usdt:  upfront,
-          monthly_contrib_usdt:  monthly,
-          maker_bps_trade,
-          maker_bps_contrib,
-          platform_fee_pct:      platformFeePct,      // BitWealth platform fee (0.75% default)
-          performance_fee_pct:   performanceFeePct,   // BitWealth performance fee (10% default)
-          fee_plan:              feePlan,             // 'management' (default) | 'platform'
-          management_fee_pct:    managementFeePct,    // 1% p.a. on NAV (management plan)
-          usdpc_enabled:                usdpcEnabled,          // idle-cash yield (matches public back-tester)
-          usdpc_apy_percent:            usdpcApyPercent,       // default 10% APY
-          usdpc_conversion_fee_percent: usdpcConvFeePercent    // default 0.1% per sweep
-          // B1–B11 + momentum / gating stay on DB defaults for now (aligned with EF / Python)
-        });
-
-        if (paramsErr) throw paramsErr;
+        // ── LTH PVR (existing flow) ──
+        // 1) + 2) Create bt_runs + bt_params rows in lth_pvr_bt
+        const bt_run_id = await btCreateLthPvrRun(orgId, common, bandSource);
 
         // 3) Call ef_bt_execute for this bt_run_id
         const { error: fnErr } = await supabaseClient.functions.invoke('ef_bt_execute', {
@@ -7412,7 +7611,7 @@
         window.btCurrentRunId = bt_run_id;
         btCurrentRunId = bt_run_id;
 
-        await btLoadAndRenderFromRun(bt_run_id);
+        await btLoadAndRenderFromRun(bt_run_id, { strategy: 'LTH_PVR' });
 
         showInlineError(errId, `Back-test completed successfully (Run #${bt_run_id}).`);
 
@@ -7557,7 +7756,7 @@
               borderWidth: 2
             },
             {
-              label: 'LTH PVR DCA NAV',
+              label: `${btStrategyLabel()} NAV`,
               data: sNav,
               borderColor: cssVar('--series-adv-value'),
               backgroundColor: grad(cssVar('--series-adv-value'), 0.14, 0),
@@ -7680,7 +7879,7 @@
           labels,
           datasets:[
             { label:'BTC Price', data:sPrice, borderColor:cssVar('--series-btc-price'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2 },
-            { label:'LTH PVR DCA NAV', data:sNav, borderColor:cssVar('--series-adv-value'), backgroundColor:grad(cssVar('--series-adv-value'),.14,0), fill:true, yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2 },
+            { label:`${btStrategyLabel()} NAV`, data:sNav, borderColor:cssVar('--series-adv-value'), backgroundColor:grad(cssVar('--series-adv-value'),.14,0), fill:true, yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2 },
             { label:'Buy', data:buyPts, borderColor:'transparent', backgroundColor:'#22c55e', yAxisID:'y', pointRadius:5, pointHoverRadius:7, pointStyle:'triangle', showLine:false, borderWidth:0 },
             { label:'Sell', data:sellPts, borderColor:'transparent', backgroundColor:'#ef4444', yAxisID:'y', pointRadius:5, pointHoverRadius:7, pointStyle:'crossRot', showLine:false, borderWidth:0 },
             { label:'Hold', data:holdPts, borderColor:'transparent', backgroundColor:'#fbbf24', yAxisID:'y', pointRadius:3, pointHoverRadius:5, pointStyle:'circle', showLine:false, borderWidth:0 }
@@ -7750,7 +7949,7 @@
           labels,
           datasets:[
             { label:'BTC Price', data:sPrice, borderColor:cssVar('--series-btc-price'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2, order:1 },
-            { label:'LTH PVR DCA NAV', data:sNav, borderColor:cssVar('--series-adv-value'), backgroundColor:grad(cssVar('--series-adv-value'),.14,0), fill:true, yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2, order:2 },
+            { label:`${btStrategyLabel()} NAV`, data:sNav, borderColor:cssVar('--series-adv-value'), backgroundColor:grad(cssVar('--series-adv-value'),.14,0), fill:true, yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.22, borderWidth:2, order:2 },
             { label:'Position Size %', type:'bar', data:sPosPct, backgroundColor:barColors, yAxisID:'y1', borderWidth:0, barPercentage:0.6, order:3 }
           ]
         },
@@ -7768,6 +7967,79 @@
             legend:legendWithFading(),
             title:{display:true,text:'NAV with Position Sizes'},
             decimation:{enabled:true,algorithm:'lttb',samples:2000},
+            zoom:{pan:{enabled:zoomReg,mode:'x'},zoom:{wheel:{enabled:zoomReg},pinch:{enabled:zoomReg},mode:'x'}}
+          }
+        }
+      });
+
+      btInitOrUpdateRange(labels);
+      btRebuildFooterForChart(btChartInstance);
+      btSetResetZoomEnabled(zoomReg && typeof btChartInstance.resetZoom==='function');
+    }
+
+    /* STH_CB only — Price vs STH Cost Basis with threshold lines, position shading and trade markers */
+    function renderBTCbSignalsChart(rows, btRunId){
+      if (!hasChart){ showInlineError('btReportsError','Chart.js is not available.'); return; }
+      btDestroyChart();
+
+      const canvas = document.getElementById('btPerfChart');
+      const ctx    = canvas.getContext('2d');
+
+      const p = (window.btLastSthCbParams || {});
+      const capBuy   = Number(p.cap_buy_ratio)     || 0.70;
+      const capExit  = Number(p.cap_exit_ratio)    || 1.00;
+      const trEnter  = Number(p.trend_enter_ratio) || 1.05;
+      const trExit   = Number(p.trend_exit_ratio)  || 0.95;
+
+      const labels  = rows.map(r => normalizeDate(r.trade_date));
+      const sPrice  = rows.map(r => numOrNull(r.price_usd));
+      const sCb     = rows.map(r => numOrNull(r.sth_cost_basis_usd));
+      const line    = (k) => sCb.map(v => (v == null ? null : v * k));
+      const buyPts  = rows.map(r => (r.action||'').toUpperCase() === 'BUY'  && !/contribution/i.test(r.rule||'') ? numOrNull(r.price_usd) : null);
+      const sellPts = rows.map(r => (r.action||'').toUpperCase() === 'SELL' ? numOrNull(r.price_usd) : null);
+      // Position shading: 1 while in market, coloured by hold type (mirrors ChartInspect's orange/green bands)
+      const sPos    = rows.map(r => r.position_state && r.position_state !== 'cash' ? 1 : null);
+      const posCol  = rows.map(r => r.position_state === 'trend_hold' ? 'rgba(249,115,22,0.18)' : (r.position_state === 'cap_hold' ? 'rgba(34,197,94,0.22)' : 'rgba(0,0,0,0)'));
+
+      btSetReportTitle(btRunId);
+
+      const usdFmt = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 });
+      const tickColor = cssVar('--ink-soft') || '#6B7280';
+      const gridColor = cssVar('--border-subtle') || '#E5E7EB';
+      let zoomReg=false;
+      try{ if(window['chartjs-plugin-zoom']&&!Chart.registry.plugins.get('zoom')) Chart.register(window['chartjs-plugin-zoom']); zoomReg=!!Chart.registry.plugins.get('zoom'); }catch(e){}
+
+      const pctLabel = (k) => `${Math.round(k*100)}% of STH CB`;
+      btChartInstance = new Chart(ctx,{
+        type:'line',
+        data:{
+          labels,
+          datasets:[
+            { label:'BTC Price', data:sPrice, borderColor:cssVar('--series-btc-price'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.1, borderWidth:2, order:1 },
+            { label:'STH Cost Basis', data:sCb, borderColor:'#F97316', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.1, borderWidth:2, order:2 },
+            { label:`Capitulation buy (${pctLabel(capBuy)})`, data:line(capBuy), borderColor:'#22C55E', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1.2, borderDash:[4,3], order:3 },
+            { label:`Trend entry (${pctLabel(trEnter)})`, data:line(trEnter), borderColor:'#3B82F6', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:4 },
+            { label:`Trend exit (${pctLabel(trExit)})`, data:line(trExit), borderColor:'#EF4444', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:5 },
+            ...(capExit !== 1 ? [{ label:`Capitulation exit (${pctLabel(capExit)})`, data:line(capExit), borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:6 }] : []),
+            { label:'Buy (all-in)', data:buyPts, borderColor:'transparent', backgroundColor:'#16A34A', yAxisID:'y', pointRadius:6, pointHoverRadius:8, pointStyle:'triangle', showLine:false, borderWidth:0, order:0, btFooter:false },
+            { label:'Sell (all-out)', data:sellPts, borderColor:'transparent', backgroundColor:'#DC2626', yAxisID:'y', pointRadius:6, pointHoverRadius:8, pointStyle:'crossRot', showLine:false, borderWidth:0, order:0, btFooter:false },
+            { label:'In market (green = capitulation hold, orange = trend hold)', type:'bar', data:sPos, backgroundColor:posCol, borderWidth:0, yAxisID:'y2', barPercentage:1, categoryPercentage:1, order:10, btFooter:false }
+          ]
+        },
+        options:{
+          responsive:true,
+          layout:{padding:{top:8,right:14,bottom:8,left:12}},
+          interaction:{mode:'index',intersect:false},
+          animation:false,
+          scales:{
+            x:{ title:{display:true,text:'Trade Date'}, ticks:{color:tickColor,maxRotation:0,autoSkipPadding:20}, grid:{color:gridColor}, min:0, max:labels.length-1 },
+            y:{ type:'logarithmic', title:{display:true,text:'USD (log)'}, position:'left', ticks:{color:tickColor,callback:v=>usdFmt.format(v)}, grid:{color:gridColor} },
+            y2:{ display:false, min:0, max:1 }
+          },
+          plugins:{
+            legend:legendWithFading(),
+            title:{display:true,text:'BTC Price vs STH Cost Basis — rule thresholds, position and all-in / all-out fills'},
+            decimation:{enabled:false},
             zoom:{pan:{enabled:zoomReg,mode:'x'},zoom:{wheel:{enabled:zoomReg},pinch:{enabled:zoomReg},mode:'x'}}
           }
         }
@@ -7832,6 +8104,12 @@
       const stdSeries  = labels.map(d => (d in stdMap  ? stdMap[d]  : null));
       const hodlSeries = labels.map(d => (d in hodlMap ? hodlMap[d] : null));
 
+      // Optional companion LTH PVR (production) overlay for STH_CB runs
+      const benchRows = btBenchRows();
+      const benchMap = Object.create(null);
+      (benchRows || []).forEach(r => { const v = numOrNull(r.nav_usd); if (v != null) benchMap[normalizeDate(r.trade_date)] = v; });
+      const benchSeries = benchRows ? labels.map(d => (d in benchMap ? benchMap[d] : null)) : null;
+
       // ✅ Formatter that was missing
       const usdFmt = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -7863,7 +8141,7 @@
           labels,
           datasets: [
             {
-              label: 'LTH PVR BTC DCA NAV',
+              label: `${btStrategyLabel()} NAV`,
               data: lthSeries,
               borderColor: cssVar('--series-adv-value') || '#22c55e',
               backgroundColor: 'transparent',
@@ -7895,7 +8173,19 @@
               tension: 0.22,
               borderWidth: 1.5,
               borderDash: [4, 3]
-            }
+            },
+            ...(benchSeries ? [{
+              label: 'LTH PVR DCA NAV (production)',
+              data: benchSeries,
+              borderColor: '#F59E0B',
+              backgroundColor: 'transparent',
+              yAxisID: 'y',
+              pointRadius: 0,
+              pointHoverRadius: 3,
+              tension: 0.22,
+              borderWidth: 2,
+              borderDash: [6, 3]
+            }] : [])
           ]
         },
         options: {
@@ -7969,6 +8259,10 @@
       const sLth  = labels.map(d => lthMap.has(d)  ? lthMap.get(d)  : null);
       const sStd  = labels.map(d => stdMap.has(d)  ? stdMap.get(d)  : null);
       const sHodl = labels.map(d => hodlMap.has(d) ? hodlMap.get(d) : null);
+      const benchRows = btBenchRows();
+      const benchMap = new Map();
+      (benchRows || []).forEach(r => benchMap.set(normalizeDate(r.trade_date), numOrNull(r.total_roi_percent)));
+      const sBench = benchRows ? labels.map(d => benchMap.has(d) ? benchMap.get(d) : null) : null;
 
       btSetReportTitle(btRunId);
 
@@ -7980,9 +8274,10 @@
         data:{
           labels,
           datasets:[
-            { label:'LTH PVR DCA ROI', data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
+            { label:`${btStrategyLabel()} ROI`, data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
             { label:'Standard DCA ROI', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
-            { label:'HODL ROI (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] }
+            { label:'HODL ROI (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] },
+            ...(sBench ? [{ label:'LTH PVR DCA ROI (production)', data:sBench, borderColor:'#F59E0B', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2, borderDash:[6,3] }] : [])
           ]
         },
         options:{
@@ -8007,7 +8302,7 @@
           },
           plugins:{
             legend:legendWithFading(),
-            title:{display:true,text:'ROI – LTH PVR DCA vs Standard DCA'},
+            title:{display:true,text:`ROI – ${btStrategyLabel()} vs Standard DCA`},
             decimation:{enabled:true,algorithm:'lttb',samples:2000},
             zoom:{pan:{enabled:true,mode:'x'},zoom:{wheel:{enabled:true},pinch:{enabled:true},mode:'x'}}
           }
@@ -8046,6 +8341,10 @@
       const sLth  = labels.map(d => lthMap.has(d)  ? lthMap.get(d)  : null);
       const sStd  = labels.map(d => stdMap.has(d)  ? stdMap.get(d)  : null);
       const sHodl = labels.map(d => hodlMap.has(d) ? hodlMap.get(d) : null);
+      const benchRows = btBenchRows();
+      const benchMap = new Map();
+      (benchRows || []).forEach(r => benchMap.set(normalizeDate(r.trade_date), numOrNull(r.cagr_percent)));
+      const sBench = benchRows ? labels.map(d => benchMap.has(d) ? benchMap.get(d) : null) : null;
 
       btSetReportTitle(btRunId);
 
@@ -8057,9 +8356,10 @@
         data:{
           labels,
           datasets:[
-            { label:'LTH PVR DCA CAGR', data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
+            { label:`${btStrategyLabel()} CAGR`, data:sLth, borderColor:cssVar('--series-adv-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
             { label:'Standard DCA CAGR', data:sStd, borderColor:cssVar('--series-std-value'), backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2 },
-            { label:'HODL CAGR (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] }
+            { label:'HODL CAGR (lump-sum day 1)', data:sHodl, borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:1.5, borderDash:[4,3] },
+            ...(sBench ? [{ label:'LTH PVR DCA CAGR (production)', data:sBench, borderColor:'#F59E0B', backgroundColor:'transparent', yAxisID:'y', pointRadius:0,pointHoverRadius:3,tension:.22,borderWidth:2, borderDash:[6,3] }] : [])
           ]
         },
         options:{
@@ -8084,7 +8384,7 @@
           },
           plugins:{
             legend:legendWithFading(),
-            title:{display:true,text:'CAGR – LTH PVR DCA vs Standard DCA'},
+            title:{display:true,text:`CAGR – ${btStrategyLabel()} vs Standard DCA`},
             decimation:{enabled:true,algorithm:'lttb',samples:2000},
             zoom:{pan:{enabled:true,mode:'x'},zoom:{wheel:{enabled:true},pinch:{enabled:true},mode:'x'}}
           }
@@ -8112,6 +8412,7 @@
       const entries = [];
       chart.data.datasets.forEach((d, i) => {
         if(!chart.isDatasetVisible(i)) return;
+        if (d.btFooter === false) return;   // marker / shading datasets opt out of the footer
         const arr = d.data || [];
         for (let ii=end; ii>=start; ii--){
           const v = arr[ii];
@@ -9231,12 +9532,17 @@
       }
 
       try{
-        const { data, error } = await supabaseClient
-          .schema('lth_pvr_bt')
-          .from('v_bt_results_annual')
-          .select('*')
-          .eq('bt_run_id', btRunId)
-          .order('trading_year', { ascending: true });
+        const isSth = btActiveStrategy === 'STH_CB';
+        const stratLabel = btStrategyLabel();
+        const annualRes = isSth
+          ? await supabaseClient.rpc('sth_cb_bt_get_annual', { p_bt_run_id: btRunId })
+          : await supabaseClient
+              .schema('lth_pvr_bt')
+              .from('v_bt_results_annual')
+              .select('*')
+              .eq('bt_run_id', btRunId)
+              .order('trading_year', { ascending: true });
+        const { data, error } = annualRes;
 
         if (error){
           console.error('v_bt_results_annual error:', error);
@@ -9244,11 +9550,29 @@
           return;
         }
 
-        const rows = data || [];
+        let rows = (data || []).slice().sort((a,b) => a.trading_year - b.trading_year);
         if (!rows.length){
           table.innerHTML = '<tr><td colspan="8">No annual results for this back-test run.</td></tr>';
           return;
         }
+
+        // STH_CB: merge the companion LTH PVR (production) annual figures as bench_* columns
+        let hasBench = false;
+        if (isSth && btLthBenchRunId){
+          const { data: benchRows, error: benchErr } = await supabaseClient
+            .schema('lth_pvr_bt').from('v_bt_results_annual').select('trading_year, nav_usd, roi_percent, cagr_percent')
+            .eq('bt_run_id', btLthBenchRunId);
+          if (!benchErr && Array.isArray(benchRows) && benchRows.length){
+            const byYear = new Map(benchRows.map(b => [Number(b.trading_year), b]));
+            rows = rows.map(r => {
+              const b = byYear.get(Number(r.trading_year));
+              return { ...r, bench_nav_usd: b?.nav_usd ?? null, bench_roi_percent: b?.roi_percent ?? null, bench_cagr_percent: b?.cagr_percent ?? null };
+            });
+            hasBench = true;
+          }
+        }
+        const benchTh = (txt) => hasBench ? `<th>${txt}</th>` : '';
+        const benchTd = (v, fmt) => hasBench ? `<td>${v == null ? '–' : fmt(v)}</td>` : '';
 
         const usdFmt = new Intl.NumberFormat('en-US', {
           style: 'currency',
@@ -9294,9 +9618,10 @@
           const header = `
             <tr>
               <th>Year</th>
-              <th>LTH PVR DCA Portfolio Value</th>
+              <th>${stratLabel} Portfolio Value</th>
               <th>Standard DCA Portfolio Value</th>
               <th>HODL Portfolio Value</th>
+              ${benchTh('LTH PVR DCA (production) Portfolio Value')}
             </tr>
           `;
           const body = rows.map(r => `
@@ -9305,6 +9630,7 @@
               <td>${r.nav_usd == null ? '–' : usdFmt.format(r.nav_usd)}</td>
               <td>${r.std_nav_usd == null ? '–' : usdFmt.format(r.std_nav_usd)}</td>
               <td>${r.hodl_nav_usd == null ? '–' : usdFmt.format(r.hodl_nav_usd)}</td>
+              ${benchTd(r.bench_nav_usd, v => usdFmt.format(v))}
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -9314,9 +9640,10 @@
           const header = `
             <tr>
               <th>Year</th>
-              <th>LTH PVR DCA Cumulative ROI %</th>
+              <th>${stratLabel} Cumulative ROI %</th>
               <th>Standard DCA Cumulative ROI %</th>
               <th>HODL Cumulative ROI %</th>
+              ${benchTh('LTH PVR DCA (production) Cumulative ROI %')}
             </tr>
           `;
           const body = rows.map(r => `
@@ -9325,6 +9652,7 @@
               <td>${pct(r.roi_percent)}</td>
               <td>${pct(r.std_roi_percent)}</td>
               <td>${pct(r.hodl_roi_percent)}</td>
+              ${benchTd(r.bench_roi_percent, pct)}
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -9334,9 +9662,10 @@
           const header = `
             <tr>
               <th>Year</th>
-              <th>LTH PVR DCA Annualised CAGR %</th>
+              <th>${stratLabel} Annualised CAGR %</th>
               <th>Standard DCA Annualised CAGR %</th>
               <th>HODL Annualised CAGR %</th>
+              ${benchTh('LTH PVR DCA (production) Annualised CAGR %')}
             </tr>
           `;
           const body = rows.map(r => `
@@ -9345,6 +9674,7 @@
               <td>${pct(r.cagr_percent)}</td>
               <td>${pct(r.std_cagr_percent)}</td>
               <td>${pct(r.hodl_cagr_percent)}</td>
+              ${benchTd(r.bench_cagr_percent, pct)}
             </tr>
           `).join('');
           table.innerHTML = header + body;
@@ -10943,6 +11273,9 @@
       color: #6b7280;
       max-width: 480px;
     }
+
+    /* STH_CB parameter block participates in the 4-column grid when shown */
+    #btSthCbParams.is-visible { display: contents !important; }
 
     /* Executed-orders collapsible */
     .executed-collapsible summary{cursor:pointer;font-weight:600;margin:.5rem 0}

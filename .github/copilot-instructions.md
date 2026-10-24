@@ -79,6 +79,13 @@ retained only for historical back-test reproducibility.
 - **`lth_pvr_bt`** - Back-testing (isolated from live data)
   - `bt_runs`, `bt_results_daily`, `bt_std_dca_balances`
 
+- **`sth_cb` / `sth_cb_bt`** - STH Cost Basis strategy (`STH_CB`, added 2026-10-24; back-tester only, no live pipeline yet)
+  - `sth_cb.cost_basis_daily` is a **view** over `lth_pvr.onchain_pvr_daily` (STH cost basis = RB `realized_price_sth`) — do not add a second fetcher
+  - `sth_cb_bt.bt_runs / bt_params / bt_results_daily / bt_ledger / bt_std_dca_* / bt_hodl_* / v_bt_results_annual` mirror `lth_pvr_bt` column names so UI chart code is shared
+  - Security posture like `ta_bot`: RLS on, no policies, service-role only; browser reads via `public.sth_cb_bt_*` SECURITY DEFINER RPCs guarded by `my_orgs()`
+  - Both schemas must stay in PostgREST **Exposed schemas** or `ef_sth_cb_bt_execute` fails with `PGRST106 Invalid schema`
+  - Rules engine: `_shared/sth_cb_strategy_logic.ts` (`decideSthCb`) — any future live decision EF must import it
+
 ### 3. VALR Exchange Integration
 
 **Authentication Pattern:**
@@ -336,5 +343,5 @@ const { data } = await supabase.schema('lth_pvr').from('decisions_daily').select
 
 ---
 
-**Last Updated:** 2026-05-19 (Day 7 of CI→RB migration complete — live trading, statements, fees, optimizer, simulator, and public back-tester all default to RB)  
+**Last Updated:** 2026-10-24 (STH_CB strategy MVP: rules engine + Admin UI back-tester; previously 2026-05-19 CI→RB migration complete)  
 **For detailed architecture, see:** [docs/SDD_v0.6.md](docs/SDD_v0.6.md)

@@ -3,11 +3,103 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-09 (v0.6.163)
+**Last updated:** 2026-10-24 (v0.6.164)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.164 – STH Cost Basis (STH_CB) strategy: rules engine + Admin UI back-tester (MVP)
+**Date:** 2026-10-24  
+**Status:** ✅ DEPLOYED (back-tester only — no live pipeline yet)
+
+**Why.** The LTH PVR strategy's bear-market pause never deactivated in the 2025–26 cycle because the daily
+close never printed below −1σ, so the 2026 accumulation window was missed and "break glass" would have
+bought a fraction of the intended BTC before selling resumed at the mean. A second, structurally different
+strategy was needed for comparison. ChartInspect's published **"BITCOIN STH Line: Trend Band 5% +
+Capitulation Buy (70%)"** (reported ≈24× HODL from 2017, no fees) was chosen as the MVP.
+
+**Strategy rules** (`ratio = price / STH cost basis`, evaluated on the daily close):
+
+| Rule | Condition | Action |
+|------|-----------|--------|
+| R1 Capitulation buy | ratio ≤ **0.70** | deploy all cash → `cap_hold` |
+| R2 Capitulation exit | ratio ≥ **1.00** | sell all BTC → `cash` |
+| R3 Trend entry | ratio ≥ **1.05** | deploy all cash → `trend_hold` |
+| R3 Trend exit | ratio ≤ **0.95** (hysteresis, not 1.00) | sell all BTC → `cash` |
+
+- In-market = *capitulation latch* **OR** *trend latch* (ChartInspect `latch()` semantics). A capitulation
+  hold that rallies straight through the cost basis and above +5% is upgraded to `trend_hold` without a
+  round-trip; a capitulation entry while trend-latched converts to `cap_hold`.
+- **BitWealth refinement — momentum-gated sells.** Either exit may be deferred until `ROC(n) ≤ thr`
+  (default n=5, thr=0 %), i.e. "sell when momentum turns, not when price merely touches the line". When a
+  deferred R2 is later upgraded to `trend_hold`, the capitulation latch is released so the deferred exit
+  can never trap the portfolio in market after the trend latch exits (unit-tested).
+- Execution timing is a parameter: **next-day fill** (signal D, fill D+1 — matches the live pipeline, where
+  RB data for D lands on D+1) is the default; same-day fill reproduces ChartInspect.
+- Monthly contributions while out of market accumulate as idle cash (USDPC yield when enabled) and are
+  deployed on the next buy signal; while in market they are bought on the contribution day.
+
+**Data source.** STH cost basis == Research Bitcoin `realizedprice/realized_price_sth`, already persisted
+daily in `lth_pvr.onchain_pvr_daily.sth_realized_price` by `ef_fetch_onchain_pvr` (chained from
+`ef_fetch_rb_bands`). Coverage verified complete 2010-12-19 → today. No new RB fetcher was added;
+`sth_cb.cost_basis_daily` is a **view** over that table (single source of truth, zero extra API calls).
+
+**Database** — migration `20261024_sth_cb_strategy_foundations.sql` (applied as remote version
+`20261024160000`):
+- `public.strategies` += `STH_CB` (schema `sth_cb`); `customer_strategies` check constraint extended.
+- New schemas `sth_cb` (daily inputs) and `sth_cb_bt` (back-testing). Security posture mirrors `ta_bot`:
+  RLS on, **zero policies**, all privileges revoked from `anon`/`authenticated`, service-role only.
+  Both schemas are in PostgREST **Exposed schemas** (required for edge-function access via supabase-js).
+- `sth_cb_bt.bt_runs` (+ `label`, `lth_pvr_bt_run_id` companion, `summary` jsonb), `bt_params`
+  (contribution/fee/USDPC columns identical to `lth_pvr_bt` + `cap_buy_ratio`, `cap_exit_ratio`,
+  `trend_enter_ratio`, `trend_exit_ratio`, `momo_enabled`, `momo_len`, `momo_thr`, `momo_on_cap_exit`,
+  `momo_on_trend_exit`, `execution_lag_days`), `bt_results_daily` (same columns as `lth_pvr_bt` minus
+  `band_bucket`, plus `signal_date`, `position_state`, `cap_latch`, `trend_latch`, `signal_in_market`,
+  `roc`, `sth_cost_basis_usd`, `price_to_cb_ratio`), `bt_ledger`, `bt_std_dca_*`, `bt_hodl_*`,
+  `v_bt_results_annual` (same column list as the LTH PVR view).
+- Browser reads via `SECURITY DEFINER` RPCs in `public` guarded by `org_id IN (SELECT id FROM my_orgs())`:
+  `sth_cb_bt_list_runs`, `sth_cb_bt_get_run`, `sth_cb_bt_get_results_daily`,
+  `sth_cb_bt_get_std_dca_balances`, `sth_cb_bt_get_hodl_balances`, `sth_cb_bt_get_ledger`,
+  `sth_cb_bt_get_annual`, `get_sth_cost_basis_series`. Service-role callers (no `auth.uid()`) are
+  correctly rejected.
+
+**Code.**
+- `_shared/sth_cb_strategy_logic.ts` — pure latch state machine (`decideSthCb`, `warmupSthCbState`,
+  `computeRocSeries`); 12 unit tests in `sth_cb_strategy_logic.test.ts` (`deno test`). A future live
+  decision generator must import this module so back-test and pipeline never drift.
+- `ef_sth_cb_bt_execute` — admin-authorised (`requireOrgAdmin`) back-tester. Body `{ params, label,
+  lth_pvr_bt_run_id }` creates run + params and executes; `{ bt_run_id }` re-runs. Warm-up replays from
+  2011-01-01 to seed latches (and the pending next-day signal). Portfolio accounting (VALR bps fees,
+  platform/management/performance fee plans with HWM, USDPC sweep/just-in-time conversion, Std DCA and
+  HODL benchmarks) mirrors `ef_bt_execute` line-for-line so the two strategies are comparable. Writes a
+  `summary` (final NAV/ROI/CAGR, trades, % time in market, fee totals, warm-up state) to `bt_runs`.
+- Admin UI (Strategy Back-Testing): `STH_CB` in the strategy selector; parameter block (thresholds, momentum
+  gate per rule, execution timing, companion LTH PVR toggle); shared chart/table code now labels by
+  `btStrategyLabel()`; comparison charts/tables add the **companion production-variation LTH PVR run** as a
+  4th series/column (created through the same `lth_pvr_bt` flow, executed in parallel); new chart type
+  **"Price vs STH Cost Basis (signals)"** — log price, STH CB, 70 % / 105 % / 95 % lines, green/orange
+  position shading, all-in/all-out markers (mirrors the ChartInspect panel for rule validation).
+
+**Smoke test** (run `26fba122`, 2015-01-04 → 2026-10-23, $10 000 upfront + $500/month, defaults, next-day
+fills, management plan + 10 % performance fee, USDPC on): 29 round-trips, 74 % time in market, final NAV
+**$32.7 M** vs HODL $24.0 M vs Std DCA $6.3 M (after $4.85 M BitWealth fees). Capitulation buys land on
+2018-02-07 ($7.9k), 2018-03-30 ($6.9k), 2018-11-25 ($3.8k), 2020-03-14 ($5.4k), 2021-06-23 ($33.8k),
+2022-06-14 ($22.2k). Full table of fills in `docs/STH_CB_Strategy_Test_Cases.md`.
+
+**Operational note.** `supabase db push` refuses to run because the remote migration history (453 versions,
+applied via MCP) is not mirrored in `supabase/migrations/`. Workaround used: a scratch workdir containing
+empty placeholder files for every remote version plus the new migration (14-digit name) — dry-run showed
+only the new file pending. The Postgres instance restarted ~1 min after the push (platform upgrade/backup,
+confirmed in the dashboard), causing ~4 min of REST/Auth 503s — unrelated to the migration.
+
+**Not in scope (next steps):** live pipeline (`ef_generate_sth_cb_decisions`, order intents, ledger),
+strategy variation templates / optimizer for STH_CB, public website back-tester, walk-forward validation.
+
+**Files changed:** `supabase/migrations/20261024_sth_cb_strategy_foundations.sql`,
+`supabase/functions/_shared/sth_cb_strategy_logic.ts` (+ `.test.ts`),
+`supabase/functions/ef_sth_cb_bt_execute/{index,client}.ts`, `ui/Advanced BTC DCA Strategy.html`,
+`docs/STH_CB_Strategy_Test_Cases.md`, `.github/copilot-instructions.md`.
 
 ### v0.6.163 – Customer 49 incidents: ZAR conversion, deposit emails, USDPC sweep + Admin UI 401s
 **Date:** 2026-10-01 → 2026-10-09  
