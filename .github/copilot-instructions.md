@@ -85,6 +85,7 @@ retained only for historical back-test reproducibility.
   - Security posture like `ta_bot`: RLS on, no policies, service-role only; browser reads via `public.sth_cb_bt_*` SECURITY DEFINER RPCs guarded by `my_orgs()`
   - Both schemas must stay in PostgREST **Exposed schemas** or `ef_sth_cb_bt_execute` fails with `PGRST106 Invalid schema`
   - Rules engine: `_shared/sth_cb_strategy_logic.ts` (`decideSthCb`) — any future live decision EF must import it
+  - Simulator: `_shared/sth_cb_simulator.ts` (pure, DB-free) is the single accounting implementation for `ef_sth_cb_bt_execute` AND the local lab `tools/sth_cb_lab/` (Deno; `fetch.ts` → `run.ts` / `optimize.ts`). Experiment locally first; promote winners via `bt_params.extras` (jsonb of `SthCbConfig` flags) — new refinement ideas must NOT add columns/tables
 
 ### 3. VALR Exchange Integration
 

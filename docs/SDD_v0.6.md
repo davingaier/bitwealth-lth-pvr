@@ -3,11 +3,67 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-24 (v0.6.164)
+**Last updated:** 2026-10-24 (v0.6.165)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.165 – STH_CB: pure simulator, refinement flags, `extras` jsonb, local lab/optimizer; UI paging fix
+**Date:** 2026-10-24  
+**Status:** ✅ DEPLOYED
+
+**Bug fix (Admin UI).** STH_CB results stopped at 1 000 rows (e.g. 2020-01-01 → 2022-09-26): the new RPC
+loaders did not page, and PostgREST caps set-returning RPCs at 1 000 rows like tables. `loadSthCbRpc()` now
+pages with `.order().range()` (verified 1000/1000/488 for 2020→2026). The edge function was never affected.
+Also: the holdings chart's "USDT Balance" series now shows **USDT + USDPC** ("Cash Balance") for both strategies
+— idle cash lives in USDPC, so USDT alone read ~$0 while out of market.
+
+**Architecture change — experiments without schema churn.**
+- `_shared/sth_cb_simulator.ts` — the whole portfolio simulation (contributions, VALR fees, fee plans, HWM
+  performance fee, USDPC sweep/JIT conversion, Std DCA + HODL benchmarks, next-day fills) extracted from
+  the edge function into a pure, DB-free function `simulateSthCb(rows, params, opts)`. `ef_sth_cb_bt_execute`
+  is now a thin wrapper (load series → simulate → insert). Regression: run `26fba122` reproduced to the
+  cent ($32,740,432.88, 29 trades, 74.09 % in market); a second run with `extras` matched the local lab
+  to 15 significant digits. Also returns `max_drawdown` (contribution-neutral unit value), `calmar`,
+  `sharpe`, `nav_vs_hodl`, `nav_vs_std_dca` in `bt_runs.summary`.
+- `sth_cb_strategy_logic.ts` — `decideSthCb()` now emits `targetAlloc` (0..1) and accepts optional
+  experimental flags on `SthCbConfig`, all OFF by default and covered by 20 unit tests:
+
+  | Idea | Flag(s) | Behaviour |
+  |---|---|---|
+  | 1 anti-whipsaw | `trendExitConfirmDays`, `exitRocLength` | N consecutive closes ≤ exit line; momentum gate on exits uses a slower ROC |
+  | 2 scaling | `capBuyTiers`, `sellTiers` | tiered scale-in (e.g. 50 % @70 %, 100 % @60 %) / scale-out (e.g. 66 % @150 %, 33 % @200 %); `alloc 0` = full exit |
+  | 3 CB slope | `cbSlopeDays` | trend exit only when STH CB slope over N days ≤ 0 |
+  | 4 hybrid | `distributeAtSigma`, `disableTrendExit` | sell all at LTH PVR +1.5/2/2.5σ (bands from `v_backtest_prices_rb`), optionally without the −5 % exit |
+  | 5 re-entry ladder | `trendReentryRatio` | after a trend exit, re-enter at e.g. 100 % instead of 105 % |
+  | 6 validation | lab `--same-day`, `--walk-forward` | ChartInspect-style fills; per-calendar-year OOS scoring |
+
+  The simulator generalises execution to a target allocation (all-in / all-out paths are byte-identical
+  to the MVP; partial allocations rebalance only when drift > 2 % of NAV).
+- Migration `20261024_sth_cb_extras_and_target_alloc.sql` (remote `20261024170000`): `bt_params.extras jsonb`
+  (any flag above, camelCase, merged over the column config by `simParamsFromBtParams`) and
+  `bt_results_daily.target_alloc`. **This is the last schema change new ideas need.**
+- Admin UI: "Advanced (extras JSON)" textarea in the STH_CB block; run label records the extras.
+
+**Local lab / optimizer — `tools/sth_cb_lab/`** (Deno; README inside). Uses the identical simulator so
+nothing can drift:
+- `fetch.ts` caches the STH-CB/price series + RB bands to `data/series.json` (git-ignored).
+- `run.ts` — one config, full fill trail, `--walk-forward` table, `--json`.
+- `optimize.ts` — grid / reproducible random search over per-idea grids (`ideas.ts`) on all CPU cores via
+  Web Workers (~65 evals/s ≈ 240 k configs/h on the dev machine); objectives `nav_vs_hodl` (default),
+  `calmar`, `cagr`, `sharpe`, `final_nav`, `nav_vs_std_dca`; `--walk-forward` ranks first by *calendar
+  years beating HODL*; writes every result to `results/*.csv`; prints the winner's extras JSON to paste
+  into the UI.
+- First findings (2015-01-04 → 2026-10-23, $10k + $500/mo, full fees): baseline NAV÷HODL 1.36×, beats HODL
+  in 5/12 years. Idea 1 `trendExitRatio=0.97 + trendExitConfirmDays=2` → 1.40×, 25 trades. Idea 5
+  `trendExitRatio=0.97 + trendReentryRatio=0.98` → 1.33× but 6/12 years. Nothing is conclusive yet — the
+  lab is the tool to settle it.
+
+**Files changed:** `supabase/functions/_shared/sth_cb_strategy_logic.ts` (+ `.test.ts`),
+`supabase/functions/_shared/sth_cb_simulator.ts` (new), `supabase/functions/ef_sth_cb_bt_execute/index.ts`,
+`supabase/migrations/20261024_sth_cb_extras_and_target_alloc.sql`, `ui/Advanced BTC DCA Strategy.html`,
+`tools/sth_cb_lab/*` (new), `.gitignore`, `docs/STH_CB_Strategy_Test_Cases.md`, `.github/copilot-instructions.md`.
 
 ### v0.6.164 – STH Cost Basis (STH_CB) strategy: rules engine + Admin UI back-tester (MVP)
 **Date:** 2026-10-24  

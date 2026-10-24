@@ -4712,6 +4712,9 @@
               <input id="btCbIncludeLth" type="checkbox" checked title="Also run the production LTH PVR variation over the same window / contributions / fees and overlay it on the comparison charts">
               <span>Run companion LTH PVR (production) back-test</span>
             </label>
+
+            <label for="btCbExtras"><strong>Advanced (extras JSON):</strong></label>
+            <textarea id="btCbExtras" rows="2" placeholder='{"trendExitConfirmDays":2,"exitRocLength":20}' title="Experimental refinement flags, promoted from tools/sth_cb_lab. Keys: trendExitConfirmDays, exitRocLength, capBuyTiers, sellTiers, cbSlopeDays, distributeAtSigma, disableTrendExit, trendReentryRatio. Base keys (capBuyRatio, trendExitRatio, momoLength …) may also be overridden here." style="width:100%;font:inherit;font-size:.85rem;border-radius:var(--control-radius);border:1px solid var(--border);padding:.35rem var(--control-pad-x);resize:vertical;"></textarea>
           </div>
 
           <!-- Actions / messages -->
@@ -7204,11 +7207,24 @@
     }
 
     // --- STH_CB loaders: sth_cb_bt is service-role only; reads go through public RPCs ---
-    async function loadSthCbRpc(fnName, btRunId){
+    // PostgREST caps any response at 1 000 rows (incl. set-returning RPCs), so page with .range().
+    async function loadSthCbRpc(fnName, btRunId, orderCol = 'trade_date'){
       if (!supabaseClient) return { data: [], error: { message: 'Supabase not available' } };
       if (!btRunId)        return { data: [], error: null };
-      const { data, error } = await supabaseClient.rpc(fnName, { p_bt_run_id: btRunId });
-      return { data: data || [], error };
+      const pageSize = 1000;
+      let from = 0, all = [];
+      while (true) {
+        const { data, error } = await supabaseClient
+          .rpc(fnName, { p_bt_run_id: btRunId })
+          .order(orderCol, { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) return { data: all, error };
+        if (!data || !data.length) break;
+        all = all.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return { data: all, error: null };
     }
     const loadSthCbResults        = (id) => loadSthCbRpc('sth_cb_bt_get_results_daily', id);
     const loadSthCbStdDcaResults  = (id) => loadSthCbRpc('sth_cb_bt_get_std_dca_balances', id);
@@ -7378,6 +7394,12 @@
     function btReadSthCbParams(){
       const num = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : def; };
       const chk = (id, def) => { const el = document.getElementById(id); return el ? !!el.checked : def; };
+      let extras = {};
+      const extrasTxt = (document.getElementById('btCbExtras')?.value || '').trim();
+      if (extrasTxt) {
+        extras = JSON.parse(extrasTxt);   // surfaces a clear SyntaxError to the caller
+        if (!extras || typeof extras !== 'object' || Array.isArray(extras)) throw new Error('Advanced (extras JSON) must be a JSON object.');
+      }
       return {
         cap_buy_ratio:      num('btCbCapBuy', 70) / 100,
         cap_exit_ratio:     num('btCbCapExit', 100) / 100,
@@ -7389,7 +7411,8 @@
         momo_on_cap_exit:   chk('btCbMomoCap', true),
         momo_on_trend_exit: chk('btCbMomoTrend', true),
         execution_lag_days: (document.getElementById('btCbExecLag')?.value === '0') ? 0 : 1,
-        include_lth_benchmark: chk('btCbIncludeLth', true)
+        include_lth_benchmark: chk('btCbIncludeLth', true),
+        extras
       };
     }
 
@@ -7560,9 +7583,11 @@
             trend_enter_ratio: sth.trend_enter_ratio, trend_exit_ratio: sth.trend_exit_ratio,
             momo_enabled: sth.momo_enabled, momo_len: sth.momo_len, momo_thr: sth.momo_thr,
             momo_on_cap_exit: sth.momo_on_cap_exit, momo_on_trend_exit: sth.momo_on_trend_exit,
-            execution_lag_days: sth.execution_lag_days
+            execution_lag_days: sth.execution_lag_days,
+            extras: sth.extras
           };
-          const label = `STH_CB ${startDate}..${endDate} cap ${Math.round(sth.cap_buy_ratio*100)}/${Math.round(sth.cap_exit_ratio*100)} trend ${Math.round(sth.trend_enter_ratio*100)}/${Math.round(sth.trend_exit_ratio*100)}${sth.momo_enabled ? ` momo ROC${sth.momo_len}≤${(sth.momo_thr*100).toFixed(1)}%` : ''} lag ${sth.execution_lag_days}`;
+          const extrasLabel = Object.keys(sth.extras || {}).length ? ` extras ${JSON.stringify(sth.extras)}` : '';
+          const label = `STH_CB ${startDate}..${endDate} cap ${Math.round(sth.cap_buy_ratio*100)}/${Math.round(sth.cap_exit_ratio*100)} trend ${Math.round(sth.trend_enter_ratio*100)}/${Math.round(sth.trend_exit_ratio*100)}${sth.momo_enabled ? ` momo ROC${sth.momo_len}≤${(sth.momo_thr*100).toFixed(1)}%` : ''} lag ${sth.execution_lag_days}${extrasLabel}`;
 
           // Fire both engines in parallel; companion failures must not block the STH_CB result
           const [sthRes, lthRes] = await Promise.all([
@@ -7690,7 +7715,14 @@
       const sPrice   = rows.map(r => numOrNull(r.price_usd));
       const sContrib = rows.map(r => numOrNull(r.contrib_gross_usdt_cum));
       const sNav     = rows.map(r => numOrNull(r.nav_usd));
-      const sUsd     = rows.map(r => numOrNull(r.usdt_balance));
+      // Cash = USDT + USDPC (idle cash is parked in the yield stablecoin, so USDT alone reads ~0)
+      const sUsd     = rows.map(r => {
+        const usdt = numOrNull(r.usdt_balance);
+        const usdpc = numOrNull(r.usdpc_balance);
+        const usdpcPx = numOrNull(r.usdpc_price_usd);
+        if (usdt == null) return null;
+        return usdt + ((usdpc || 0) * (usdpcPx == null ? 1 : usdpcPx));
+      });
       const sBtc     = rows.map(r => numOrNull(r.btc_balance));
 
       btSetReportTitle(btRunId);
@@ -7768,7 +7800,7 @@
               borderWidth: 2
             },
             {
-              label: 'USDT Balance',
+              label: 'Cash Balance (USDT + USDPC)',
               data: sUsd,
               borderColor: cssVar('--series-usd-balance'),
               backgroundColor: grad(cssVar('--series-usd-balance'), 0.12, 0),

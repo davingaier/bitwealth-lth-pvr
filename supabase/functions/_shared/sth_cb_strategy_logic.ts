@@ -1,9 +1,9 @@
 // sth_cb_strategy_logic.ts
 // Shared STH Cost Basis (STH_CB) trading logic — single source of truth.
-// Used by: ef_sth_cb_bt_execute (back-testing). A live decision generator can
-// import the same `decideSthCb()` later so the back-tester and pipeline never drift.
+// Used by: _shared/sth_cb_simulator.ts (back-tester EF + local lab). A live decision
+// generator must import the same `decideSthCb()` so back-test and pipeline never drift.
 //
-// Strategy (ChartInspect "STH Line: Trend Band 5% + Capitulation Buy 70%"):
+// Base strategy (ChartInspect "STH Line: Trend Band 5% + Capitulation Buy 70%"):
 //
 //   ratio = price / STH cost basis
 //
@@ -14,20 +14,32 @@
 //
 //   inMarket = capLatch OR trendLatch    (ChartInspect `f5 = f3 || f4`)
 //
-// Momentum gate (BitWealth refinement): a latch EXIT (i.e. a sell) may be
-// deferred until momentum turns non-positive — ROC(momoLength) <= momoThreshold.
-// While deferred, the position is held; the exit fires on the first day the
-// exit condition AND the momentum condition are both true.
+// Momentum gate (BitWealth refinement): a latch EXIT (a sell) may be deferred until
+// momentum turns non-positive — ROC(momoLength) <= momoThreshold.
 //
-// Position precedence when both latches are set: trend_hold.  When the trend
-// latch engages, the capitulation latch is released (position is "upgraded")
-// so a momentum-deferred capitulation exit cannot keep the portfolio in market
-// after the trend latch later exits.  Symmetrically, a capitulation entry
-// releases the trend latch.
+// Position precedence when both latches are set: trend_hold. When the trend latch
+// engages, the capitulation latch is released (position "upgraded") so a
+// momentum-deferred capitulation exit cannot keep the portfolio in market after the
+// trend latch later exits. A capitulation entry releases the trend latch.
+//
+// Experimental refinements (all OFF unless configured — see SthCbConfig):
+//   1. trendExitConfirmDays / exitRocLength  — anti-whipsaw on the trend exit
+//   2. capBuyTiers / sellTiers               — scale in / scale out (targetAlloc < 1)
+//   3. cbSlopeDays                           — honour trend exit only if the STH CB is flat/falling
+//   4. distributeAtSigma (+ disableTrendExit) — exit at an LTH PVR upper band instead of −5 %
+//   5. trendReentryRatio                     — cheaper re-entry after a trend exit
+//   6. (validation modes live in the simulator / lab, not here)
 
 // ========================================================================================
 // TYPES
 // ========================================================================================
+
+export interface AllocTier {
+  /** price / STH-cost-basis ratio at which this tier triggers */
+  ratio: number;
+  /** target BTC allocation (0..1) once this tier has triggered */
+  alloc: number;
+}
 
 export interface SthCbConfig {
   capBuyRatio: number;      // e.g. 0.70
@@ -39,23 +51,69 @@ export interface SthCbConfig {
   momoThreshold: number;    // sell allowed when ROC <= threshold (e.g. 0.0)
   momoOnCapExit: boolean;   // gate the capitulation exit (rule 2)
   momoOnTrendExit: boolean; // gate the trend exit (rule 3)
+
+  // ── Idea 1: anti-whipsaw ──────────────────────────────────────────────────
+  /** Require N consecutive closes <= trendExitRatio before the trend exit fires (1 = off). */
+  trendExitConfirmDays?: number;
+  /** Use a separate (slower) ROC length for the momentum gate on exits; needs `extra.rocExit`. */
+  exitRocLength?: number;
+
+  // ── Idea 2: scaling ───────────────────────────────────────────────────────
+  /** Scale-in tiers, e.g. [{ratio:0.70,alloc:0.5},{ratio:0.60,alloc:1}]. Replaces capBuyRatio when set. */
+  capBuyTiers?: AllocTier[];
+  /** Scale-out tiers while in market, e.g. [{ratio:1.5,alloc:0.66},{ratio:2.0,alloc:0.33}]. alloc 0 = full exit. */
+  sellTiers?: AllocTier[];
+
+  // ── Idea 3: cost-basis slope filter ──────────────────────────────────────
+  /** Trend exit only fires if the STH CB slope over N days <= 0; needs `extra.cbSlope`. */
+  cbSlopeDays?: number;
+
+  // ── Idea 4: hybrid distribution at LTH PVR bands ─────────────────────────
+  /** Sell everything when price >= the LTH PVR band at this sigma (0.5,1,1.5,2,2.5); needs `extra.bands`. */
+  distributeAtSigma?: number;
+  /** Skip the −5 % trend exit entirely (pair with distributeAtSigma or sellTiers). */
+  disableTrendExit?: boolean;
+
+  // ── Idea 5: re-entry ladder ───────────────────────────────────────────────
+  /** After a trend exit, re-enter when ratio >= this (e.g. 1.00) instead of trendEnterRatio. */
+  trendReentryRatio?: number;
 }
 
 export interface SthCbState {
   capLatch: boolean;
   trendLatch: boolean;
+  /** idea 1: consecutive closes meeting the trend-exit condition */
+  exitConfirmCount?: number;
+  /** idea 2: number of capitulation tiers hit (0 = none) */
+  capTierLevel?: number;
+  /** idea 2: number of sell tiers hit (0 = none) */
+  sellTierLevel?: number;
+  /** idea 5: last exit was a trend exit → cheaper re-entry armed */
+  reentryArmed?: boolean;
 }
 
 export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
 
+/** Optional per-day inputs needed only by the experimental flags. */
+export interface SthCbExtraInputs {
+  /** ROC over `exitRocLength` days (idea 1) */
+  rocExit?: number;
+  /** STH cost basis slope over `cbSlopeDays` (cb[t] / cb[t-N] − 1) (idea 3) */
+  cbSlope?: number;
+  /** LTH PVR band price levels keyed p050|p100|p150|p200|p250 (idea 4) */
+  bands?: Record<string, number | null | undefined>;
+}
+
 export interface SthCbSignal {
   inMarket: boolean;
   position: SthCbPosition;
+  /** Target BTC allocation 0..1 (1 = all-in). Always 0 when position is cash. */
+  targetAlloc: number;
   state: SthCbState;
   /** Human-readable rule that fired (or "Hold"). */
   rule: string;
   note: string;
-  /** True when an exit condition was met but the momentum gate deferred the sell. */
+  /** True when an exit condition was met but a gate (momentum / slope / confirm) deferred the sell. */
   sellDeferred: boolean;
   ratio: number;
 }
@@ -98,6 +156,35 @@ export function computeRocSeries(prices: number[], len: number): number[] {
   return out;
 }
 
+/** Map a sigma multiplier to the band column suffix used by lth_pvr.rb_bands_daily. */
+export function sigmaKey(sigma: number): string | null {
+  const map: Record<string, string> = { "0.5": "p050", "1": "p100", "1.5": "p150", "2": "p200", "2.5": "p250" };
+  return map[String(sigma)] ?? null;
+}
+
+function capTiers(config: SthCbConfig): AllocTier[] {
+  const t = config.capBuyTiers?.length ? [...config.capBuyTiers] : [{ ratio: config.capBuyRatio, alloc: 1 }];
+  return t.sort((a, b) => b.ratio - a.ratio); // highest ratio first (hit first on the way down)
+}
+
+function sellTiers(config: SthCbConfig): AllocTier[] {
+  return (config.sellTiers ?? []).slice().sort((a, b) => a.ratio - b.ratio); // lowest first (hit first on the way up)
+}
+
+function allocFor(s: SthCbState, config: SthCbConfig): number {
+  if (!s.capLatch && !s.trendLatch) return 0;
+  let alloc = 1;
+  if (s.capLatch && !s.trendLatch && config.capBuyTiers?.length) {
+    const tiers = capTiers(config);
+    const lvl = Math.min(s.capTierLevel ?? 0, tiers.length);
+    alloc = lvl > 0 ? tiers[lvl - 1].alloc : 0;
+  }
+  const st = sellTiers(config);
+  const sl = Math.min(s.sellTierLevel ?? 0, st.length);
+  if (sl > 0) alloc = Math.min(alloc, st[sl - 1].alloc);
+  return Math.max(0, Math.min(1, alloc));
+}
+
 // ========================================================================================
 // CORE DECISION
 // ========================================================================================
@@ -109,7 +196,8 @@ export function computeRocSeries(prices: number[], len: number): number[] {
  * @param cb     STH cost basis (realized price of the <155d cohort)
  * @param roc    ROC(momoLength) at this close (used only when momentum gating is on)
  * @param prev   latch state carried from the previous close
- * @param config strategy thresholds
+ * @param config strategy thresholds (+ optional experimental flags)
+ * @param extra  per-day inputs required by experimental flags (ignored when flags are off)
  */
 export function decideSthCb(
   px: number,
@@ -117,13 +205,22 @@ export function decideSthCb(
   roc: number,
   prev: SthCbState,
   config: SthCbConfig,
+  extra: SthCbExtraInputs = {},
 ): SthCbSignal {
-  const s: SthCbState = { capLatch: !!prev?.capLatch, trendLatch: !!prev?.trendLatch };
+  const s: SthCbState = {
+    capLatch: !!prev?.capLatch,
+    trendLatch: !!prev?.trendLatch,
+    exitConfirmCount: prev?.exitConfirmCount ?? 0,
+    capTierLevel: prev?.capTierLevel ?? (prev?.capLatch ? 1 : 0),
+    sellTierLevel: prev?.sellTierLevel ?? 0,
+    reentryArmed: !!prev?.reentryArmed,
+  };
 
   if (!(px > 0) || !(cb > 0)) {
     return {
       inMarket: s.capLatch || s.trendLatch,
       position: positionOf(s),
+      targetAlloc: allocFor(s, config),
       state: s,
       rule: "Hold",
       note: "Missing price or STH cost basis — state carried forward",
@@ -133,56 +230,130 @@ export function decideSthCb(
   }
 
   const ratio = px / cb;
-  const momoWeak = !config.momoEnabled || roc <= config.momoThreshold;
   const pct = (r: number) => `${(r * 100).toFixed(0)}%`;
-  const rocTxt = `ROC${config.momoLength}=${(roc * 100).toFixed(2)}%`;
+
+  // Momentum gate: exits use the slower ROC when exitRocLength is configured and supplied
+  const useExitRoc = !!config.exitRocLength && fin(extra.rocExit);
+  const rocGate = useExitRoc ? Number(extra.rocExit) : roc;
+  const momoWeak = !config.momoEnabled || rocGate <= config.momoThreshold;
+  const rocTxt = `ROC${useExitRoc ? config.exitRocLength : config.momoLength}=${(rocGate * 100).toFixed(2)}%`;
+
+  // Idea 3: cost-basis slope filter (only applies when configured AND an input is supplied)
+  const slopeActive = !!config.cbSlopeDays && fin(extra.cbSlope);
+  const slopeOk = !slopeActive || Number(extra.cbSlope) <= 0;
 
   let rule = "Hold";
   let note = `price ${pct(ratio)} of STH CB`;
   let sellDeferred = false;
 
-  // ── Capitulation latch ────────────────────────────────────────────────────
-  if (!s.capLatch && ratio <= config.capBuyRatio) {
-    s.capLatch = true;
-    s.trendLatch = false; // capitulation entry supersedes any (stale) trend hold
-    rule = "R1 Capitulation buy";
-    note = `price ${pct(ratio)} ≤ ${pct(config.capBuyRatio)} of STH CB`;
-  } else if (s.capLatch && !s.trendLatch && ratio >= config.capExitRatio) {
-    const gated = config.momoEnabled && config.momoOnCapExit;
-    if (!gated || momoWeak) {
-      s.capLatch = false;
-      rule = "R2 Capitulation exit";
-      note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
-    } else {
-      sellDeferred = true;
-      rule = "R2 deferred (momentum)";
-      note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB but ${rocTxt} > thr — holding`;
+  const enterCash = () => {
+    s.capLatch = false;
+    s.trendLatch = false;
+    s.capTierLevel = 0;
+    s.sellTierLevel = 0;
+    s.exitConfirmCount = 0;
+  };
+
+  // ── Capitulation latch (idea 2 generalises the single 70 % level to tiers) ─
+  const cTiers = capTiers(config);
+  {
+    const hit = cTiers.filter((t) => ratio <= t.ratio).length;
+    if (hit > (s.capTierLevel ?? 0)) {
+      const first = !s.capLatch;
+      s.capLatch = true;
+      s.trendLatch = false; // capitulation entry supersedes any (stale) trend hold
+      s.capTierLevel = hit;
+      s.sellTierLevel = 0;
+      s.exitConfirmCount = 0;
+      s.reentryArmed = false;
+      rule = first ? "R1 Capitulation buy" : `R1 Capitulation tier ${hit}`;
+      note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB`;
+    } else if (s.capLatch && !s.trendLatch && ratio >= config.capExitRatio) {
+      const gated = config.momoEnabled && config.momoOnCapExit;
+      if (!gated || momoWeak) {
+        enterCash();
+        rule = "R2 Capitulation exit";
+        note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
+      } else {
+        sellDeferred = true;
+        rule = "R2 deferred (momentum)";
+        note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB but ${rocTxt} > thr — holding`;
+      }
     }
   }
 
   // ── Trend latch ───────────────────────────────────────────────────────────
-  if (!s.trendLatch && ratio >= config.trendEnterRatio) {
+  const ladder = s.reentryArmed && !!config.trendReentryRatio;
+  const enterRatio = ladder ? Number(config.trendReentryRatio) : config.trendEnterRatio;
+  if (!s.trendLatch && ratio >= enterRatio) {
     s.trendLatch = true;
     s.capLatch = false; // upgrade cap_hold -> trend_hold (releases a deferred R2)
-    rule = "R3 Trend entry";
-    note = `price ${pct(ratio)} ≥ ${pct(config.trendEnterRatio)} of STH CB`;
+    s.capTierLevel = 0;
+    s.sellTierLevel = 0;
+    s.exitConfirmCount = 0;
+    s.reentryArmed = false;
+    rule = (ladder && enterRatio !== config.trendEnterRatio) ? "R5 Trend re-entry (ladder)" : "R3 Trend entry";
+    note = `price ${pct(ratio)} ≥ ${pct(enterRatio)} of STH CB`;
     sellDeferred = false;
-  } else if (s.trendLatch && ratio <= config.trendExitRatio) {
+  } else if (s.trendLatch && !config.disableTrendExit && ratio <= config.trendExitRatio) {
+    const confirmDays = Math.max(1, Math.trunc(config.trendExitConfirmDays ?? 1));
+    s.exitConfirmCount = (s.exitConfirmCount ?? 0) + 1;
+    const confirmed = s.exitConfirmCount >= confirmDays;
     const gated = config.momoEnabled && config.momoOnTrendExit;
-    if (!gated || momoWeak) {
-      s.trendLatch = false;
+    if (confirmed && (!gated || momoWeak) && slopeOk) {
+      enterCash();
+      s.reentryArmed = true;
       rule = "R3 Trend exit";
-      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
+      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB` +
+        (confirmDays > 1 ? ` for ${confirmDays} closes` : "") +
+        (gated ? ` and ${rocTxt} ≤ thr` : "") +
+        (slopeActive ? " and CB slope ≤ 0" : "");
     } else {
       sellDeferred = true;
-      rule = "R3 deferred (momentum)";
-      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB but ${rocTxt} > thr — holding`;
+      const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : "momentum");
+      rule = `R3 deferred (${why})`;
+      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB but ${why} — holding`;
+    }
+  } else if (s.trendLatch) {
+    s.exitConfirmCount = 0; // condition not met today → reset the confirmation streak
+  }
+
+  // ── Idea 4: distribution at an LTH PVR upper band (any hold type) ─────────
+  if ((s.capLatch || s.trendLatch) && config.distributeAtSigma) {
+    const key = sigmaKey(config.distributeAtSigma);
+    const level = key ? Number(extra.bands?.[key]) : NaN;
+    if (fin(level) && level > 0 && px >= level) {
+      enterCash();
+      s.reentryArmed = false;
+      rule = `R4 Distribution at +${config.distributeAtSigma}σ`;
+      note = `price ${px.toFixed(0)} ≥ LTH PVR ${key} ${level.toFixed(0)}`;
+      sellDeferred = false;
+    }
+  }
+
+  // ── Idea 2: scale-out tiers while in market ───────────────────────────────
+  const sTiers = sellTiers(config);
+  if ((s.capLatch || s.trendLatch) && sTiers.length) {
+    const hit = sTiers.filter((t) => ratio >= t.ratio).length;
+    if (hit > (s.sellTierLevel ?? 0)) {
+      s.sellTierLevel = hit;
+      const tier = sTiers[hit - 1];
+      if (tier.alloc <= 0) {
+        enterCash();
+        s.reentryArmed = false;
+        rule = `R6 Sell tier ${hit} (full exit)`;
+      } else {
+        rule = `R6 Sell tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC`;
+      }
+      note = `price ${pct(ratio)} ≥ ${pct(tier.ratio)} of STH CB`;
+      sellDeferred = false;
     }
   }
 
   return {
     inMarket: s.capLatch || s.trendLatch,
     position: positionOf(s),
+    targetAlloc: allocFor(s, config),
     state: s,
     rule,
     note,
@@ -192,8 +363,9 @@ export function decideSthCb(
 }
 
 /**
- * Replay a history of (price, cost-basis) closes to seed the latch state at a
- * given start. Returns the state after the last row.
+ * Replay a history of closes to seed the latch state at a given start.
+ * Returns the state after the last row. Only the base inputs are derived here;
+ * the simulator's replay also derives the experimental inputs.
  */
 export function warmupSthCbState(
   rows: Array<{ px: number; cb: number }>,

@@ -16,6 +16,7 @@ import {
 const CB = 100_000; // STH cost basis fixed at $100k for readability
 const NO_MOMO: SthCbConfig = { ...DEFAULT_STH_CB_CONFIG, momoEnabled: false };
 const CASH: SthCbState = { ...INITIAL_STH_CB_STATE };
+const latches = (s: SthCbState) => ({ capLatch: s.capLatch, trendLatch: s.trendLatch });
 
 Deno.test("R1: capitulation buy latches at <= 70% of STH CB", () => {
   const d = decideSthCb(69_999, CB, 0, CASH, NO_MOMO);
@@ -102,7 +103,7 @@ Deno.test("Missing inputs carry state forward without trading", () => {
   const held: SthCbState = { capLatch: true, trendLatch: false };
   const d = decideSthCb(0, CB, 0, held, NO_MOMO);
   assertEquals(d.inMarket, true);
-  assertEquals(d.state, held);
+  assertEquals(latches(d.state), { capLatch: true, trendLatch: false });
 });
 
 Deno.test("computeRocSeries: zero during look-back, then px[i]/px[i-len]-1", () => {
@@ -121,5 +122,109 @@ Deno.test("warmupSthCbState replays history to seed latches", () => {
     { px: 80_000, cb: CB },  // hold
   ];
   const s = warmupSthCbState(rows, NO_MOMO);
-  assertEquals(s, { capLatch: true, trendLatch: false });
+  assertEquals(latches(s), { capLatch: true, trendLatch: false });
+});
+
+// ========================================================================================
+// Experimental refinement flags (ideas 1–5)
+// ========================================================================================
+
+Deno.test("Base config: targetAlloc is 1 in market, 0 in cash", () => {
+  const inMkt = decideSthCb(69_000, CB, 0, CASH, NO_MOMO);
+  assertEquals(inMkt.targetAlloc, 1);
+  const out = decideSthCb(100_000, CB, 0, inMkt.state, NO_MOMO);
+  assertEquals(out.targetAlloc, 0);
+});
+
+Deno.test("Idea 1: trendExitConfirmDays requires N consecutive closes", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, trendExitConfirmDays: 3 };
+  let s: SthCbState = { capLatch: false, trendLatch: true };
+  let d = decideSthCb(94_000, CB, 0, s, cfg); assertEquals(d.inMarket, true); assertEquals(d.rule, "R3 deferred (confirm 1/3)");
+  d = decideSthCb(94_000, CB, 0, d.state, cfg); assertEquals(d.inMarket, true);
+  // a close back above 95% resets the streak
+  d = decideSthCb(96_000, CB, 0, d.state, cfg); assertEquals(d.state.exitConfirmCount, 0);
+  d = decideSthCb(94_000, CB, 0, d.state, cfg);
+  d = decideSthCb(94_000, CB, 0, d.state, cfg);
+  d = decideSthCb(94_000, CB, 0, d.state, cfg);
+  assertEquals(d.inMarket, false);
+  assertEquals(d.rule, "R3 Trend exit");
+});
+
+Deno.test("Idea 1: exitRocLength gates on the slower ROC supplied via extra.rocExit", () => {
+  const cfg: SthCbConfig = { ...DEFAULT_STH_CB_CONFIG, exitRocLength: 20 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  // fast ROC negative but slow ROC positive → deferred
+  const d1 = decideSthCb(94_000, CB, -0.05, held, cfg, { rocExit: +0.10 });
+  assertEquals(d1.inMarket, true);
+  assertEquals(d1.sellDeferred, true);
+  // slow ROC negative → exit
+  const d2 = decideSthCb(94_000, CB, +0.05, held, cfg, { rocExit: -0.01 });
+  assertEquals(d2.inMarket, false);
+});
+
+Deno.test("Idea 2: capBuyTiers scale in and exit sells all", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyTiers: [{ ratio: 0.70, alloc: 0.5 }, { ratio: 0.60, alloc: 1 }] };
+  const t1 = decideSthCb(69_000, CB, 0, CASH, cfg);
+  assertEquals(t1.position, "cap_hold");
+  assertEquals(t1.targetAlloc, 0.5);
+  const hold = decideSthCb(65_000, CB, 0, t1.state, cfg);
+  assertEquals(hold.targetAlloc, 0.5, "between tiers → unchanged");
+  const t2 = decideSthCb(59_000, CB, 0, hold.state, cfg);
+  assertEquals(t2.targetAlloc, 1);
+  assertEquals(t2.rule, "R1 Capitulation tier 2");
+  const exit = decideSthCb(100_000, CB, 0, t2.state, cfg);
+  assertEquals(exit.targetAlloc, 0);
+  assertEquals(exit.position, "cash");
+});
+
+Deno.test("Idea 2: sellTiers scale out while trend-latched; alloc 0 tier is a full exit", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, sellTiers: [{ ratio: 1.5, alloc: 0.66 }, { ratio: 2.0, alloc: 0 }] };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const a = decideSthCb(140_000, CB, 0, held, cfg); assertEquals(a.targetAlloc, 1);
+  const b = decideSthCb(150_000, CB, 0, a.state, cfg); assertEquals(b.targetAlloc, 0.66); assertEquals(b.position, "trend_hold");
+  const c = decideSthCb(145_000, CB, 0, b.state, cfg); assertEquals(c.targetAlloc, 0.66, "tier latches — no re-buy on dip");
+  const d = decideSthCb(200_000, CB, 0, c.state, cfg); assertEquals(d.position, "cash"); assertEquals(d.targetAlloc, 0);
+});
+
+Deno.test("Idea 3: cbSlopeDays blocks a trend exit while the cost basis is rising", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, cbSlopeDays: 14 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const rising = decideSthCb(94_000, CB, 0, held, cfg, { cbSlope: +0.03 });
+  assertEquals(rising.inMarket, true);
+  assertEquals(rising.rule, "R3 deferred (CB rising)");
+  const flat = decideSthCb(94_000, CB, 0, held, cfg, { cbSlope: -0.001 });
+  assertEquals(flat.inMarket, false);
+  // No slope input supplied → filter is inert (back-compat)
+  const noInput = decideSthCb(94_000, CB, 0, held, cfg);
+  assertEquals(noInput.inMarket, false);
+});
+
+Deno.test("Idea 4: distributeAtSigma exits at the LTH PVR band; disableTrendExit skips −5% exit", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, distributeAtSigma: 2.0, disableTrendExit: true };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const dip = decideSthCb(90_000, CB, 0, held, cfg, { bands: { p200: 180_000 } });
+  assertEquals(dip.inMarket, true, "−10% dip ignored because trend exit disabled");
+  const top = decideSthCb(181_000, CB, 0, dip.state, cfg, { bands: { p200: 180_000 } });
+  assertEquals(top.inMarket, false);
+  assertEquals(top.rule, "R4 Distribution at +2σ");
+  // Re-entry after distribution uses the normal 105% rule (not the ladder)
+  const re = decideSthCb(105_000, CB, 0, top.state, cfg);
+  assertEquals(re.rule, "R3 Trend entry");
+});
+
+Deno.test("Idea 5: trendReentryRatio arms a cheaper re-entry only after a trend exit", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, trendReentryRatio: 1.00 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const exit = decideSthCb(94_000, CB, 0, held, cfg);
+  assertEquals(exit.state.reentryArmed, true);
+  const noYet = decideSthCb(99_000, CB, 0, exit.state, cfg);
+  assertEquals(noYet.inMarket, false);
+  const re = decideSthCb(100_500, CB, 0, noYet.state, cfg);
+  assertEquals(re.inMarket, true);
+  assertEquals(re.rule, "R5 Trend re-entry (ladder)");
+  // After a capitulation exit the ladder is NOT armed → needs 105%
+  const capHeld: SthCbState = { capLatch: true, trendLatch: false };
+  const capExit = decideSthCb(100_000, CB, 0, capHeld, cfg);
+  const tryRe = decideSthCb(101_000, CB, 0, capExit.state, cfg);
+  assertEquals(tryRe.inMarket, false);
 });

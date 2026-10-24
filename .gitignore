@@ -53,3 +53,8 @@ ci_bands_raw_response.json
 ci_bands_raw_response.meta.txt
 ci_bands_raw_response.error.txt
 rb_pvr_bands_output.json
+
+# STH_CB local lab caches / outputs
+tools/sth_cb_lab/data/
+tools/sth_cb_lab/results/
+

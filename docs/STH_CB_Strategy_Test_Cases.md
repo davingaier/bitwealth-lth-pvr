@@ -24,7 +24,28 @@ Strategy reference: SDD §0 change-log entry v0.6.164. Rules engine:
 | U-11 | `computeRocSeries` | 0 during look-back, then px[i]/px[i−len]−1 | as expected | PASS |
 | U-12 | `warmupSthCbState` replay | seeds `{cap:true, trend:false}` for the fixture | as expected | PASS |
 
-Result: **12 passed, 0 failed** (2026-10-24).
+Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the refinement-flag tests below.
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| U-13 | Base config `targetAlloc` 1 in market / 0 in cash | as stated | as expected | PASS |
+| U-14 | Idea 1 `trendExitConfirmDays=3` needs 3 consecutive closes; a close above the line resets | exit on 3rd consecutive | as expected | PASS |
+| U-15 | Idea 1 `exitRocLength` gates on `extra.rocExit` not the fast ROC | deferred while slow ROC > 0 | as expected | PASS |
+| U-16 | Idea 2 `capBuyTiers` 50 % @70 %, 100 % @60 %; exit sells all | allocs 0.5 → 1 → 0 | as expected | PASS |
+| U-17 | Idea 2 `sellTiers` latch (no re-buy on dip); `alloc 0` tier = full exit | 1 → 0.66 → 0.66 → cash | as expected | PASS |
+| U-18 | Idea 3 `cbSlopeDays` blocks exit while CB rising; inert without input | deferred / exits | as expected | PASS |
+| U-19 | Idea 4 `distributeAtSigma=2` exits at p200; `disableTrendExit` ignores −10 % dip | R4 fires; normal 105 % re-entry | as expected | PASS |
+| U-20 | Idea 5 `trendReentryRatio=1.00` armed only after a trend exit, not after R2 | ladder re-entry / no re-entry | as expected | PASS |
+
+### Simulator regression (`_shared/sth_cb_simulator.ts` vs deployed EF)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| S-01 | Lab `run.ts` defaults 2015-01-04→2026-10-23 vs EF run `26fba122` | identical NAV / trades / HODL / Std DCA | $32,740,433 · 29 · $24,029,095 · $6,333,369 (identical) | PASS |
+| S-02 | EF run `8aa277dc` (`trend_exit_ratio=0.97`, `extras={"trendExitConfirmDays":2}`) vs lab | identical | NAV 33579806.2621442, 25 trades, maxDD −0.519560040733831 (identical) | PASS |
+| S-03 | UI paging: RPC `order` + `limit/offset` over 2020→2026 | 1000 / 1000 / 488 rows | as expected | PASS |
+| S-04 | Optimizer idea 1 (100 combos) on all cores | completes, CSV written, baseline row recognised | 1.5 s, 67 evals/s | PASS |
+| S-05 | Optimizer idea 5 `--walk-forward` | 12 annual folds scored, ranking by folds first | baseline 5/12 | PASS |
 
 ---
 
