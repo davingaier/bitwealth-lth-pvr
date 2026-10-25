@@ -3,11 +3,53 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-25 (v0.6.167)
+**Last updated:** 2026-10-25 (v0.6.168)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.168 – STH_CB "hybrid v1": autonomous strategy iteration reaches 272 684 % ROI (32.7× HODL) on the lump-sum basis
+**Date:** 2026-10-25  
+**Status:** ✅ DEPLOYED (back-tester only — no live pipeline)
+
+**Mandate.** Full autonomy to change and re-test the strategy until the best design is found; target > 200 000 %
+ROI on $1 000, 2017-01-01 → 2026-10-23, next-day fills, VALR fees + 1 % management + 10 % performance + USDPC.
+
+**Method.** Five optimisation rounds (R1–R5, ≈ 61 000 configurations) on the STH_CB engine, each followed by a
+read of the fill trail to identify the next *structural* gap, which was then added as a flag (no schema change):
+
+| Round | What was added | Best NAV | × HODL | WF |
+|---|---|---|---|---|
+| R1 | existing ideas 1–5 only | $1.41 M | 16.9× | 5/10 |
+| — | ideas 7–12: σ-adaptive thresholds, momentum re-entry, min-hold, LTH macro filter, capitulation ROC confirmation, trailing stop | | | |
+| R2 | hybrid neighbourhood + hill-climb | $1.41 M (robust $1.33 M) | 16.9× | 6/10 |
+| — | ideas 13–14: no re-entry after a distribution until price ≤ k·CB; LTH PVR −σ band as capitulation trigger | | | |
+| R3 | hybrid + 13/14 | $1.70 M | 20.4× | 7/10 |
+| R4 | fine local search + sell tiers | **$2.73 M** | **32.7×** | **7/10** |
+| R5 | second seed, 16 climbs | no improvement | | |
+
+**Winning rules ("STH_CB hybrid v1").** Capitulation buy at ≤ 75 % of STH CB *or* at the LTH PVR −0.5σ band, once
+2-day ROC ≥ 0; capitulation exit at ≥ 95 % of CB when momentum ≤ −2 %; trend entry at ≥ 112 % (re-entry ladder at
+102 %, or on 2-day ROC ≥ 10 %); trend exit at ≤ 97 % of CB gated by momentum and a flat/falling 21-day CB slope;
+35 % trailing stop; distribute everything at the LTH PVR +2.5σ band or at 2× the CB, then stay out until price
+≤ 90 % of CB; no trend entries above LTH +2.5σ; 15-day minimum hold. 33 trades in 9.8 years, 76 % time in
+market. Key fills: out $15.2k Dec-17 → in $7.0k; out $7.95k Mar-20 → in $5.3k (18 Mar 2020); out $57k/$61k 2021;
+in $21k and $16.7k (Nov-22); out $109.5k Oct-25; in $59.9k Jun-26.
+
+**Robustness** (`tools/sth_cb_lab/robustness.ts`): beats HODL from every start year 2015–2023 (≥ 4.8× for 2015–22);
+STH CB × 0.97 / 1.03 → 16.5× / 20.7×; LTH bands × 0.95 / 1.05 → 20.9× / 36.5×; same-day fills 27.6×; gross of
+BitWealth fees 64×; $10k + $500/mo → $38.3 M (6.7× HODL, 55 438 %). Lost to HODL in 2017, 2023, 2024. Max DD 48 %.
+
+**Code.** `_shared/sth_cb_strategy_logic.ts` — ideas 7–14 as optional `SthCbConfig` flags (28 unit tests);
+`_shared/sth_cb_simulator.ts` — `computeSigmaSeries`, new `EXTRA_CONFIG_KEYS`, bands needed also for ideas 10/14;
+`ef_sth_cb_bt_execute` fetches LTH m100…mean too (redeployed; run `9cfaba5b` reproduces $2 727 839.29 exactly);
+lab `optimize.ts` gained `--climb/--passes/--wf-top` (random → coordinate descent → walk-forward), `ideas.ts`
+grids 7–12 / `hybrid` / `fine`, new `robustness.ts`; `fetch.ts` caches LTH lower bands.
+
+**Honest framing.** Parameters are in-sample for this window; WF 7/10 and the start-year table argue against pure
+curve-fit, but 2023–24 underperformed HODL and a ±6 % cost-basis shift cuts the result by two-thirds. Next steps if
+pursued: paper-trade, then a live decision EF importing `decideSthCb` (next-day fills already match the pipeline).
 
 ### v0.6.167 – `band_source = 'sth_cb'`: LTH PVR engine on STH-cost-basis σ bands + optimisation campaign
 **Date:** 2026-10-25  

@@ -77,6 +77,44 @@ export interface SthCbConfig {
   // ── Idea 5: re-entry ladder ───────────────────────────────────────────────
   /** After a trend exit, re-enter when ratio >= this (e.g. 1.00) instead of trendEnterRatio. */
   trendReentryRatio?: number;
+
+  // ── Idea 7: σ-adaptive thresholds (needs `extra.sigma`) ───────────────────
+  /** When set, thresholds below are interpreted in σ-units: ratio_thr = exp(k·σ_t) (ratio_sigma) or (cb+k·unit)/cb (sth_pvr). */
+  sigmaMode?: "ratio_sigma" | "sth_pvr";
+  /** ratio_sigma window in days (0 = expanding). */
+  sigmaWindow?: number;
+  capBuySigma?: number;      // e.g. −1.5  (replaces capBuyRatio)
+  capExitSigma?: number;     // e.g.  0.0  (replaces capExitRatio)
+  trendEnterSigma?: number;  // e.g. +0.5  (replaces trendEnterRatio)
+  trendExitSigma?: number;   // e.g. −0.25 (replaces trendExitRatio)
+
+  // ── Idea 8: momentum re-entry after a trend exit ──────────────────────────
+  /** Re-enter (trend) when re-entry is armed and ROC >= this, provided ratio >= trendReentryRatio (default 1.0). */
+  reentryRocThreshold?: number;
+
+  // ── Idea 9: minimum hold ───────────────────────────────────────────────────
+  /** Ignore every exit rule for N days after an entry. */
+  minHoldDays?: number;
+
+  // ── Idea 10: LTH PVR macro filter (needs `extra.bands`) ───────────────────
+  /** Block trend entries / re-entries while price >= the LTH PVR band at this sigma. */
+  blockEntryAboveSigma?: number;
+
+  // ── Idea 11: capitulation confirmation ────────────────────────────────────
+  /** Capitulation buy requires ROC >= this (e.g. 0 = price has stopped falling). */
+  capBuyRocThreshold?: number;
+
+  // ── Idea 12: trailing stop on trend holds (needs `extra.peakRatio`) ───────
+  /** Exit a trend hold when price has fallen this fraction from its peak since entry (e.g. 0.25). */
+  trailingStopPct?: number;
+
+  // ── Idea 13: no immediate re-entry after a distribution ───────────────────
+  /** After an R4 distribution, block trend (re-)entries until ratio <= this (e.g. 1.0 = back at the cost basis). */
+  distReentryClearRatio?: number;
+
+  // ── Idea 14: LTH PVR lower bands as capitulation triggers (needs `extra.bands`) ──
+  /** Also trigger a capitulation buy when price <= the LTH PVR band at this sigma (0 = mean, −0.5, −1 …). */
+  capBuyAtLthSigma?: number;
 }
 
 export interface SthCbState {
@@ -90,6 +128,12 @@ export interface SthCbState {
   sellTierLevel?: number;
   /** idea 5: last exit was a trend exit → cheaper re-entry armed */
   reentryArmed?: boolean;
+  /** idea 9: days since the current position was entered */
+  holdDays?: number;
+  /** idea 12: highest price seen since the current entry */
+  peakPx?: number;
+  /** idea 13: a distribution happened and price has not yet returned to the clear level */
+  distLatch?: boolean;
 }
 
 export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
@@ -100,8 +144,10 @@ export interface SthCbExtraInputs {
   rocExit?: number;
   /** STH cost basis slope over `cbSlopeDays` (cb[t] / cb[t-N] − 1) (idea 3) */
   cbSlope?: number;
-  /** LTH PVR band price levels keyed p050|p100|p150|p200|p250 (idea 4) */
+  /** LTH PVR band price levels keyed p050|p100|p150|p200|p250 (ideas 4, 10) */
   bands?: Record<string, number | null | undefined>;
+  /** idea 7: σ of ln(px/cb) (ratio_sigma) or $ per σ (sth_pvr) at this close */
+  sigma?: number;
 }
 
 export interface SthCbSignal {
@@ -158,7 +204,10 @@ export function computeRocSeries(prices: number[], len: number): number[] {
 
 /** Map a sigma multiplier to the band column suffix used by lth_pvr.rb_bands_daily. */
 export function sigmaKey(sigma: number): string | null {
-  const map: Record<string, string> = { "0.5": "p050", "1": "p100", "1.5": "p150", "2": "p200", "2.5": "p250" };
+  const map: Record<string, string> = {
+    "-1": "m100", "-0.75": "m075", "-0.5": "m050", "-0.25": "m025", "0": "mean",
+    "0.5": "p050", "1": "p100", "1.5": "p150", "2": "p200", "2.5": "p250",
+  };
   return map[String(sigma)] ?? null;
 }
 
@@ -214,7 +263,15 @@ export function decideSthCb(
     capTierLevel: prev?.capTierLevel ?? (prev?.capLatch ? 1 : 0),
     sellTierLevel: prev?.sellTierLevel ?? 0,
     reentryArmed: !!prev?.reentryArmed,
+    holdDays: prev?.holdDays ?? 0,
+    peakPx: prev?.peakPx ?? 0,
+    distLatch: !!prev?.distLatch,
   };
+  const wasInMarket = s.capLatch || s.trendLatch;
+  if (wasInMarket) {
+    s.holdDays = (s.holdDays ?? 0) + 1;
+    if (px > (s.peakPx ?? 0)) s.peakPx = px;
+  }
 
   if (!(px > 0) || !(cb > 0)) {
     return {
@@ -231,6 +288,33 @@ export function decideSthCb(
 
   const ratio = px / cb;
   const pct = (r: number) => `${(r * 100).toFixed(0)}%`;
+
+  // Idea 7: σ-adaptive thresholds — translate σ multipliers into today's ratio thresholds
+  const sigmaActive = !!config.sigmaMode && fin(extra.sigma) && Number(extra.sigma) > 0;
+  const sigmaRatio = (k: number | undefined, fallback: number): number => {
+    if (!sigmaActive || typeof k !== "number") return fallback;
+    const sg = Number(extra.sigma);
+    return config.sigmaMode === "sth_pvr" ? (cb + k * sg) / cb : Math.exp(k * sg);
+  };
+  const capBuyRatio = sigmaRatio(config.capBuySigma, config.capBuyRatio);
+  const capExitRatio = sigmaRatio(config.capExitSigma, config.capExitRatio);
+  const trendEnterRatio = sigmaRatio(config.trendEnterSigma, config.trendEnterRatio);
+  const trendExitRatio = sigmaRatio(config.trendExitSigma, config.trendExitRatio);
+
+  // Idea 9: minimum hold — exits are suppressed while the position is younger than N days
+  const holdLocked = !!config.minHoldDays && wasInMarket && (s.holdDays ?? 0) < Math.trunc(config.minHoldDays);
+
+  // Idea 10: LTH macro filter — no trend entries while price sits above the LTH PVR +kσ band
+  const macroKey = config.blockEntryAboveSigma ? sigmaKey(config.blockEntryAboveSigma) : null;
+  const macroLevel = macroKey ? Number(extra.bands?.[macroKey]) : NaN;
+  // Idea 13: after a distribution, stay out until price has come back to the clear ratio
+  if (s.distLatch && typeof config.distReentryClearRatio === "number" && ratio <= config.distReentryClearRatio) s.distLatch = false;
+  const entryBlocked = (fin(macroLevel) && macroLevel > 0 && px >= macroLevel) || (!!s.distLatch && typeof config.distReentryClearRatio === "number");
+
+  // Idea 14: LTH PVR lower band as an additional capitulation trigger
+  const lthCapKey = typeof config.capBuyAtLthSigma === "number" ? sigmaKey(config.capBuyAtLthSigma) : null;
+  const lthCapLevel = lthCapKey ? Number(extra.bands?.[lthCapKey]) : NaN;
+  const lthCapHit = fin(lthCapLevel) && lthCapLevel > 0 && px <= lthCapLevel;
 
   // Momentum gate: exits use the slower ROC when exitRocLength is configured and supplied
   const useExitRoc = !!config.exitRocLength && fin(extra.rocExit);
@@ -252,50 +336,71 @@ export function decideSthCb(
     s.capTierLevel = 0;
     s.sellTierLevel = 0;
     s.exitConfirmCount = 0;
+    s.holdDays = 0;
+    s.peakPx = 0;
   };
+  const markEntry = () => { s.holdDays = 0; s.peakPx = px; };
 
   // ── Capitulation latch (idea 2 generalises the single 70 % level to tiers) ─
-  const cTiers = capTiers(config);
+  const cTiers = config.capBuyTiers?.length ? capTiers(config) : [{ ratio: capBuyRatio, alloc: 1 }];
   {
-    const hit = cTiers.filter((t) => ratio <= t.ratio).length;
-    if (hit > (s.capTierLevel ?? 0)) {
+    let hit = cTiers.filter((t) => ratio <= t.ratio).length;
+    // idea 14: LTH lower band counts as hitting the first tier (full alloc when there is only one tier)
+    const viaLth = hit === 0 && lthCapHit && !s.capLatch && !s.trendLatch;
+    if (viaLth) hit = 1;
+    const rocOk = typeof config.capBuyRocThreshold !== "number" || roc >= config.capBuyRocThreshold; // idea 11
+    if (hit > (s.capTierLevel ?? 0) && rocOk) {
       const first = !s.capLatch;
+      if (first) markEntry();
       s.capLatch = true;
       s.trendLatch = false; // capitulation entry supersedes any (stale) trend hold
       s.capTierLevel = hit;
       s.sellTierLevel = 0;
       s.exitConfirmCount = 0;
       s.reentryArmed = false;
-      rule = first ? "R1 Capitulation buy" : `R1 Capitulation tier ${hit}`;
-      note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB`;
-    } else if (s.capLatch && !s.trendLatch && ratio >= config.capExitRatio) {
+      s.distLatch = false;
+      rule = viaLth ? `R14 Capitulation buy (LTH ${lthCapKey})` : first ? "R1 Capitulation buy" : `R1 Capitulation tier ${hit}`;
+      note = viaLth ? `price ${px.toFixed(0)} ≤ LTH PVR ${lthCapKey} ${lthCapLevel.toFixed(0)}` : `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB`;
+    } else if (hit > (s.capTierLevel ?? 0) && !rocOk) {
+      rule = "R1 waiting (ROC)";
+      note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB but ROC ${(roc * 100).toFixed(1)}% < thr`;
+    } else if (s.capLatch && !s.trendLatch && ratio >= capExitRatio && !holdLocked) {
       const gated = config.momoEnabled && config.momoOnCapExit;
       if (!gated || momoWeak) {
         enterCash();
         rule = "R2 Capitulation exit";
-        note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
+        note = `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
       } else {
         sellDeferred = true;
         rule = "R2 deferred (momentum)";
-        note = `price ${pct(ratio)} ≥ ${pct(config.capExitRatio)} of STH CB but ${rocTxt} > thr — holding`;
+        note = `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB but ${rocTxt} > thr — holding`;
       }
     }
   }
 
   // ── Trend latch ───────────────────────────────────────────────────────────
   const ladder = s.reentryArmed && !!config.trendReentryRatio;
-  const enterRatio = ladder ? Number(config.trendReentryRatio) : config.trendEnterRatio;
-  if (!s.trendLatch && ratio >= enterRatio) {
+  const enterRatio = ladder ? Number(config.trendReentryRatio) : trendEnterRatio;
+  // Idea 8: momentum re-entry — armed after a trend exit, fires when ROC recovers (ratio floor = ladder ratio or 1.0)
+  const momoReentry = s.reentryArmed && typeof config.reentryRocThreshold === "number" && !s.trendLatch
+    && roc >= config.reentryRocThreshold && ratio >= (config.trendReentryRatio ?? 1.0);
+  if (!s.trendLatch && (ratio >= enterRatio || momoReentry) && !entryBlocked) {
+    const wasCap = s.capLatch;
     s.trendLatch = true;
     s.capLatch = false; // upgrade cap_hold -> trend_hold (releases a deferred R2)
     s.capTierLevel = 0;
     s.sellTierLevel = 0;
     s.exitConfirmCount = 0;
+    if (!wasCap) markEntry();
+    const viaMomo = momoReentry && ratio < enterRatio;
     s.reentryArmed = false;
-    rule = (ladder && enterRatio !== config.trendEnterRatio) ? "R5 Trend re-entry (ladder)" : "R3 Trend entry";
-    note = `price ${pct(ratio)} ≥ ${pct(enterRatio)} of STH CB`;
+    rule = viaMomo ? "R8 Trend re-entry (momentum)" : (ladder && enterRatio !== trendEnterRatio) ? "R5 Trend re-entry (ladder)" : "R3 Trend entry";
+    note = viaMomo ? `ROC ${(roc * 100).toFixed(1)}% ≥ thr at ${pct(ratio)} of STH CB` : `price ${pct(ratio)} ≥ ${pct(enterRatio)} of STH CB`;
     sellDeferred = false;
-  } else if (s.trendLatch && !config.disableTrendExit && ratio <= config.trendExitRatio) {
+  } else if (!s.trendLatch && (ratio >= enterRatio || momoReentry) && entryBlocked) {
+    rule = s.distLatch ? "R13 Entry blocked (post-distribution)" : "R10 Entry blocked (LTH macro)";
+    note = s.distLatch ? `waiting for price ≤ ${pct(Number(config.distReentryClearRatio))} of STH CB` : `price ${px.toFixed(0)} ≥ LTH PVR ${macroKey} ${macroLevel.toFixed(0)}`;
+  } else if (s.trendLatch && !config.disableTrendExit && ratio <= trendExitRatio && !holdLocked) {
     const confirmDays = Math.max(1, Math.trunc(config.trendExitConfirmDays ?? 1));
     s.exitConfirmCount = (s.exitConfirmCount ?? 0) + 1;
     const confirmed = s.exitConfirmCount >= confirmDays;
@@ -304,7 +409,7 @@ export function decideSthCb(
       enterCash();
       s.reentryArmed = true;
       rule = "R3 Trend exit";
-      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB` +
+      note = `price ${pct(ratio)} ≤ ${pct(trendExitRatio)} of STH CB` +
         (confirmDays > 1 ? ` for ${confirmDays} closes` : "") +
         (gated ? ` and ${rocTxt} ≤ thr` : "") +
         (slopeActive ? " and CB slope ≤ 0" : "");
@@ -312,10 +417,22 @@ export function decideSthCb(
       sellDeferred = true;
       const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : "momentum");
       rule = `R3 deferred (${why})`;
-      note = `price ${pct(ratio)} ≤ ${pct(config.trendExitRatio)} of STH CB but ${why} — holding`;
+      note = `price ${pct(ratio)} ≤ ${pct(trendExitRatio)} of STH CB but ${why} — holding`;
     }
   } else if (s.trendLatch) {
     s.exitConfirmCount = 0; // condition not met today → reset the confirmation streak
+  }
+
+  // ── Idea 12: trailing stop on trend holds ────────────────────────────────
+  if (s.trendLatch && config.trailingStopPct && !holdLocked && (s.peakPx ?? 0) > 0) {
+    const dd = px / (s.peakPx as number) - 1;
+    if (dd <= -config.trailingStopPct) {
+      enterCash();
+      s.reentryArmed = true;
+      rule = `R12 Trailing stop (${Math.round(config.trailingStopPct * 100)}%)`;
+      note = `price ${px.toFixed(0)} is ${(dd * 100).toFixed(1)}% below peak`;
+      sellDeferred = false;
+    }
   }
 
   // ── Idea 4: distribution at an LTH PVR upper band (any hold type) ─────────
@@ -325,6 +442,7 @@ export function decideSthCb(
     if (fin(level) && level > 0 && px >= level) {
       enterCash();
       s.reentryArmed = false;
+      s.distLatch = true;
       rule = `R4 Distribution at +${config.distributeAtSigma}σ`;
       note = `price ${px.toFixed(0)} ≥ LTH PVR ${key} ${level.toFixed(0)}`;
       sellDeferred = false;

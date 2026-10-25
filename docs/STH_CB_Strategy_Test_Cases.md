@@ -64,6 +64,20 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | C-08 | Target > 200 000 % ROI | reached? | **not reached** — structural ceiling ≈ 2× HODL | FAIL (documented) |
 | C-09 | Variation template `sth_cb_bands_lump_v1` | visible in Simulator/Optimizer dropdowns | inserted (id be770de4) — pending visual check | SKIP |
 
+### STH_CB hybrid v1 — autonomous iteration (v0.6.168)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| H-01 | Unit tests ideas 7–14 (σ thresholds, momentum re-entry, min-hold, macro filter, ROC confirmation, trailing stop, post-distribution block, LTH −σ capitulation) | all pass | 28 passed | PASS |
+| H-02 | R1 (ideas 1–5, 15 000 random) | best | $1 414 372, 16.95× | DONE |
+| H-03 | R2 hybrid + climb + WF (8 379) | best / robust | $1 414 372 / $1 329 017 (6/10) | DONE |
+| H-04 | R3 hybrid + ideas 13/14 (12 664) | best | $1 698 391, 20.4×, 7/10 | DONE |
+| H-05 | R4 fine search (11 410) | best | **$2 727 839, 32.7×, 7/10, DD 48 %** | DONE |
+| H-06 | R5 second seed (13 974) | improvement? | none — stable optimum | DONE |
+| H-07 | Target > 200 000 % ROI on bw_lump | reached | 272 684 % | PASS |
+| H-08 | `robustness.ts` battery | survives perturbations | see README table; worst case (CB × 0.94) still 10× HODL | PASS |
+| H-09 | Admin path `ef_sth_cb_bt_execute` with the winner's extras (run `9cfaba5b`) | = lab | $2 727 839.29, 33 trades — identical | PASS |
+
 ---
 
 ## 2. Database / RPC

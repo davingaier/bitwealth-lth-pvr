@@ -61,50 +61,98 @@ for (let i = 0; i < workersN; i++) {
     const h = (ev: MessageEvent) => { if (ev.data?.type === "ready") { w.removeEventListener("message", h); res(); } };
     w.addEventListener("message", h);
   }));
-  w.postMessage({ type: "init", lab, folds });
+  w.postMessage({ type: "init", lab, folds: annualFolds(lab.start, lab.end) });
 }
 await Promise.all(ready);
 
-const batchSize = Math.max(1, Math.min(50, Math.ceil(configs.length / (workersN * 8))));
-const batches: SthCbConfig[][] = [];
-for (let i = 0; i < configs.length; i += batchSize) batches.push(configs.slice(i, i + batchSize));
-
-const results: EvalResult[] = [];
-let done = 0;
-const t0 = performance.now();
-let nextBatch = 0;
-
-await new Promise<void>((resolve) => {
-  const dispatch = (w: Worker) => {
-    if (nextBatch >= batches.length) return false;
-    const id = nextBatch++;
-    w.postMessage({ type: "eval", id, configs: batches[id] });
-    return true;
-  };
-  for (const w of workers) {
-    w.addEventListener("message", (ev: MessageEvent) => {
-      if (ev.data?.type !== "result") return;
-      for (const r of ev.data.results) {
-        if (r.error) console.warn("eval error:", r.error, configDiff(r.config, baseCfg));
-        else results.push(r as EvalResult);
-      }
-      done += ev.data.results.length;
-      const pct = (done / configs.length * 100).toFixed(0);
-      const rate = done / ((performance.now() - t0) / 1000);
-      Deno.stdout.writeSync(new TextEncoder().encode(`\r  ${done}/${configs.length} (${pct}%) · ${rate.toFixed(0)} evals/s   `));
-      if (!dispatch(w) && done >= configs.length) resolve();
-    });
-    dispatch(w);
-  }
+// ── Generic parallel evaluator ─────────────────────────────────────────────
+let msgId = 0;
+const pendingCb = new Map<number, (r: EvalResult[]) => void>();
+for (const w of workers) {
+  w.addEventListener("message", (ev: MessageEvent) => {
+    if (ev.data?.type !== "result") return;
+    const cb = pendingCb.get(ev.data.id); pendingCb.delete(ev.data.id); cb?.(ev.data.results);
+  });
+}
+let rr = 0;
+const evalBatch = (cfgs: SthCbConfig[], wf: boolean): Promise<EvalResult[]> => new Promise((res) => {
+  const id = msgId++; pendingCb.set(id, res);
+  workers[rr++ % workers.length].postMessage({ type: "eval", id, configs: cfgs, walkForward: wf });
 });
-for (const w of workers) w.terminate();
-console.log(`\nDone in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+async function evalAll(list: SthCbConfig[], wf: boolean, label: string): Promise<EvalResult[]> {
+  const batch = Math.max(1, Math.min(wf ? 5 : 50, Math.ceil(list.length / (workersN * 8))));
+  const chunks: SthCbConfig[][] = [];
+  for (let i = 0; i < list.length; i += batch) chunks.push(list.slice(i, i + batch));
+  const out: EvalResult[] = [];
+  let done = 0, next = 0;
+  const t0 = performance.now();
+  const runOne = async () => {
+    while (next < chunks.length) {
+      const c = chunks[next++];
+      const r = await evalBatch(c, wf);
+      for (const x of r as (EvalResult & { error?: string })[]) { if (x.error) console.warn("eval error:", x.error); else out.push(x); }
+      done += c.length;
+      Deno.stdout.writeSync(new TextEncoder().encode(`\r  ${label}: ${done}/${list.length} · ${(done / ((performance.now() - t0) / 1000)).toFixed(0)} evals/s   `));
+    }
+  };
+  await Promise.all(Array.from({ length: workersN * 2 }, runOne));
+  console.log("");
+  return out;
+}
 
-// ── Rank + output ───────────────────────────────────────────────────────────
+const cfgKey = (c: SthCbConfig) => JSON.stringify(c, Object.keys(c).sort());
+const all = new Map<string, EvalResult>();
 const score = (r: EvalResult) => {
   const v = objectiveValue(r.metrics, objective);
   return Number.isFinite(v) ? v : -Infinity;
 };
+const ranked = () => [...all.values()].sort((a, b) => score(b) - score(a));
+
+// ── Phase 1: grid / random ─────────────────────────────────────────────────
+const t0 = performance.now();
+console.log(`\nPhase 1 — ${useRandom ? "random sample" : "full grid"} (${configs.length} configs)`);
+for (const r of await evalAll(configs, false, "sample")) all.set(cfgKey(r.config), r);
+
+// ── Phase 2: coordinate descent from the top K (over the grid's own value lists) ──
+const climbK = Number(args.climb ?? 0);
+const passes = Number(args.passes ?? 3);
+if (climbK > 0) {
+  console.log(`\nPhase 2 — coordinate descent from top ${climbK} (${passes} passes max)`);
+  const keys = Object.keys(grid);
+  const starts = ranked().slice(0, climbK).map((r) => r.config);
+  for (let si = 0; si < starts.length; si++) {
+    let cur = starts[si];
+    let curScore = score(all.get(cfgKey(cur))!);
+    for (let pass = 0; pass < passes; pass++) {
+      let improved = false;
+      for (const k of keys) {
+        const cands = (grid[k] as unknown[]).map((v) => {
+          const c = { ...cur } as Record<string, unknown>;
+          if (v === null || typeof v === "undefined") delete c[k]; else c[k] = v;
+          return c as unknown as SthCbConfig;
+        }).filter((c) => cfgKey(c) !== cfgKey(cur));
+        const fresh = cands.filter((c) => !all.has(cfgKey(c)));
+        if (fresh.length) for (const r of await evalAll(fresh, false, `climb ${si + 1}/${starts.length} p${pass + 1} ${k}`)) all.set(cfgKey(r.config), r);
+        for (const c of cands) { const r = all.get(cfgKey(c)); if (r && score(r) > curScore) { cur = c; curScore = score(r); improved = true; } }
+      }
+      console.log(`  start ${si + 1} pass ${pass + 1}: ${objective}=${curScore.toFixed(3)} NAV ${fmtUsd(all.get(cfgKey(cur))!.metrics.final_nav_usd)}`);
+      if (!improved) break;
+    }
+  }
+}
+
+// ── Phase 3: walk-forward on the top M ─────────────────────────────────────
+const wfTop = walkForward ? Number(args["wf-top"] ?? 100) : 0;
+if (wfTop > 0) {
+  console.log(`\nPhase 3 — walk-forward on top ${wfTop}`);
+  const list = ranked().slice(0, wfTop).map((r) => r.config);
+  for (const r of await evalAll(list, true, "walk-forward")) all.set(cfgKey(r.config), r);
+}
+for (const w of workers) w.terminate();
+console.log(`\nDone in ${((performance.now() - t0) / 1000).toFixed(1)} s · ${all.size} configs evaluated`);
+
+// ── Rank + output ───────────────────────────────────────────────────────────
+const results = [...all.values()];
 results.sort((a, b) => {
   // With walk-forward on, prefer configs that beat HODL in more years, then by objective
   if (walkForward && (a.folds_beating_hodl ?? 0) !== (b.folds_beating_hodl ?? 0)) return (b.folds_beating_hodl ?? 0) - (a.folds_beating_hodl ?? 0);
@@ -139,12 +187,12 @@ console.log(hdr);
 results.slice(0, topN).forEach((r, i) => {
   const m = r.metrics;
   console.log(
-    `  ${String(i + 1).padStart(2)}  ${String(score(r).toFixed(3)).padEnd(12)} ${fmtX(m.nav_vs_hodl, 2).padStart(8)}  ${fmtPct(m.final_cagr_percent, 1).padStart(7)}  ${fmtPct(m.max_drawdown * 100, 0).padStart(6)}  ${m.calmar.toFixed(2).padStart(6)} ${String(m.trades).padStart(6)} ${String(m.pct_time_in_market.toFixed(0) + "%").padStart(5)}${walkForward ? `  ${r.folds_beating_hodl}/${folds!.length}` : ""}  ${configDiff(r.config, baseCfg)}`,
+    `  ${String(i + 1).padStart(2)}  ${String(score(r).toFixed(3)).padEnd(12)} ${fmtX(m.nav_vs_hodl, 2).padStart(8)}  ${fmtPct(m.final_cagr_percent, 1).padStart(7)}  ${fmtPct(m.max_drawdown * 100, 0).padStart(6)}  ${m.calmar.toFixed(2).padStart(6)} ${String(m.trades).padStart(6)} ${String(m.pct_time_in_market.toFixed(0) + "%").padStart(5)}${walkForward ? `  ${r.folds_beating_hodl ?? "-"}/${folds!.length}` : ""}  ${configDiff(r.config, baseCfg)}`,
   );
 });
 if (baseline) {
   const m = baseline.metrics;
-  console.log(`\nBaseline (defaults): ${objective}=${score(baseline).toFixed(3)} · NAV ${fmtUsd(m.final_nav_usd)} · NAV÷HODL ${fmtX(m.nav_vs_hodl, 2)} · CAGR ${fmtPct(m.final_cagr_percent, 1)} · MaxDD ${fmtPct(m.max_drawdown * 100, 0)} · ${m.trades} trades${walkForward ? ` · WF ${baseline.folds_beating_hodl}/${folds!.length}` : ""}`);
+  console.log(`\nBaseline (defaults): ${objective}=${score(baseline).toFixed(3)} · NAV ${fmtUsd(m.final_nav_usd)} · NAV÷HODL ${fmtX(m.nav_vs_hodl, 2)} · CAGR ${fmtPct(m.final_cagr_percent, 1)} · MaxDD ${fmtPct(m.max_drawdown * 100, 0)} · ${m.trades} trades${walkForward ? ` · WF ${baseline.folds_beating_hodl ?? "-"}/${folds!.length}` : ""}`);
 }
 console.log(`\nAll ${results.length} results → ${outFile}`);
 if (results[0]) {

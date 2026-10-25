@@ -145,7 +145,13 @@ combination is also saved to `results/<timestamp>_<idea>_<objective>.csv`.
 | `3` | Only sell on the −5 % trend exit when the STH cost basis itself has stopped rising | 20 |
 | `4` | Hybrid: sell at an LTH PVR +σ band instead of (or as well as) the −5 % exit | 16 |
 | `5` | Re-entry ladder: after a −5 % exit, buy back at ~100 % instead of waiting for 105 % | 60 |
-| `all` | Every parameter from every idea at once (≈ 150 million combinations — random sampling only) | sampled |
+| `7`–`12` | σ-adaptive thresholds, momentum re-entry, minimum hold, LTH macro filter, capitulation confirmation, trailing stop | small |
+| `hybrid` | The LTH-distribution neighbourhood that won the lump-sum campaign (20 knobs incl. ideas 13/14) | sampled |
+| `fine` | Tight steps around the current winner — use with `--base '{winner}'` | sampled |
+| `all` | Every parameter from every idea at once — random sampling only | sampled |
+
+Add `--climb K --passes N` to hill-climb from the top K after sampling (coordinate descent over each knob's
+value list); with `--walk-forward`, `--wf-top M` controls how many finalists get the per-year scoring.
 
 You can also pass your own grid instead of an idea:
 
@@ -285,6 +291,44 @@ Ratios are **price ÷ STH cost basis** (so `0.70` = price at 70 % of the cost ba
 | 4 | `distributeAtSigma` | `2` | Sell everything when price reaches the LTH PVR **+2σ** band (allowed: 0.5, 1, 1.5, 2, 2.5) |
 | 4 | `disableTrendExit` | `true` | Switch the −5 % trend exit off entirely (usually paired with `distributeAtSigma` or `sellTiers`) |
 | 5 | `trendReentryRatio` | `1.00` | After a trend exit, re-enter at this ratio instead of waiting for `trendEnterRatio`. Not armed after a capitulation exit |
+| 7 | `sigmaMode`, `sigmaWindow`, `capBuySigma`, `capExitSigma`, `trendEnterSigma`, `trendExitSigma` | `"ratio_sigma"`, `365`, `-1.5`, `0`, `0.5`, `-0.5` | Express the thresholds in σ of ln(price ÷ CB) (or STH-PVR $ units with `"sth_pvr"`) so they widen in volatile regimes and tighten in calm ones. Any σ key set overrides its ratio twin |
+| 8 | `reentryRocThreshold` | `0.05` | After a trend exit, re-enter as soon as ROC ≥ this and price ≥ `trendReentryRatio` (default 1.0) — don't wait for +5 % |
+| 9 | `minHoldDays` | `15` | Ignore every exit rule for N days after an entry |
+| 10 | `blockEntryAboveSigma` | `2.5` | No trend entries while price is above the LTH PVR +kσ band (macro top filter) |
+| 11 | `capBuyRocThreshold` | `0` | A capitulation buy waits until ROC ≥ this (price has stopped falling) |
+| 12 | `trailingStopPct` | `0.35` | Exit a trend hold once price is this far below its peak since entry; arms the re-entry ladder |
+| 13 | `distReentryClearRatio` | `0.9` | After an LTH +σ distribution, block trend re-entries until price has come back to this ratio of the CB |
+| 14 | `capBuyAtLthSigma` | `-0.5` | Also treat price ≤ the LTH PVR band at this σ (0 = mean, −0.5, −1) as a capitulation buy |
+
+### The optimised "STH_CB hybrid v1" (2026-10-25)
+
+Found by R1→R5 (≈ 61 000 configurations, lump-sum basis, walk-forward-first ranking):
+
+```json
+{"capBuyRatio":0.75,"capExitRatio":0.95,"trendEnterRatio":1.12,"trendExitRatio":0.97,"momoLength":2,"momoThreshold":-0.02,
+ "distributeAtSigma":2.5,"cbSlopeDays":21,"trailingStopPct":0.35,"reentryRocThreshold":0.1,"minHoldDays":15,
+ "blockEntryAboveSigma":2.5,"distReentryClearRatio":0.9,"capBuyAtLthSigma":-0.5,"trendReentryRatio":1.02,
+ "capBuyRocThreshold":0,"sellTiers":[{"ratio":2,"alloc":0}]}
+```
+
+| Basis ($1 000 lump sum, 2017-01-01 → 2026-10-23) | NAV | ROI | × HODL | Max DD | WF |
+|---|---|---|---|---|---|
+| **Next-day fills, full BitWealth fees** | **$2 727 839** | **272 684 %** | **32.7×** | 48 % | 7/10 |
+| Same-day fills, full fees | $2 301 729 | 230 073 % | 27.6× | 52 % | |
+| Exchange fees only (gross) | $5 350 073 | 534 907 % | 64.1× | 49 % | |
+| STH cost basis × 0.97 / × 1.03 | $1.38 M / $1.73 M | | 16.5× / 20.7× | | |
+| LTH bands × 0.95 / × 1.05 | $1.75 M / $3.04 M | | 20.9× / 36.5× | | |
+| Start 2018 / 2019 / 2020 / 2021 / 2022 / 2023 | | | 36.6× / 11.7× / 11.3× / 8.9× / 4.8× / 1.5× | | |
+| $10 000 + $500/month | $38.3 M | 55 438 % | 6.7× | | |
+
+Run `deno run -A tools/sth_cb_lab/robustness.ts --extras '{...}'` to regenerate this table for any config.
+What the rules do in practice: sold Dec-2017 at $15.2k, re-bought $7.0k; out before COVID at $7.95k, back in
+at $5.3k on 2020-03-18; out at $57k (Mar-21) and $61k (Oct-21); back in at $21k and $16.7k (Nov-22, LTH −0.5σ);
+out at $109.5k (Oct-25); currently in since $59.9k (Jun-26). 33 trades in 9.8 years.
+
+**Caveats, stated plainly:** the parameters were chosen on this very window (in-sample). Walk-forward 7/10 and
+the start-year table are the evidence that it is not pure curve-fit, but 2023 and 2024 both lost to HODL,
+and ±6 % on the cost-basis line still cuts the result by two-thirds. Paper-trade before capital.
 
 ---
 

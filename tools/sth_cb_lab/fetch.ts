@@ -33,7 +33,7 @@ const bandHeaders = { ...headers, "Accept-Profile": "lth_pvr_bt" };
 const bands: Record<string, unknown>[] = [];
 for (let offset = 0; ; offset += 1000) {
   const resp = await fetch(
-    `${url}/rest/v1/v_backtest_prices_rb?select=close_date,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250&org_id=eq.${orgId}&close_date=gte.${from}&order=close_date.asc&limit=1000&offset=${offset}`,
+    `${url}/rest/v1/v_backtest_prices_rb?select=close_date,price_at_m100,price_at_m075,price_at_m050,price_at_m025,price_at_mean,price_at_p050,price_at_p100,price_at_p150,price_at_p200,price_at_p250&org_id=eq.${orgId}&close_date=gte.${from}&order=close_date.asc&limit=1000&offset=${offset}`,
     { headers: bandHeaders },
   );
   if (!resp.ok) { console.warn(`  bands unavailable (HTTP ${resp.status}) — idea 4 will be inert`); break; }
@@ -43,6 +43,7 @@ for (let offset = 0; ; offset += 1000) {
 }
 console.log(`  ${bands.length} band rows`);
 const bandMap = new Map(bands.map((b) => [String(b.close_date), {
+  m100: Number(b.price_at_m100), m075: Number(b.price_at_m075), m050: Number(b.price_at_m050), m025: Number(b.price_at_m025), mean: Number(b.price_at_mean),
   p050: Number(b.price_at_p050), p100: Number(b.price_at_p100), p150: Number(b.price_at_p150),
   p200: Number(b.price_at_p200), p250: Number(b.price_at_p250),
 }]));

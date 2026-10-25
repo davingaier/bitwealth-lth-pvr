@@ -249,6 +249,9 @@ export function simParamsFromBtParams(params: Record<string, unknown>): SthCbSim
 export const EXTRA_CONFIG_KEYS = [
   "trendExitConfirmDays", "exitRocLength", "capBuyTiers", "sellTiers",
   "cbSlopeDays", "distributeAtSigma", "disableTrendExit", "trendReentryRatio",
+  "sigmaMode", "sigmaWindow", "capBuySigma", "capExitSigma", "trendEnterSigma", "trendExitSigma",
+  "reentryRocThreshold", "minHoldDays", "blockEntryAboveSigma", "capBuyRocThreshold", "trailingStopPct",
+  "distReentryClearRatio", "capBuyAtLthSigma",
 ] as const;
 
 /** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
@@ -274,7 +277,45 @@ export function unknownExtraKeys(extras: Record<string, unknown>): string[] {
 
 /** Does this config need LTH PVR bands joined onto the series? */
 export function configNeedsBands(config: SthCbConfig): boolean {
-  return !!config.distributeAtSigma;
+  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number";
+}
+
+/**
+ * σ series for idea 7 (σ-adaptive thresholds).
+ *  ratio_sigma: std of ln(px/cb) over `window` days (0 = expanding)
+ *  sth_pvr:     expanding std of STH market cap ÷ STH supply ($ per 1σ); needs sth_supply
+ */
+export function computeSigmaSeries(rows: SthCbSeriesRow[], mode: "ratio_sigma" | "sth_pvr", window: number): number[] {
+  const out = new Array<number>(rows.length).fill(NaN);
+  const MIN = 30;
+  let n = 0, mean = 0, m2 = 0;
+  if (mode === "sth_pvr") {
+    for (let i = 0; i < rows.length; i++) {
+      const s = Number(rows[i].sth_supply);
+      if (!(rows[i].px > 0) || !(s > 0)) continue;
+      const x = rows[i].px * s;
+      n++; const d = x - mean; mean += d / n; m2 += d * (x - mean);
+      if (n >= MIN) out[i] = Math.sqrt(m2 / (n - 1)) / s;
+    }
+    return out;
+  }
+  const win = Math.max(0, Math.trunc(window));
+  const buf: number[] = [];
+  let sum = 0, sumSq = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (!(rows[i].px > 0) || !(rows[i].cb > 0)) continue;
+    const x = Math.log(rows[i].px / rows[i].cb);
+    if (win > 0) {
+      buf.push(x); sum += x; sumSq += x * x;
+      if (buf.length > win) { const o = buf.shift()!; sum -= o; sumSq -= o * o; }
+      const k = buf.length;
+      if (k >= Math.min(MIN, win)) { const mu = sum / k; out[i] = Math.sqrt(Math.max(0, (sumSq - k * mu * mu) / Math.max(1, k - 1))); }
+    } else {
+      n++; const d = x - mean; mean += d / n; m2 += d * (x - mean);
+      if (n >= MIN) out[i] = Math.sqrt(m2 / (n - 1));
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,10 +345,12 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
   const rocSeries = computeRocSeries(pxAll, config.momoLength);
   const rocExitSeries = config.exitRocLength ? computeRocSeries(pxAll, Math.max(1, Math.trunc(config.exitRocLength))) : null;
   const cbSlopeSeries = config.cbSlopeDays ? computeRocSeries(cbAll, Math.max(1, Math.trunc(config.cbSlopeDays))) : null;
+  const sigmaSeries = config.sigmaMode ? computeSigmaSeries(all, config.sigmaMode, config.sigmaWindow ?? 0) : null;
   const extraAt = (i: number): SthCbExtraInputs => ({
     rocExit: rocExitSeries ? rocExitSeries[i] : undefined,
     cbSlope: cbSlopeSeries ? cbSlopeSeries[i] : undefined,
     bands: all[i].bands,
+    sigma: sigmaSeries ? sigmaSeries[i] : undefined,
   });
 
   // Warm-up pass seeds the latches (and the pending next-day signal when lag=1)

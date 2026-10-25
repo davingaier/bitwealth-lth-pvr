@@ -228,3 +228,105 @@ Deno.test("Idea 5: trendReentryRatio arms a cheaper re-entry only after a trend 
   const tryRe = decideSthCb(101_000, CB, 0, capExit.state, cfg);
   assertEquals(tryRe.inMarket, false);
 });
+
+// ========================================================================================
+// Ideas 7–12 (lump-sum campaign mechanics)
+// ========================================================================================
+
+Deno.test("Idea 7: σ-adaptive thresholds replace fixed ratios when sigma is supplied", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, sigmaMode: "ratio_sigma", sigmaWindow: 365, capBuySigma: -1.5, trendEnterSigma: 0.5, trendExitSigma: -0.5 };
+  const sg = 0.2; // ln-σ → cap buy at exp(-0.3)=0.741, trend entry at exp(0.1)=1.105, trend exit at exp(-0.1)=0.905
+  const noBuy = decideSthCb(75_000, CB, 0, CASH, cfg, { sigma: sg });
+  assertEquals(noBuy.inMarket, false, "0.75 > 0.741 → no capitulation buy");
+  const buy = decideSthCb(74_000, CB, 0, CASH, cfg, { sigma: sg });
+  assertEquals(buy.position, "cap_hold");
+  const noTrend = decideSthCb(108_000, CB, 0, CASH, cfg, { sigma: sg });
+  assertEquals(noTrend.inMarket, false, "1.08 < 1.105 → no trend entry under σ thresholds");
+  const trend = decideSthCb(111_000, CB, 0, CASH, cfg, { sigma: sg });
+  assertEquals(trend.position, "trend_hold");
+  // Without a sigma input the fixed ratios apply (back-compat)
+  const fixed = decideSthCb(69_000, CB, 0, CASH, cfg);
+  assertEquals(fixed.position, "cap_hold");
+});
+
+Deno.test("Idea 8: momentum re-entry fires after a trend exit when ROC recovers (ratio floor 1.0)", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, reentryRocThreshold: 0.03 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const exit = decideSthCb(94_000, CB, 0, held, cfg);
+  assertEquals(exit.state.reentryArmed, true);
+  const below = decideSthCb(99_000, CB, 0.05, exit.state, cfg);
+  assertEquals(below.inMarket, false, "ratio < 1.0 → floor blocks");
+  const weak = decideSthCb(101_000, CB, 0.01, below.state, cfg);
+  assertEquals(weak.inMarket, false, "ROC below threshold");
+  const re = decideSthCb(101_000, CB, 0.04, weak.state, cfg);
+  assertEquals(re.position, "trend_hold");
+  assertEquals(re.rule, "R8 Trend re-entry (momentum)");
+});
+
+Deno.test("Idea 9: minHoldDays suppresses exits until the position is old enough", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, minHoldDays: 3 };
+  let d = decideSthCb(69_000, CB, 0, CASH, cfg);       // day 0 entry (cap)
+  d = decideSthCb(101_000, CB, 0, d.state, cfg);       // day 1: exit condition met but locked
+  assertEquals(d.inMarket, true);
+  d = decideSthCb(101_000, CB, 0, d.state, cfg);       // day 2: locked
+  assertEquals(d.inMarket, true);
+  d = decideSthCb(101_000, CB, 0, d.state, cfg);       // day 3: holdDays=3 → unlocked
+  assertEquals(d.inMarket, false);
+});
+
+Deno.test("Idea 10: blockEntryAboveSigma stops trend entries above the LTH band", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, blockEntryAboveSigma: 2 };
+  const blocked = decideSthCb(106_000, CB, 0, CASH, cfg, { bands: { p200: 100_000 } });
+  assertEquals(blocked.inMarket, false);
+  assertEquals(blocked.rule, "R10 Entry blocked (LTH macro)");
+  const ok = decideSthCb(106_000, CB, 0, CASH, cfg, { bands: { p200: 200_000 } });
+  assertEquals(ok.position, "trend_hold");
+  // capitulation buys are never blocked
+  const cap = decideSthCb(69_000, CB, 0, CASH, cfg, { bands: { p200: 50_000 } });
+  assertEquals(cap.position, "cap_hold");
+});
+
+Deno.test("Idea 11: capBuyRocThreshold waits for ROC before a capitulation buy", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyRocThreshold: 0 };
+  const wait = decideSthCb(65_000, CB, -0.1, CASH, cfg);
+  assertEquals(wait.inMarket, false);
+  assertEquals(wait.rule, "R1 waiting (ROC)");
+  const buy = decideSthCb(66_000, CB, 0.01, wait.state, cfg);
+  assertEquals(buy.position, "cap_hold");
+});
+
+Deno.test("Idea 12: trailing stop exits a trend hold X% below its peak and arms re-entry", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, trailingStopPct: 0.2, disableTrendExit: true };
+  let d = decideSthCb(106_000, CB, 0, CASH, cfg);     // entry, peak 106k
+  d = decideSthCb(150_000, CB, 0, d.state, cfg);      // peak 150k
+  d = decideSthCb(125_000, CB, 0, d.state, cfg);      // −16.7% → hold
+  assertEquals(d.inMarket, true);
+  d = decideSthCb(119_000, CB, 0, d.state, cfg);      // −20.7% → stop
+  assertEquals(d.inMarket, false);
+  assertEquals(d.rule, "R12 Trailing stop (20%)");
+  assertEquals(d.state.reentryArmed, true);
+});
+
+Deno.test("Idea 13: after a distribution, trend entries are blocked until price returns to the clear ratio", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, distributeAtSigma: 2, distReentryClearRatio: 1.0 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const dist = decideSthCb(150_000, CB, 0, held, cfg, { bands: { p200: 140_000 } });
+  assertEquals(dist.inMarket, false);
+  assertEquals(dist.state.distLatch, true);
+  const blocked = decideSthCb(130_000, CB, 0, dist.state, cfg, { bands: { p200: 140_000 } });
+  assertEquals(blocked.inMarket, false);
+  assertEquals(blocked.rule, "R13 Entry blocked (post-distribution)");
+  const cleared = decideSthCb(99_000, CB, 0, blocked.state, cfg, { bands: { p200: 140_000 } });
+  assertEquals(cleared.state.distLatch, false);
+  const re = decideSthCb(106_000, CB, 0, cleared.state, cfg, { bands: { p200: 140_000 } });
+  assertEquals(re.position, "trend_hold");
+});
+
+Deno.test("Idea 14: LTH PVR lower band triggers a capitulation buy even above 70% of STH CB", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyAtLthSigma: -0.5 };
+  const d = decideSthCb(80_000, CB, 0, CASH, cfg, { bands: { m050: 85_000 } });
+  assertEquals(d.position, "cap_hold");
+  assertEquals(d.rule, "R14 Capitulation buy (LTH m050)");
+  const none = decideSthCb(80_000, CB, 0, CASH, cfg, { bands: { m050: 70_000 } });
+  assertEquals(none.inMarket, false);
+});

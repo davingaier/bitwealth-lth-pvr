@@ -151,12 +151,13 @@ Deno.serve(async (req) => {
     if (configNeedsBands(simParams.config)) {
       const bandRows = await pageAll((from, to) =>
         sb.schema("lth_pvr_bt").from("v_backtest_prices_rb")
-          .select("close_date, price_at_p050, price_at_p100, price_at_p150, price_at_p200, price_at_p250")
+          .select("close_date, price_at_m100, price_at_m075, price_at_m050, price_at_m025, price_at_mean, price_at_p050, price_at_p100, price_at_p150, price_at_p200, price_at_p250")
           .eq("org_id", org_id).gte("close_date", WARMUP_START).lte("close_date", simParams.endDate)
           .order("close_date", { ascending: true }).range(from, to));
       bandsByDate = new Map();
       for (const b of bandRows) {
         bandsByDate.set(String(b.close_date), {
+          m100: toNum(b.price_at_m100, NaN), m075: toNum(b.price_at_m075, NaN), m050: toNum(b.price_at_m050, NaN), m025: toNum(b.price_at_m025, NaN), mean: toNum(b.price_at_mean, NaN),
           p050: toNum(b.price_at_p050, NaN), p100: toNum(b.price_at_p100, NaN), p150: toNum(b.price_at_p150, NaN),
           p200: toNum(b.price_at_p200, NaN), p250: toNum(b.price_at_p250, NaN),
         });

@@ -9,7 +9,7 @@ let rows: SthCbSeriesRow[] = [];
 let lab: LabArgs | null = null;
 let folds: ReturnType<typeof annualFolds> = [];
 
-self.onmessage = async (ev: MessageEvent) => {
+(self as unknown as Worker).onmessage = async (ev: MessageEvent) => {
   const msg = ev.data;
   if (msg.type === "init") {
     muteConsole();

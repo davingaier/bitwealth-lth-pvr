@@ -9,7 +9,7 @@ let rows: SthCbSeriesRow[] = [];
 let lab: LabArgs | null = null;
 let folds: Fold[] | undefined;
 
-self.onmessage = async (ev: MessageEvent) => {
+(self as unknown as Worker).onmessage = async (ev: MessageEvent) => {
   const msg = ev.data;
   if (msg.type === "init") {
     const series = await loadSeries();
@@ -21,9 +21,10 @@ self.onmessage = async (ev: MessageEvent) => {
   }
   if (msg.type === "eval") {
     const out = [];
+    const useFolds = msg.walkForward ? folds : undefined;
     for (const cfg of msg.configs as SthCbConfig[]) {
       try {
-        const r = evaluate(rows, lab!, cfg, folds);
+        const r = evaluate(rows, lab!, cfg, useFolds);
         out.push(r);
       } catch (e) {
         out.push({ config: cfg, error: String((e as Error)?.message ?? e) });
