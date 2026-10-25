@@ -5902,6 +5902,38 @@
   <div id="onchain-charts-module" class="module">
     <h2>On-Chain Charts</h2>
 
+    <!-- ── STH CB Hybrid — Strategy Tracker (daily paper record) ──────────── -->
+    <div class="card" id="sthTrackerCard" style="margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div>
+          <h3 class="bc-title" style="margin:0;">STH Cost Basis Hybrid — Strategy Tracker</h3>
+          <div class="bc-meta" id="sthTrackerMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+          <div class="bc-presets" id="sthTrackerPresets" style="display:flex;gap:.25rem;">
+            <button type="button" data-range="6M">6M</button>
+            <button type="button" data-range="1Y">1Y</button>
+            <button type="button" data-range="3Y" class="active">3Y</button>
+            <button type="button" data-range="5Y">5Y</button>
+            <button type="button" data-range="ALL">All</button>
+          </div>
+          <label style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:.35rem;"><input type="checkbox" id="sthTrackerShowNav" checked> NAV vs HODL</label>
+          <button type="button" id="sthTrackerReset" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem">Reset Zoom</button>
+        </div>
+      </div>
+      <div id="sthTrackerStatus" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;margin-top:.75rem;"></div>
+      <div class="bc-canvas-wrap" style="position:relative;height:520px;margin-top:.75rem;">
+        <canvas id="sthTrackerChart"></canvas>
+      </div>
+      <div style="margin-top:.5rem;font-size:.75rem;color:var(--muted);">
+        Drag to zoom · double-click to reset · click legend items to toggle. Shading: <span style="color:#10b981">green</span> = capitulation hold, <span style="color:#f97316">orange</span> = trend hold.
+        ▲ all-in · ● all-out. Dashed lines are the rule thresholds as a % of the STH cost basis; purple = LTH PVR −0.5σ (buy) / +2.5σ (distribute).
+        The signal is evaluated on the daily close and executed at the next close; the status panel shows the position held <em>and</em> what the latest close instructs for tomorrow.
+        Figures are a $1,000 paper record from 2017-01-01 after full BitWealth fees — see <code>docs/STH_CB_Hybrid_Fact_Sheet.html</code> for the rules.
+      </div>
+      <details style="margin-top:.5rem;font-size:.8rem;"><summary style="cursor:pointer;color:var(--muted);">Recent trades</summary><div id="sthTrackerTrades" style="margin-top:.4rem;max-height:220px;overflow:auto;"></div></details>
+    </div>
+
     <div class="card" id="pvrChartCard">
       <div class="bc-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
         <div>
@@ -5946,6 +5978,177 @@
   </main>
 
   <script>
+    // ===================== STH CB Hybrid — Strategy Tracker =====================
+    (() => {
+      const card = document.querySelector('#sthTrackerCard');
+      if (!card) return;
+      const canvas = card.querySelector('#sthTrackerChart');
+      const metaEl = card.querySelector('#sthTrackerMeta');
+      const statusEl = card.querySelector('#sthTrackerStatus');
+      const tradesEl = card.querySelector('#sthTrackerTrades');
+      const presetsEl = card.querySelector('#sthTrackerPresets');
+      const resetBtn = card.querySelector('#sthTrackerReset');
+      const navToggle = card.querySelector('#sthTrackerShowNav');
+      let chart = null, rows = [], cfg = null, loaded = false, loading = false;
+
+      const usd = (v, d = 0) => v == null || !Number.isFinite(Number(v)) ? '–' : '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
+      const usdK = (v) => v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v);
+      const pct = (v, d = 1) => v == null ? '–' : (v >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%';
+      const POS = { cash: ['CASH', '#94a3b8'], cap_hold: ['CAPITULATION HOLD', '#10b981'], trend_hold: ['TREND HOLD', '#f97316'] };
+
+      // Full-height position shading + year gridlines (x grid is off: every day is a tick)
+      const shade = {
+        id: 'sthShade',
+        beforeDatasetsDraw(c) {
+          const o = c.config.options.plugins.sthShade; if (!o) return;
+          const ctx = c.ctx, xs = c.scales.x, a = c.chartArea, arr = o.pos;
+          const lo = xs.min ?? 0, hi = xs.max ?? arr.length - 1;
+          let i = Math.max(0, Math.floor(lo));
+          while (i <= Math.min(arr.length - 1, Math.ceil(hi))) {
+            if (!arr[i]) { i++; continue; }
+            let j = i; while (j + 1 < arr.length && arr[j + 1] === arr[i]) j++;
+            const x0 = Math.max(a.left, xs.getPixelForValue(i)), x1 = Math.min(a.right, xs.getPixelForValue(j));
+            ctx.fillStyle = arr[i] === 2 ? 'rgba(249,115,22,0.10)' : 'rgba(16,185,129,0.12)';
+            ctx.fillRect(x0, a.top, Math.max(1, x1 - x0), a.bottom - a.top);
+            i = j + 1;
+          }
+          ctx.strokeStyle = 'rgba(148,163,184,0.15)'; ctx.lineWidth = 1;
+          o.years.forEach((idx) => { if (idx < lo || idx > hi) return; const x = Math.round(xs.getPixelForValue(idx)) + 0.5; ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke(); });
+        }
+      };
+
+      function ensureZoom() {
+        try { const Z = window['chartjs-plugin-zoom']; if (Z && window.Chart && !Chart.registry.plugins.get('zoom')) Chart.register(Z); return !!Chart.registry.plugins.get('zoom'); } catch (_) { return false; }
+      }
+
+      function render() {
+        const zoom = ensureZoom();
+        const labels = rows.map(r => r.date);
+        const px = rows.map(r => Number(r.price_usd));
+        const cb = rows.map(r => Number(r.sth_cost_basis_usd));
+        const pos = rows.map(r => r.position_state === 'trend_hold' ? 2 : r.position_state === 'cap_hold' ? 1 : 0);
+        const years = []; let seen = {}; labels.forEach((l, i) => { const y = l.slice(0, 4); if (!seen[y]) { seen[y] = 1; years.push(i); } });
+        const yearAt = {}; years.forEach(i => { yearAt[i] = labels[i].slice(0, 4); });
+        const x = cfg?.extras || {};
+        const line = (k) => cb.map(v => v * k);
+        const ds = (label, data, color, w, dash, extra) => Object.assign({ label, data, borderColor: color, backgroundColor: 'transparent', borderWidth: w, borderDash: dash || [], pointRadius: 0, tension: 0, spanGaps: true, yAxisID: 'y' }, extra || {});
+        const buys = rows.map(r => r.action === 'BUY' ? Number(r.price_usd) : null);
+        const sells = rows.map(r => r.action === 'SELL' ? Number(r.price_usd) : null);
+        const showNav = navToggle.checked;
+        const datasets = [
+          ds('BTC price', px, '#e2e8f0', 1.4),
+          ds('STH cost basis', cb, '#f97316', 1.8),
+          ds(`${Math.round((x.capBuyRatio ?? 0.7) * 100)}% — capitulation buy`, line(x.capBuyRatio ?? 0.7), '#10b981', 1, [5, 3]),
+          ds(`${Math.round((x.capExitRatio ?? 1) * 100)}% — capitulation exit`, line(x.capExitRatio ?? 1), '#fbbf24', 0.9, [2, 3]),
+          ds(`${Math.round((x.trendExitRatio ?? 0.95) * 100)}% — trend exit`, line(x.trendExitRatio ?? 0.95), '#f59e0b', 0.9, [2, 3], { hidden: true }),
+          ds(`${Math.round((x.trendEnterRatio ?? 1.05) * 100)}% — trend entry`, line(x.trendEnterRatio ?? 1.05), '#38bdf8', 1, [4, 3]),
+          ds('LTH PVR −0.5σ (buy)', rows.map(r => r.lth_m050 == null ? null : Number(r.lth_m050)), '#a855f7', 1, [6, 3]),
+          ds('LTH PVR +2.5σ (distribute)', rows.map(r => r.lth_p250 == null ? null : Number(r.lth_p250)), '#a855f7', 1, [6, 3]),
+          ds('All-in', buys, 'transparent', 0, [], { pointRadius: 6, pointHoverRadius: 8, pointStyle: 'triangle', pointBackgroundColor: '#22c55e', pointBorderColor: '#052e16', pointBorderWidth: 1, showLine: false }),
+          ds('All-out', sells, 'transparent', 0, [], { pointRadius: 5, pointHoverRadius: 7, pointStyle: 'circle', pointBackgroundColor: '#ef4444', pointBorderColor: '#450a0a', pointBorderWidth: 1, showLine: false }),
+          ds('Strategy NAV ($1,000 from 2017)', rows.map(r => Number(r.nav_usd)), '#FFB400', 1.6, [], { yAxisID: 'yNav', hidden: !showNav }),
+          ds('HODL NAV', rows.map(r => Number(r.hodl_nav_usd)), '#c084fc', 1.1, [3, 3], { yAxisID: 'yNav', hidden: !showNav }),
+        ];
+        const tickFmt = (v) => [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000].includes(v) ? usdK(v) : '';
+        const options = {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: 'index', axis: 'x', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 11 }, filter: (item) => !/trend exit/.test(item.text) || true } },
+            tooltip: { callbacks: {
+              title: (items) => { const r = rows[items[0].dataIndex]; return `${r.date} · ${POS[r.position_state]?.[0] || r.position_state} · ${Math.round(Number(r.price_to_cb_ratio) * 100)}% of CB${r.action !== 'HOLD' ? ' · ' + r.action + ': ' + r.rule : ''}`; },
+              label: (c) => c.parsed.y == null ? null : `${c.dataset.label}: ${usd(c.parsed.y, c.parsed.y < 100 ? 2 : 0)}`,
+            } },
+            sthShade: { pos, years },
+            decimation: { enabled: false },
+            zoom: zoom ? { pan: { enabled: false }, zoom: { drag: { enabled: true, backgroundColor: 'rgba(255,180,0,0.15)' }, wheel: { enabled: false }, pinch: { enabled: true }, mode: 'x' }, limits: { x: { min: 'original', max: 'original' } } } : undefined,
+          },
+          scales: {
+            x: { type: 'category', ticks: { autoSkip: false, maxRotation: 0, font: { size: 10 }, callback: (v, i) => yearAt[i] || null }, grid: { display: false } },
+            y: { type: 'logarithmic', position: 'left', title: { display: true, text: 'BTC price / bands (USD, log)' }, grid: { color: 'rgba(148,163,184,0.12)' }, ticks: { font: { size: 10 }, callback: tickFmt } },
+            yNav: { type: 'logarithmic', position: 'right', display: showNav, title: { display: true, text: 'Portfolio value (USD, log)' }, grid: { drawOnChartArea: false }, ticks: { font: { size: 10 }, callback: tickFmt } },
+          },
+        };
+        if (chart) { chart.data = { labels, datasets }; chart.options = options; chart.update('none'); }
+        else {
+          chart = new Chart(canvas, { type: 'line', data: { labels, datasets }, options, plugins: [shade] });
+          canvas.addEventListener('dblclick', () => applyPreset('ALL'));
+        }
+      }
+
+      function applyPreset(range) {
+        if (!chart) return;
+        const labels = chart.data.labels, last = labels.length - 1;
+        presetsEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.range === range));
+        if (chart.resetZoom) chart.resetZoom();
+        const months = { '6M': 6, '1Y': 12, '3Y': 36, '5Y': 60 }[range];
+        if (!months) { delete chart.options.scales.x.min; delete chart.options.scales.x.max; chart.update('none'); return; }
+        const from = new Date(labels[last] + 'T00:00:00Z'); from.setUTCMonth(from.getUTCMonth() - months);
+        const iso = from.toISOString().slice(0, 10);
+        let idx = labels.findIndex(d => d >= iso); if (idx < 0) idx = 0;
+        chart.options.scales.x.min = idx; chart.options.scales.x.max = last; chart.update('none');
+      }
+
+      function renderStatus() {
+        const last = rows[rows.length - 1]; if (!last) return;
+        const x = cfg?.extras || {};
+        const price = Number(last.price_usd), cbv = Number(last.sth_cost_basis_usd), ratio = price / cbv;
+        const held = POS[last.position_state] || [last.position_state, '#fff'];
+        const lastTrade = [...rows].reverse().find(r => r.action !== 'HOLD');
+        const daysInPos = lastTrade ? Math.round((new Date(last.date) - new Date(lastTrade.date)) / 86400000) : null;
+        const sinceEntry = lastTrade && lastTrade.action === 'BUY' ? price / Number(lastTrade.price_usd) - 1 : null;
+        const inMkt = last.position_state !== 'cash';
+        const tomorrow = last.signal_in_market === inMkt ? 'Hold' : (last.signal_in_market ? 'BUY at next close' : 'SELL at next close');
+        const nextLevels = inMkt
+          ? [[`Capitulation exit (${Math.round((x.capExitRatio ?? 1) * 100)}%)`, cbv * (x.capExitRatio ?? 1), last.position_state === 'cap_hold'], [`Trend exit (${Math.round((x.trendExitRatio ?? .95) * 100)}%)`, cbv * (x.trendExitRatio ?? .95), last.position_state === 'trend_hold'], ['Distribute (LTH +2.5σ)', Number(last.lth_p250), true]]
+          : [[`Capitulation buy (${Math.round((x.capBuyRatio ?? .7) * 100)}%)`, cbv * (x.capBuyRatio ?? .7), true], ['LTH −0.5σ buy', Number(last.lth_m050), true], [`Trend entry (${Math.round((x.trendEnterRatio ?? 1.05) * 100)}%)`, cbv * (x.trendEnterRatio ?? 1.05), true]];
+        const tile = (l, v, sub, color) => `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">${l}</div><div style="font-size:1.05rem;font-weight:700;color:${color || 'var(--ink)'};">${v}</div>${sub ? `<div style="font-size:.72rem;color:var(--muted);">${sub}</div>` : ''}</div>`;
+        statusEl.innerHTML = [
+          tile('Position held', held[0], `${daysInPos != null ? daysInPos + ' days' : ''}${sinceEntry != null ? ' · ' + pct(sinceEntry) + ' since entry' : ''}`, held[1]),
+          tile('Latest close → tomorrow', tomorrow, `${last.date} · signal: ${last.signal_rule || '–'}`, tomorrow === 'Hold' ? 'var(--ink)' : '#FFB400'),
+          tile('BTC vs STH cost basis', `${Math.round(ratio * 100)}%`, `${usd(price)} vs ${usd(cbv)}`),
+          ...nextLevels.filter(n => n[2] && Number.isFinite(n[1])).map(n => tile(n[0], usd(n[1]), `${pct(n[1] / price - 1)} from here`)),
+          tile('Paper NAV ($1,000 since 2017)', usdK(Number(last.nav_usd)), `HODL ${usdK(Number(last.hodl_nav_usd))} · ${(Number(last.nav_usd) / Number(last.hodl_nav_usd)).toFixed(1)}×`, '#FFB400'),
+          tile('Last trade', lastTrade ? `${lastTrade.action} ${usd(lastTrade.price_usd)}` : '–', lastTrade ? `${lastTrade.date} · ${lastTrade.rule}` : ''),
+        ].join('');
+        const trades = rows.filter(r => r.action !== 'HOLD').slice(-20).reverse();
+        tradesEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.78rem;"><tr><th style="text-align:left">Date</th><th style="text-align:left">Action</th><th style="text-align:left">Rule</th><th style="text-align:right">Price</th><th style="text-align:right">% of CB</th><th style="text-align:right">NAV</th></tr>${trades.map(t => `<tr><td>${t.date}</td><td style="color:${t.action === 'BUY' ? '#22c55e' : '#ef4444'}">${t.action}</td><td>${t.rule}</td><td style="text-align:right">${usd(t.price_usd)}</td><td style="text-align:right">${Math.round(Number(t.price_to_cb_ratio) * 100)}%</td><td style="text-align:right">${usdK(Number(t.nav_usd))}</td></tr>`).join('')}</table>`;
+      }
+
+      async function load() {
+        if (loaded || loading) return;
+        if (!window.supabaseClient) { metaEl.textContent = 'Sign in to load the tracker.'; return; }
+        loading = true; metaEl.textContent = 'Loading tracker…';
+        try {
+          const { data: cfgs, error: ce } = await window.supabaseClient.rpc('sth_cb_tracker_list');
+          if (ce) throw ce;
+          cfg = (cfgs || [])[0] || null;
+          const key = cfg?.tracker_key || 'hybrid_v1';
+          let all = [];
+          for (let from = 0; ; from += 1000) {
+            const { data, error } = await window.supabaseClient.rpc('sth_cb_tracker_series', { p_tracker_key: key }).order('date', { ascending: true }).range(from, from + 999);
+            if (error) throw error;
+            if (!data?.length) break;
+            all = all.concat(data);
+            if (data.length < 1000) break;
+          }
+          rows = all;
+          if (!rows.length) { metaEl.textContent = 'No tracker data yet — run ef_sth_cb_tracker once (it is chained to the daily on-chain fetch).'; loading = false; return; }
+          render(); applyPreset('3Y'); renderStatus();
+          const trades = rows.filter(r => r.action !== 'HOLD').length;
+          metaEl.textContent = `${cfg?.label || key} · ${rows[0].date} → ${rows[rows.length - 1].date} · ${trades} trades · updated ${String(rows[rows.length - 1].computed_at || '').slice(0, 16).replace('T', ' ')} UTC`;
+          loaded = true;
+        } catch (e) { metaEl.textContent = `Error: ${e.message || e}`; }
+        loading = false;
+      }
+
+      presetsEl?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) applyPreset(b.dataset.range); });
+      resetBtn?.addEventListener('click', () => applyPreset('ALL'));
+      navToggle?.addEventListener('change', () => { if (!rows.length) return; const active = presetsEl.querySelector('button.active')?.dataset.range || 'ALL'; render(); applyPreset(active); });
+      const maybe = () => { if (location.hash === '#onchain-charts-module') load(); };
+      window.addEventListener('hashchange', maybe); document.addEventListener('DOMContentLoaded', maybe); maybe();
+    })();
+
     // ===================== On-Chain Charts =====================
     (() => {
       const root = document.querySelector('#onchain-charts-module');

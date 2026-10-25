@@ -448,6 +448,23 @@ Deno.serve(async (req: Request) => {
     sthCbBands = { error: msg };
   }
 
+  // ---- Chain: rebuild the STH_CB strategy tracker (paper record) -------------
+  // Fire-and-forget; the tracker rebuilds its full history from scratch each run.
+  try {
+    const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (baseUrl && key) {
+      const resp = await fetch(`${baseUrl}/functions/v1/ef_sth_cb_tracker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        body: JSON.stringify({ org_id }),
+      });
+      console.info(`ef_fetch_onchain_pvr: sth_cb tracker trigger -> HTTP ${resp.status}`);
+    }
+  } catch (e) {
+    console.warn(`ef_fetch_onchain_pvr: sth_cb tracker trigger failed (non-fatal): ${String((e as Error)?.message ?? e)}`);
+  }
+
   return new Response(
     JSON.stringify({
       ok: true,
