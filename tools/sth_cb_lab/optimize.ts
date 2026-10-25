@@ -147,11 +147,13 @@ if (baseline) {
   console.log(`\nBaseline (defaults): ${objective}=${score(baseline).toFixed(3)} · NAV ${fmtUsd(m.final_nav_usd)} · NAV÷HODL ${fmtX(m.nav_vs_hodl, 2)} · CAGR ${fmtPct(m.final_cagr_percent, 1)} · MaxDD ${fmtPct(m.max_drawdown * 100, 0)} · ${m.trades} trades${walkForward ? ` · WF ${baseline.folds_beating_hodl}/${folds!.length}` : ""}`);
 }
 console.log(`\nAll ${results.length} results → ${outFile}`);
-console.log(`Promote a winner to the Admin UI by pasting its experimental keys into "Advanced (extras JSON)", e.g.`);
 if (results[0]) {
   const d: Record<string, unknown> = {};
   for (const k of Object.keys(results[0].config) as (keyof SthCbConfig)[]) {
     if (JSON.stringify(results[0].config[k]) !== JSON.stringify(DEFAULT_STH_CB_CONFIG[k])) d[k] = results[0].config[k];
   }
+  console.log(`\nTo reproduce #1 in the Admin UI, paste this into "Advanced (extras JSON)":`);
   console.log(`  ${JSON.stringify(d)}`);
+  console.log(`and set the SAME window and contributions: Start ${lab.start}, End ${lab.end}, Upfront $${lab.upfront}, Monthly $${lab.monthly}, ${lab.sameDay ? "same-day" : "next-day"} fill.`);
+  console.log(`(Different dates or amounts give a different NAV — compare NAV÷HODL and CAGR across windows, never raw NAV.)`);
 }

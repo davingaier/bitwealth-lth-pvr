@@ -3,11 +3,30 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-24 (v0.6.165)
+**Last updated:** 2026-10-25 (v0.6.166)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.166 – STH_CB: `extras` dropped base keys (fix) + lab README rewrite
+**Date:** 2026-10-25  
+**Status:** ✅ DEPLOYED
+
+**Bug.** A lab winner promoted to the Admin UI (run `2e575462`) returned NAV $52,612 vs $71.7 M in the lab.
+Two causes: (1) the lab had used its default window (2015-01-04, $10 k + $500/mo, $81 k contributed) while the
+UI run was 2020-01-01, $500 + $100/mo ($8.7 k) — not comparable by NAV; (2) **real bug** — `applyExtras()`
+only accepted the eight experimental keys, so base keys pasted from the lab (`capExitRatio 0.95`,
+`trendEnterRatio 1.08`, `trendExitRatio 0.92`, `momoLength 3`, `momoThreshold 0.02`) were silently dropped and
+the EF ran a different strategy. Lab reproduction: intended config on the UI window = $103,294 (1.05× HODL);
+config with base keys dropped = $52,611.73 (exact match).
+
+**Fix.** `applyExtras` now merges `BASE_CONFIG_KEYS` + `EXTRA_CONFIG_KEYS`; unknown keys make the EF fail with
+the allowed list instead of being ignored; `bt_runs.summary` gains `effective_config` and `window`; the UI
+mirrors base keys from the JSON back into the form fields and the status line prints the window with a
+reminder; the optimizer's promote hint prints the window/contributions to replicate. Run `2e575462` re-executed:
+$103,294.50, 23 trades — identical to the lab. `tools/sth_cb_lab/README.md` rewritten as a step-by-step
+plain-language guide (purpose of every file, every option, how to read every metric, walk-forward, promotion).
 
 ### v0.6.165 – STH_CB: pure simulator, refinement flags, `extras` jsonb, local lab/optimizer; UI paging fix
 **Date:** 2026-10-24  

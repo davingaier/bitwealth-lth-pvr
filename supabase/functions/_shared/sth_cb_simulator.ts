@@ -243,19 +243,31 @@ export function simParamsFromBtParams(params: Record<string, unknown>): SthCbSim
   };
 }
 
-/** Allow-listed experimental keys accepted from `extras` (camelCase, matching SthCbConfig). */
+/** Experimental keys accepted from `extras` (camelCase, matching SthCbConfig). */
 export const EXTRA_CONFIG_KEYS = [
   "trendExitConfirmDays", "exitRocLength", "capBuyTiers", "sellTiers",
   "cbSlopeDays", "distributeAtSigma", "disableTrendExit", "trendReentryRatio",
 ] as const;
 
+/** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
+export const BASE_CONFIG_KEYS = [
+  "capBuyRatio", "capExitRatio", "trendEnterRatio", "trendExitRatio",
+  "momoEnabled", "momoLength", "momoThreshold", "momoOnCapExit", "momoOnTrendExit",
+] as const;
+
 export function applyExtras(extras: Record<string, unknown>): Partial<SthCbConfig> {
   const out: Record<string, unknown> = {};
-  for (const k of EXTRA_CONFIG_KEYS) {
+  for (const k of [...BASE_CONFIG_KEYS, ...EXTRA_CONFIG_KEYS]) {
     if (typeof extras[k] === "undefined" || extras[k] === null) continue;
     out[k] = extras[k];
   }
   return out as Partial<SthCbConfig>;
+}
+
+/** Keys present in `extras` that are not recognised (typos) — callers can warn on these. */
+export function unknownExtraKeys(extras: Record<string, unknown>): string[] {
+  const known = new Set<string>([...BASE_CONFIG_KEYS, ...EXTRA_CONFIG_KEYS]);
+  return Object.keys(extras).filter((k) => !known.has(k));
 }
 
 /** Does this config need LTH PVR bands joined onto the series? */

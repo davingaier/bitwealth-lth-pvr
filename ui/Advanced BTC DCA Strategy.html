@@ -7399,6 +7399,16 @@
       if (extrasTxt) {
         extras = JSON.parse(extrasTxt);   // surfaces a clear SyntaxError to the caller
         if (!extras || typeof extras !== 'object' || Array.isArray(extras)) throw new Error('Advanced (extras JSON) must be a JSON object.');
+        // Base keys pasted from the lab override the form fields — reflect them in the form so the
+        // visible inputs always match what the engine runs.
+        const mirror = { capBuyRatio:['btCbCapBuy',100], capExitRatio:['btCbCapExit',100], trendEnterRatio:['btCbTrendEnter',100], trendExitRatio:['btCbTrendExit',100], momoLength:['btCbMomoLen',1], momoThreshold:['btCbMomoThr',100] };
+        for (const [k,[id,scale]] of Object.entries(mirror)) {
+          if (typeof extras[k] === 'number') { const el = document.getElementById(id); if (el) el.value = String(Math.round(extras[k] * scale * 1000) / 1000); }
+        }
+        const mirrorChk = { momoEnabled:'btCbMomoEnabled', momoOnCapExit:'btCbMomoCap', momoOnTrendExit:'btCbMomoTrend' };
+        for (const [k,id] of Object.entries(mirrorChk)) {
+          if (typeof extras[k] === 'boolean') { const el = document.getElementById(id); if (el) el.checked = extras[k]; }
+        }
       }
       return {
         cap_buy_ratio:      num('btCbCapBuy', 70) / 100,
@@ -7616,8 +7626,10 @@
           await btLoadAndRenderFromRun(bt_run_id, { strategy: 'STH_CB', lthBenchRunId: lthRunId });
 
           const s = sthRes.data?.summary?.sth_cb;
-          const extra = s ? ` — ${s.trades} round-trip trades, ${s.pct_time_in_market}% time in market, final NAV ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(s.final_nav_usd)}` : '';
-          showInlineError(errId, `STH_CB back-test completed (Run #${bt_run_id})${extra}.`);
+          const w = sthRes.data?.summary?.window;
+          const extra = s ? ` — ${s.trades} round-trip trades, ${s.pct_time_in_market}% time in market, final NAV ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(s.final_nav_usd)} (${Number(s.nav_vs_hodl).toFixed(2)}× HODL)` : '';
+          const win = w ? ` · window ${w.start_date}→${w.end_date}, $${w.upfront} + $${w.monthly}/mo — compare lab results only on the same window & contributions` : '';
+          showInlineError(errId, `STH_CB back-test completed (Run #${bt_run_id})${extra}${win}.`);
           return;
         }
 

@@ -16,11 +16,14 @@
 import { getServiceClient } from "./client.ts";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import {
+  BASE_CONFIG_KEYS,
   configNeedsBands,
+  EXTRA_CONFIG_KEYS,
   simParamsFromBtParams,
   simulateSthCb,
   SthCbSeriesRow,
   toNum,
+  unknownExtraKeys,
 } from "../_shared/sth_cb_simulator.ts";
 
 const corsHeaders = {
@@ -132,6 +135,9 @@ Deno.serve(async (req) => {
     await sbBt.from("bt_runs").update({ status: "running", error: null, finished_at: null }).eq("bt_run_id", bt_run_id);
 
     const simParams = simParamsFromBtParams(params);
+    const extrasObj = (params.extras && typeof params.extras === "object") ? params.extras as Record<string, unknown> : {};
+    const unknown = unknownExtraKeys(extrasObj);
+    if (unknown.length) throw new Error(`Unrecognised key(s) in extras: ${unknown.join(", ")}. Allowed: ${[...BASE_CONFIG_KEYS, ...EXTRA_CONFIG_KEYS].join(", ")}`);
     console.info(`ef_sth_cb_bt_execute: run=${bt_run_id} ${simParams.startDate}..${simParams.endDate} lag=${simParams.executionLag}`, simParams.config);
 
     // ── Load price / cost-basis series (warm-up + window) ─────────────────
@@ -180,7 +186,13 @@ Deno.serve(async (req) => {
     await bulkInsert(sbBt, "bt_hodl_ledger", tag(sim.hodlLedger));
     await bulkInsert(sbBt, "bt_hodl_balances", tag(sim.hodlBalances));
 
-    const summary = { ...sim.summary, warmup: { ...sim.summary.warmup, from: WARMUP_START } };
+    const summary = {
+      ...sim.summary,
+      warmup: { ...sim.summary.warmup, from: WARMUP_START },
+      // The config the engine actually ran (form columns merged with extras) — single source of truth for "what was tested"
+      effective_config: simParams.config,
+      window: { start_date: simParams.startDate, end_date: simParams.endDate, upfront: simParams.upfront, monthly: simParams.monthly, execution_lag_days: simParams.executionLag },
+    };
     await sbBt.from("bt_runs").update({
       status: "ok", finished_at: new Date().toISOString(), error: null, summary,
     }).eq("bt_run_id", bt_run_id);

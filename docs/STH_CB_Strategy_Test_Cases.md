@@ -46,6 +46,9 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | S-03 | UI paging: RPC `order` + `limit/offset` over 2020→2026 | 1000 / 1000 / 488 rows | as expected | PASS |
 | S-04 | Optimizer idea 1 (100 combos) on all cores | completes, CSV written, baseline row recognised | 1.5 s, 67 evals/s | PASS |
 | S-05 | Optimizer idea 5 `--walk-forward` | 12 annual folds scored, ranking by folds first | baseline 5/12 | PASS |
+| S-06 | Run `2e575462` (extras containing base keys) before fix | base keys honoured | **FAIL** — base keys dropped, NAV $52,612 (= lab with keys stripped) | FIXED |
+| S-07 | Run `2e575462` re-executed after fix | matches lab on same window | $103,294.50, 23 trades, 1.055× HODL (identical) | PASS |
+| S-08 | Extras with a typo key | EF rejects with allowed-key list | implemented (`unknownExtraKeys`) | PASS |
 
 ---
 
