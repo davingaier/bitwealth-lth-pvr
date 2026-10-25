@@ -81,6 +81,8 @@ with **$10 000 upfront + $500 per month**, next-day fills, and the full BitWealt
 | `--monthly 100` | Contribution on the first trading day of every month | `500` |
 | `--same-day` | Fill at the same close as the signal (how ChartInspect back-tests). Without it the fill happens at the *next* day's close, which is what the live pipeline can actually achieve | next-day |
 | `--fees exchange_only` | Only VALR exchange fees, no BitWealth management/performance fees, no USDPC. Use this to compare like-for-like with ChartInspect's numbers | `full` |
+| `--trade-bps 10` | Exchange fee on each BTC buy/sell in basis points (ChartInspect uses `fee 0.001` = 10 bps) | `8` (VALR) |
+| `--contrib-bps 0` | Fee on each contribution in basis points (ZAR→USDT). ChartInspect has none | `18` (VALR) |
 | `--config '{...}'` | Override the **base** strategy settings (see table of keys below) | — |
 | `--extras '{...}'` | Switch on **refinement** flags (see table of keys below). `--config` and `--extras` are interchangeable; both are just merged over the defaults | — |
 | `--walk-forward` | Also print a per-calendar-year table (explained in Step 4) | off |
@@ -212,6 +214,22 @@ Related: `--same-day` reproduces ChartInspect's fill assumption. Use it to check
 line up with theirs; use the default next-day fills for decisions, because that is what the live
 pipeline can execute.
 
+### Reproducing ChartInspect's headline (and why it won't match exactly)
+
+ChartInspect's script is a **single $1 000 lump sum from 2017-01-01, 0.1 % fee, no momentum gate,
+same-day fills, no management/performance fees**. The equivalent lab command is:
+
+```powershell
+deno run -A tools/sth_cb_lab/run.ts --start 2017-01-01 --upfront 1000 --monthly 0 --fees exchange_only --trade-bps 10 --contrib-bps 0 --same-day --config '{"momoEnabled":false}'
+```
+
+This gives ≈ 80 000 % ROI (≈ 9.6× HODL) against their 172 988 % (≈ 22× HODL). The remaining gap is the
+**cost-basis data itself**: their `onchain.sth-cost-basis` metric is a different provider's calculation
+from Research Bitcoin's `realized_price_sth`, and an all-in/all-out strategy is extremely sensitive to
+exactly where that line sits. Shifting our cost basis by just ±3 % moves the ROI between 29 000 % and
+79 000 %; +10 % takes it below HODL. Treat any single headline number — theirs or ours — with that in mind,
+and use `--walk-forward` to judge robustness instead.
+
 ---
 
 ## Step 5 — Promote a result to the Admin UI
@@ -291,3 +309,76 @@ deno run -A tools/sth_cb_lab/run.ts --extras '{...}' --walk-forward        # 5. 
 3. Add the key to `EXTRA_CONFIG_KEYS` in the simulator and a grid entry in `ideas.ts`.
 
 No database change is needed — the flag travels in `bt_params.extras`.
+
+---
+
+# Part 2 — LTH PVR engine on STH-CB bands (`lth_run.ts`, `lth_optimize.ts`)
+
+A second experiment lives in the same folder: keep the **three LTH PVR pillars** — (1) tiered buy sizes
+B1–B5 below the mean and tiered sell sizes B6–B11 above it, (2) the momentum filter on the middle sell
+tiers, (3) bear-pause with retrace buys — but replace the LTH PVR bands with bands drawn around the
+**STH cost basis**. In the database this is the band source **`sth_cb`** (next to `rb` and `ci`).
+
+## How the bands are defined
+
+Mean band = STH cost basis. The ±σ unit comes from one of two definitions (`--bands` spec):
+
+| Spec | Meaning |
+|---|---|
+| `sth_pvr:auto` | σ-unit = expanding std-dev of STH market cap ÷ STH supply (so +1σ is "STH PVR = +1"), multiplied by the expanding std-dev of the STH PVR series — the faithful analogue of how the LTH PVR bands are built |
+| `sth_pvr:2` | Same unit, fixed multiplier 2 (any number works) |
+| `ratio_sigma:365:1` | σ = std-dev of ln(price ÷ cost basis) over the last 365 days (0 = all history), multiplier 1; bands are `cb × exp(±kσ)` |
+
+The code is `supabase/functions/_shared/sth_cb_bands.ts`; the database copy (`lth_pvr.sth_cb_bands_daily`)
+is recomputed from `lth_pvr.onchain_pvr_daily` every day by `ef_fetch_onchain_pvr` using the definition
+stored in `lth_pvr.sth_cb_band_params`. Changing the definition = `UPDATE` that row + call the function
+with `{ "sth_cb_bands": "backfill" }`.
+
+## Commands
+
+```powershell
+deno run -A tools/sth_cb_lab/lth_run.ts --start 2017-01-01 --end 2026-10-23 --upfront 1000 --monthly 0          # production LTH params on sth_pvr:auto
+deno run -A tools/sth_cb_lab/lth_run.ts ... --bands ratio_sigma:365:1                                           # another band definition
+deno run -A tools/sth_cb_lab/lth_run.ts ... --genes '{...}' --walk-forward                                      # a specific candidate (paste from the optimiser)
+deno run -A tools/sth_cb_lab/lth_optimize.ts --start 2017-01-01 --end 2026-10-23 --upfront 1000 --monthly 0     # full search
+```
+
+`lth_optimize.ts` searches 18 "genes" (band spec, B1–B11, momentum length/threshold, bear-pause
+enter/exit σ, retrace on/off + base) in three phases: ~4 800 *structured* seeds (sensible lump-sum shapes)
+plus random samples → coordinate-descent hill-climbing from the top K → walk-forward scoring of the top M.
+It prints the **baseline**, the **max in-sample** result, the **most robust** result (most calendar years
+beating HODL) and whether anything cleared `--target` (default 200 000 %). Flags: `--samples`, `--climb`,
+`--passes`, `--wf-top`, `--seed`, `--seedgenes '{...}'`, `--lock '{"bandSpec":"sth_pvr:2"}'`,
+`--objective roi|nav_vs_hodl|cagr|sharpe|calmar`, `--no-structured`.
+
+> Note: the LTH PVR engine fills at the **signal close** (that is how the production LTH PVR back-tester
+> works), unlike the STH_CB strategy's next-day default.
+
+## Result of the 2026-10-25 campaign (target: >200 000 % ROI, $1 000 lump sum, 2017-01-01 → 2026-10-23, full BitWealth fees)
+
+Two campaigns, **27 122 configurations** evaluated.
+
+| | ROI | NAV | × HODL | Max DD | WF years |
+|---|---|---|---|---|---|
+| Production LTH PVR params on `sth_pvr:auto` | 1 930 % | $20 304 | 0.24× | 76 % | — |
+| **Best found** (`sth_pvr:2`, all-in below mean, sell 10 %/day in +0.5–1σ only when 3-day ROC > 20 %, 20 %/day above +2.5σ, pause 2σ → −0.5σ) | **18 201 %** | $183 005 | 2.19× | 77 % | 4/10 |
+| Same, without BitWealth fees (gross) | 32 788 % | $328 883 | 3.94× | | |
+| For reference: ChartInspect STH_CB rules on the same basis | 55 824 % | $559 239 | 6.70× | 52 % | |
+| Target | 200 000 % | $2 001 000 | 24× | | |
+
+**The target was not reached, and the search shows why it cannot be with these three pillars.** Both
+campaigns converge on the same flat plateau (dozens of neighbouring configs give the identical result),
+which is the signature of a structural ceiling rather than an under-searched space:
+
+- The LTH pillars only **buy below the mean** and **sell into strength above it**. They have no
+  trailing exit — nothing sells when price falls from +1σ back through the cost basis — so the portfolio
+  rides every bear market down (max drawdown 77 %, the same as HODL). The one rule that made
+  ChartInspect's STH_CB strategy work was precisely that −5 % exit below the cost basis.
+- The only re-entry above the mean is the retrace exception, which is too narrow to re-board a trend.
+- A lump sum removes the engine's main lever: the B1–B5 tiers were designed to size *monthly inflows*,
+  not to time a single stake.
+- Fees matter at this scale: 1 % management + 10 % performance take the gross 32 788 % down to 18 201 %.
+
+The best configuration is saved as the variation template **"STH-CB Bands v1 (lump-sum optimised,
+experimental)"** and `band_source = 'sth_cb'` is selectable in the Admin back-tester, simulator and
+optimizer. Treat it as a research artefact: it beats HODL in only 4 of 10 calendar years.

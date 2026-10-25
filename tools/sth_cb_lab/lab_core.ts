@@ -63,6 +63,8 @@ export interface LabArgs {
   monthly: number;
   sameDay: boolean;
   fees: "full" | "exchange_only";
+  tradeBps: number;
+  contribBps: number;
   config: SthCbConfig;
 }
 
@@ -90,6 +92,8 @@ export function labArgsFrom(a: Record<string, string | boolean>, seriesTo: strin
     monthly: num("monthly", 500),
     sameDay: a["same-day"] === true || a.sameDay === true,
     fees: a.fees === "exchange_only" ? "exchange_only" : "full",
+    tradeBps: num("trade-bps", 8),
+    contribBps: num("contrib-bps", 18),
     config: { ...DEFAULT_STH_CB_CONFIG, ...base, ...extras },
   };
 }
@@ -101,8 +105,8 @@ export function simParams(l: LabArgs, config: SthCbConfig = l.config): SthCbSimP
     endDate: l.end,
     upfront: l.upfront,
     monthly: l.monthly,
-    tradeFeeRate: 8 / 10_000,
-    contribFeeRate: 18 / 10_000,
+    tradeFeeRate: l.tradeBps / 10_000,
+    contribFeeRate: l.contribBps / 10_000,
     feePlan: "management",
     platformFeeRate: 0.0075,
     managementFeeRate: full ? 0.01 : 0,

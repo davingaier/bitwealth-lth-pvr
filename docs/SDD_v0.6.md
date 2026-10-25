@@ -3,11 +3,74 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-25 (v0.6.166)
+**Last updated:** 2026-10-25 (v0.6.167)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.167 – `band_source = 'sth_cb'`: LTH PVR engine on STH-cost-basis σ bands + optimisation campaign
+**Date:** 2026-10-25  
+**Status:** ✅ DEPLOYED (back-tester / simulator / optimizer only — no live pipeline)
+
+**Request.** A variation of LTH PVR that keeps the three pillars (B1–B11 tiered sizing, momentum filter,
+bear-pause + retrace) but replaces the LTH PVR bands with bands around the **STH cost basis**; optimise it for
+>200 000 % ROI on a $1 000 lump sum, 2017-01-01 → 2026-10-23, BitWealth-realistic fees.
+
+**Design.** Implemented as a third band source for the existing engine — no new strategy, schema or UI module.
+- `_shared/sth_cb_bands.ts` — `computeSthCbBands()`: mean = STH cost basis; σ-unit either `sth_pvr`
+  (expanding std of STH market cap ÷ STH supply, × scale or × expanding std of the STH PVR series = `auto`;
+  linear bands) or `ratio_sigma` (rolling/expanding std of ln(price/CB) over N days; log bands). Emits the
+  `price_at_m150 … price_at_p900` columns `decideTrade` reads by name. 7 unit tests.
+- `_shared/sth_cb_bands_db.ts` — `refreshSthCbBands()`: recomputes the whole series from
+  `lth_pvr.onchain_pvr_daily` (expanding stats, ~6 k rows, ms) and upserts `lth_pvr.sth_cb_bands_daily`.
+  Chained from `ef_fetch_onchain_pvr` after every daily append (non-fatal) and callable with
+  `{ "sth_cb_bands": "backfill" }`. Active σ definition lives in `lth_pvr.sth_cb_band_params` (one row/org).
+- Migration `20261025_sth_cb_band_source.sql` (remote `20261025190000`): the two tables (service-role only),
+  `lth_pvr_bt.v_backtest_prices_sth_cb` (same columns as `v_backtest_prices_rb` + extra σ columns),
+  `public.get_sth_cb_bands_series()`, and a DO-block that widened every `band_source` CHECK constraint
+  (`decisions_daily`, `bt_runs`, `wft_runs`) to accept `'sth_cb'`.
+- `_shared/band_source.ts`: `BandSource = 'ci'|'rb'|'sth_cb'`, `bandsTableForSource()` →
+  `sth_cb_bands_daily`, new `backtestPricesViewForSource()`. `ef_bt_execute` routes through it. The
+  simulator / optimizer / statement EFs already go through `bandsTableForSource`, so they accept `sth_cb`
+  unchanged (the table has the same `date, btc_price, price_at_*` columns).
+- Admin UI: "STH CB – STH cost basis ± σ (experimental)" option in all four band-source selectors
+  (back-tester, simulator, optimizer, WFT launcher); the three `=== 'ci' ? 'ci' : 'rb'` normalisers now
+  pass `sth_cb` through.
+- Lab: `tools/sth_cb_lab/lth_core.ts`, `lth_run.ts`, `lth_worker.ts`, `lth_optimize.ts` — the LTH engine
+  (`_shared/lth_pvr_simulator.ts`, unchanged) driven by in-memory `sth_cb` bands; 18-gene search
+  (band spec, B1–B11, momentum, pause σ, retrace) with structured lump-sum seeds → random → coordinate
+  descent → walk-forward; writes `results/*_lth_sthcb_*.csv`. `fetch.ts` now also caches `sth_supply`.
+
+**Campaign result (27 122 configurations, two runs).** Target **not reached**:
+
+| | ROI | × HODL | Max DD | WF |
+|---|---|---|---|---|
+| Production LTH params on `sth_pvr:auto` | 1 930 % | 0.24× | 76 % | — |
+| **Best:** `sth_pvr:2`, B1–B5 = 1 (all-in below mean), B6 0 / B7 0.10 / B8 0.01 / B9 0.02 / B10 0 / B11 0.20, momo 3d > 20 %, pause +2σ → −0.5σ, retrace B3 | **18 201 %** | 2.19× | 77 % | 4/10 |
+| Same without BitWealth fees | 32 788 % | 3.94× | | |
+| ChartInspect STH_CB rules, same basis (for reference) | 55 824 % | 6.70× | 52 % | |
+| Target | 200 000 % | 24× | | |
+
+Both campaigns converge on the same flat plateau → structural ceiling: the pillars buy below the mean and sell
+into strength only; there is no trailing exit (price falling back through the cost basis sells nothing), so the
+book rides every bear down (DD = HODL's); the lump sum removes the tier-sizing lever designed for monthly
+inflows; and fees take ~45 % of the gross. Full reasoning in `tools/sth_cb_lab/README.md` Part 2.
+
+**Deployed state.** `sth_cb_band_params` = `sth_pvr`, scale 2; 5 789 band rows backfilled (2011-01-01 →
+2026-10-24); `ef_bt_execute` run `0417e7f6` with `band_source='sth_cb'` and the winning params → $182 218
+(18 122 %) vs lab $183 005 — 0.4 % apart, a pre-existing warm-up-ROC difference between the two LTH engines.
+Variation template **`sth_cb_bands_lump_v1`** ("STH-CB Bands v1 (lump-sum optimised, experimental)",
+`is_production=false`) saved for the Simulator/Optimizer dropdowns — select band source "STH CB" with it.
+
+**Note on fills.** The LTH engine fills at the signal close (production LTH back-tester convention); the
+"bw_lump" basis therefore inherits same-day fills here, unlike the STH_CB strategy's next-day default.
+
+**Files changed:** `supabase/functions/_shared/{sth_cb_bands,sth_cb_bands_db,band_source}.ts` (+ bands test),
+`_shared/lth_pvr_strategy_logic.ts` (type widening), `ef_bt_execute/index.ts`, `ef_fetch_onchain_pvr/index.ts`,
+`_shared/sth_cb_simulator.ts` (`sth_supply` on series rows), `supabase/migrations/20261025_sth_cb_band_source.sql`,
+`ui/Advanced BTC DCA Strategy.html`, `tools/sth_cb_lab/{lth_core,lth_run,lth_worker,lth_optimize,fetch}.ts`,
+`tools/sth_cb_lab/README.md`, docs.
 
 ### v0.6.166 – STH_CB: `extras` dropped base keys (fix) + lab README rewrite
 **Date:** 2026-10-25  

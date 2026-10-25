@@ -38,6 +38,8 @@ export interface SthCbSeriesRow {
   close_date: string;            // YYYY-MM-DD
   px: number;                    // BTC close
   cb: number;                    // STH cost basis
+  /** BTC held by the STH cohort — needed only for the "sth_cb" band source (sth_pvr mode) */
+  sth_supply?: number;
   /** LTH PVR band price levels (p050…p250) — only needed for distributeAtSigma */
   bands?: Record<string, number | null | undefined>;
 }

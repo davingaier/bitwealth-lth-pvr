@@ -50,6 +50,20 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | S-07 | Run `2e575462` re-executed after fix | matches lab on same window | $103,294.50, 23 trades, 1.055× HODL (identical) | PASS |
 | S-08 | Extras with a typo key | EF rejects with allowed-key list | implemented (`unknownExtraKeys`) | PASS |
 
+### band_source = 'sth_cb' (LTH PVR engine on STH-CB σ bands, v0.6.167)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| C-01 | `sth_cb_bands.test.ts` (naming, spec parsing, symmetry, linearity, auto scale, NaN guards) | 7 pass | 7 passed | PASS |
+| C-02 | Migration widens `band_source` CHECKs | decisions_daily, bt_runs, wft_runs | all three widened (NOTICE) | PASS |
+| C-03 | `{ "sth_cb_bands": "backfill" }` on `ef_fetch_onchain_pvr` | full series upserted | 5 789 rows, params sth_pvr/2 | PASS |
+| C-04 | `v_backtest_prices_sth_cb` | mean = STH CB, upper bands populated, sub-zero bands NULL | 2026-10-24: mean 75 763, p200 234 427, m100 NULL | PASS |
+| C-05 | `ef_bt_execute` with `band_source='sth_cb'`, winner params, $1 000 lump 2017→2026 (run `0417e7f6`) | ≈ lab 18 201 % | 18 122 % ($182 218) — 0.4 % engine difference | PASS |
+| C-06 | Optimisation campaign 1 (11 335 configs) | best found | 16 332 % | DONE |
+| C-07 | Optimisation campaign 2 (15 787 configs, widened grid, seeded) | best found | 18 201 %, WF 4/10 | DONE |
+| C-08 | Target > 200 000 % ROI | reached? | **not reached** — structural ceiling ≈ 2× HODL | FAIL (documented) |
+| C-09 | Variation template `sth_cb_bands_lump_v1` | visible in Simulator/Optimizer dropdowns | inserted (id be770de4) — pending visual check | SKIP |
+
 ---
 
 ## 2. Database / RPC

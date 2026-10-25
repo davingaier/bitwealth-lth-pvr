@@ -32,6 +32,7 @@
 // ===========================================================================
 
 import { getServiceClient, sleep } from "./client.ts";
+import { refreshSthCbBands } from "../_shared/sth_cb_bands_db.ts";
 
 const RB_BASE = "https://api.researchbitcoin.net";
 const ORG_FALLBACK = "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
@@ -268,6 +269,22 @@ Deno.serve(async (req: Request) => {
 
   const isBackfill = body.backfill === true;
 
+  // ---- sth_cb band source maintenance (no RB call) ---------------------------
+  // { "sth_cb_bands": "backfill" }            → recompute & upsert the whole series
+  // { "sth_cb_bands": "from", "from": date }  → recompute, upsert from `from`
+  if (typeof body.sth_cb_bands === "string") {
+    try {
+      const fromDate = body.sth_cb_bands === "backfill" ? null : String(body.from ?? "");
+      const res = await refreshSthCbBands(sb, org_id, fromDate || null);
+      console.info(`ef_fetch_onchain_pvr: sth_cb bands refreshed (${res.rows_written} rows, params ${JSON.stringify(res.params)})`);
+      return new Response(JSON.stringify({ ok: true, sth_cb_bands: res }), { headers: { "content-type": "application/json" } });
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      await logAlert(sb, "error", "sth_cb bands refresh failed", { org_id, error: msg }, org_id);
+      return new Response(msg, { status: 500 });
+    }
+  }
+
   // ---- Load RB API token ----------------------------------------------------
   const { data: tokenRow, error: tokenErr } = await sb
     .schema("lth_pvr")
@@ -419,6 +436,18 @@ Deno.serve(async (req: Request) => {
 
   console.info(`ef_fetch_onchain_pvr: wrote ${rows.length} rows, last_date=${lastDate}, lth_n=${lthWFinal.n}`);
 
+  // ---- Chain: refresh the sth_cb band source for the new dates --------------
+  // Non-fatal: the PVR series is the primary product; band rows can be rebuilt
+  // any time with { "sth_cb_bands": "backfill" }.
+  let sthCbBands: unknown = null;
+  try {
+    sthCbBands = await refreshSthCbBands(sb, org_id, isBackfill ? null : rows[0].date);
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    await logAlert(sb, "warn", "sth_cb bands refresh failed after PVR append", { org_id, error: msg }, org_id);
+    sthCbBands = { error: msg };
+  }
+
   return new Response(
     JSON.stringify({
       ok: true,
@@ -427,6 +456,7 @@ Deno.serve(async (req: Request) => {
       last_date: lastDate,
       sth_n: sthWFinal.n,
       lth_n: lthWFinal.n,
+      sth_cb_bands: sthCbBands,
     }),
     { headers: { "content-type": "application/json" } },
   );

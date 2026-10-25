@@ -47,11 +47,27 @@ const bandMap = new Map(bands.map((b) => [String(b.close_date), {
   p200: Number(b.price_at_p200), p250: Number(b.price_at_p250),
 }]));
 
+console.log("Fetching STH supply (for sth_pvr-style bands)…");
+const supplyHeaders = { ...headers, "Accept-Profile": "lth_pvr" };
+const supplyMap = new Map<string, number>();
+for (let offset = 0; ; offset += 1000) {
+  const resp = await fetch(
+    `${url}/rest/v1/onchain_pvr_daily?select=date,sth_supply&org_id=eq.${orgId}&date=gte.${from}&order=date.asc&limit=1000&offset=${offset}`,
+    { headers: supplyHeaders },
+  );
+  if (!resp.ok) { console.warn(`  sth_supply unavailable (HTTP ${resp.status}) — band mode sth_pvr will be inert`); break; }
+  const page = await resp.json() as Record<string, unknown>[];
+  for (const r of page) supplyMap.set(String(r.date), Number(r.sth_supply));
+  if (page.length < 1000) break;
+}
+console.log(`  ${supplyMap.size} supply rows`);
+
 const rows: SthCbSeriesRow[] = cb
   .map((r) => ({
     close_date: String(r.close_date),
     px: Number(r.btc_price_usd),
     cb: Number(r.sth_cost_basis_usd),
+    sth_supply: supplyMap.get(String(r.close_date)),
     bands: bandMap.get(String(r.close_date)),
   }))
   .filter((r) => r.px > 0 && r.cb > 0);

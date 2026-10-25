@@ -1,6 +1,7 @@
 import { getServiceClient } from "./client.ts";
 import { bucketLabel, decideTrade, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { syntheticUsdpcPrice, sizeUsdpcToUsdt, sizeUsdtToUsdpc } from "../_shared/usdpc.ts";
+import { backtestPricesViewForSource, BandSource, normaliseBandSource } from "../_shared/band_source.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -130,12 +131,13 @@ Deno.serve(async (req)=>{
     // Band source. Selects the underlying view:
     //   - 'rb' (default, post-Day 7 of CI->RB migration, 2026-05-19) -> lth_pvr_bt.v_backtest_prices_rb (sourced from lth_pvr.rb_bands_daily)
     //   - 'ci'                                                       -> lth_pvr_bt.v_backtest_prices    (sourced from lth_pvr.ci_bands_daily, frozen historical reference)
+    //   - 'sth_cb' (2026-10-25)                                      -> lth_pvr_bt.v_backtest_prices_sth_cb (mean = STH cost basis ± σ, lth_pvr.sth_cb_bands_daily)
     // The public website back-tester (website/lth-pvr-backtest.html) does NOT
     // send a band_source field, so it inherits this default; users see the
     // same band source that live customers actually trade on.
     const rawBandSource = body?.band_source ?? params.band_source ?? run.band_source ?? "rb";
-    const bandSource: "ci" | "rb" = rawBandSource === "ci" ? "ci" : "rb";
-    const pricesView = bandSource === "rb" ? "v_backtest_prices_rb" : "v_backtest_prices";
+    const bandSource: BandSource = normaliseBandSource(rawBandSource === "" ? "rb" : rawBandSource);
+    const pricesView = backtestPricesViewForSource(bandSource);
     console.info(`ef_bt_execute: bt_run_id=${bt_run_id} band_source=${bandSource} prices_view=${pricesView}`);
     // Interpret fees as basis points (e.g. 8 bps = 0.08%)
     const tradeFeeRate = toNum(params.maker_bps_trade, 0) / 10000;  // VALR BTC/USDT exchange fee (8 bps, charged in BTC)

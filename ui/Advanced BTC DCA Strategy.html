@@ -2038,6 +2038,7 @@
               <select id="simBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
                 <option value="rb" selected>RB – Research Bitcoin (live default)</option>
                 <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
+                <option value="sth_cb">STH CB – STH cost basis ± σ (experimental)</option>
               </select>
             </div>
             <div style="display:flex;align-items:center;gap:.5rem;align-self:end;height:var(--control-height);">
@@ -2107,6 +2108,7 @@
                 <select id="optBandSource" class="band-source-select" style="width:100%;height:var(--control-height);border-radius:var(--control-radius);border:1px solid var(--border);padding:0 var(--control-pad-x);">
                   <option value="rb" selected>RB – Research Bitcoin (live default)</option>
                   <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
+                  <option value="sth_cb">STH CB – STH cost basis ± σ (experimental)</option>
                 </select>
               </div>
             </div>
@@ -4664,9 +4666,10 @@
 
           <!-- Band source (CI vs RB on-chain bands) -->
           <label for="btBandSource"><strong>Band source:</strong></label>
-          <select id="btBandSource" class="band-source-select" title="On-chain band source: RB (Research Bitcoin, live default) or CI (CryptoQuant, frozen historical). For STH_CB runs this applies to the companion LTH PVR benchmark run.">
+          <select id="btBandSource" class="band-source-select" title="On-chain band source: RB (Research Bitcoin, live default), CI (CryptoQuant, frozen historical) or STH CB (mean = STH cost basis ± σ, experimental). For STH_CB-strategy runs this applies to the companion LTH PVR benchmark run.">
             <option value="rb" selected>RB – Research Bitcoin (live default)</option>
             <option value="ci">CI – CryptoQuant (frozen 2026-05-19)</option>
+            <option value="sth_cb">STH CB – STH cost basis ± σ (experimental)</option>
           </select>
 
           <!-- STH Cost Basis strategy parameters (shown only for STH_CB) -->
@@ -4820,6 +4823,7 @@
                 <select id="wftLaunchBandSource" style="width:100%;font-size:13px;">
                   <option value="rb" selected>rb — Research Bitcoin (default)</option>
                   <option value="ci">ci — CryptoQuant (legacy)</option>
+                  <option value="sth_cb">sth_cb — STH cost basis ± σ (experimental)</option>
                 </select>
               </div>
               <div style="display:flex;flex-direction:column;justify-content:flex-end;">
@@ -7554,9 +7558,9 @@
       }
 
       try{
-        // Band source: 'rb' (live default) or 'ci' (frozen historical)
+        // Band source: 'rb' (live default), 'ci' (frozen historical) or 'sth_cb' (STH cost basis ± σ, experimental)
         const bandSourceEl = document.getElementById('btBandSource');
-        const bandSource = (bandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const bandSource = ['ci','sth_cb'].includes(bandSourceEl?.value) ? bandSourceEl.value : 'rb';
 
         // Common contribution / fee settings shared by both engines
         const common = {
@@ -16858,7 +16862,7 @@ Momentum:
 
         // Call simulator edge function
         const simBandSourceEl = document.getElementById('simBandSource');
-        const simBandSource = (simBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const simBandSource = ['ci','sth_cb'].includes(simBandSourceEl?.value) ? simBandSourceEl.value : 'rb';
         const simUsdpcEnabled = !!document.getElementById('simUsdpcEnabled')?.checked;
         const simUsdpcApyRaw = parseFloat(document.getElementById('simUsdpcApy')?.value);
         const simUsdpcApy = Number.isFinite(simUsdpcApyRaw) ? simUsdpcApyRaw : 10;
@@ -17389,7 +17393,7 @@ Momentum:
 
         // Build request body
         const optBandSourceEl = document.getElementById('optBandSource');
-        const optBandSource = (optBandSourceEl?.value === 'ci') ? 'ci' : 'rb';
+        const optBandSource = ['ci','sth_cb'].includes(optBandSourceEl?.value) ? optBandSourceEl.value : 'rb';
         const requestBody = {
           variation_id: variationId,
           start_date: startDate,

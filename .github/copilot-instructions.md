@@ -86,6 +86,7 @@ retained only for historical back-test reproducibility.
   - Both schemas must stay in PostgREST **Exposed schemas** or `ef_sth_cb_bt_execute` fails with `PGRST106 Invalid schema`
   - Rules engine: `_shared/sth_cb_strategy_logic.ts` (`decideSthCb`) — any future live decision EF must import it
   - Simulator: `_shared/sth_cb_simulator.ts` (pure, DB-free) is the single accounting implementation for `ef_sth_cb_bt_execute` AND the local lab `tools/sth_cb_lab/` (Deno; `fetch.ts` → `run.ts` / `optimize.ts`). Experiment locally first; promote winners via `bt_params.extras` (jsonb of `SthCbConfig` flags) — new refinement ideas must NOT add columns/tables
+  - **`band_source='sth_cb'`** (2026-10-25): a third band source for the *LTH PVR engine* — mean = STH cost basis, ±σ per `_shared/sth_cb_bands.ts`; rows in `lth_pvr.sth_cb_bands_daily` (recomputed daily by `ef_fetch_onchain_pvr` via `_shared/sth_cb_bands_db.ts`, definition in `lth_pvr.sth_cb_band_params`); view `lth_pvr_bt.v_backtest_prices_sth_cb`. Optimised in `tools/sth_cb_lab/lth_optimize.ts`; ceiling ≈ 2× HODL on a lump sum (see README Part 2) — experimental only
 
 ### 3. VALR Exchange Integration
 

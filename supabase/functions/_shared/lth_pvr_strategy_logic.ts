@@ -98,7 +98,7 @@ export async function computeBearPauseAt(
   orgId: string,
   upToDateStr: string,
   config: StrategyConfig,
-  bandsTable: "ci_bands_daily" | "rb_bands_daily" = "ci_bands_daily"
+  bandsTable: "ci_bands_daily" | "rb_bands_daily" | "sth_cb_bands_daily" = "ci_bands_daily"
 ): Promise<boolean> {
   // Map sigma values to column names
   // Enter: +2.0σ = price_at_p200
