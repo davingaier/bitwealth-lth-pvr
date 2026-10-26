@@ -88,6 +88,7 @@ retained only for historical back-test reproducibility.
   - Simulator: `_shared/sth_cb_simulator.ts` (pure, DB-free) is the single accounting implementation for `ef_sth_cb_bt_execute` AND the local lab `tools/sth_cb_lab/` (Deno; `fetch.ts` → `run.ts` / `optimize.ts`). Experiment locally first; promote winners via `bt_params.extras` (jsonb of `SthCbConfig` flags) — new refinement ideas must NOT add columns/tables
   - **`band_source='sth_cb'`** (2026-10-25): a third band source for the *LTH PVR engine* — mean = STH cost basis, ±σ per `_shared/sth_cb_bands.ts`; rows in `lth_pvr.sth_cb_bands_daily` (recomputed daily by `ef_fetch_onchain_pvr` via `_shared/sth_cb_bands_db.ts`, definition in `lth_pvr.sth_cb_band_params`); view `lth_pvr_bt.v_backtest_prices_sth_cb`. Optimised in `tools/sth_cb_lab/lth_optimize.ts`; ceiling ≈ 2× HODL on a lump sum (see README Part 2) — experimental only
   - **STH_CB hybrid v1** (2026-10-25): best STH_CB config found by autonomous iteration (ideas 1–14, flags in `extras`) — 272 684 % ROI / 32.7× HODL on $1k lump 2017→2026 with full fees, WF 7/10; JSON + robustness table in `tools/sth_cb_lab/README.md`. Re-run `robustness.ts` before trusting any new winner
+  - **Strategy tracker** (2026-10-26): `sth_cb.tracker_config` / `tracker_daily` rebuilt daily by `ef_sth_cb_tracker` (chained from `ef_fetch_onchain_pvr`); shown as the top card of Admin UI → On-Chain Charts. To track another config, insert a `tracker_config` row — no code change
 
 ### 3. VALR Exchange Integration
 

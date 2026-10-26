@@ -3,11 +3,37 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-25 (v0.6.169)
+**Last updated:** 2026-10-26 (v0.6.170)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.170 – STH_CB Strategy Tracker in the Admin UI (On-Chain Charts)
+**Date:** 2026-10-26 · **Status:** ✅ DEPLOYED
+
+**Where.** Top card of **On-Chain Charts** — the module that already renders the daily STH/LTH on-chain series and is
+refreshed by the same data chain, so the tracker is always as current as the cost basis itself.
+
+**Daily paper record (DB + EF).** Migration `20261025_sth_cb_tracker.sql` (remote `20261025210000`):
+`sth_cb.tracker_config` (which configurations to track — one row `hybrid_v1` seeded with the optimised extras;
+$1 000 from 2017-01-01, next-day fills, full fees) and `sth_cb.tracker_daily` (one row per close: price, STH CB, ratio,
+LTH −0.5σ / +2.5σ levels, `position_state`, `signal_in_market` + rule/note, executed `action`, NAV, HODL NAV, BTC/cash).
+New `ef_sth_cb_tracker` (service-role gated, `--no-verify-jwt`) rebuilds the full history for every active config with
+the shared simulator (~ms) and upserts; chained from `ef_fetch_onchain_pvr` after the PVR append + sth_cb band refresh.
+RPCs `public.sth_cb_tracker_list()` / `sth_cb_tracker_series(key, from)` guarded by `my_orgs()`. First automatic run
+confirmed 2026-10-26 02:20 UTC (3 585 rows, through close 2026-10-25).
+
+**UI card.** Status tiles — position held (+ days / % since entry), *latest close → tomorrow* instruction, BTC as % of
+STH CB, the live trigger levels that matter for the current state (exit / distribute, or buy levels when in cash) with
+% distance, paper NAV vs HODL, last trade. Chart — log BTC price, STH cost basis, dashed 75 % / 95 % / 97 % / 112 %
+threshold bands, LTH PVR −0.5σ / +2.5σ, green/orange hold shading, ▲ all-in / ● all-out, optional NAV-vs-HODL on a
+second log axis; 6M/1Y/3Y(default)/5Y/All presets, drag-zoom, year gridlines; collapsible last-20-trades table.
+Current state at deploy: **TREND HOLD** since 2026-06-29 ($59,911, +34 %), 106 % of CB, trend exit at $73,497 (−8.7 %),
+distribute at $143,866; paper NAV $2.69 M (32.7× HODL).
+
+**Files:** `supabase/migrations/20261025_sth_cb_tracker.sql`, `supabase/functions/ef_sth_cb_tracker/{index,client}.ts`,
+`ef_fetch_onchain_pvr/index.ts` (chain), `ui/Advanced BTC DCA Strategy.html`.
 
 ### v0.6.169 – STH_CB Hybrid product fact sheet
 **Date:** 2026-10-25 · **Status:** ✅ DONE
