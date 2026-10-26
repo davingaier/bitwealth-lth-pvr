@@ -3,11 +3,30 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-26 (v0.6.170)
+**Last updated:** 2026-10-26 (v0.6.171)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.171 – STH_CB Hybrid rules as editable fields in the Admin back-tester (+ presets)
+**Date:** 2026-10-26 · **Status:** ✅ DONE (UI only)
+
+The STH_CB block in **Strategy Back-Testing** now exposes every rule of the hybrid as a labelled form field instead of
+a pasted JSON blob: capitulation buy % + ROC confirmation + LTH −σ buy band; capitulation exit %; trend entry %,
+re-entry ladder %, momentum re-entry ROC; trend exit % / disable / confirmation closes / CB-slope days; trailing stop %;
+distribution at LTH +σ and/or × CB; post-distribution clear %; macro-top block σ; minimum hold; momentum gate.
+Blank / "Off" = rule disabled. A **Rule preset** selector loads *STH CB Hybrid v1* (default) or *ChartInspect
+original* (70/100/105/95, same-day fills, no momentum gate); any manual edit flips it to *Custom*. "Advanced (extras
+JSON)" remains for the few keys without a field (`exitRocLength`, multi-tier `capBuyTiers`/`sellTiers`, σ-mode
+thresholds) and is merged last. The "Price vs STH Cost Basis (signals)" chart now also draws the LTH PVR buy /
+distribute bands (fetched from `v_backtest_prices_rb`) and the ×CB distribution line, and hides the trend-exit line
+when disabled. Run labels record the preset name.
+
+Verification: form output for the Hybrid v1 preset → `ef_sth_cb_bt_execute` = **$2,727,839 / 272,684 % / 33 trades**
+(identical to the lab); ChartInspect preset = $519,792 / 51,879 % / 37 trades on the same basis (differs from the
+55,824 % quoted in v0.6.166 because that run still had the momentum gate on and next-day fills — the preset mirrors
+the ChartInspect script exactly).
 
 ### v0.6.170 – STH_CB Strategy Tracker in the Admin UI (On-Chain Charts)
 **Date:** 2026-10-26 · **Status:** ✅ DEPLOYED

@@ -250,13 +250,13 @@ and set the SAME window and contributions: Start 2015-01-04, End 2026-10-23, Upf
 
 1. Admin UI → **Strategy Back-Testing** → Strategy = **STH Cost Basis**.
 2. Set Start / End / Upfront / Monthly **to the values shown** (or expect a different NAV).
-3. Paste the JSON into **Advanced (extras JSON)** and click **Run back-test**.
+3. Either pick a **Rule preset** (*Hybrid v1* / *ChartInspect original*) and edit the labelled fields, or paste the
+   JSON into **Advanced (extras JSON)** and click **Run back-test**.
 
-Any key in the JSON — base or refinement — overrides the form fields; the form inputs are updated to
-show what was used. If the JSON contains a key the engine does not know (a typo), the run fails with a
-message listing the allowed keys rather than silently ignoring it. The run's stored summary contains
-`effective_config` — the exact configuration that ran.
-
+Every hybrid rule has its own field; blank / "Off" disables it. The JSON box is only needed for keys without a
+field (`exitRocLength`, multi-tier `capBuyTiers` / `sellTiers`, σ-mode thresholds) and is merged last, so it
+overrides any field. Unknown keys (typos) make the run fail with the allowed list; the run's stored summary
+carries `effective_config` — the exact configuration that ran.
 You can also copy the full `config` cell from the CSV; it is the same thing with every key spelled out.
 
 ---

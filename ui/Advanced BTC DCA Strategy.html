@@ -4674,17 +4674,80 @@
 
           <!-- STH Cost Basis strategy parameters (shown only for STH_CB) -->
           <div id="btSthCbParams" style="display:none;">
+            <label for="btCbPreset"><strong>Rule preset:</strong></label>
+            <select id="btCbPreset" title="Loads a complete parameter set into the fields below. Edit any field afterwards — the preset switches to 'Custom'.">
+              <option value="hybrid_v1" selected>STH CB Hybrid v1 — BitWealth optimised (2026-10-25)</option>
+              <option value="chartinspect">ChartInspect original — 70 % capitulation / ±5 % trend band</option>
+              <option value="custom">Custom (edited)</option>
+            </select>
+
             <label for="btCbCapBuy"><strong>Capitulation buy (% of STH CB):</strong></label>
-            <input id="btCbCapBuy" type="number" min="10" max="99" step="1" value="70" title="R1: deploy all cash when price ≤ this % of the STH cost basis (ChartInspect default 70%)">
+            <input id="btCbCapBuy" type="number" min="10" max="99" step="1" value="75" title="R1: deploy all cash when price ≤ this % of the STH cost basis">
+
+            <label for="btCbCapBuyRoc"><strong>…only once ROC ≥ (%):</strong></label>
+            <input id="btCbCapBuyRoc" type="number" min="-50" max="50" step="0.5" value="0" placeholder="blank = off" title="R1 confirmation: wait until the momentum ROC is at or above this (0 = price has stopped falling). Leave blank to buy the moment the level is hit.">
+
+            <label for="btCbLthBuy"><strong>Also buy at LTH PVR band (σ):</strong></label>
+            <select id="btCbLthBuy" title="R14: an additional capitulation trigger — price at or below this LTH PVR band">
+              <option value="">Off</option>
+              <option value="0">mean (0σ)</option>
+              <option value="-0.25">−0.25σ</option>
+              <option value="-0.5" selected>−0.5σ</option>
+              <option value="-0.75">−0.75σ</option>
+              <option value="-1">−1σ</option>
+            </select>
 
             <label for="btCbCapExit"><strong>Capitulation exit (% of STH CB):</strong></label>
-            <input id="btCbCapExit" type="number" min="50" max="200" step="1" value="100" title="R2: sell all BTC when price ≥ this % of the STH cost basis (default 100% = touches the line)">
+            <input id="btCbCapExit" type="number" min="50" max="200" step="1" value="95" title="R2: sell all BTC when price recovers to this % of the STH cost basis">
 
             <label for="btCbTrendEnter"><strong>Trend entry (% of STH CB):</strong></label>
-            <input id="btCbTrendEnter" type="number" min="100" max="200" step="1" value="105" title="R3: deploy all cash when price ≥ this % of the STH cost basis (default 105%)">
+            <input id="btCbTrendEnter" type="number" min="100" max="200" step="1" value="112" title="R3: deploy all cash when price ≥ this % of the STH cost basis">
+
+            <label for="btCbReentry"><strong>Re-entry after a trend exit (%):</strong></label>
+            <input id="btCbReentry" type="number" min="80" max="150" step="1" value="102" placeholder="blank = off" title="R5 ladder: after a trend exit, re-enter at this % instead of the full trend-entry level. Blank = off.">
+
+            <label for="btCbReentryRoc"><strong>…or when ROC ≥ (%):</strong></label>
+            <input id="btCbReentryRoc" type="number" min="0" max="100" step="0.5" value="10" placeholder="blank = off" title="R8 momentum re-entry: after a trend exit, re-enter as soon as ROC ≥ this and price is above the re-entry level. Blank = off.">
 
             <label for="btCbTrendExit"><strong>Trend exit (% of STH CB):</strong></label>
-            <input id="btCbTrendExit" type="number" min="50" max="100" step="1" value="95" title="R3 exit: sell all BTC when price ≤ this % of the STH cost basis (ChartInspect default 95%)">
+            <input id="btCbTrendExit" type="number" min="50" max="100" step="1" value="97" title="R3 exit: sell the trend position when price ≤ this % of the STH cost basis">
+
+            <label for="btCbTrendExitOff"><strong>Disable trend exit:</strong></label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;"><input id="btCbTrendExitOff" type="checkbox"> <span>Rely on trailing stop / distribution only</span></label>
+
+            <label for="btCbConfirm"><strong>Trend-exit confirmation (closes):</strong></label>
+            <input id="btCbConfirm" type="number" min="1" max="30" step="1" value="1" title="Require this many consecutive closes below the exit level (1 = off)">
+
+            <label for="btCbSlope"><strong>Trend exit only if CB slope ≤ 0 over (days):</strong></label>
+            <input id="btCbSlope" type="number" min="1" max="365" step="1" value="21" placeholder="blank = off" title="Idea 3: only honour the trend exit when the STH cost basis has been flat/falling over this many days. Blank = off.">
+
+            <label for="btCbTrail"><strong>Trailing stop (% below peak):</strong></label>
+            <input id="btCbTrail" type="number" min="1" max="90" step="1" value="35" placeholder="blank = off" title="R12: exit a trend hold once price is this % below its peak since entry. Blank = off.">
+
+            <label for="btCbDistSigma"><strong>Distribute at LTH PVR band (σ):</strong></label>
+            <select id="btCbDistSigma" title="R4: sell everything when price reaches this LTH PVR upper band">
+              <option value="">Off</option>
+              <option value="1.5">+1.5σ</option>
+              <option value="2">+2σ</option>
+              <option value="2.5" selected>+2.5σ</option>
+            </select>
+
+            <label for="btCbDistRatio"><strong>…or at × STH cost basis:</strong></label>
+            <input id="btCbDistRatio" type="number" min="1.1" max="5" step="0.1" value="2" placeholder="blank = off" title="R6: sell everything when price ≥ this multiple of the STH cost basis. Blank = off.">
+
+            <label for="btCbDistClear"><strong>After distributing, no re-entry until (% of CB):</strong></label>
+            <input id="btCbDistClear" type="number" min="50" max="120" step="1" value="90" placeholder="blank = off" title="R13: after a distribution sale, block trend re-entries until price has returned to this % of the cost basis. Blank = off.">
+
+            <label for="btCbBlockSigma"><strong>No trend entries above LTH band (σ):</strong></label>
+            <select id="btCbBlockSigma" title="R10 macro filter: block trend entries while price is above this LTH PVR band (capitulation buys are never blocked)">
+              <option value="">Off</option>
+              <option value="1.5">+1.5σ</option>
+              <option value="2">+2σ</option>
+              <option value="2.5" selected>+2.5σ</option>
+            </select>
+
+            <label for="btCbMinHold"><strong>Minimum hold (days):</strong></label>
+            <input id="btCbMinHold" type="number" min="0" max="365" step="1" value="15" title="R9: ignore every exit rule for this many days after an entry (0 = off)">
 
             <label for="btCbMomoEnabled"><strong>Momentum-gated sells:</strong></label>
             <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
@@ -4693,10 +4756,10 @@
             </label>
 
             <label for="btCbMomoLen"><strong>Momentum ROC length (days):</strong></label>
-            <input id="btCbMomoLen" type="number" min="1" max="60" step="1" value="5">
+            <input id="btCbMomoLen" type="number" min="1" max="60" step="1" value="2">
 
             <label for="btCbMomoThr"><strong>Momentum threshold (%):</strong></label>
-            <input id="btCbMomoThr" type="number" min="-50" max="50" step="0.1" value="0" title="Sell allowed once ROC(n) ≤ this value">
+            <input id="btCbMomoThr" type="number" min="-50" max="50" step="0.1" value="-2" title="Sell allowed once ROC(n) ≤ this value">
 
             <label><strong>Apply momentum gate to:</strong></label>
             <div style="display:flex;gap:1rem;align-items:center;font-weight:400;">
@@ -4717,7 +4780,7 @@
             </label>
 
             <label for="btCbExtras"><strong>Advanced (extras JSON):</strong></label>
-            <textarea id="btCbExtras" rows="2" placeholder='{"trendExitConfirmDays":2,"exitRocLength":20}' title="Experimental refinement flags, promoted from tools/sth_cb_lab. Keys: trendExitConfirmDays, exitRocLength, capBuyTiers, sellTiers, cbSlopeDays, distributeAtSigma, disableTrendExit, trendReentryRatio, sigmaMode/sigmaWindow/capBuySigma/capExitSigma/trendEnterSigma/trendExitSigma, reentryRocThreshold, minHoldDays, blockEntryAboveSigma, capBuyRocThreshold, trailingStopPct, distReentryClearRatio, capBuyAtLthSigma. Base keys (capBuyRatio, trendExitRatio, momoLength …) may also be overridden here. See tools/sth_cb_lab/README.md for the optimised hybrid v1." style="width:100%;font:inherit;font-size:.85rem;border-radius:var(--control-radius);border:1px solid var(--border);padding:.35rem var(--control-pad-x);resize:vertical;"></textarea>
+            <textarea id="btCbExtras" rows="2" placeholder='Optional — anything not covered by the fields above, e.g. {"exitRocLength":20,"capBuyTiers":[{"ratio":0.7,"alloc":0.5},{"ratio":0.6,"alloc":1}]}' title="Keys here are merged LAST and override the fields above. Remaining keys not in the form: exitRocLength, capBuyTiers, sellTiers (multi-tier), sigmaMode/sigmaWindow/capBuySigma/capExitSigma/trendEnterSigma/trendExitSigma. See tools/sth_cb_lab/README.md." style="width:100%;font:inherit;font-size:.85rem;border-radius:var(--control-radius);border:1px solid var(--border);padding:.35rem var(--control-pad-x);resize:vertical;"></textarea>
           </div>
 
           <!-- Actions / messages -->
@@ -7438,6 +7501,29 @@
     const loadSthCbStdDcaResults  = (id) => loadSthCbRpc('sth_cb_bt_get_std_dca_balances', id);
     const loadSthCbHodlResults    = (id) => loadSthCbRpc('sth_cb_bt_get_hodl_balances', id);
 
+    // LTH PVR band column suffix for a sigma multiplier (matches lth_pvr band tables)
+    function btSigmaKey(sigma){
+      const k = Math.abs(Math.round(sigma * 100)).toString().padStart(3, '0');
+      return sigma === 0 ? 'price_at_mean' : (sigma < 0 ? `price_at_m${k}` : `price_at_p${k}`);
+    }
+    // LTH PVR band levels by date (for the STH_CB signals chart) — read from the RB back-test view
+    async function loadLthBandsByDate(startDate, endDate){
+      const out = {};
+      if (!supabaseClient || !startDate || !endDate) return out;
+      try {
+        const db = supabaseClient.schema('lth_pvr_bt');
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from('v_backtest_prices_rb')
+            .select('close_date, price_at_m100, price_at_m075, price_at_m050, price_at_m025, price_at_mean, price_at_p050, price_at_p100, price_at_p150, price_at_p200, price_at_p250')
+            .gte('close_date', startDate).lte('close_date', endDate).order('close_date', { ascending: true }).range(from, from + 999);
+          if (error || !data?.length) break;
+          for (const r of data) out[normalizeDate(r.close_date)] = r;
+          if (data.length < 1000) break;
+        }
+      } catch (e) { console.warn('LTH bands for signals chart unavailable:', e); }
+      return out;
+    }
+
     // Single entry-point: load data for bt_run_id and refresh chart + table.
     // opts.strategy: 'LTH_PVR' (default) | 'STH_CB'; opts.lthBenchRunId: companion lth_pvr_bt run for STH_CB overlays.
     async function btLoadAndRenderFromRun(btRunId, opts = {}){
@@ -7473,6 +7559,10 @@
           isSth ? supabaseClient.rpc('sth_cb_bt_get_run', { p_bt_run_id: btRunId }) : Promise.resolve({ data: null, error: null })
         ]);
         if (isSth && runRes?.data?.params) window.btLastSthCbParams = runRes.data.params;
+        if (isSth && lthRes.data?.length) {
+          const first = lthRes.data[0].trade_date, lastD = lthRes.data[lthRes.data.length - 1].trade_date;
+          window.btLthBandsByDate = await loadLthBandsByDate(first, lastD);
+        }
 
         if (lthRes.error) {
           showInlineError(errId, lthRes.error.message || `Could not load ${btStrategyLabel()} back-test results.`);
@@ -7578,9 +7668,8 @@
       if (panel) panel.classList.toggle('is-visible', strategy === 'STH_CB');
       const note = document.getElementById('btStrategyNote');
       if (note) {
-        note.textContent = strategy === 'STH_CB'
-          ? 'STH Cost Basis strategy: all-in at ≤70% of the STH cost basis or ≥105% (trend); all-out at the cost basis (capitulation hold) or ≤95% (trend hold). Sells can be deferred until momentum turns. Back-tester only — no live pipeline yet.'
-          : 'Advanced BTC DCA back-testing is coming soon. Currently the LTH PVR BTC DCA and STH Cost Basis strategies are available.';
+        if (strategy === 'STH_CB') btUpdateSthCbNote();
+        else note.textContent = 'Advanced BTC DCA back-testing is coming soon. Currently the LTH PVR BTC DCA and STH Cost Basis strategies are available.';
       }
       const reportSel = document.getElementById('btReportTypeSelect');
       if (reportSel) {
@@ -7598,24 +7687,44 @@
       }
     }
 
-    // Read the STH_CB parameter block into the bt_params shape expected by ef_sth_cb_bt_execute
+    // Read the STH_CB parameter block into the bt_params shape expected by ef_sth_cb_bt_execute.
+    // Every refinement field maps to one SthCbConfig key in `extras`; a blank / "Off" field means "rule off".
     function btReadSthCbParams(){
       const num = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : def; };
+      const opt = (id) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : null; }; // null = off
       const chk = (id, def) => { const el = document.getElementById(id); return el ? !!el.checked : def; };
-      let extras = {};
+
+      const extras = {};
+      const set = (k, v) => { if (v !== null && v !== undefined) extras[k] = v; };
+      set('capBuyRocThreshold', opt('btCbCapBuyRoc') == null ? null : opt('btCbCapBuyRoc') / 100);
+      set('capBuyAtLthSigma', opt('btCbLthBuy'));
+      set('trendReentryRatio', opt('btCbReentry') == null ? null : opt('btCbReentry') / 100);
+      set('reentryRocThreshold', opt('btCbReentryRoc') == null ? null : opt('btCbReentryRoc') / 100);
+      if (chk('btCbTrendExitOff', false)) extras.disableTrendExit = true;
+      const confirm = Math.trunc(num('btCbConfirm', 1)); if (confirm > 1) extras.trendExitConfirmDays = confirm;
+      set('cbSlopeDays', opt('btCbSlope'));
+      set('trailingStopPct', opt('btCbTrail') == null ? null : opt('btCbTrail') / 100);
+      set('distributeAtSigma', opt('btCbDistSigma'));
+      const distRatio = opt('btCbDistRatio'); if (distRatio != null) extras.sellTiers = [{ ratio: distRatio, alloc: 0 }];
+      set('distReentryClearRatio', opt('btCbDistClear') == null ? null : opt('btCbDistClear') / 100);
+      set('blockEntryAboveSigma', opt('btCbBlockSigma'));
+      const minHold = Math.trunc(num('btCbMinHold', 0)); if (minHold > 0) extras.minHoldDays = minHold;
+
+      // Advanced JSON is merged LAST so it can override anything above
       const extrasTxt = (document.getElementById('btCbExtras')?.value || '').trim();
       if (extrasTxt) {
-        extras = JSON.parse(extrasTxt);   // surfaces a clear SyntaxError to the caller
-        if (!extras || typeof extras !== 'object' || Array.isArray(extras)) throw new Error('Advanced (extras JSON) must be a JSON object.');
+        const adv = JSON.parse(extrasTxt);   // surfaces a clear SyntaxError to the caller
+        if (!adv || typeof adv !== 'object' || Array.isArray(adv)) throw new Error('Advanced (extras JSON) must be a JSON object.');
+        Object.assign(extras, adv);
         // Base keys pasted from the lab override the form fields — reflect them in the form so the
         // visible inputs always match what the engine runs.
         const mirror = { capBuyRatio:['btCbCapBuy',100], capExitRatio:['btCbCapExit',100], trendEnterRatio:['btCbTrendEnter',100], trendExitRatio:['btCbTrendExit',100], momoLength:['btCbMomoLen',1], momoThreshold:['btCbMomoThr',100] };
         for (const [k,[id,scale]] of Object.entries(mirror)) {
-          if (typeof extras[k] === 'number') { const el = document.getElementById(id); if (el) el.value = String(Math.round(extras[k] * scale * 1000) / 1000); }
+          if (typeof adv[k] === 'number') { const el = document.getElementById(id); if (el) el.value = String(Math.round(adv[k] * scale * 1000) / 1000); }
         }
         const mirrorChk = { momoEnabled:'btCbMomoEnabled', momoOnCapExit:'btCbMomoCap', momoOnTrendExit:'btCbMomoTrend' };
         for (const [k,id] of Object.entries(mirrorChk)) {
-          if (typeof extras[k] === 'boolean') { const el = document.getElementById(id); if (el) el.checked = extras[k]; }
+          if (typeof adv[k] === 'boolean') { const el = document.getElementById(id); if (el) el.checked = adv[k]; }
         }
       }
       return {
@@ -7633,6 +7742,56 @@
         extras
       };
     }
+
+    // ── STH_CB rule presets ──────────────────────────────────────────────────
+    // Field values are in the units shown on the form (percentages, days, σ); '' = off.
+    const BT_STHCB_PRESETS = {
+      hybrid_v1: {
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '2.5', btCbDistRatio: 2,
+        btCbDistClear: 90, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbExecLag: '1', btCbExtras: ''
+      },
+      chartinspect: {
+        btCbCapBuy: 70, btCbCapBuyRoc: '', btCbLthBuy: '', btCbCapExit: 100, btCbTrendEnter: 105, btCbReentry: '', btCbReentryRoc: '',
+        btCbTrendExit: 95, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: '', btCbTrail: '', btCbDistSigma: '', btCbDistRatio: '',
+        btCbDistClear: '', btCbBlockSigma: '', btCbMinHold: 0, btCbMomoEnabled: false, btCbMomoLen: 5, btCbMomoThr: 0, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbExecLag: '0', btCbExtras: ''
+      }
+    };
+    let btSthCbApplyingPreset = false;
+    function btApplySthCbPreset(name){
+      const p = BT_STHCB_PRESETS[name]; if (!p) return;
+      btSthCbApplyingPreset = true;
+      for (const [id, v] of Object.entries(p)) {
+        const el = document.getElementById(id); if (!el) continue;
+        if (el.type === 'checkbox') el.checked = !!v; else el.value = v === null || v === undefined ? '' : String(v);
+      }
+      btSthCbApplyingPreset = false;
+      btUpdateSthCbNote();
+    }
+    function btUpdateSthCbNote(){
+      const note = document.getElementById('btStrategyNote');
+      const strategy = document.getElementById('btStrategySelect')?.value;
+      if (!note || strategy !== 'STH_CB') return;
+      const preset = document.getElementById('btCbPreset')?.value;
+      note.textContent = preset === 'hybrid_v1'
+        ? 'STH CB Hybrid v1 — the BitWealth-optimised rule set (272,684 % ROI / 32.7× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 7/10). Edit any field to experiment; see docs/STH_CB_Hybrid_Fact_Sheet.html for the rules.'
+        : preset === 'chartinspect'
+        ? 'ChartInspect original: all-in at ≤70 % of the STH cost basis or ≥105 % (trend); all-out at the cost basis (capitulation hold) or ≤95 % (trend hold); same-day fills, no momentum gate.'
+        : 'Custom STH CB rules. Blank fields / "Off" disable that rule. Back-tester only — no live pipeline yet.';
+    }
+    (function bindSthCbPreset(){
+      const sel = document.getElementById('btCbPreset');
+      const panel = document.getElementById('btSthCbParams');
+      if (!sel || !panel || sel._bound) return;
+      sel.addEventListener('change', () => { if (sel.value !== 'custom') btApplySthCbPreset(sel.value); else btUpdateSthCbNote(); });
+      // Any manual edit flips the preset to "Custom"
+      panel.addEventListener('input', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
+      panel.addEventListener('change', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
+      sel._bound = true;
+      btApplySthCbPreset('hybrid_v1');
+    })();
 
     // Create an LTH PVR run (lth_pvr_bt.bt_runs + bt_params) and return its bt_run_id.
     // Shared by the plain LTH PVR flow and the STH_CB companion benchmark run.
@@ -7804,7 +7963,8 @@
             execution_lag_days: sth.execution_lag_days,
             extras: sth.extras
           };
-          const extrasLabel = Object.keys(sth.extras || {}).length ? ` extras ${JSON.stringify(sth.extras)}` : '';
+          const extrasKeys = Object.keys(sth.extras || {});
+          const extrasLabel = extrasKeys.length ? ` +${extrasKeys.length} rules [${document.getElementById('btCbPreset')?.value || 'custom'}]` : '';
           const label = `STH_CB ${startDate}..${endDate} cap ${Math.round(sth.cap_buy_ratio*100)}/${Math.round(sth.cap_exit_ratio*100)} trend ${Math.round(sth.trend_enter_ratio*100)}/${Math.round(sth.trend_exit_ratio*100)}${sth.momo_enabled ? ` momo ROC${sth.momo_len}≤${(sth.momo_thr*100).toFixed(1)}%` : ''} lag ${sth.execution_lag_days}${extrasLabel}`;
 
           // Fire both engines in parallel; companion failures must not block the STH_CB result
@@ -8238,10 +8398,16 @@
       const ctx    = canvas.getContext('2d');
 
       const p = (window.btLastSthCbParams || {});
-      const capBuy   = Number(p.cap_buy_ratio)     || 0.70;
-      const capExit  = Number(p.cap_exit_ratio)    || 1.00;
-      const trEnter  = Number(p.trend_enter_ratio) || 1.05;
-      const trExit   = Number(p.trend_exit_ratio)  || 0.95;
+      const x = (p.extras && typeof p.extras === 'object') ? p.extras : {};
+      const capBuy   = Number(x.capBuyRatio ?? p.cap_buy_ratio)     || 0.70;
+      const capExit  = Number(x.capExitRatio ?? p.cap_exit_ratio)    || 1.00;
+      const trEnter  = Number(x.trendEnterRatio ?? p.trend_enter_ratio) || 1.05;
+      const trExit   = Number(x.trendExitRatio ?? p.trend_exit_ratio)  || 0.95;
+      const distRatio = Array.isArray(x.sellTiers) && x.sellTiers.length ? Number(x.sellTiers[x.sellTiers.length - 1].ratio) : null;
+      const lthBuyKey = typeof x.capBuyAtLthSigma === 'number' ? btSigmaKey(x.capBuyAtLthSigma) : null;
+      const lthDistKey = typeof x.distributeAtSigma === 'number' ? btSigmaKey(x.distributeAtSigma) : null;
+      const lthMap = window.btLthBandsByDate || {};
+      const lthLine = (key) => key ? rows.map(r => { const b = lthMap[normalizeDate(r.trade_date)]; return b && b[key] != null ? Number(b[key]) : null; }) : null;
 
       const labels  = rows.map(r => normalizeDate(r.trade_date));
       const sPrice  = rows.map(r => numOrNull(r.price_usd));
@@ -8271,8 +8437,11 @@
             { label:'STH Cost Basis', data:sCb, borderColor:'#F97316', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, pointHoverRadius:3, tension:.1, borderWidth:2, order:2 },
             { label:`Capitulation buy (${pctLabel(capBuy)})`, data:line(capBuy), borderColor:'#22C55E', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1.2, borderDash:[4,3], order:3 },
             { label:`Trend entry (${pctLabel(trEnter)})`, data:line(trEnter), borderColor:'#3B82F6', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:4 },
-            { label:`Trend exit (${pctLabel(trExit)})`, data:line(trExit), borderColor:'#EF4444', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:5 },
-            ...(capExit !== 1 ? [{ label:`Capitulation exit (${pctLabel(capExit)})`, data:line(capExit), borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:6 }] : []),
+            { label:`Trend exit (${pctLabel(trExit)})`, data:line(trExit), borderColor:'#EF4444', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:5, hidden: !!x.disableTrendExit },
+            ...(capExit !== 1 ? [{ label:`Capitulation exit (${pctLabel(capExit)})`, data:line(capExit), borderColor:'#FBBF24', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[2,3], order:6 }] : []),
+            ...(distRatio ? [{ label:`Distribute at ${distRatio}× STH CB`, data:line(distRatio), borderColor:'#F43F5E', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1, borderDash:[6,3], order:6 }] : []),
+            ...(lthBuyKey && lthLine(lthBuyKey) ? [{ label:`LTH PVR ${x.capBuyAtLthSigma}σ (capitulation buy)`, data:lthLine(lthBuyKey), borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1.1, borderDash:[6,3], order:6 }] : []),
+            ...(lthDistKey && lthLine(lthDistKey) ? [{ label:`LTH PVR +${x.distributeAtSigma}σ (distribute)`, data:lthLine(lthDistKey), borderColor:'#A855F7', backgroundColor:'transparent', yAxisID:'y', pointRadius:0, tension:.1, borderWidth:1.1, borderDash:[6,3], order:6 }] : []),
             { label:'Buy (all-in)', data:buyPts, borderColor:'transparent', backgroundColor:'#16A34A', yAxisID:'y', pointRadius:6, pointHoverRadius:8, pointStyle:'triangle', showLine:false, borderWidth:0, order:0, btFooter:false },
             { label:'Sell (all-out)', data:sellPts, borderColor:'transparent', backgroundColor:'#DC2626', yAxisID:'y', pointRadius:6, pointHoverRadius:8, pointStyle:'crossRot', showLine:false, borderWidth:0, order:0, btFooter:false },
             { label:'In market (green = capitulation hold, orange = trend hold)', type:'bar', data:sPos, backgroundColor:posCol, borderWidth:0, yAxisID:'y2', barPercentage:1, categoryPercentage:1, order:10, btFooter:false }
