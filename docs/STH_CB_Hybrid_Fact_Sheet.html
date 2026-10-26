@@ -51,6 +51,7 @@
     .legend span.dash::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
     .legend span.mk::before { width: 8px; height: 8px; border-radius: 50%; }
     .legend span.tri::before { width: 0; height: 0; background: none; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--c); border-radius: 0; }
+    .legend span.tri.down::before { border-bottom: 0; border-top: 9px solid var(--c); }
     .legend span.area::before { height: 9px; opacity: .55; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -132,8 +133,8 @@
         <span class="dash" style="--c:#A855F7">LTH PVR −0.5σ (buy) · +2.5σ (distribute)</span>
         <span class="area" style="--c:#10B981">capitulation hold</span>
         <span class="area" style="--c:#F97316">trend hold</span>
-        <span class="tri" style="--c:#22C55E">all-in</span>
-        <span class="mk" style="--c:#EF4444">all-out</span>
+        <span class="tri" style="--c:#22C55E">all-in (below the price line)</span>
+        <span class="tri down" style="--c:#EF4444">all-out (above the line)</span>
       </div>
     </div>
 
@@ -316,8 +317,9 @@
   var pos = D.daily.map(function (d) { return d[6]; });
   var line = function (k) { return cb.map(function (v) { return v * k; }); };
   var tradeByDate = {}; D.trades.forEach(function (t) { tradeByDate[t.date] = t; });
-  var buyPts = labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === 'BUY' ? t.price : null; });
-  var sellPts = labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === 'SELL' ? t.price : null; });
+  // Markers sit clear of the price line: buys below (× 0.74), sells above (× 1.32); dataset 0 paints on top in Chart.js
+  var buyPts = labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === 'BUY' ? t.price * 0.74 : null; });
+  var sellPts = labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === 'SELL' ? t.price * 1.32 : null; });
   // Position shading drawn as a full-height band via a custom plugin (crisper than bars in print)
   var shadePlugin = {
     id: 'shade',
@@ -343,15 +345,15 @@
   new Chart(document.getElementById('mainChart'), {
     type: 'line',
     data: { labels: labels, datasets: [
+      ds(buyPts, 'transparent', 0, [], { pointRadius: 5.5, pointStyle: 'triangle', pointBackgroundColor: '#22C55E', pointBorderColor: '#052e16', pointBorderWidth: 1, showLine: false }),
+      ds(sellPts, 'transparent', 0, [], { pointRadius: 5.5, pointStyle: 'triangle', pointRotation: 180, pointBackgroundColor: '#EF4444', pointBorderColor: '#450a0a', pointBorderWidth: 1, showLine: false }),
       ds(px, '#CBD5E1', 1.3),
       ds(cb, '#F97316', 1.6),
       ds(line(C.capBuyRatio), '#10B981', 1, [4, 3]),
       ds(line(C.trendEnterRatio), '#38BDF8', 0.9, [3, 3]),
       ds(line(C.capExitRatio), '#FBBF24', 0.8, [2, 3]),
       ds(D.daily.map(function (d) { return d[7]; }), '#A855F7', 1, [5, 3]),
-      ds(D.daily.map(function (d) { return d[8]; }), '#A855F7', 1, [5, 3]),
-      ds(buyPts, 'transparent', 0, [], { pointRadius: 5, pointStyle: 'triangle', pointBackgroundColor: '#22C55E', pointBorderColor: '#052e16', pointBorderWidth: 1, showLine: false }),
-      ds(sellPts, 'transparent', 0, [], { pointRadius: 4.5, pointStyle: 'circle', pointBackgroundColor: '#EF4444', pointBorderColor: '#450a0a', pointBorderWidth: 1, showLine: false })
+      ds(D.daily.map(function (d) { return d[8]; }), '#A855F7', 1, [5, 3])
     ] },
     options: { responsive: true, animation: false, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { enabled: false }, shade: { pos: pos }, decimation: { enabled: false } },
@@ -379,7 +381,7 @@
   var ruleShort = function (r) { return r.replace(/^Initial deploy.*$/, 'Carried in from 2016').replace(/^R\d+ /, '').replace('Capitulation buy (LTH m050)', 'LTH −0.5σ buy').replace('Distribution at +2.5σ', 'LTH +2.5σ distribution').replace('Trend re-entry (ladder)', 'Trend re-entry').replace(' (35%)', '').replace('Sell tier 1 (full exit)', '2× CB distribution'); };
   document.getElementById('tradeTable').innerHTML = th + D.trades.map(function (t) {
     var b = t.action === 'BUY';
-    return '<tr><td>' + t.date + '</td><td class="' + (b ? 'g' : 'rd') + '"><b>' + (b ? '▲' : '●') + '</b></td><td>' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
+    return '<tr><td>' + t.date + '</td><td class="' + (b ? 'g' : 'rd') + '"><b>' + (b ? '▲' : '▼') + '</b></td><td>' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
   }).join('');
 
   // ── Robustness tables ──────────────────────────────────────────────────

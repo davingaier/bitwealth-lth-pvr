@@ -56,6 +56,8 @@
     .legend span.mk.sm::before { width: 6px; height: 6px; }
     .legend span.tri::before { width: 0; height: 0; background: none; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--c); border-radius: 0; }
     .legend span.tri.sm::before { border-left-width: 4px; border-right-width: 4px; border-bottom-width: 7px; }
+    .legend span.tri.down::before { border-bottom: 0; border-top: 9px solid var(--c); }
+    .legend span.tri.down.sm::before { border-top-width: 7px; }
     .legend span.area::before { height: 9px; opacity: .55; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .two > * { min-width: 0; }
@@ -157,10 +159,10 @@
         <span class="dot" style="--c:#C084FC">LTH PVR +1σ / +1.5σ / +2σ — scale-out rungs</span>
         <span class="area" style="--c:#10B981">capitulation hold</span>
         <span class="area" style="--c:#F97316">trend hold</span>
-        <span class="tri" style="--c:#22C55E">all-in</span>
+        <span class="tri" style="--c:#22C55E">all-in (below the price line)</span>
         <span class="tri sm" style="--c:#86EFAC">dip re-buy</span>
-        <span class="mk sm" style="--c:#FB7185">scale-out slice</span>
-        <span class="mk" style="--c:#EF4444">all-out</span>
+        <span class="tri down sm" style="--c:#FB7185">scale-out slice (above the line)</span>
+        <span class="tri down" style="--c:#EF4444">all-out</span>
       </div>
     </div>
     <div class="chart-box">
@@ -378,7 +380,8 @@
   var col = function (k) { return D.daily.map(function (d) { return d[k]; }); };
   var line = function (k) { return cb.map(function (v) { return v * k; }); };
   var tradeByDate = {}; D.trades.forEach(function (t) { tradeByDate[t.date] = t; });
-  var mk = function (act, partial) { return labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === act && !!t.partial === partial ? t.price : null; }); };
+  // Markers sit clear of the price line: buys below it (× 0.74), sells above it (× 1.32) — multiplicative so the gap is constant on the log axis
+  var mk = function (act, partial, k) { return labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === act && !!t.partial === partial ? t.price * k : null; }); };
   var maxPx = Math.max.apply(null, px.concat(col(8).filter(function (v) { return v != null; })));
   var shadePlugin = {
     id: 'shade',
@@ -401,10 +404,15 @@
   var xAxis = { ticks: { color: '#6B7896', font: { size: 8 }, maxRotation: 0, autoSkip: false, callback: function (v, i) { return yearAt[i] || null; } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.1)' } };
   var yLog = Object.assign({}, axisCommon, { type: 'logarithmic', ticks: { color: '#6B7896', font: { size: 8 }, callback: function (v) { return [1000, 3000, 10000, 30000, 100000].indexOf(v) >= 0 ? usdK(v) : ''; } }, min: 700, max: Math.max(200000, maxPx * 1.1) });
   var ds = function (data, color, w, dash, extra) { return Object.assign({ data: data, borderColor: color, borderWidth: w, borderDash: dash || [], pointRadius: 0, tension: 0, spanGaps: true, backgroundColor: 'transparent' }, extra || {}); };
-  var marker = function (data, style, r, fill, border) { return ds(data, 'transparent', 0, [], { pointRadius: r, pointStyle: style, pointBackgroundColor: fill, pointBorderColor: border, pointBorderWidth: 1, showLine: false }); };
+  var marker = function (data, style, r, fill, border, rot) { return ds(data, 'transparent', 0, [], { pointRadius: r, pointStyle: style, pointBackgroundColor: fill, pointBorderColor: border, pointBorderWidth: 1, pointRotation: rot || 0, showLine: false }); };
   new Chart(document.getElementById('mainChart'), {
     type: 'line',
     data: { labels: labels, datasets: [
+      // Chart.js paints dataset 0 on top — markers first so they are never hidden by the price line
+      marker(mk('BUY', false, 0.74), 'triangle', 5.5, '#22C55E', '#052e16'),
+      marker(mk('BUY', true, 0.74), 'triangle', 4.5, '#86EFAC', '#052e16'),
+      marker(mk('SELL', true, 1.32), 'triangle', 4.5, '#FB7185', '#4c0519', 180),
+      marker(mk('SELL', false, 1.32), 'triangle', 5.5, '#EF4444', '#450a0a', 180),
       ds(px, '#CBD5E1', 1.3),
       ds(cb, '#F97316', 1.6),
       ds(line(C.capBuyRatio), '#10B981', 1, [4, 3]),
@@ -414,11 +422,7 @@
       ds(col(8), '#A855F7', 1, [5, 3]),
       ds(col(10), '#C084FC', 0.7, [1.5, 2.5]),
       ds(col(11), '#C084FC', 0.7, [1.5, 2.5]),
-      ds(col(12), '#C084FC', 0.7, [1.5, 2.5]),
-      marker(mk('BUY', false), 'triangle', 5, '#22C55E', '#052e16'),
-      marker(mk('BUY', true), 'triangle', 4, '#86EFAC', '#052e16'),
-      marker(mk('SELL', true), 'circle', 3.5, '#FB7185', '#4c0519'),
-      marker(mk('SELL', false), 'circle', 4.5, '#EF4444', '#450a0a')
+      ds(col(12), '#C084FC', 0.7, [1.5, 2.5])
     ] },
     options: { responsive: true, animation: false, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { display: false }, tooltip: { enabled: false }, shade: { pos: pos }, decimation: { enabled: false } },
@@ -455,7 +459,7 @@
   var tr = function (t) {
     var b = t.action === 'BUY';
     var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
-    return '<tr><td>' + t.date + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '●') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
+    return '<tr><td>' + t.date + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
   };
   var half = Math.ceil(D.trades.length / 2);
   document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
