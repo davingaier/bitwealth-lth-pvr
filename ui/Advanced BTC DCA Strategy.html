@@ -4676,7 +4676,8 @@
           <div id="btSthCbParams" style="display:none;">
             <label for="btCbPreset"><strong>Rule preset:</strong></label>
             <select id="btCbPreset" title="Loads a complete parameter set into the fields below. Edit any field afterwards — the preset switches to 'Custom'.">
-              <option value="hybrid_v1" selected>STH CB Hybrid v1 — BitWealth optimised (2026-10-25)</option>
+              <option value="hybrid_v2" selected>STH CB Hybrid v2 — scale-out ladder + dip re-buy (2026-10-26)</option>
+              <option value="hybrid_v1">STH CB Hybrid v1 — BitWealth optimised (2026-10-25)</option>
               <option value="chartinspect">ChartInspect original — 70 % capitulation / ±5 % trend band</option>
               <option value="custom">Custom (edited)</option>
             </select>
@@ -4748,6 +4749,24 @@
 
             <label for="btCbMinHold"><strong>Minimum hold (days):</strong></label>
             <input id="btCbMinHold" type="number" min="0" max="365" step="1" value="15" title="R9: ignore every exit rule for this many days after an entry (0 = off)">
+
+            <label for="btCbLadder"><strong>Scale-out ladder at LTH PVR bands (v2):</strong></label>
+            <input id="btCbLadder" type="text" value="" placeholder='blank = off · e.g. 1:85, 1.5:70, 2:50, 2.5:0' title="R15: step down the BTC allocation as price crosses LTH PVR upper bands. Format: sigma:percentBTC pairs, comma-separated. 0 % = full exit (replaces the single distribution). Tiers latch per hold.">
+
+            <label for="btCbLadderGate"><strong>…momentum-gate the ladder:</strong></label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;"><input id="btCbLadderGate" type="checkbox"> <span>Sell a slice only once ROC ≤ threshold</span></label>
+
+            <label for="btCbDipPct"><strong>Re-buy to 100 % on pull-back of (%):</strong></label>
+            <input id="btCbDipPct" type="number" min="1" max="90" step="1" value="" placeholder="blank = off" title="R16: after a partial scale-out, restore 100 % BTC once price has fallen this % from its post-sell peak">
+
+            <label for="btCbDipCb"><strong>…or when price ≤ (% of CB):</strong></label>
+            <input id="btCbDipCb" type="number" min="50" max="150" step="1" value="" placeholder="blank = off" title="R16 alternative trigger: restore 100 % BTC when price returns to this % of the STH cost basis">
+
+            <label for="btCbDipMax"><strong>…max re-buys per hold:</strong></label>
+            <input id="btCbDipMax" type="number" min="1" max="20" step="1" value="" placeholder="blank = unlimited">
+
+            <label for="btCbScaleCool"><strong>Scale-out / re-buy cooldown (days):</strong></label>
+            <input id="btCbScaleCool" type="number" min="0" max="60" step="1" value="" placeholder="blank = off" title="Minimum days between a partial sell and a re-buy (and vice-versa) — removes next-day flip-flops. Full exits ignore it.">
 
             <label for="btCbMomoEnabled"><strong>Momentum-gated sells:</strong></label>
             <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
@@ -5973,6 +5992,7 @@
           <div class="bc-meta" id="sthTrackerMeta" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;">Loading…</div>
         </div>
         <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+          <select id="sthTrackerKey" title="Which tracked configuration to display (rows in sth_cb.tracker_config)" style="padding:.3rem .5rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);font-size:.8rem;max-width:260px;"></select>
           <div class="bc-presets" id="sthTrackerPresets" style="display:flex;gap:.25rem;">
             <button type="button" data-range="6M">6M</button>
             <button type="button" data-range="1Y">1Y</button>
@@ -5990,9 +6010,10 @@
       </div>
       <div style="margin-top:.5rem;font-size:.75rem;color:var(--muted);">
         Drag to zoom · double-click to reset · click legend items to toggle. Shading: <span style="color:#10b981">green</span> = capitulation hold, <span style="color:#f97316">orange</span> = trend hold.
-        ▲ all-in · ● all-out. Dashed lines are the rule thresholds as a % of the STH cost basis; purple = LTH PVR −0.5σ (buy) / +2.5σ (distribute).
-        The signal is evaluated on the daily close and executed at the next close; the status panel shows the position held <em>and</em> what the latest close instructs for tomorrow.
-        Figures are a $1,000 paper record from 2017-01-01 after full BitWealth fees — see <code>docs/STH_CB_Hybrid_Fact_Sheet.html</code> for the rules.
+        ▲ buy / re-buy · ● sell (v2: partial scale-out slices appear as ● while the shading continues). Dashed lines are the rule thresholds as a % of the STH cost basis; purple = LTH PVR −0.5σ (buy) / +2.5σ (full exit).
+        The signal is evaluated on the daily close and executed at the next close; the status panel shows the position held (and, for v2, the % of the portfolio still in BTC) <em>and</em> what the latest close instructs for tomorrow.
+        Use the selector (top right) to switch between tracked configurations (Hybrid v1 = single all-out; Hybrid v2 = momentum-gated ladder 75/50/25/0 % at LTH +1/1.5/2/2.5σ with dip re-buy).
+        Figures are a $1,000 paper record from 2017-01-01 after full BitWealth fees — see <code>docs/STH_CB_Hybrid_v2_Fact_Sheet.html</code> (v2) / <code>docs/STH_CB_Hybrid_Fact_Sheet.html</code> (v1) for the rules.
       </div>
       <details style="margin-top:.5rem;font-size:.8rem;"><summary style="cursor:pointer;color:var(--muted);">Recent trades</summary><div id="sthTrackerTrades" style="margin-top:.4rem;max-height:220px;overflow:auto;"></div></details>
     </div>
@@ -6052,7 +6073,8 @@
       const presetsEl = card.querySelector('#sthTrackerPresets');
       const resetBtn = card.querySelector('#sthTrackerReset');
       const navToggle = card.querySelector('#sthTrackerShowNav');
-      let chart = null, rows = [], cfg = null, loaded = false, loading = false;
+      const keySel = card.querySelector('#sthTrackerKey');
+      let chart = null, rows = [], cfg = null, cfgs = [], loaded = false, loading = false;
 
       const usd = (v, d = 0) => v == null || !Number.isFinite(Number(v)) ? '–' : '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
       const usdK = (v) => v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v);
@@ -6162,15 +6184,25 @@
         const daysInPos = lastTrade ? Math.round((new Date(last.date) - new Date(lastTrade.date)) / 86400000) : null;
         const sinceEntry = lastTrade && lastTrade.action === 'BUY' ? price / Number(lastTrade.price_usd) - 1 : null;
         const inMkt = last.position_state !== 'cash';
-        const tomorrow = last.signal_in_market === inMkt ? 'Hold' : (last.signal_in_market ? 'BUY at next close' : 'SELL at next close');
+        // v2 ladders hold a partial BTC allocation inside a trend/cap hold — compare held vs target allocation
+        const heldAlloc = Number(last.nav_usd) > 0 ? Number(last.btc_balance) * price / Number(last.nav_usd) : (inMkt ? 1 : 0);
+        const targetAlloc = last.target_alloc == null ? (last.signal_in_market ? 1 : 0) : Number(last.target_alloc);
+        const allocDiff = targetAlloc - heldAlloc;
+        const tomorrow = Math.abs(allocDiff) < 0.02 ? 'Hold'
+          : targetAlloc === 0 ? 'SELL at next close'
+          : heldAlloc < 0.02 ? 'BUY at next close'
+          : allocDiff < 0 ? `SCALE OUT to ${Math.round(targetAlloc * 100)}% BTC` : `RE-BUY to ${Math.round(targetAlloc * 100)}% BTC`;
+        const ladder = Array.isArray(x.lthSellTiers) && x.lthSellTiers.length ? x.lthSellTiers : null;
+        const ladderTxt = ladder ? ladder.map(t => `+${t.sigma}σ→${Math.round(t.alloc * 100)}%`).join(' · ') : null;
         const nextLevels = inMkt
-          ? [[`Capitulation exit (${Math.round((x.capExitRatio ?? 1) * 100)}%)`, cbv * (x.capExitRatio ?? 1), last.position_state === 'cap_hold'], [`Trend exit (${Math.round((x.trendExitRatio ?? .95) * 100)}%)`, cbv * (x.trendExitRatio ?? .95), last.position_state === 'trend_hold'], ['Distribute (LTH +2.5σ)', Number(last.lth_p250), true]]
+          ? [[`Capitulation exit (${Math.round((x.capExitRatio ?? 1) * 100)}%)`, cbv * (x.capExitRatio ?? 1), last.position_state === 'cap_hold'], [`Trend exit (${Math.round((x.trendExitRatio ?? .95) * 100)}%)`, cbv * (x.trendExitRatio ?? .95), last.position_state === 'trend_hold'], [ladder ? 'Full exit (LTH +2.5σ)' : 'Distribute (LTH +2.5σ)', Number(last.lth_p250), true]]
           : [[`Capitulation buy (${Math.round((x.capBuyRatio ?? .7) * 100)}%)`, cbv * (x.capBuyRatio ?? .7), true], ['LTH −0.5σ buy', Number(last.lth_m050), true], [`Trend entry (${Math.round((x.trendEnterRatio ?? 1.05) * 100)}%)`, cbv * (x.trendEnterRatio ?? 1.05), true]];
         const tile = (l, v, sub, color) => `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">${l}</div><div style="font-size:1.05rem;font-weight:700;color:${color || 'var(--ink)'};">${v}</div>${sub ? `<div style="font-size:.72rem;color:var(--muted);">${sub}</div>` : ''}</div>`;
         statusEl.innerHTML = [
-          tile('Position held', held[0], `${daysInPos != null ? daysInPos + ' days' : ''}${sinceEntry != null ? ' · ' + pct(sinceEntry) + ' since entry' : ''}`, held[1]),
+          tile('Position held', held[0] + (inMkt && heldAlloc < 0.98 ? ` · ${Math.round(heldAlloc * 100)}% BTC` : ''), `${daysInPos != null ? daysInPos + ' days' : ''}${sinceEntry != null ? ' · ' + pct(sinceEntry) + ' since entry' : ''}`, held[1]),
           tile('Latest close → tomorrow', tomorrow, `${last.date} · signal: ${last.signal_rule || '–'}`, tomorrow === 'Hold' ? 'var(--ink)' : '#FFB400'),
           tile('BTC vs STH cost basis', `${Math.round(ratio * 100)}%`, `${usd(price)} vs ${usd(cbv)}`),
+          ...(ladderTxt && inMkt ? [tile('Scale-out ladder (LTH PVR σ)', ladderTxt, `${x.lthSellMomoGate ? 'momentum-gated · ' : ''}re-buy ${x.dipRebuyPct ? '−' + Math.round(x.dipRebuyPct * 100) + '% dip' : ''}${x.dipRebuyAtCbRatio ? ' or ≤' + Math.round(x.dipRebuyAtCbRatio * 100) + '% CB' : ''}${x.scaleCooldownDays ? ' · ' + x.scaleCooldownDays + 'd cooldown' : ''}`)] : []),
           ...nextLevels.filter(n => n[2] && Number.isFinite(n[1])).map(n => tile(n[0], usd(n[1]), `${pct(n[1] / price - 1)} from here`)),
           tile('Paper NAV ($1,000 since 2017)', usdK(Number(last.nav_usd)), `HODL ${usdK(Number(last.hodl_nav_usd))} · ${(Number(last.nav_usd) / Number(last.hodl_nav_usd)).toFixed(1)}×`, '#FFB400'),
           tile('Last trade', lastTrade ? `${lastTrade.action} ${usd(lastTrade.price_usd)}` : '–', lastTrade ? `${lastTrade.date} · ${lastTrade.rule}` : ''),
@@ -6179,32 +6211,59 @@
         tradesEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.78rem;"><tr><th style="text-align:left">Date</th><th style="text-align:left">Action</th><th style="text-align:left">Rule</th><th style="text-align:right">Price</th><th style="text-align:right">% of CB</th><th style="text-align:right">NAV</th></tr>${trades.map(t => `<tr><td>${t.date}</td><td style="color:${t.action === 'BUY' ? '#22c55e' : '#ef4444'}">${t.action}</td><td>${t.rule}</td><td style="text-align:right">${usd(t.price_usd)}</td><td style="text-align:right">${Math.round(Number(t.price_to_cb_ratio) * 100)}%</td><td style="text-align:right">${usdK(Number(t.nav_usd))}</td></tr>`).join('')}</table>`;
       }
 
+      async function loadSeries(key) {
+        let all = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await window.supabaseClient.rpc('sth_cb_tracker_series', { p_tracker_key: key }).order('date', { ascending: true }).range(from, from + 999);
+          if (error) throw error;
+          if (!data?.length) break;
+          all = all.concat(data);
+          if (data.length < 1000) break;
+        }
+        return all;
+      }
+      function showLoaded(key) {
+        render(); applyPreset('3Y'); renderStatus();
+        const trades = rows.filter(r => r.action !== 'HOLD').length;
+        metaEl.textContent = `${cfg?.label || key} · ${rows[0].date} → ${rows[rows.length - 1].date} · ${trades} trades · updated ${String(rows[rows.length - 1].computed_at || '').slice(0, 16).replace('T', ' ')} UTC`;
+      }
+
       async function load() {
         if (loaded || loading) return;
         if (!window.supabaseClient) { metaEl.textContent = 'Sign in to load the tracker.'; return; }
         loading = true; metaEl.textContent = 'Loading tracker…';
         try {
-          const { data: cfgs, error: ce } = await window.supabaseClient.rpc('sth_cb_tracker_list');
+          const { data: list, error: ce } = await window.supabaseClient.rpc('sth_cb_tracker_list');
           if (ce) throw ce;
-          cfg = (cfgs || [])[0] || null;
+          cfgs = list || [];
+          // Default to the most recently added configuration (keys sort v1 < v2 …) unless the user picked one before
+          const remembered = localStorage.getItem('sthTrackerKey');
+          cfg = cfgs.find(c => c.tracker_key === remembered) || cfgs[cfgs.length - 1] || null;
           const key = cfg?.tracker_key || 'hybrid_v1';
-          let all = [];
-          for (let from = 0; ; from += 1000) {
-            const { data, error } = await window.supabaseClient.rpc('sth_cb_tracker_series', { p_tracker_key: key }).order('date', { ascending: true }).range(from, from + 999);
-            if (error) throw error;
-            if (!data?.length) break;
-            all = all.concat(data);
-            if (data.length < 1000) break;
+          if (keySel) {
+            keySel.innerHTML = cfgs.map(c => `<option value="${c.tracker_key}"${c.tracker_key === key ? ' selected' : ''}>${c.label || c.tracker_key}</option>`).join('');
+            keySel.style.display = cfgs.length > 1 ? '' : 'none';
           }
-          rows = all;
+          rows = await loadSeries(key);
           if (!rows.length) { metaEl.textContent = 'No tracker rows returned — sign in as an org admin (the tracker is rebuilt daily by ef_sth_cb_tracker after the on-chain fetch).'; loading = false; return; }
-          render(); applyPreset('3Y'); renderStatus();
-          const trades = rows.filter(r => r.action !== 'HOLD').length;
-          metaEl.textContent = `${cfg?.label || key} · ${rows[0].date} → ${rows[rows.length - 1].date} · ${trades} trades · updated ${String(rows[rows.length - 1].computed_at || '').slice(0, 16).replace('T', ' ')} UTC`;
+          showLoaded(key);
           loaded = true;
         } catch (e) { metaEl.textContent = `Error: ${e.message || e}`; }
         loading = false;
       }
+
+      keySel?.addEventListener('change', async () => {
+        const key = keySel.value; if (!key || loading) return;
+        loading = true; metaEl.textContent = 'Loading tracker…';
+        try {
+          cfg = cfgs.find(c => c.tracker_key === key) || null;
+          localStorage.setItem('sthTrackerKey', key);
+          rows = await loadSeries(key);
+          if (!rows.length) { metaEl.textContent = `No rows yet for ${key} — it is built on the next daily on-chain run.`; loading = false; return; }
+          showLoaded(key);
+        } catch (e) { metaEl.textContent = `Error: ${e.message || e}`; }
+        loading = false;
+      });
 
       presetsEl?.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) applyPreset(b.dataset.range); });
       resetBtn?.addEventListener('click', () => applyPreset('ALL'));
@@ -7709,6 +7768,21 @@
       set('distReentryClearRatio', opt('btCbDistClear') == null ? null : opt('btCbDistClear') / 100);
       set('blockEntryAboveSigma', opt('btCbBlockSigma'));
       const minHold = Math.trunc(num('btCbMinHold', 0)); if (minHold > 0) extras.minHoldDays = minHold;
+      // v2: scale-out ladder "sigma:pct, sigma:pct" + dip re-buy
+      const ladderTxt = (document.getElementById('btCbLadder')?.value || '').trim();
+      if (ladderTxt) {
+        const tiers = ladderTxt.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+          const [a, b] = s.split(':').map(t => parseFloat(t));
+          if (!Number.isFinite(a) || !Number.isFinite(b)) throw new Error(`Scale-out ladder: cannot parse "${s}" — use sigma:percentBTC pairs like 2:50`);
+          return { sigma: a, alloc: Math.max(0, Math.min(1, b / 100)) };
+        });
+        if (tiers.length) extras.lthSellTiers = tiers;
+        if (chk('btCbLadderGate', false)) extras.lthSellMomoGate = true;
+      }
+      set('dipRebuyPct', opt('btCbDipPct') == null ? null : opt('btCbDipPct') / 100);
+      set('dipRebuyAtCbRatio', opt('btCbDipCb') == null ? null : opt('btCbDipCb') / 100);
+      set('dipRebuyMax', opt('btCbDipMax') == null ? null : Math.trunc(opt('btCbDipMax')));
+      const cool = opt('btCbScaleCool'); if (cool != null && cool > 0) extras.scaleCooldownDays = Math.trunc(cool);
 
       // Advanced JSON is merged LAST so it can override anything above
       const extrasTxt = (document.getElementById('btCbExtras')?.value || '').trim();
@@ -7746,16 +7820,27 @@
     // ── STH_CB rule presets ──────────────────────────────────────────────────
     // Field values are in the units shown on the form (percentages, days, σ); '' = off.
     const BT_STHCB_PRESETS = {
+      // v2 = v1 with the single +2.5σ distribution replaced by a momentum-gated ladder
+      // (75/50/25/0 % BTC at LTH +1/1.5/2/2.5σ), a dip re-buy (−10 % from post-sell peak or ≤110 % CB, max 3) and a 5-day cooldown.
+      hybrid_v2: {
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
+        btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbLadder: '1:75, 1.5:50, 2:25, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 110, btCbDipMax: 3, btCbScaleCool: 5,
+        btCbExecLag: '1', btCbExtras: ''
+      },
       hybrid_v1: {
         btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '2.5', btCbDistRatio: 2,
         btCbDistClear: 90, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbLadder: '', btCbLadderGate: false, btCbDipPct: '', btCbDipCb: '', btCbDipMax: '', btCbScaleCool: '',
         btCbExecLag: '1', btCbExtras: ''
       },
       chartinspect: {
         btCbCapBuy: 70, btCbCapBuyRoc: '', btCbLthBuy: '', btCbCapExit: 100, btCbTrendEnter: 105, btCbReentry: '', btCbReentryRoc: '',
         btCbTrendExit: 95, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: '', btCbTrail: '', btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: '', btCbBlockSigma: '', btCbMinHold: 0, btCbMomoEnabled: false, btCbMomoLen: 5, btCbMomoThr: 0, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbLadder: '', btCbLadderGate: false, btCbDipPct: '', btCbDipCb: '', btCbDipMax: '', btCbScaleCool: '',
         btCbExecLag: '0', btCbExtras: ''
       }
     };
@@ -7775,7 +7860,9 @@
       const strategy = document.getElementById('btStrategySelect')?.value;
       if (!note || strategy !== 'STH_CB') return;
       const preset = document.getElementById('btCbPreset')?.value;
-      note.textContent = preset === 'hybrid_v1'
+      note.textContent = preset === 'hybrid_v2'
+        ? 'STH CB Hybrid v2 — v1 plus a momentum-gated scale-out ladder at the LTH PVR upper bands (75/50/25/0 % BTC at +1/1.5/2/2.5σ) and a dip re-buy (−10 % from the post-sell peak or ≤110 % of CB, max 3 per hold, 5-day cooldown). 380,110 % ROI / 45.6× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_Fact_Sheet.html.'
+        : preset === 'hybrid_v1'
         ? 'STH CB Hybrid v1 — the BitWealth-optimised rule set (272,684 % ROI / 32.7× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 7/10). Edit any field to experiment; see docs/STH_CB_Hybrid_Fact_Sheet.html for the rules.'
         : preset === 'chartinspect'
         ? 'ChartInspect original: all-in at ≤70 % of the STH cost basis or ≥105 % (trend); all-out at the cost basis (capitulation hold) or ≤95 % (trend hold); same-day fills, no momentum gate.'
@@ -7790,7 +7877,7 @@
       panel.addEventListener('input', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
       panel.addEventListener('change', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
       sel._bound = true;
-      btApplySthCbPreset('hybrid_v1');
+      btApplySthCbPreset('hybrid_v2');
     })();
 
     // Create an LTH PVR run (lth_pvr_bt.bt_runs + bt_params) and return its bt_run_id.

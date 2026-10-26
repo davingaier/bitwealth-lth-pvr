@@ -14,6 +14,7 @@
 // ===========================================================================
 
 import { getServiceClient } from "./client.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import { simParamsFromBtParams, simulateSthCb, SthCbSeriesRow, toNum } from "../_shared/sth_cb_simulator.ts";
 
 const WARMUP_START = "2011-01-01";
@@ -38,9 +39,10 @@ async function pageAll(query: (from: number, to: number) => any): Promise<Record
 
 Deno.serve(async (req) => {
   const sb = getServiceClient();
-  const auth = req.headers.get("Authorization") ?? "";
-  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!svc || auth !== `Bearer ${svc}`) return json({ error: "service role required" }, 401);
+  // Internal (service-role) callers only — same key recognition as the other admin EFs.
+  // deno-lint-ignore no-explicit-any
+  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  if (!caller.ok || !caller.internal) return json({ error: "service role required" }, 401);
 
   const body = await req.json().catch(() => ({}));
   const org_id: string = body?.org_id ?? Deno.env.get("ORG_ID") ?? ORG_FALLBACK;

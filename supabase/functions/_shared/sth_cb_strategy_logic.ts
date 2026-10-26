@@ -115,6 +115,24 @@ export interface SthCbConfig {
   // ── Idea 14: LTH PVR lower bands as capitulation triggers (needs `extra.bands`) ──
   /** Also trigger a capitulation buy when price <= the LTH PVR band at this sigma (0 = mean, −0.5, −1 …). */
   capBuyAtLthSigma?: number;
+
+  // ── v2 — Idea 15: scale OUT at LTH PVR upper bands (needs `extra.bands`) ────
+  /** Tiers keyed by LTH PVR sigma, e.g. [{sigma:1.5,alloc:0.75},{sigma:2,alloc:0.5},{sigma:2.5,alloc:0}]. alloc 0 = full exit (same as distributeAtSigma). Tiers latch per hold. */
+  lthSellTiers?: Array<{ sigma: number; alloc: number }>;
+  /** Momentum-gate the partial tiers too (sell only once ROC ≤ momoThreshold). Default false = sell at the band. */
+  lthSellMomoGate?: boolean;
+
+  // ── v2 — Idea 16: re-accumulate on the pull-back after a partial scale-out ──
+  /** After a partial sell, restore 100 % BTC once price has fallen this fraction from its post-sell peak (e.g. 0.2). */
+  dipRebuyPct?: number;
+  /** Alternatively / additionally, restore 100 % when price <= this × STH cost basis (e.g. 1.0). */
+  dipRebuyAtCbRatio?: number;
+  /** Maximum re-accumulations per hold (default unlimited). */
+  dipRebuyMax?: number;
+  /** Minimum days between a scale-out and a dip re-buy, and between a re-buy and the next scale-out (anti-churn). */
+  scaleCooldownDays?: number;
+  /** Simulator: when set, also rebalance back to the target whenever drift exceeds this fraction of NAV (constant-mix). Off by default. */
+  rebalanceDrift?: number;
 }
 
 export interface SthCbState {
@@ -134,6 +152,16 @@ export interface SthCbState {
   peakPx?: number;
   /** idea 13: a distribution happened and price has not yet returned to the clear level */
   distLatch?: boolean;
+  /** v2: number of LTH sell tiers hit in the current hold */
+  lthTierLevel?: number;
+  /** v2: current partial allocation after scale-out (1 = full) */
+  scaledAlloc?: number;
+  /** v2: highest price since the last partial sell (for dip re-buy) */
+  postSellPeak?: number;
+  /** v2: re-accumulations done in the current hold */
+  dipRebuys?: number;
+  /** v2: days since the last scale-out or re-buy (for the cooldown) */
+  sinceScaleEvent?: number;
 }
 
 export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
@@ -231,7 +259,13 @@ function allocFor(s: SthCbState, config: SthCbConfig): number {
   const st = sellTiers(config);
   const sl = Math.min(s.sellTierLevel ?? 0, st.length);
   if (sl > 0) alloc = Math.min(alloc, st[sl - 1].alloc);
+  // v2: LTH scale-out (restored to 1 by a dip re-buy via scaledAlloc)
+  if (typeof s.scaledAlloc === "number") alloc = Math.min(alloc, s.scaledAlloc);
   return Math.max(0, Math.min(1, alloc));
+}
+
+function lthTiers(config: SthCbConfig): Array<{ sigma: number; alloc: number }> {
+  return (config.lthSellTiers ?? []).slice().sort((a, b) => a.sigma - b.sigma);
 }
 
 // ========================================================================================
@@ -266,11 +300,17 @@ export function decideSthCb(
     holdDays: prev?.holdDays ?? 0,
     peakPx: prev?.peakPx ?? 0,
     distLatch: !!prev?.distLatch,
+    lthTierLevel: prev?.lthTierLevel ?? 0,
+    scaledAlloc: prev?.scaledAlloc,
+    postSellPeak: prev?.postSellPeak ?? 0,
+    dipRebuys: prev?.dipRebuys ?? 0,
+    sinceScaleEvent: (prev?.sinceScaleEvent ?? 9999) + 1,
   };
   const wasInMarket = s.capLatch || s.trendLatch;
   if (wasInMarket) {
     s.holdDays = (s.holdDays ?? 0) + 1;
     if (px > (s.peakPx ?? 0)) s.peakPx = px;
+    if (typeof s.scaledAlloc === "number" && px > (s.postSellPeak ?? 0)) s.postSellPeak = px;
   }
 
   if (!(px > 0) || !(cb > 0)) {
@@ -338,8 +378,13 @@ export function decideSthCb(
     s.exitConfirmCount = 0;
     s.holdDays = 0;
     s.peakPx = 0;
+    s.lthTierLevel = 0;
+    s.scaledAlloc = undefined;
+    s.postSellPeak = 0;
+    s.dipRebuys = 0;
   };
-  const markEntry = () => { s.holdDays = 0; s.peakPx = px; };
+  const markEntry = () => { s.holdDays = 0; s.peakPx = px; s.lthTierLevel = 0; s.scaledAlloc = undefined; s.postSellPeak = 0; s.dipRebuys = 0; s.sinceScaleEvent = 9999; };
+  const cooldownOk = !config.scaleCooldownDays || (s.sinceScaleEvent ?? 9999) >= Math.trunc(config.scaleCooldownDays);
 
   // ── Capitulation latch (idea 2 generalises the single 70 % level to tiers) ─
   const cTiers = config.capBuyTiers?.length ? capTiers(config) : [{ ratio: capBuyRatio, alloc: 1 }];
@@ -464,6 +509,65 @@ export function decideSthCb(
         rule = `R6 Sell tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC`;
       }
       note = `price ${pct(ratio)} ≥ ${pct(tier.ratio)} of STH CB`;
+      sellDeferred = false;
+    }
+  }
+
+  // ── v2 Idea 15: scale OUT at LTH PVR upper bands ─────────────────────────
+  const lTiers = lthTiers(config);
+  if ((s.capLatch || s.trendLatch) && lTiers.length) {
+    let hit = 0;
+    for (const t of lTiers) {
+      const key = sigmaKey(t.sigma);
+      const level = key ? Number(extra.bands?.[key]) : NaN;
+      if (fin(level) && level > 0 && px >= level) hit++;
+    }
+    if (hit > (s.lthTierLevel ?? 0)) {
+      const gateOk = !config.lthSellMomoGate || !config.momoEnabled || rocGate <= config.momoThreshold;
+      // A hold that was *entered* above a tier must not scale out on day 1: initialise the level at entry instead
+      const freshEntry = (s.holdDays ?? 0) === 0;
+      if (freshEntry) {
+        s.lthTierLevel = hit;
+      } else if (gateOk && (cooldownOk || lTiers[hit - 1].alloc <= 0)) {
+        s.lthTierLevel = hit;
+        s.sinceScaleEvent = 0;
+        const tier = lTiers[hit - 1];
+        if (tier.alloc <= 0) {
+          enterCash();
+          s.reentryArmed = false;
+          s.distLatch = true;
+          rule = `R15 LTH scale-out tier ${hit} (full exit at +${tier.sigma}σ)`;
+        } else {
+          s.scaledAlloc = tier.alloc;
+          s.postSellPeak = px;
+          rule = `R15 LTH scale-out tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC (+${tier.sigma}σ)`;
+        }
+        note = `price ${px.toFixed(0)} ≥ LTH PVR +${tier.sigma}σ`;
+        sellDeferred = false;
+      } else {
+        sellDeferred = true;
+        rule = `R15 deferred (momentum)`;
+        note = `price above LTH +${lTiers[hit - 1].sigma}σ but ${rocTxt} > thr — holding`;
+      }
+    }
+  }
+
+  // ── v2 Idea 16: re-accumulate on the pull-back after a partial scale-out ──
+  if ((s.capLatch || s.trendLatch) && typeof s.scaledAlloc === "number" && s.scaledAlloc < 1
+    && (typeof config.dipRebuyPct === "number" || typeof config.dipRebuyAtCbRatio === "number")
+    && (config.dipRebuyMax == null || (s.dipRebuys ?? 0) < config.dipRebuyMax) && cooldownOk) {
+    const peak = s.postSellPeak ?? px;
+    const dd = peak > 0 ? px / peak - 1 : 0;
+    const byDip = typeof config.dipRebuyPct === "number" && dd <= -config.dipRebuyPct;
+    const byCb = typeof config.dipRebuyAtCbRatio === "number" && ratio <= config.dipRebuyAtCbRatio;
+    if (byDip || byCb) {
+      s.scaledAlloc = 1;
+      s.dipRebuys = (s.dipRebuys ?? 0) + 1;
+      s.sinceScaleEvent = 0;
+      // Allow the SAME tiers to fire again on the next leg up: reset the tier level to the tiers still below price
+      s.lthTierLevel = 0;
+      rule = `R16 Dip re-buy → 100% BTC`;
+      note = byDip ? `price ${(dd * 100).toFixed(1)}% below post-sell peak ${peak.toFixed(0)}` : `price ${pct(ratio)} ≤ ${pct(Number(config.dipRebuyAtCbRatio))} of STH CB`;
       sellDeferred = false;
     }
   }

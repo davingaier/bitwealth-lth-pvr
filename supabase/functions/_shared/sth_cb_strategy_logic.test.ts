@@ -330,3 +330,69 @@ Deno.test("Idea 14: LTH PVR lower band triggers a capitulation buy even above 70
   const none = decideSthCb(80_000, CB, 0, CASH, cfg, { bands: { m050: 70_000 } });
   assertEquals(none.inMarket, false);
 });
+
+// ========================================================================================
+// v2: scale-out at LTH bands + dip re-accumulation
+// ========================================================================================
+
+Deno.test("Idea 15: LTH scale-out tiers reduce targetAlloc step-wise and latch; alloc 0 = full exit", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 1.5, alloc: 0.75 }, { sigma: 2, alloc: 0.5 }, { sigma: 2.5, alloc: 0 }] };
+  const bands = { p150: 150_000, p200: 200_000, p250: 250_000 };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const a = decideSthCb(140_000, CB, 0, held, cfg, { bands }); assertEquals(a.targetAlloc, 1);
+  const b = decideSthCb(155_000, CB, 0, a.state, cfg, { bands }); assertEquals(b.targetAlloc, 0.75); assertEquals(b.rule.startsWith("R15"), true);
+  const c = decideSthCb(145_000, CB, 0, b.state, cfg, { bands }); assertEquals(c.targetAlloc, 0.75, "tier latches on a dip");
+  const d = decideSthCb(205_000, CB, 0, c.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  const e = decideSthCb(260_000, CB, 0, d.state, cfg, { bands }); assertEquals(e.inMarket, false); assertEquals(e.state.distLatch, true);
+});
+
+Deno.test("Idea 15: lthSellMomoGate defers the partial sell while ROC > threshold", () => {
+  const cfg: SthCbConfig = { ...DEFAULT_STH_CB_CONFIG, lthSellTiers: [{ sigma: 2, alloc: 0.5 }], lthSellMomoGate: true };
+  const held: SthCbState = { capLatch: false, trendLatch: true };
+  const deferred = decideSthCb(205_000, CB, +0.05, held, cfg, { bands: { p200: 200_000 } });
+  assertEquals(deferred.targetAlloc, 1); assertEquals(deferred.sellDeferred, true);
+  const fired = decideSthCb(205_000, CB, -0.01, deferred.state, cfg, { bands: { p200: 200_000 } });
+  assertEquals(fired.targetAlloc, 0.5);
+});
+
+Deno.test("Idea 16: dip re-buy restores 100% after a pull-back from the post-sell peak and re-arms the tiers", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 2, alloc: 0.5 }], dipRebuyPct: 0.2 };
+  const bands = { p200: 200_000 };
+  let d = decideSthCb(205_000, CB, 0, { capLatch: false, trendLatch: true }, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  d = decideSthCb(230_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.state.postSellPeak, 230_000);
+  d = decideSthCb(190_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5, "−17% not enough");
+  d = decideSthCb(183_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 1); assertEquals(d.rule, "R16 Dip re-buy → 100% BTC");
+  // next leg up through +2σ sells again
+  d = decideSthCb(210_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  assertEquals(d.state.dipRebuys, 1);
+});
+
+Deno.test("Idea 16: dipRebuyMax caps re-accumulations; dipRebuyAtCbRatio alternative trigger", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 2, alloc: 0.5 }], dipRebuyAtCbRatio: 1.0, dipRebuyMax: 1 };
+  const bands = { p200: 200_000 };
+  let d = decideSthCb(205_000, CB, 0, { capLatch: false, trendLatch: true }, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 1, "re-buy at the cost basis");
+  d = decideSthCb(205_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5, "max 1 re-buy per hold");
+});
+
+Deno.test("v2: scaleCooldownDays blocks a re-buy / next partial sell inside the window; full exit always allowed", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 2, alloc: 0.5 }, { sigma: 2.5, alloc: 0 }], dipRebuyAtCbRatio: 1.0, scaleCooldownDays: 3 };
+  const bands = { p200: 200_000, p250: 250_000 };
+  let d = decideSthCb(205_000, CB, 0, { capLatch: false, trendLatch: true, holdDays: 5 }, cfg, { bands }); assertEquals(d.targetAlloc, 0.5);
+  d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5, "day 1 after sell: cooldown");
+  d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5, "day 2");
+  d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 1, "day 3: re-buy allowed");
+  d = decideSthCb(205_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 1, "partial sell blocked by cooldown");
+  d = decideSthCb(260_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.inMarket, false, "full exit ignores cooldown");
+});
+
+Deno.test("v2: a hold entered above a tier does not scale out on entry day", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 1, alloc: 0.8 }, { sigma: 2.5, alloc: 0 }] };
+  const bands = { p100: 100_000, p250: 300_000 };
+  const entry = decideSthCb(120_000, CB, 0, CASH, cfg, { bands }); // trend entry at 120% with price already above +1σ
+  assertEquals(entry.position, "trend_hold");
+  assertEquals(entry.targetAlloc, 1);
+  const next = decideSthCb(121_000, CB, 0, entry.state, cfg, { bands });
+  assertEquals(next.targetAlloc, 1, "tier 1 was initialised at entry; no sell until a higher tier");
+});

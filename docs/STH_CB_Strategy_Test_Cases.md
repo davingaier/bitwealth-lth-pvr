@@ -78,6 +78,25 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | H-08 | `robustness.ts` battery | survives perturbations | see README table; worst case (CB × 0.94) still 10× HODL | PASS |
 | H-09 | Admin path `ef_sth_cb_bt_execute` with the winner's extras (run `9cfaba5b`) | = lab | $2 727 839.29, 33 trades — identical | PASS |
 
+### STH_CB hybrid v2 — scale-out ladder + dip re-buy (v0.6.172)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| V2-01 | Unit tests ideas 15/16 + cooldown (`lthSellTiers` latching, momentum gate, fresh-entry tier init, dip re-buy by % and by CB ratio, `dipRebuyMax`, `scaleCooldownDays` blocks re-buy/next slice but not full exit) | all pass | 34 passed | PASS |
+| V2-02 | Naïve ladder (no gate, no re-buy) vs v1 | ≥ v1? | loses to v1 — gate required | DONE |
+| V2-03 | v2 R1 `--idea v2` (12 k, WF) | best | $3.29 M, 8/10 | DONE |
+| V2-04 | v2 R2 `--idea v2fine` (12 k) | best | $3.40 M, 40.7× | DONE |
+| V2-05 | Cooldown probe 0–10 d | optimum | 5 d ($3.64 M); ≥ 7 d degrades | DONE |
+| V2-06 | v2 R3 `v2fine` + cooldown (12 754, climb 14×4, WF top 250) | best | **$3 802 097, 45.6×, 49 trades, DD 48 %, WF 8/10** | DONE |
+| V2-07 | `robustness.ts` v2 vs v1 (30 rows) | v2 ≥ v1 | v2 better on every row, same DD | PASS |
+| V2-08 | Fill trail inspection | no churn; re-buys below slice price | 49 trades; 5/6 re-buys 3–14 % cheaper, Dec-24 +1.8 % (CB-ratio trigger) | PASS |
+| V2-09 | Deployed `ef_sth_cb_bt_execute` with v2 extras (run `7e0b19cd`) | = lab | $3 802 096.89, 49 trades — identical | PASS |
+| V2-10 | UI preset *Hybrid v2* → `btReadSthCbParams()` | exactly the 15 v2 extras, no `sellTiers`/`distributeAtSigma` | verified headless | PASS |
+| V2-11 | `tracker_config` row `hybrid_v2` + `ef_sth_cb_tracker` rebuild | 2 trackers, rows to latest close | v1 $2.69 M / v2 $3.75 M to 2026-10-25, 3 585 rows each | PASS |
+| V2-12 | Tracker card selector + partial-allocation tiles (mocked client) | "TREND HOLD · 50 % BTC", "SCALE OUT to 25 % BTC", ladder tile, switch v1↔v2 remembered | as expected | PASS |
+| V2-13 | Tracker card signed-in rendering of real v2 rows | chart + tiles | pending manual check | SKIP |
+| V2-14 | `factsheet_data.ts --variant v2` → `STH_CB_Hybrid_v2_Fact_Sheet.html` | 3 pages fit A4; headline = lab; battery "as tested" = headline; v1 column = v1 sheet | spare 46/27/10 px at 96 dpi; $3,802,097 / 49 trades; v1 $2,727,839; assert added in generator | PASS |
+
 ---
 
 ## 2. Database / RPC

@@ -148,6 +148,8 @@ combination is also saved to `results/<timestamp>_<idea>_<objective>.csv`.
 | `7`–`12` | σ-adaptive thresholds, momentum re-entry, minimum hold, LTH macro filter, capitulation confirmation, trailing stop | small |
 | `hybrid` | The LTH-distribution neighbourhood that won the lump-sum campaign (20 knobs incl. ideas 13/14) | sampled |
 | `fine` | Tight steps around the current winner — use with `--base '{winner}'` | sampled |
+| `v2` | Ideas 15/16: scale-out ladders at the LTH PVR upper bands, momentum gate, dip re-buy — use with `--base '{hybrid v1}'` | sampled |
+| `v2fine` | Tight steps around the v2 winner incl. `scaleCooldownDays` — use with `--base '{hybrid v2}'` | sampled |
 | `all` | Every parameter from every idea at once — random sampling only | sampled |
 
 Add `--climb K --passes N` to hill-climb from the top K after sampling (coordinate descent over each knob's
@@ -299,6 +301,13 @@ Ratios are **price ÷ STH cost basis** (so `0.70` = price at 70 % of the cost ba
 | 12 | `trailingStopPct` | `0.35` | Exit a trend hold once price is this far below its peak since entry; arms the re-entry ladder |
 | 13 | `distReentryClearRatio` | `0.9` | After an LTH +σ distribution, block trend re-entries until price has come back to this ratio of the CB |
 | 14 | `capBuyAtLthSigma` | `-0.5` | Also treat price ≤ the LTH PVR band at this σ (0 = mean, −0.5, −1) as a capitulation buy |
+| 15 | `lthSellTiers` | `[{"sigma":1,"alloc":0.75},{"sigma":2.5,"alloc":0}]` | **Scale out at the LTH PVR upper bands**: at +1σ hold 75 % BTC … `alloc 0` = sell everything (replaces `distributeAtSigma`). Tiers latch per hold; entering a hold already above a tier does not sell on day one |
+| 15 | `lthSellMomoGate` | `true` | Sell a ladder slice only once ROC ≤ `momoThreshold` (momentum has turned) rather than on the first touch of the band. Without it, ladders *lose* to a single all-out |
+| 16 | `dipRebuyPct` | `0.10` | After a partial scale-out, go back to 100 % BTC once price has fallen this far from its post-sell peak. Re-arms the ladder for the next leg up |
+| 16 | `dipRebuyAtCbRatio` | `1.10` | Alternative re-buy trigger: price back at ≤ this × the STH cost basis |
+| 16 | `dipRebuyMax` | `3` | Maximum re-buys per hold (blank = unlimited) |
+| v2 | `scaleCooldownDays` | `5` | Minimum days between a partial sell and a re-buy (either direction). Full exits ignore it. Kills next-day flip-flops |
+| v2 | `rebalanceDrift` | `0.05` | Opt-in constant-mix: while at a partial allocation, rebalance when the held weight drifts this far from target. Default off — trades only when the target changes |
 
 ### The optimised "STH_CB hybrid v1" (2026-10-25)
 
@@ -329,6 +338,44 @@ out at $109.5k (Oct-25); currently in since $59.9k (Jun-26). 33 trades in 9.8 ye
 **Caveats, stated plainly:** the parameters were chosen on this very window (in-sample). Walk-forward 7/10 and
 the start-year table are the evidence that it is not pure curve-fit, but 2023 and 2024 both lost to HODL,
 and ±6 % on the cost-basis line still cuts the result by two-thirds. Paper-trade before capital.
+
+### The "STH_CB hybrid v2" — scale out into euphoria, re-buy the dip (2026-10-26)
+
+Davin's hypothesis: instead of sitting at 100 % BTC until the +2.5σ all-out, peel off slices as price climbs
+through the LTH PVR upper bands and redeploy that USDT after the pull-back. Three rounds (~37 000 configs,
+`--idea v2` then `v2fine`) confirmed it — **but only with the momentum gate**; blind ladders at the first band touch
+lose to v1.
+
+```json
+{"capBuyRatio":0.75,"capExitRatio":0.95,"trendEnterRatio":1.12,"trendExitRatio":0.97,"momoLength":2,"momoThreshold":-0.02,
+ "cbSlopeDays":21,"trailingStopPct":0.35,"reentryRocThreshold":0.1,"minHoldDays":15,"blockEntryAboveSigma":2.5,
+ "distReentryClearRatio":0.85,"capBuyAtLthSigma":-0.5,"trendReentryRatio":1.02,"capBuyRocThreshold":0,
+ "lthSellTiers":[{"sigma":1,"alloc":0.75},{"sigma":1.5,"alloc":0.5},{"sigma":2,"alloc":0.25},{"sigma":2.5,"alloc":0}],
+ "lthSellMomoGate":true,"dipRebuyPct":0.1,"dipRebuyAtCbRatio":1.1,"dipRebuyMax":3,"scaleCooldownDays":5}
+```
+
+| Basis ($1 000 lump sum, 2017-01-01 → 2026-10-23) | v1 | **v2** |
+|---|---|---|
+| **Next-day fills, full BitWealth fees** | $2 727 839 · 32.7× · 33 trades | **$3 802 097 · 380 110 % · 45.6× · 49 trades** |
+| Same-day fills | 27.6× | 41.8× |
+| Exchange fees only (gross) | 64.1× | 90.3× |
+| STH cost basis × 0.94 / 0.97 / 1.03 / 1.06 | 10.0× / 16.5× / 20.7× / 8.5× | 13.8× / 21.7× / 26.4× / 11.2× |
+| LTH bands × 0.95 / 1.05 | 20.9× / 36.5× | 30.3× / 37.9× |
+| Start 2018 / 2019 / 2020 / 2021 / 2022 / 2023 | 36.6× / 11.7× / 11.3× / 8.9× / 4.8× / 1.5× | 45.4× / 14.5× / 14.0× / 11.1× / 5.6× / 1.7× |
+| $10 000 + $500/month | 6.7× | 9.2× |
+| Max drawdown | 48 % | 48 % |
+| Walk-forward years beating HODL | 7/10 | **8/10** |
+
+v2 wins every row with the same drawdown. Where the money comes from: in 2021 v1 held 100 % until the $57k all-out;
+v2 sold 25 % at $34.8k, re-bought $32k, sold to 25 % at $48.6k, re-bought $44.7k, sold again at $48.3k/$55.4k,
+re-bought $53.5k, then exited at $58.2k/$61.4k. Same pattern Nov-17 ($7.4k → $6.4k → $16.6k) and Nov-24 → Jul-25
+($93k/$102k/$108k/$119k slices, $94.7k/$104k re-buys). Only the Dec-24 re-buy was above its slice price (+1.8 %, via
+the ≤ 110 % CB trigger); the other five were 3–14 % cheaper. Full logs: `results/v2_r3.log`, `results/v2_robustness.log`,
+`results/v1_robustness.log` (local, git-ignored — regenerate with the commands above).
+
+The Admin UI preset *STH CB Hybrid v2* is now the default; the tracker card has a selector for v1 / v2.
+Fact sheet: `docs/STH_CB_Hybrid_v2_Fact_Sheet.html` — regenerate its data with
+`deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2` (no flag = the v1 sheet's data).
 
 ---
 

@@ -3,11 +3,82 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-26 (v0.6.171)
+**Last updated:** 2026-10-26 (v0.6.172)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.172 – STH_CB Hybrid **v2**: momentum-gated scale-out ladder + dip re-buy (hypothesis confirmed)
+**Date:** 2026-10-26 · **Status:** ✅ DEPLOYED (`ef_sth_cb_bt_execute`, `ef_sth_cb_tracker`; migration `20261026_sth_cb_tracker_hybrid_v2.sql`)
+
+**Hypothesis (Davin):** scaling *out* of BTC into euphoric strength — as the LTH PVR strategy does in its selling
+regime — banks spare USDT that can be redeployed after the pull-back, and should beat v1's single all-out at +2.5σ.
+
+**New rules in `_shared/sth_cb_strategy_logic.ts` (all opt-in via `extras`):**
+- **Idea 15 — `lthSellTiers` / `lthSellMomoGate`.** While in a hold, step the BTC allocation down as price crosses
+  the LTH PVR upper bands (`[{sigma:1,alloc:0.75},{sigma:1.5,alloc:0.5},{sigma:2,alloc:0.25},{sigma:2.5,alloc:0}]`;
+  `alloc 0` = full exit and replaces `distributeAtSigma`). Tiers latch per hold; a hold entered *above* a tier
+  initialises at that tier (no sell on entry day). With `lthSellMomoGate:true` a slice is sold only once ROC ≤
+  `momoThreshold` — selling into weakness at height rather than at the first touch.
+- **Idea 16 — `dipRebuyPct` / `dipRebuyAtCbRatio` / `dipRebuyMax`.** After a partial scale-out, restore 100 % BTC
+  once price has fallen `dipRebuyPct` from its post-sell peak **or** returned to ≤ `dipRebuyAtCbRatio` × CB; at most
+  `dipRebuyMax` re-buys per hold. The tier level is re-armed so the ladder can sell again on the next leg up.
+- **`scaleCooldownDays`** — minimum days between a partial sell and a re-buy (and vice-versa); full exits ignore it.
+  Removes next-day flip-flops (5 d optimal; ≥ 7 d degrades).
+- Simulator (`_shared/sth_cb_simulator.ts`): partial-allocation branch now trades only when the **target** changes
+  (constant-mix drift rebalancing is opt-in via `rebalanceDrift`); `EXTRA_CONFIG_KEYS` extended; `configNeedsBands`
+  true when `lthSellTiers` is set.
+
+**Campaign (lab, lump-sum basis $1 000 2017-01-01 → 2026-10-23, next-day fills, full fees):** v2 R1 (ideas 15/16
+grid, 12 k) → $3.29 M WF 8/10; R2 fine (12 k) → $3.40 M; cooldown probe → 5 d = $3.64 M; R3 fine + cooldown
+(12 754 configs, climb 14 × 4, WF top 250) → **$3,802,097 / 380,110 % / 45.6× HODL / DD 48 % / 49 trades / WF 8/10**.
+Naïve ladders *without* the momentum gate lose to v1 — the gate plus the dip re-buy is what makes scale-out pay.
+
+**Hybrid v2 config** = v1 base minus `distributeAtSigma`/`sellTiers`, plus
+`distReentryClearRatio:0.85, lthSellTiers:[1→75 %, 1.5→50 %, 2→25 %, 2.5→0 %], lthSellMomoGate:true,
+dipRebuyPct:0.1, dipRebuyAtCbRatio:1.1, dipRebuyMax:3, scaleCooldownDays:5`.
+
+| `robustness.ts` row | v1 | **v2** |
+|---|---|---|
+| As configured | $2 727 839 · 32.7× | **$3 802 097 · 45.6×** |
+| Same-day fills | 27.6× | 41.8× |
+| Exchange fees only | 64.1× | 90.3× |
+| CB × 0.94 / 0.97 / 1.03 / 1.06 | 10.0× / 16.5× / 20.7× / 8.5× | 13.8× / 21.7× / 26.4× / 11.2× |
+| LTH bands × 0.95 / 1.05 | 20.9× / 36.5× | 30.3× / 37.9× |
+| Start 2018 / 2019 / 2020 / 2021 / 2022 / 2023 | 36.6× / 11.7× / 11.3× / 8.9× / 4.8× / 1.5× | 45.4× / 14.5× / 14.0× / 11.1× / 5.6× / 1.7× |
+| $10 000 + $500/mo · $0 + $100/mo | 6.7× · 2.2× | 9.2× · 3.0× |
+| Walk-forward years beating HODL | 7/10 | **8/10** (2017 now ✓) |
+| Max drawdown | 48 % | 48 % |
+
+v2 beats v1 on **every** stress row with the same drawdown. Where the edge comes from (fill trail): Nov-17 → sold
+25 % at $7.4k, re-bought $6.4k, full exit $16.6k; Jan–Apr-21 → four scale-outs $34.8k–$61.4k with three re-buys
+$32k–$53.5k (v1 sat at 100 % and dumped everything at $57k); Nov-24 → Jul-25 → slices at $93k/$102k/$108k/$119k,
+re-buys $94.7k/$104k.
+
+**Deployed artefacts:** `ef_sth_cb_bt_execute` redeployed (verification run `7e0b19cd` = $3,802,096.89 / 49 trades,
+identical to the lab); `ef_sth_cb_tracker` redeployed (now authorises via `_shared/adminAuth.ts` like the other admin
+EFs) and a second `sth_cb.tracker_config` row `hybrid_v2` inserted — both trackers rebuilt (to 2026-10-25: v1 $2.69 M,
+v2 $3.75 M, both TREND HOLD). **Admin UI:** back-tester preset *STH CB Hybrid v2* (new default) + fields *Scale-out
+ladder*, *momentum-gate*, *Re-buy on pull-back %*, *…or ≤ % of CB*, *max re-buys*, *cooldown days*; the tracker card
+gains a configuration selector (remembered in `localStorage`), shows the % BTC still held inside a hold, a ladder
+tile, and allocation-aware "tomorrow" instructions (*SCALE OUT to 25 % BTC* / *RE-BUY to 100 % BTC*). Lab: ideas
+grids `v2`, `v2fine`; 34 unit tests pass.
+
+**Fact sheet v2:** `docs/STH_CB_Hybrid_v2_Fact_Sheet.html` (3 A4 pages, print → PDF; data `docs/sth_cb_factsheet_data_v2.js`
+from `tools/sth_cb_lab/factsheet_data.ts --variant v2`). Page 1: one-paragraph rules, KPI strip with v1 figures in the
+sub-line, price chart with the +1/+1.5/+2σ rungs and four marker types (all-in ▲, dip re-buy ▲ small, slice ● rose,
+all-out ●), a **BTC-allocation strip**, NAV chart with v1 overlaid. Page 2: states, "New in v2" cards (ladder / momentum
+gate / dip re-buy + cooldown) with a 5-rung ladder graphic, entry/exit/filter cards with fire dates. Page 3: all 49 trades
+in two columns (slices and re-buys colour-coded, BTC % column), year-by-year with v2 **and** v1 walk-forward, a
+v1 → v2 comparison table, and the stress-test battery with v1 and v2 side by side. The generator now runs the
+robustness battery on the *normalised* config (`lab.config`) and asserts the "as tested" row equals the headline NAV;
+the v1 sheet's data file was regenerated (figures unchanged; daily rows gained alloc/band columns it does not read).
+
+**Caveats:** still in-sample on the same window; 49 trades vs 33 (more execution risk — and not every re-buy is a
+bargain: 5 of the 6 historical re-buys were 3–14 % below the slice price, but Dec-24 re-bought 1.8 % *above* it via
+the ≤ 110 % CB trigger); the ladder depends on the LTH PVR bands as well as the STH cost basis, so two data series
+must be right.
 
 ### v0.6.171 – STH_CB Hybrid rules as editable fields in the Admin back-tester (+ presets)
 **Date:** 2026-10-26 · **Status:** ✅ DONE (UI only)

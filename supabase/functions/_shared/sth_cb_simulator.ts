@@ -252,6 +252,7 @@ export const EXTRA_CONFIG_KEYS = [
   "sigmaMode", "sigmaWindow", "capBuySigma", "capExitSigma", "trendEnterSigma", "trendExitSigma",
   "reentryRocThreshold", "minHoldDays", "blockEntryAboveSigma", "capBuyRocThreshold", "trailingStopPct",
   "distReentryClearRatio", "capBuyAtLthSigma",
+  "lthSellTiers", "lthSellMomoGate", "dipRebuyPct", "dipRebuyAtCbRatio", "dipRebuyMax", "rebalanceDrift", "scaleCooldownDays",
 ] as const;
 
 /** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
@@ -277,7 +278,7 @@ export function unknownExtraKeys(extras: Record<string, unknown>): string[] {
 
 /** Does this config need LTH PVR bands joined onto the series? */
 export function configNeedsBands(config: SthCbConfig): boolean {
-  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number";
+  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number" || !!config.lthSellTiers?.length;
 }
 
 /**
@@ -616,13 +617,15 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
         position = "cash";
         currentAlloc = 0;
       } else {
-        // Partial allocation (ideas 2): rebalance only when drift exceeds the band
+        // Partial allocation (ideas 2 / 15 / 16): trade when the target allocation CHANGES.
+        // Continuous drift-rebalancing (constant-mix) is opt-in via config.rebalanceDrift, because
+        // "sell a slice and keep the cash" is a different hypothesis from "keep a fixed BTC weight".
         const nav = navNow(px);
         const desiredBtcUsd = target * nav;
         const delta = desiredBtcUsd - btcBal * px;
-        const band = Math.max(USDT_DUST, REBALANCE_BAND * nav);
+        const driftBand = typeof config.rebalanceDrift === "number" ? Math.max(USDT_DUST, config.rebalanceDrift * nav) : Infinity;
         const allocChanged = Math.abs(target - currentAlloc) > 1e-9;
-        if (delta > band || (allocChanged && delta > USDT_DUST)) {
+        if (delta > driftBand || (allocChanged && delta > USDT_DUST)) {
           ensureUsdt(delta, tradeDate);
           const tradeUsdt = Math.min(delta, Math.max(0, usdtBal));
           if (tradeUsdt > USDT_DUST) {
@@ -632,7 +635,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
             else tradesCount++;
             buyBtc(tradeUsdt, px, tradeDate, rule);
           }
-        } else if (delta < -band || (allocChanged && delta < -USDT_DUST)) {
+        } else if (delta < -driftBand || (allocChanged && delta < -USDT_DUST)) {
           const btcToSell = Math.min(btcBal, -delta / px);
           if (btcToSell * px > USDT_DUST) {
             action = "SELL";
