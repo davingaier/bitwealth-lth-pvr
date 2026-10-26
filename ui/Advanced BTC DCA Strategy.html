@@ -7997,7 +7997,8 @@
           const w = sthRes.data?.summary?.window;
           const extra = s ? ` — ${s.trades} round-trip trades, ${s.pct_time_in_market}% time in market, final NAV ${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(s.final_nav_usd)} (${Number(s.nav_vs_hodl).toFixed(2)}× HODL)` : '';
           const win = w ? ` · window ${w.start_date}→${w.end_date}, $${w.upfront} + $${w.monthly}/mo — compare lab results only on the same window & contributions` : '';
-          showInlineError(errId, `STH_CB back-test completed (Run #${bt_run_id})${extra}${win}.`);
+          const lumpNote = (w && Number(w.monthly) === 0) ? ' Note: with no monthly contribution, Standard DCA and HODL are the same single day-1 buy, so their lines/columns coincide by definition.' : '';
+          showInlineError(errId, `STH_CB back-test completed (Run #${bt_run_id})${extra}${win}.${lumpNote}`);
           return;
         }
 
@@ -8018,7 +8019,8 @@
 
         await btLoadAndRenderFromRun(bt_run_id, { strategy: 'LTH_PVR' });
 
-        showInlineError(errId, `Back-test completed successfully (Run #${bt_run_id}).`);
+        const lumpNoteLth = Number(common.monthly) === 0 ? ' Note: with no monthly contribution, Standard DCA and HODL are the same single day-1 buy, so their lines/columns coincide by definition.' : '';
+        showInlineError(errId, `Back-test completed successfully (Run #${bt_run_id}).${lumpNoteLth}`);
 
       }catch(err){
         console.error('Back-test failed:', err);
