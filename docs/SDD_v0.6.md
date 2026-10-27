@@ -62,7 +62,10 @@ EFs) and a second `sth_cb.tracker_config` row `hybrid_v2` inserted — both trac
 v2 $3.75 M, both TREND HOLD). **Admin UI:** back-tester preset *STH CB Hybrid v2* (new default) + fields *Scale-out
 ladder*, *momentum-gate*, *Re-buy on pull-back %*, *…or ≤ % of CB*, *max re-buys*, *cooldown days*; the tracker card
 gains a configuration selector (remembered in `localStorage`), shows the % BTC still held inside a hold, a ladder
-tile, and allocation-aware "tomorrow" instructions (*SCALE OUT to 25 % BTC* / *RE-BUY to 100 % BTC*). Lab: ideas
+tile, and allocation-aware "tomorrow" instructions (*SCALE OUT to 25 % BTC* / *RE-BUY to 100 % BTC*). Tracker chart
+markers (2026-10-27, matching the fact sheets): buys ▲ plotted at 0.74× price (below the line), sells ▼ at 1.32× (above);
+v2 slices / dip re-buys as smaller rose / light-green triangles; tooltip reports the actual fill price; y-axis given
+0.7× / 1.4× headroom so the first marker is not clipped. Lab: ideas
 grids `v2`, `v2fine`; 34 unit tests pass.
 
 **Fact sheet v2:** `docs/STH_CB_Hybrid_v2_Fact_Sheet.html` (3 A4 pages, print → PDF; data `docs/sth_cb_factsheet_data_v2.js`
