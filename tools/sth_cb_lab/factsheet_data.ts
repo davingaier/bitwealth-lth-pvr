@@ -1,10 +1,12 @@
 // tools/sth_cb_lab/factsheet_data.ts
 // Generate the data file behind the STH_CB fact sheets.
 //
-//   deno run -A tools/sth_cb_lab/factsheet_data.ts                 → docs/sth_cb_factsheet_data.js     (Hybrid v1 sheet)
-//   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2    → docs/sth_cb_factsheet_data_v2.js  (Hybrid v2 sheet, incl. v1 comparison)
+//   deno run -A tools/sth_cb_lab/factsheet_data.ts                   → docs/sth_cb_factsheet_data.js      (Hybrid v1 sheet)
+//   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2      → docs/sth_cb_factsheet_data_v2.js   (Hybrid v2 sheet, compares with v1)
+//   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2_1    → docs/sth_cb_factsheet_data_v2_1.js (Hybrid v2.1 sheet, compares with v2)
 
 import { simulateSthCb } from "../../supabase/functions/_shared/sth_cb_simulator.ts";
+import { SthCbConfig } from "../../supabase/functions/_shared/sth_cb_strategy_logic.ts";
 import { annualFolds, evaluate, labArgsFrom, loadSeries, parseArgs, REPO_ROOT, simParams } from "./lab_core.ts";
 
 export const HYBRID_V1 = {
@@ -24,9 +26,23 @@ export const HYBRID_V2 = {
   lthSellMomoGate: true, dipRebuyPct: 0.1, dipRebuyAtCbRatio: 1.1, dipRebuyMax: 3, scaleCooldownDays: 5,
 };
 
+// v2.1 = v2 with the slice sizes optimised by ladder_optimize.ts (2026-10-27): 30/20/10/0 % instead of 75/50/25/0 %.
+export const HYBRID_V2_1 = {
+  ...HYBRID_V2,
+  lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 1.5, alloc: 0.2 }, { sigma: 2, alloc: 0.1 }, { sigma: 2.5, alloc: 0 }],
+};
+
+const VARIANTS: Record<string, { config: Record<string, unknown>; file: string; compare?: { label: string; config: Record<string, unknown> } }> = {
+  v1: { config: HYBRID_V1, file: "sth_cb_factsheet_data.js" },
+  v2: { config: HYBRID_V2, file: "sth_cb_factsheet_data_v2.js", compare: { label: "Hybrid v1", config: HYBRID_V1 } },
+  v2_1: { config: HYBRID_V2_1, file: "sth_cb_factsheet_data_v2_1.js", compare: { label: "Hybrid v2", config: HYBRID_V2 } },
+};
+
 const args = parseArgs(Deno.args);
-const variant = (args.variant as string | undefined) === "v2" ? "v2" : "v1";
-const CONFIG = variant === "v2" ? HYBRID_V2 : HYBRID_V1;
+const variant = String(args.variant ?? "v1");
+const V = VARIANTS[variant];
+if (!V) { console.error(`Unknown --variant '${variant}'. Options: ${Object.keys(VARIANTS).join(", ")}`); Deno.exit(1); }
+const CONFIG = V.config;
 const series = await loadSeries();
 const lab = labArgsFrom({ start: "2017-01-01", end: "2026-10-23", upfront: "1000", monthly: "0", ...args, extras: JSON.stringify(CONFIG) }, series.to);
 const rows = series.rows.filter((r) => r.close_date <= lab.end);
@@ -88,13 +104,13 @@ const annual = years.map((y) => {
 const wf = evaluate(rows, lab, lab.config, annualFolds(lab.start, lab.end));
 
 // Robustness
-const run = (over: Partial<typeof lab> = {}, mutate?: (r: typeof rows[number]) => typeof rows[number], config: Record<string, unknown> = lab.config as Record<string, unknown>) => {
+const run = (over: Partial<typeof lab> = {}, mutate?: (r: typeof rows[number]) => typeof rows[number], config: SthCbConfig = lab.config) => {
   const l = { ...lab, ...over };
   const data = (mutate ? rows.map(mutate) : rows).filter((r) => r.close_date <= l.end);
-  const s = simulateSthCb(data, simParams(l, config as typeof lab.config), { ledger: false, daily: false }).summary.sth_cb;
+  const s = simulateSthCb(data, simParams(l, config), { ledger: false, daily: false }).summary.sth_cb;
   return { nav: +s.final_nav_usd.toFixed(0), x: +s.nav_vs_hodl.toFixed(2), roi: +s.final_roi_percent.toFixed(0), dd: +(s.max_drawdown * 100).toFixed(0), trades: s.trades };
 };
-const battery = (config: Record<string, unknown>) => ({
+const battery = (config: SthCbConfig) => ({
   base: run({}, undefined, config),
   same_day: run({ sameDay: true }, undefined, config),
   gross: run({ fees: "exchange_only" }, undefined, config),
@@ -103,21 +119,21 @@ const battery = (config: Record<string, unknown>) => ({
   starts: Object.fromEntries(["2015-01-04", "2016-01-01", "2017-01-01", "2018-01-01", "2019-01-01", "2020-01-01", "2021-01-01", "2022-01-01", "2023-01-01"].map((s) => [s, run({ start: s }, undefined, config)])),
   dca: { "10000+500": run({ upfront: 10_000, monthly: 500 }, undefined, config), "1000+100": run({ upfront: 1_000, monthly: 100 }, undefined, config), "0+100": run({ upfront: 0, monthly: 100 }, undefined, config) },
 });
-const robustness = battery(lab.config as Record<string, unknown>);
+const robustness = battery(lab.config);
 
-// v2 sheet: the same battery for v1 so every row can be shown side by side, plus v1's walk-forward and daily NAV.
+// Comparison sheet: the same battery for the previous version so every row can be shown side by side, plus its walk-forward and daily NAV.
 let compare: Record<string, unknown> | undefined;
-if (variant === "v2") {
-  const v1lab = labArgsFrom({ start: lab.start, end: lab.end, upfront: String(lab.upfront), monthly: String(lab.monthly), extras: JSON.stringify(HYBRID_V1) }, series.to);
+if (V.compare) {
+  const v1lab = labArgsFrom({ start: lab.start, end: lab.end, upfront: String(lab.upfront), monthly: String(lab.monthly), extras: JSON.stringify(V.compare.config) }, series.to);
   const v1sim = simulateSthCb(rows, simParams(v1lab), { ledger: false, daily: true });
   const v1wf = evaluate(rows, v1lab, v1lab.config, annualFolds(lab.start, lab.end));
   const v1nav = new Map(v1sim.results.map((d) => [d.trade_date, +d.nav_usd.toFixed(2)]));
   compare = {
-    label: "Hybrid v1",
-    config: HYBRID_V1,
+    label: V.compare.label,
+    config: V.compare.config,
     summary: { final_nav: +v1sim.summary.sth_cb.final_nav_usd.toFixed(0), roi_pct: +v1sim.summary.sth_cb.final_roi_percent.toFixed(0), cagr_pct: +v1sim.summary.sth_cb.final_cagr_percent.toFixed(1), max_dd_pct: +(v1sim.summary.sth_cb.max_drawdown * 100).toFixed(1), trades: v1sim.summary.sth_cb.trades, nav_vs_hodl: +v1sim.summary.sth_cb.nav_vs_hodl.toFixed(2), pct_in_market: v1sim.summary.sth_cb.pct_time_in_market, sharpe: +v1sim.summary.sth_cb.sharpe.toFixed(2), calmar: +v1sim.summary.sth_cb.calmar.toFixed(2), wf_beat: v1wf.folds_beating_hodl, wf_total: v1wf.folds!.length },
     wf: v1wf.folds!.map((f) => ({ year: f.fold.oosStart.slice(0, 4), x: +f.nav_vs_hodl.toFixed(2), beat: f.beat_hodl })),
-    robustness: battery(v1lab.config as Record<string, unknown>),
+    robustness: battery(v1lab.config),
     nav: daily.map((d) => v1nav.get(d[0] as string) ?? null),
   };
 }
@@ -140,6 +156,6 @@ const out = {
   wf: wf.folds!.map((f) => ({ year: f.fold.oosStart.slice(0, 4), x: +f.nav_vs_hodl.toFixed(2), beat: f.beat_hodl })),
   annual, trades, robustness, daily, compare,
 };
-const file = `${REPO_ROOT}docs/${variant === "v2" ? "sth_cb_factsheet_data_v2.js" : "sth_cb_factsheet_data.js"}`;
-await Deno.writeTextFile(file, `// Generated by tools/sth_cb_lab/factsheet_data.ts${variant === "v2" ? " --variant v2" : ""} on ${out.generated_at} — do not edit\nwindow.STHCB = ${JSON.stringify(out)};\n`);
-console.log(`wrote ${file}: ${daily.length} daily rows, ${trades.length} trades, NAV ${m.final_nav_usd.toFixed(0)}${compare ? ` (v1 NAV ${(compare.summary as { final_nav: number }).final_nav})` : ""}`);
+const file = `${REPO_ROOT}docs/${V.file}`;
+await Deno.writeTextFile(file, `// Generated by tools/sth_cb_lab/factsheet_data.ts${variant !== "v1" ? ` --variant ${variant}` : ""} on ${out.generated_at} — do not edit\nwindow.STHCB = ${JSON.stringify(out)};\n`);
+console.log(`wrote ${file}: ${daily.length} daily rows, ${trades.length} trades, NAV ${m.final_nav_usd.toFixed(0)}${compare ? ` (${V.compare!.label} NAV ${(compare.summary as { final_nav: number }).final_nav})` : ""}`);

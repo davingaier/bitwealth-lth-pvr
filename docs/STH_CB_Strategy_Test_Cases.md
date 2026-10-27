@@ -97,6 +97,20 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | V2-13 | Tracker card signed-in rendering of real v2 rows | chart + tiles | pending manual check | SKIP |
 | V2-14 | `factsheet_data.ts --variant v2` → `STH_CB_Hybrid_v2_Fact_Sheet.html` | 3 pages fit A4; headline = lab; battery "as tested" = headline; v1 column = v1 sheet | spare 46/27/10 px at 96 dpi; $3,802,097 / 49 trades; v1 $2,727,839; assert added in generator | PASS |
 
+### Ladder sizing study (v0.6.173)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| L-01 | `configKey()` keeps nested tier objects distinct | two ladders with different allocs → different keys | fixed; first (buggy) run evaluated 359 configs, fixed run 16 294 | PASS |
+| L-02 | Ladder enumeration count (6 bands, 0.1 step, non-increasing, 1.0 = no rung) | Σ C(6,k)·C(10,k) = 8 007 | 8 007 (after fixing the skip-band ordering bug) | PASS |
+| L-03 | Phase 0: 10/20/30 % sell at the mean on the v2 base | material change? | −22 / −29 / −36 % NAV, 75 trades | DONE (negative) |
+| L-04 | Phase 0: 10/20/30 % sell at +0.5σ | material change? | −3 / −7 / −11 % NAV, 59 trades | DONE (negative) |
+| L-05 | Phase 1+2+3 optimum | > v2 | `+1σ→20 % +1.5σ→10 % +2.5σ→0 %` = $4 398 785, 52.7×, 48 trades, DD 48 %, WF 8/10 (+15.7 %) | PASS |
+| L-06 | Momentum gate off / no +2.5σ exit | worse | best gate-off $2.73 M; no final exit $2.10 M | PASS |
+| L-07 | `--idea v2knobs` on the optimum (12 822 configs) | other knobs matter? | +0.65 % best (cooldown 4, re-buy ≤108 % CB), +6 trades — noise | DONE |
+| L-08 | `robustness.ts` optimum vs v2 | ≥ v2 on every row | better on all 30 rows, same DD/WF | PASS |
+| L-09 | Promotion of 30/20/10/0 as **Hybrid v2.1**: UI preset default emits 15 keys incl. the new ladder; `tracker_config` row `hybrid_v2_1` built; fact sheet pages fit; deployed EF run `3eb68310` | = lab $4,304,977 / 49 trades | all as expected; EF identical to the cent | PASS |
+
 ---
 
 ## 2. Database / RPC

@@ -22,8 +22,10 @@ minute and only send the winners to the Admin UI for the charts.
 | `fetch.ts` | Downloads the daily BTC price, STH cost basis and LTH PVR bands from your database and saves them to `data/series.json` | Yes — once, and again whenever you want fresher data |
 | `run.ts` | Simulates **one** strategy configuration and prints a full report with every trade | Yes |
 | `optimize.ts` | Simulates **thousands** of configurations in parallel on all your CPU cores and ranks them | Yes |
+| `ladder_optimize.ts` | Searches the v2 scale-out ladder itself — which LTH PVR bands to sell at and how much (1-dp sizes) | Yes, when tuning the ladder |
 | `ideas.ts` | The lists of parameter values the optimizer tries for each refinement idea | Only edit if you want to change the ranges being tested |
 | `lab_core.ts` | Shared plumbing: reading `.env`, loading the cached data, scoring, CSV output | No |
+| `pool.ts` | The CPU-core worker pool shared by both optimizers | No |
 | `worker.ts` | The background process the optimizer spawns per CPU core | No |
 | `data/` | The cached series (git-ignored) | — |
 | `results/` | One CSV per optimizer run with every configuration tried (git-ignored) | Open in Excel |
@@ -150,6 +152,7 @@ combination is also saved to `results/<timestamp>_<idea>_<objective>.csv`.
 | `fine` | Tight steps around the current winner — use with `--base '{winner}'` | sampled |
 | `v2` | Ideas 15/16: scale-out ladders at the LTH PVR upper bands, momentum gate, dip re-buy — use with `--base '{hybrid v1}'` | sampled |
 | `v2fine` | Tight steps around the v2 winner incl. `scaleCooldownDays` — use with `--base '{hybrid v2}'` | sampled |
+| `v2knobs` | Everything in `v2fine` **except** the ladder (the ladder in `--base` is kept) — pair with `ladder_optimize.ts` | sampled |
 | `all` | Every parameter from every idea at once — random sampling only | sampled |
 
 Add `--climb K --passes N` to hill-climb from the top K after sampling (coordinate descent over each knob's
@@ -376,6 +379,53 @@ the ≤ 110 % CB trigger); the other five were 3–14 % cheaper. Full logs: `res
 The Admin UI preset *STH CB Hybrid v2* is now the default; the tracker card has a selector for v1 / v2.
 Fact sheet: `docs/STH_CB_Hybrid_v2_Fact_Sheet.html` — regenerate its data with
 `deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2` (no flag = the v1 sheet's data).
+
+### Optimising the ladder itself: `ladder_optimize.ts` (2026-10-27)
+
+`optimize.ts` can only pick a ladder from a fixed list. `ladder_optimize.ts` searches the ladder *shape*:
+
+```powershell
+deno run -A tools/sth_cb_lab/ladder_optimize.ts --base '{hybrid v2 json}' --climb 15 --walk-forward --wf-top 250
+```
+
+- **Phase 0** adds a 10 / 20 / 30 % sell at the LTH PVR **mean** and/or **+0.5σ** to the base ladder — a direct answer to
+  "does trimming early help?".
+- **Phase 1** enumerates **every** ladder over the bands `--levels 0,0.5,1,1.5,2,2.5` with allocations in `--step 0.1`
+  (1 dp) steps, non-increasing from the mean upward (`1.0` at a band = no rung there) — 8 007 ladders — with the
+  momentum gate on and off.
+- **Phase 2** (`--climb K`) coordinate-descends the re-buy / cooldown / gate knobs for the top K ladders.
+- **Phase 3** (`--walk-forward`) scores the top `--wf-top` per calendar year. Output: CSV + top table + a
+  "best with / without a rung at each band" summary.
+
+**Findings (lump sum 2017-01-01 → 2026-10-23, full fees, Hybrid v2 base = $3 802 097):**
+
+| Question | Answer |
+|---|---|
+| Small sell (10–30 %) at the **mean** | **Hurts badly**: −22 % to −36 % NAV, trades 49 → 75. Price spends most of every bull run above the mean, so the rung fires constantly and the re-buy churns |
+| Small sell at **+0.5σ** | Mildly negative: −3 % (10 %) to −11 % (30 %), trades 49 → 59 |
+| Any ladder that includes a mean rung | Best possible $3.24 M — below v2 |
+| Momentum gate off | Best possible $2.73 M — the gate stays essential |
+| Dropping the +2.5σ full exit | $4.40 M → $2.10 M — the final all-out stays essential |
+| **Optimised sizes** | **`+1σ → 20 %`, `+1.5σ → 10 %`, `+2.5σ → 0 %`** = **$4 398 785 · 52.7× HODL · 48 trades · DD 48 % · WF 8/10 (+15.7 % vs v2)**. Same trigger dates as v2 — only the slice sizes differ |
+| Shape of the optimum | A smooth monotone surface: NAV rises steadily the *more* is sold at +1σ and +1.5σ (90 %→$3.3 M … 20 %→$4.4 M). Not a lucky spike. 4-rung `30/20/10/0` = $4.30 M (−2 %) if a gentler profile is preferred |
+| Other knobs on top (`--idea v2knobs`, 12 822 configs) | +0.65 % at best (cooldown 4 d, re-buy ≤108 % CB) with 6 extra trades — noise |
+| Robustness (`robustness.ts`) | The optimised ladder beats v2 on **every** stress row (CB ±3/6 %, LTH bands ±5 %, all start years, all DCA schedules), same DD, same WF |
+
+Why selling *more* at +1σ wins: the slice is only sold once momentum has turned above +1σ, and the dip re-buy restores 100 %
+after a 10 % pull-back (or at ≤110 % CB). The more BTC converted to USDT at the top of the swing, the more is re-bought
+lower — it is a mean-reversion trade on the euphoria leg, and the +2.5σ rung still catches the blow-off. Caveat: 5 of 6
+historical re-buys were cheaper than their slice; the Mar-21 and Dec-24 re-buys were not, and with 80–90 % sold those cost more.
+
+> **Bug fixed 2026-10-27 (affects earlier search breadth, not results):** `optimize.ts` keyed its "already evaluated"
+> map with `JSON.stringify(c, Object.keys(c).sort())`. A replacer *array* filters nested objects too, so the
+> `{sigma, alloc}` tiers inside `lthSellTiers` were stripped and every ladder with the same top-level keys collided.
+> Earlier v2 runs therefore evaluated far fewer distinct ladders than reported (the v2 winner itself is unaffected —
+> it was verified independently). All scripts now use `configKey()` from `lab_core.ts`.
+
+**Promoted (2026-10-27) as "STH_CB hybrid v2.1"** — the gentler 4-rung ladder was chosen over the 3-rung optimum:
+`lthSellTiers: [{1→0.3},{1.5→0.2},{2→0.1},{2.5→0}]`, everything else as v2 → **$4 304 977 · 430 398 % · 51.6× HODL ·
+49 trades · DD 48 % · WF 8/10**. Default Admin UI preset, tracker row `hybrid_v2_1`, fact sheet
+`docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html` (`factsheet_data.ts --variant v2_1`, compares against v2).
 
 ---
 

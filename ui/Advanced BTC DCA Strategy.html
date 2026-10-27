@@ -4676,7 +4676,8 @@
           <div id="btSthCbParams" style="display:none;">
             <label for="btCbPreset"><strong>Rule preset:</strong></label>
             <select id="btCbPreset" title="Loads a complete parameter set into the fields below. Edit any field afterwards — the preset switches to 'Custom'.">
-              <option value="hybrid_v2" selected>STH CB Hybrid v2 — scale-out ladder + dip re-buy (2026-10-26)</option>
+              <option value="hybrid_v2_1" selected>STH CB Hybrid v2.1 — optimised slice sizes 30/20/10/0 % (2026-10-27)</option>
+              <option value="hybrid_v2">STH CB Hybrid v2 — scale-out ladder 75/50/25/0 % (2026-10-26)</option>
               <option value="hybrid_v1">STH CB Hybrid v1 — BitWealth optimised (2026-10-25)</option>
               <option value="chartinspect">ChartInspect original — 70 % capitulation / ±5 % trend band</option>
               <option value="custom">Custom (edited)</option>
@@ -6012,8 +6013,8 @@
         Drag to zoom · double-click to reset · click legend items to toggle. Shading: <span style="color:#10b981">green</span> = capitulation hold, <span style="color:#f97316">orange</span> = trend hold.
         ▲ buy / re-buy (drawn below the price line) · ▼ sell (drawn above it); v2 slices and dip re-buys use the smaller, lighter markers. Dashed lines are the rule thresholds as a % of the STH cost basis; purple = LTH PVR −0.5σ (buy) / +2.5σ (full exit).
         The signal is evaluated on the daily close and executed at the next close; the status panel shows the position held (and, for v2, the % of the portfolio still in BTC) <em>and</em> what the latest close instructs for tomorrow.
-        Use the selector (top right) to switch between tracked configurations (Hybrid v1 = single all-out; Hybrid v2 = momentum-gated ladder 75/50/25/0 % at LTH +1/1.5/2/2.5σ with dip re-buy).
-        Figures are a $1,000 paper record from 2017-01-01 after full BitWealth fees — see <code>docs/STH_CB_Hybrid_v2_Fact_Sheet.html</code> (v2) / <code>docs/STH_CB_Hybrid_Fact_Sheet.html</code> (v1) for the rules.
+        Use the selector (top right) to switch between tracked configurations (Hybrid v1 = single all-out; Hybrid v2 = momentum-gated ladder 75/50/25/0 % at LTH +1/1.5/2/2.5σ with dip re-buy; Hybrid v2.1 = same ladder with optimised slice sizes 30/20/10/0 %).
+        Figures are a $1,000 paper record from 2017-01-01 after full BitWealth fees — see <code>docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html</code> (v2.1) / <code>docs/STH_CB_Hybrid_v2_Fact_Sheet.html</code> (v2) / <code>docs/STH_CB_Hybrid_Fact_Sheet.html</code> (v1) for the rules.
       </div>
       <details style="margin-top:.5rem;font-size:.8rem;"><summary style="cursor:pointer;color:var(--muted);">Recent trades</summary><div id="sthTrackerTrades" style="margin-top:.4rem;max-height:220px;overflow:auto;"></div></details>
     </div>
@@ -7827,6 +7828,15 @@
     // ── STH_CB rule presets ──────────────────────────────────────────────────
     // Field values are in the units shown on the form (percentages, days, σ); '' = off.
     const BT_STHCB_PRESETS = {
+      // v2.1 = v2 with the slice sizes optimised by tools/sth_cb_lab/ladder_optimize.ts (every 1-dp ladder over the
+      // LTH bands enumerated): 30/20/10/0 % BTC at +1/1.5/2/2.5σ. Same trigger dates as v2, larger slices.
+      hybrid_v2_1: {
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
+        btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbLadder: '1:30, 1.5:20, 2:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 110, btCbDipMax: 3, btCbScaleCool: 5,
+        btCbExecLag: '1', btCbExtras: ''
+      },
       // v2 = v1 with the single +2.5σ distribution replaced by a momentum-gated ladder
       // (75/50/25/0 % BTC at LTH +1/1.5/2/2.5σ), a dip re-buy (−10 % from post-sell peak or ≤110 % CB, max 3) and a 5-day cooldown.
       hybrid_v2: {
@@ -7867,7 +7877,9 @@
       const strategy = document.getElementById('btStrategySelect')?.value;
       if (!note || strategy !== 'STH_CB') return;
       const preset = document.getElementById('btCbPreset')?.value;
-      note.textContent = preset === 'hybrid_v2'
+      note.textContent = preset === 'hybrid_v2_1'
+        ? 'STH CB Hybrid v2.1 — v2 with optimised slice sizes: 30/20/10/0 % BTC at LTH PVR +1/1.5/2/2.5σ (momentum-gated), dip re-buy −10 % or ≤110 % of CB (max 3, 5-day cooldown). 430,398 % ROI / 51.6× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html.'
+        : preset === 'hybrid_v2'
         ? 'STH CB Hybrid v2 — v1 plus a momentum-gated scale-out ladder at the LTH PVR upper bands (75/50/25/0 % BTC at +1/1.5/2/2.5σ) and a dip re-buy (−10 % from the post-sell peak or ≤110 % of CB, max 3 per hold, 5-day cooldown). 380,110 % ROI / 45.6× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_Fact_Sheet.html.'
         : preset === 'hybrid_v1'
         ? 'STH CB Hybrid v1 — the BitWealth-optimised rule set (272,684 % ROI / 32.7× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 7/10). Edit any field to experiment; see docs/STH_CB_Hybrid_Fact_Sheet.html for the rules.'
@@ -7884,7 +7896,7 @@
       panel.addEventListener('input', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
       panel.addEventListener('change', (e) => { if (btSthCbApplyingPreset || e.target === sel || e.target.id === 'btCbIncludeLth') return; if (sel.value !== 'custom') { sel.value = 'custom'; btUpdateSthCbNote(); } });
       sel._bound = true;
-      btApplySthCbPreset('hybrid_v2');
+      btApplySthCbPreset('hybrid_v2_1');
     })();
 
     // Create an LTH PVR run (lth_pvr_bt.bt_runs + bt_params) and return its bt_run_id.

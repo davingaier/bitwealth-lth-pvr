@@ -205,6 +205,29 @@ export function configDiff(c: SthCbConfig, base: SthCbConfig = DEFAULT_STH_CB_CO
   return parts.join(" ") || "(defaults)";
 }
 
+/**
+ * Stable identity for a config: keys sorted at EVERY level, null/undefined dropped.
+ * (Do not use `JSON.stringify(c, Object.keys(c).sort())` — a replacer array filters nested objects too, so
+ *  the {sigma, alloc} tiers inside lthSellTiers / sellTiers / capBuyTiers would be stripped and distinct
+ *  ladders would collide.)
+ */
+export function configKey(c: unknown): string {
+  const norm = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === "object") {
+      const o: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        const x = (v as Record<string, unknown>)[k];
+        if (x === null || typeof x === "undefined") continue;
+        o[k] = norm(x);
+      }
+      return o;
+    }
+    return v;
+  };
+  return JSON.stringify(norm(c));
+}
+
 export function toCsv(rows: Record<string, unknown>[]): string {
   if (!rows.length) return "";
   const cols = Object.keys(rows[0]);

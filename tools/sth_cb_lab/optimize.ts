@@ -16,8 +16,9 @@
 
 import { DEFAULT_STH_CB_CONFIG, SthCbConfig } from "../../supabase/functions/_shared/sth_cb_strategy_logic.ts";
 import { cleanCombo, enumerateGrid, gridSize, IDEAS, sampleGrid } from "./ideas.ts";
+import { createPool } from "./pool.ts";
 import {
-  annualFolds, configDiff, EvalResult, fmtPct, fmtUsd, fmtX, labArgsFrom, loadSeries,
+  annualFolds, configDiff, configKey, EvalResult, fmtPct, fmtUsd, fmtX, labArgsFrom, loadSeries,
   Objective, OBJECTIVES, objectiveValue, parseArgs, RESULTS_DIR, timestamp, toCsv,
 } from "./lab_core.ts";
 
@@ -51,56 +52,11 @@ console.log(`Window ${lab.start} → ${lab.end} · $${lab.upfront} + $${lab.mont
 
 const folds = walkForward ? annualFolds(lab.start, lab.end) : undefined;
 
-// ── Workers ─────────────────────────────────────────────────────────────────
-const workers: Worker[] = [];
-const ready: Promise<void>[] = [];
-for (let i = 0; i < workersN; i++) {
-  const w = new Worker(new URL("./worker.ts", import.meta.url).href, { type: "module" });
-  workers.push(w);
-  ready.push(new Promise<void>((res) => {
-    const h = (ev: MessageEvent) => { if (ev.data?.type === "ready") { w.removeEventListener("message", h); res(); } };
-    w.addEventListener("message", h);
-  }));
-  w.postMessage({ type: "init", lab, folds: annualFolds(lab.start, lab.end) });
-}
-await Promise.all(ready);
+// ── Workers (shared pool) ───────────────────────────────────────────────────
+const pool = await createPool(lab, workersN);
+const evalAll = pool.evalAll;
 
-// ── Generic parallel evaluator ─────────────────────────────────────────────
-let msgId = 0;
-const pendingCb = new Map<number, (r: EvalResult[]) => void>();
-for (const w of workers) {
-  w.addEventListener("message", (ev: MessageEvent) => {
-    if (ev.data?.type !== "result") return;
-    const cb = pendingCb.get(ev.data.id); pendingCb.delete(ev.data.id); cb?.(ev.data.results);
-  });
-}
-let rr = 0;
-const evalBatch = (cfgs: SthCbConfig[], wf: boolean): Promise<EvalResult[]> => new Promise((res) => {
-  const id = msgId++; pendingCb.set(id, res);
-  workers[rr++ % workers.length].postMessage({ type: "eval", id, configs: cfgs, walkForward: wf });
-});
-async function evalAll(list: SthCbConfig[], wf: boolean, label: string): Promise<EvalResult[]> {
-  const batch = Math.max(1, Math.min(wf ? 5 : 50, Math.ceil(list.length / (workersN * 8))));
-  const chunks: SthCbConfig[][] = [];
-  for (let i = 0; i < list.length; i += batch) chunks.push(list.slice(i, i + batch));
-  const out: EvalResult[] = [];
-  let done = 0, next = 0;
-  const t0 = performance.now();
-  const runOne = async () => {
-    while (next < chunks.length) {
-      const c = chunks[next++];
-      const r = await evalBatch(c, wf);
-      for (const x of r as (EvalResult & { error?: string })[]) { if (x.error) console.warn("eval error:", x.error); else out.push(x); }
-      done += c.length;
-      Deno.stdout.writeSync(new TextEncoder().encode(`\r  ${label}: ${done}/${list.length} · ${(done / ((performance.now() - t0) / 1000)).toFixed(0)} evals/s   `));
-    }
-  };
-  await Promise.all(Array.from({ length: workersN * 2 }, runOne));
-  console.log("");
-  return out;
-}
-
-const cfgKey = (c: SthCbConfig) => JSON.stringify(c, Object.keys(c).sort());
+const cfgKey = (c: SthCbConfig) => configKey(c);
 const all = new Map<string, EvalResult>();
 const score = (r: EvalResult) => {
   const v = objectiveValue(r.metrics, objective);
@@ -148,7 +104,7 @@ if (wfTop > 0) {
   const list = ranked().slice(0, wfTop).map((r) => r.config);
   for (const r of await evalAll(list, true, "walk-forward")) all.set(cfgKey(r.config), r);
 }
-for (const w of workers) w.terminate();
+pool.terminate();
 console.log(`\nDone in ${((performance.now() - t0) / 1000).toFixed(1)} s · ${all.size} configs evaluated`);
 
 // ── Rank + output ───────────────────────────────────────────────────────────

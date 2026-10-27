@@ -3,11 +3,56 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-26 (v0.6.172)
+**Last updated:** 2026-10-27 (v0.6.174)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.174 – STH_CB Hybrid **v2.1** promoted: optimised slice sizes 30/20/10/0 % (new default)
+**Date:** 2026-10-27 · **Status:** ✅ DEPLOYED (DB row + UI + fact sheet; no EF code change needed)
+
+Following the ladder study in v0.6.173, Davin chose the gentler 4-rung ladder over the absolute optimum:
+**`+1σ → 30 %`, `+1.5σ → 20 %`, `+2σ → 10 %`, `+2.5σ → 0 %`** (v2 was 75/50/25/0 %). Everything else is v2.
+Result on the standard basis: **$4,304,977 · 430,398 % · 51.6× HODL · CAGR 134.6 % · DD 47.8 % · 49 trades · WF 8/10**
+(+13.2 % vs v2; the 3-rung 20/10/0 optimum would have been $4,398,785). Trades fire on exactly the same dates as v2.
+
+- **Config constant** `HYBRID_V2_1` in `tools/sth_cb_lab/factsheet_data.ts`; generator now has a `VARIANTS` table
+  (`v1` / `v2` / `v2_1`, each with its comparison version) → `docs/sth_cb_factsheet_data_v2_1.js`.
+- **Fact sheet** `docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html` — derived from the v2 sheet; compares against **v2**
+  (KPI sub-lines, NAV overlay, "v2 → v2.1 at a glance", side-by-side stress battery). Pages fit A4 (31/8/10 px spare).
+- **Admin UI**: preset *STH CB Hybrid v2.1* added and made the default (v2 and v1 remain selectable); tracker hint text
+  lists all three sheets.
+- **Tracker**: migration `20261027_sth_cb_tracker_hybrid_v2_1.sql` adds `tracker_config` row `hybrid_v2_1`
+  (applied via REST upsert; `ef_sth_cb_tracker` rebuilt it — $4.22 M to 2026-10-26, TREND HOLD). v1 / v2 rows stay
+  active; the On-Chain Charts selector now offers all three.
+- **Verification**: deployed `ef_sth_cb_bt_execute` run `3eb68310` = $4,304,977.46 / 49 trades — identical to the lab.
+
+### v0.6.173 – Ladder sizing study: early sells at the LTH mean / +0.5σ, optimised slice sizes (lab only)
+**Date:** 2026-10-27 · **Status:** ✅ DONE (research; the gentler 4-rung ladder was promoted as Hybrid v2.1 in v0.6.174)
+
+**Question 1 — do small sells above the LTH PVR mean / +0.5σ help?** No. On the Hybrid v2 base ($3 802 097) a 10 / 20 /
+30 % sell at the **mean** costs −22 / −29 / −36 % of final NAV (trades 49 → 75: price lives above the mean for most of
+a bull run, so the rung and the dip re-buy churn); at **+0.5σ** it costs −3 / −7 / −11 %. Across all 8 007 enumerated
+ladders, the best that includes a mean rung is $3.24 M.
+
+**Question 2 — how much is in the slice sizes?** +15.7 %. The full 1-dp enumeration over bands 0/0.5/1/1.5/2/2.5σ
+(16 014 configs with gate on/off, walk-forward on the top 250) puts the optimum at **`+1σ → 20 %`, `+1.5σ → 10 %`,
+`+2.5σ → 0 %`** — **$4 398 785 · 439 779 % · 52.7× HODL · 48 trades · DD 48 % · WF 8/10** — on exactly the same
+trigger dates as v2. The surface is smooth and monotone (more sold at +1σ/+1.5σ → higher NAV), the momentum gate and
+the +2.5σ full exit remain essential (best gate-off $2.73 M; no final exit $2.10 M), and the other knobs add ≤ 0.65 %
+(`--idea v2knobs`, 12 822 configs). `robustness.ts`: beats v2 on every stress row, same DD and WF. Gentler 4-rung
+alternative `30/20/10/0 %` = $4.30 M (−2 %).
+
+**Tooling:** new `tools/sth_cb_lab/ladder_optimize.ts` (Phase 0 early-sell probe → Phase 1 full ladder enumeration →
+Phase 2 knob climb → Phase 3 walk-forward, plus a with/without-rung-per-band summary); worker pool extracted to
+`pool.ts`; grid `v2knobs` (= `v2fine` minus the ladder) in `ideas.ts`.
+
+**Bug fixed:** `optimize.ts` keyed its evaluated-config map with `JSON.stringify(c, Object.keys(c).sort())`; a replacer
+array also filters *nested* objects, so the `{sigma, alloc}` tiers inside `lthSellTiers` / `sellTiers` / `capBuyTiers`
+were stripped and distinct ladders collided (results overwritten, candidates skipped as "already evaluated"). The v2
+winner is unaffected (verified by `run.ts` and the deployed EF), but the earlier v2 ladder search was much narrower than
+its config counts suggested. New `configKey()` in `lab_core.ts` sorts keys recursively.
 
 ### v0.6.172 – STH_CB Hybrid **v2**: momentum-gated scale-out ladder + dip re-buy (hypothesis confirmed)
 **Date:** 2026-10-26 · **Status:** ✅ DEPLOYED (`ef_sth_cb_bt_execute`, `ef_sth_cb_tracker`; migration `20261026_sth_cb_tracker_hybrid_v2.sql`)
