@@ -688,7 +688,20 @@
     .kpi .v { font-size: 20px; font-weight: 800; color: var(--gold); line-height: 1.1; }
     .kpi .l { font-size: 9.5px; color: var(--txt2); margin-top: 3px; }
     .kpi .s { font-size: 8.5px; color: var(--txt3); margin-top: 2px; }
-    .kpi-note { font-size: 9px; color: var(--txt3); text-align: center; margin: -8px 0 16px; line-height: 1.5; }
+    .kpi-note { font-size: 9px; color: var(--txt3); text-align: center; margin: -8px 0 12px; line-height: 1.5; }
+    /* in-sample vs out-of-sample strip */
+    .isoos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .isoos .col { border-radius: 8px; padding: 9px 11px; border: 1px solid var(--border); background: var(--bg2); }
+    .isoos .col.out { border-color: rgba(16,185,129,0.45); }
+    .isoos .tag { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold); }
+    .isoos .col.out .tag { color: var(--green); }
+    .isoos .big { font-size: 20px; font-weight: 800; line-height: 1.1; margin-top: 3px; color: var(--gold); }
+    .isoos .col.out .big { color: var(--green); }
+    .isoos .sub { font-size: 9px; color: var(--txt2); }
+    .isoos p { font-size: 9.5px; color: var(--txt2); line-height: 1.45; margin: 5px 0 0; }
+    .isoos-foot { font-size: 9px; color: var(--txt2); line-height: 1.45; margin: -8px 0 14px; padding: 7px 10px; border-left: 3px solid var(--green); background: rgba(16,185,129,0.06); border-radius: 0 6px 6px 0; }
+    .perf-table .strategy-row-oos td { background: rgba(16,185,129,0.08); }
+    .label-oos { background: rgba(16,185,129,0.12); color: #6ee7b7; }
     /* three-state diagram (replaces the σ bubble bar) */
     .states { display: grid; grid-template-columns: 1fr 30px 1fr 30px 1fr; align-items: center; margin: 8px 0 10px; }
     .state { border-radius: 8px; padding: 9px 10px; text-align: center; border: 1px solid rgba(255,255,255,0.08); background: var(--bg3); }
@@ -724,8 +737,8 @@
     #perfBody .nav-val, #perfBody .cagr-pos, #perfBody .cagr-neg { font-weight: 600; }
     .grid-illustration .gi-foot { font-size: 9px; color: var(--txt3); text-align: center; margin-top: 6px; line-height: 1.4; }
     .page-1 p, .page-1 ul li { font-size: 12px; }
-    .page-2 .diff-card { padding: 8px 10px; } .page-2 .diff-desc { font-size: 9.5px; line-height: 1.35; } .page-2 .diff-icon { font-size: 14px; margin-bottom: 2px; }
-    .page-2 .table-note { font-size: 8.5px; line-height: 1.4; }
+    .page-2 .diff-card { padding: 6px 9px; } .page-2 .diff-desc { font-size: 9px; line-height: 1.3; } .page-2 .diff-icon { font-size: 13px; margin-bottom: 1px; } .page-2 .diff-title { font-size: 10.5px; margin-bottom: 2px; }
+    .page-2 .table-note { font-size: 8px; line-height: 1.35; } .page-2 .perf-table td { padding: 3px 8px; } .page-2 .perf-table .period-header td { padding: 2px 8px; }
     @page { size: A4 portrait; margin: 0; }
     @media print {
       /* ABC's print rule for .screen-wrap is declared before its screen rule and loses the cascade — force it */
@@ -740,6 +753,7 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="sth_cb_one_pager_data.js"></script>
+  <script src="sth_cb_oos_data.js"></script>
 </head>
 <body>
   <button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
@@ -756,8 +770,22 @@
         </div>
       </div>
 
-      <div class="kpi-strip" id="kpis"></div>
-      <p class="kpi-note" id="kpi-note"></p>
+      <div class="section-heading">Two Numbers, Read Together</div>
+      <div class="isoos">
+        <div class="col in">
+          <div class="tag">In-sample &middot; full-history back-test</div>
+          <div class="big" id="is-x">&mdash;</div>
+          <div class="sub" id="is-sub"></div>
+          <p>Every rule parameter was chosen using the <em>whole</em> 2017&ndash;2026 history and the result is measured on that same history &mdash; the best the rules ever did on the data they were tuned to. The gold rows on page 3 are of this kind.</p>
+        </div>
+        <div class="col out">
+          <div class="tag">Out-of-sample &middot; fitted on 2015&ndash;2019, tested on 2020&ndash;2026</div>
+          <div class="big" id="oos-x">&mdash;</div>
+          <div class="sub" id="oos-sub"></div>
+          <p>The same optimisation was run using <em>only</em> data to the end of 2019; the winning rules were then run, untouched, on 2020&ndash;2026. <span id="oos-beat"></span> Reversing the halves gives <span id="oos-rev"></span>&times;.</p>
+        </div>
+      </div>
+      <div class="isoos-foot"><strong style="color:var(--white)">Plan on the out-of-sample number.</strong> It says the approach beats holding Bitcoin by roughly 1.5&ndash;2&times; over a multi-year window with a far smaller drawdown (<span id="oos-dd"></span> vs <span id="oos-hdd"></span> for holding), and that most of the distance from 2&times; to 50&times; is hindsight. ChartInspect's original, never-optimised version of this idea scores <span id="oos-ci"></span>&times; on the same test window.</div>
 
       <div class="full-col">
         <div class="section-heading">The Strategy</div>
@@ -772,10 +800,8 @@
               <li>Decisive, not incremental &mdash; full exposure in the regimes that produce the returns, cash in the ones that destroy it</li>
               <li>Sells only on weakness: every scale-out slice waits for short-term momentum to turn</li>
               <li>A <em>no-loss rule</em> means a slice is never sold below the price it was last bought at</li>
-              <li>In Bitcoin roughly three-quarters of the time; the rest is spent earning yield while waiting for the next entry</li>
               <li>One decision per day, executed automatically in a sub-account in your own name</li>
             </ul>
-            <p>Monthly contributions follow the same logic: invested immediately while the strategy is in the market, held as yielding cash while it is not.</p>
           </div>
         </div>
       </div>
@@ -931,12 +957,12 @@
       <div class="charts-row">
         <div class="chart-box">
           <div class="chart-title" id="t5"></div>
-          <canvas id="chart5yr" height="82"></canvas>
+          <canvas id="chart5yr" height="70"></canvas>
           <div class="chart-legend" id="l5"></div>
         </div>
         <div class="chart-box">
           <div class="chart-title" id="t10"></div>
-          <canvas id="chart10yr" height="82"></canvas>
+          <canvas id="chart10yr" height="70"></canvas>
           <div class="chart-legend" id="l10"></div>
         </div>
       </div>
@@ -970,7 +996,7 @@
 
       <div class="section-heading">What This Strategy Is Not</div>
       <div class="risk-grid">
-        <div class="risk-card"><div class="rt">Not a guarantee</div><p>Every rule parameter was chosen on historical data. Walk-forward and stress tests are published so you can judge how much is likely to persist &mdash; but the future can differ from every past cycle.</p></div>
+        <div class="risk-card"><div class="rt">Not a guarantee</div><p>Every rule parameter was chosen on historical data. Fitted on one half of history and tested on the other, the strategy beat holding by roughly 1.5&ndash;2&times; &mdash; not the 50&times; of the full-history back-test (page 1). The future can differ from every past cycle.</p></div>
         <div class="risk-card"><div class="rt">Not always ahead of holding</div><p>In strongly trending years with shallow pull-backs the strategy's exits cost it ground: in the back-test it lagged simple holding in <span id="years-lost"></span>. It is designed to win across a full cycle, not every year.</p></div>
         <div class="risk-card"><div class="rt">Not low-volatility</div><p>When fully invested it carries Bitcoin's full daily volatility. The back-test's worst peak-to-trough fall was <span id="dd-risk"></span>; a client who joins just before a trend break will experience a loss first.</p></div>
         <div class="risk-card"><div class="rt">Not data-independent</div><p>Signals depend on third-party on-chain series. A different provider, a methodology change or an outage would change behaviour; BitWealth monitors data freshness daily and pauses trading when it is stale.</p></div>
@@ -986,7 +1012,8 @@
         <div class="faq-item"><div class="q">How are fees charged?</div><div class="a">1% p.a. management on portfolio value, deducted monthly, plus 10% of new profit above the previous high-water mark. There is no fee on deposits or withdrawals beyond the exchange's own costs. All figures in this document are shown after these fees.</div></div>
         <div class="faq-item"><div class="q">Can I withdraw at any time?</div><div class="a">Yes. Withdrawals are processed from your sub-account in Rand; there is no lock-in and no exit penalty.</div></div>
         <div class="faq-item"><div class="q">Why doesn't the document show the exact trigger levels?</div><div class="a">The thresholds, slice sizes and confirmation rules are BitWealth's intellectual property. What we do publish is every trade the rules would have produced: the interactive back-tester at bitwealth.co.za replays them for any dates and deposits you choose.</div></div>
-        <div class="faq-item"><div class="q">How does this differ from simply holding Bitcoin?</div><div class="a">Holding captures everything &mdash; including every 50&ndash;80% drawdown. The strategy aims to capture most of the up-cycles while spending the worst of the down-cycles in cash, which in the back-test produced a higher final value at roughly half the drawdown over ten years. In some single years, holding still did better.</div></div>
+        <div class="faq-item"><div class="q">How does this differ from simply holding Bitcoin?</div><div class="a">Holding captures everything &mdash; including every 50&ndash;80% drawdown. The strategy aims to capture most of the up-cycles while spending the worst of the down-cycles in cash. Out-of-sample this produced roughly 1.5&ndash;2&times; the value of holding at well under half the drawdown; in some single years holding still did better.</div></div>
+        <div class="faq-item"><div class="q">What do "in-sample" and "out-of-sample" mean, and why show both?</div><div class="a">In-sample: the rules were tuned on the full history and then measured on it &mdash; it shows the mechanics but flatters the result. Out-of-sample: the rules were tuned on 2015&ndash;2019 only and then run blind on 2020&ndash;2026 (and vice versa) &mdash; the closest a back-test can get to a fair trial. We show both because the gap between them is itself the most useful piece of information: it is the share of the headline that came from hindsight.</div></div>
       </div>
 
       <div class="footer">
@@ -1015,13 +1042,13 @@
       document.querySelectorAll('.gen-month').forEach(function (e) { e.textContent = month; });
 
       var H = D.headline;
-      document.getElementById('kpis').innerHTML = [
+      if (document.getElementById('kpis')) document.getElementById('kpis').innerHTML = [
         ['<div class="v">' + H.nav_vs_hodl.toFixed(1) + '&times;</div><div class="l">buy-and-hold</div><div class="s">$1,000 &rarr; ' + usdK(H.final_nav) + ' vs ' + usdK(H.hodl_nav) + ' holding</div>'],
         ['<div class="v">' + H.cagr_pct.toFixed(0) + '%</div><div class="l">CAGR after all fees</div><div class="s">Bitcoin itself: ' + H.hodl_cagr_pct.toFixed(0) + '%</div>'],
         ['<div class="v">' + Math.abs(H.max_dd_pct).toFixed(0) + '%</div><div class="l">worst drawdown</div><div class="s">Bitcoin: 83%</div>'],
         ['<div class="v">' + H.wf_beat + ' / ' + H.wf_total + '</div><div class="l">years beat holding</div><div class="s">out-of-sample walk-forward</div>']
       ].map(function (k) { return '<div class="kpi">' + k[0] + '</div>'; }).join('');
-      document.getElementById('kpi-note').textContent = 'Back-tested, ' + fmtD(H.start) + ' \u2192 ' + fmtD(H.end) + ', single $1,000 investment, next-day fills, full BitWealth fee stack. Research results, not live trading. Past performance does not guarantee future results.';
+      if (document.getElementById('kpi-note')) document.getElementById('kpi-note').textContent = 'Back-tested, ' + fmtD(H.start) + ' \u2192 ' + fmtD(H.end) + ', single $1,000 investment, next-day fills, full BitWealth fee stack. Research results, not live trading. Past performance does not guarantee future results.';
       document.getElementById('years-lost').textContent = H.years_lost.join(' and ');
       document.getElementById('dd-risk').textContent = Math.abs(H.max_dd_pct).toFixed(0) + '%';
 
@@ -1048,10 +1075,28 @@
         return '<tr class="' + cls + (extra || '') + '"><td class="period-cell"><span class="strategy-label ' + lcls + '">' + label + '</span></td><td><span class="nav-val">' + usd0(r.final_nav) + '</span></td><td class="contrib-val">' + usd0(r.invested) + '</td><td><span class="' + c(r.cagr_pct) + '">' + pct(r.cagr_pct) + '</span></td><td><span class="dd-val">' + r.max_dd_pct.toFixed(1) + '%</span></td><td class="sharpe-val">' + r.sharpe.toFixed(2) + '</td><td><span class="' + c(r.roi_pct) + '">' + pct(r.roi_pct) + '</span></td></tr>';
       };
       document.getElementById('perfBody').innerHTML = D.periods.map(function (p, i) {
+        var O = window.STHCB_OOS, oosP = O ? O.plan.filter(function (q) { return q.years === p.years; })[0] : null;
+        var oosRow = oosP ? row('strategy-row-oos', 'STH CB · out-of-sample', 'label-oos', { final_nav: oosP.oos.final_nav, invested: oosP.oos.invested, cagr_pct: oosP.oos.cagr_pct, max_dd_pct: oosP.oos.raw_dd_pct, sharpe: NaN, roi_pct: (oosP.oos.final_nav / oosP.oos.invested - 1) * 100 }).replace('<td class="sharpe-val">NaN</td>', '<td class="sharpe-val">–</td>') : '';
         return '<tr class="period-header"><td class="period-cell" colspan="7">' + p.label + ' &nbsp;(' + fmtD(p.start) + ' \u2013 ' + fmtD(p.end) + ')' + (i === 0 ? ' &nbsp;·&nbsp; $' + D.basis.monthly + '/month + $' + D.basis.upfront.toLocaleString() + ' upfront' : '') + '</td></tr>' +
-          row('strategy-row-prog', 'STH CB', 'label-prog', p.strategy) + row('strategy-row-dca', 'Std DCA', 'label-dca', p.std_dca, ' bench-block-start') + row('strategy-row-hodl', 'HODL', 'label-hodl', p.hodl, ' bench-block-end');
+          row('strategy-row-prog', 'STH CB · in-sample', 'label-prog', p.strategy) + oosRow + row('strategy-row-dca', 'Std DCA', 'label-dca', p.std_dca, ' bench-block-start') + row('strategy-row-hodl', 'HODL', 'label-hodl', p.hodl, ' bench-block-end');
       }).join('');
-      document.getElementById('table-note').innerHTML = 'Back-test parameters: $' + D.basis.upfront.toLocaleString() + ' upfront + $' + D.basis.monthly + '/month contribution, each period ending ' + fmtD(D.basis.end) + '. Signals on the daily close, filled at the next close. Idle USDT swept to USDPC (~10% p.a.) between Bitcoin positions; 0.1% per sweep. Strategy fees: VALR exchange (8 bps trading, 18 bps conversion), BitWealth 1% p.a. management on NAV and 10% performance on monthly profit above the high-water mark. Std DCA &amp; HODL rows reflect exchange fees only. HODL deposits the full multi-year schedule as one lump sum on day 1; ROI/CAGR are measured against that nominal cash. Max drawdown = largest peak-to-trough fall in portfolio value; Sharpe on deposit-neutral daily returns, annualised. Past performance is not indicative of future results.';
+      document.getElementById('table-note').innerHTML = 'Back-test parameters: $' + D.basis.upfront.toLocaleString() + ' upfront + $' + D.basis.monthly + '/month contribution, each period ending ' + fmtD(D.basis.end) + '. Signals on the daily close, filled at the next close. Idle USDT swept to USDPC (~10% p.a.) between Bitcoin positions; 0.1% per sweep. Strategy fees: VALR exchange (8 bps trading, 18 bps conversion), BitWealth 1% p.a. management on NAV and 10% performance on monthly profit above the high-water mark. Std DCA &amp; HODL rows reflect exchange fees only. HODL deposits the full multi-year schedule as one lump sum on day 1; ROI/CAGR are measured against that nominal cash. <strong>In-sample</strong> rows use parameters fitted on the whole 2017&ndash;2026 history; the green <strong>out-of-sample</strong> rows (1, 3 and 5 years, all inside 2020&ndash;2026) use parameters fitted on 2015&ndash;2019 only &mdash; with monthly deposits their edge over simple DCA is thin and they can trail both benchmarks over a strongly trending 3-year stretch. Max drawdown = largest peak-to-trough fall in portfolio value; Sharpe on deposit-neutral daily returns, annualised. Past performance is not indicative of future results.';
+
+      // In-sample vs out-of-sample strip (page 1)
+      var O = window.STHCB_OOS;
+      if (O) {
+        var f = O.splits.forward, rv = O.splits.reverse, HI = O.headline_in_sample;
+        var set = function (id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
+        set('is-x', HI.x_hodl.toFixed(1) + '\u00d7 buy-and-hold');
+        set('is-sub', HI.start.slice(0, 4) + '\u2013' + HI.end.slice(0, 4) + ' \u00b7 $' + HI.upfront.toLocaleString() + ' once \u00b7 CAGR ' + HI.cagr_pct.toFixed(0) + '% \u00b7 drawdown ' + Math.abs(HI.max_dd_pct).toFixed(0) + '%');
+        set('oos-x', f.top_n.median_x.toFixed(1) + '\u00d7 buy-and-hold');
+        set('oos-sub', 'median of the ' + f.top_n.n + ' best fits (range ' + f.top_n.min_x.toFixed(1) + '\u2013' + f.top_n.max_x.toFixed(1) + '\u00d7) \u00b7 CAGR ' + f.top_n.median_cagr.toFixed(0) + '% vs ' + f.top1.hodl.cagr_pct.toFixed(0) + '% holding');
+        set('oos-beat', f.top_n.beat_hodl + ' of ' + f.top_n.n + ' still beat holding.');
+        set('oos-rev', rv.top_n.median_x.toFixed(1));
+        set('oos-dd', Math.abs(f.top_n.median_dd).toFixed(0) + '%');
+        set('oos-hdd', f.top1.hodl.raw_dd_pct.toFixed(0) + '%');
+        set('oos-ci', f.chartinspect.x_hodl.toFixed(1));
+      }
     })();
   </script>
 </body>

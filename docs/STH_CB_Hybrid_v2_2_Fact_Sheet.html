@@ -184,10 +184,11 @@
 
     <div class="stats" id="stats"></div>
     <div class="note" id="basis-note"></div>
+    <div class="note" id="oos-note" style="border-left:3px solid #10B981;padding:4px 8px;margin-top:3px;background:rgba(16,185,129,0.06);border-radius:0 6px 6px 0"><strong style="color:#fff">All figures here are in-sample</strong> (parameters fitted on 2017–2026, judged on 2017–2026). Fitted on <strong>2015–2019 only</strong> and run untouched on <strong>2020–2026</strong> the strategy beats buy-and-hold by <strong style="color:#10B981">≈ 1.9×</strong> (20 best fits: 1.6–2.4×, all beat holding, drawdown ≈ 30 % vs 76 %); reverse split ≈ 1.7×. <strong>Plan on the out-of-sample figure</strong> — page 3 footnote.</div>
 
     <div class="sh">Price, bands and every trade · 2017 → 2026</div>
     <div class="chart-box">
-      <canvas id="mainChart" height="112"></canvas>
+      <canvas id="mainChart" height="94"></canvas>
       <div class="legend">
         <span style="--c:#CBD5E1">BTC price (log)</span>
         <span style="--c:#F97316">STH cost basis</span>
@@ -359,9 +360,8 @@
     <p class="note" id="feeStats" style="margin-top:3px"></p>
 
     <div class="foot">
-      <strong>Important.</strong> This document describes a research strategy that has been back-tested, not traded. All rule parameters — including the
-      ladder levels and re-buy thresholds — were optimised on the 2017–2026 window shown; the walk-forward and stress tests are provided so the
-      reader can judge how much of the result is likely to persist. The no-loss rule guarantees that no <em>slice</em> is sold below its preceding buy; it does not prevent a full exit (rules R2/R3/R12) below an entry, nor a re-entry above a previous exit (trades: <span id="trades-foot"></span>). Rules-engine note: a defect that let a slice and a re-buy cancel inside one daily decision was fixed on 2026-11-03; every figure here is from the corrected engine. The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
+      <strong>Important.</strong> This document describes a research strategy that has been back-tested, not traded. <strong>Every figure in this document is in-sample:</strong> all rule parameters — including the
+      ladder levels and re-buy thresholds — were optimised on the 2017–2026 window shown and are then measured on that same window. The "walk-forward" column re-runs each year with the <em>same</em> parameters, so it tests path independence, not over-fitting. In a true out-of-sample test (parameters fitted on 2015–2019 only, then run untouched on 2020–2026) the strategy beat buy-and-hold by <span id="oos-foot">≈ 1.9×</span> (median of the 20 best fits; all 20 beat holding; drawdown ≈ 30 % vs 76 %), and by <span id="oos-rev-foot">≈ 1.7×</span> with the halves reversed — against 11.9× for these in-sample parameters on the same 2020–2026 window. Plan on the out-of-sample figure. The no-loss rule guarantees that no <em>slice</em> is sold below its preceding buy; it does not prevent a full exit (rules R2/R3/R12) below an entry, nor a re-entry above a previous exit (trades: <span id="trades-foot"></span>). Rules-engine note: a defect that let a slice and a re-buy cancel inside one daily decision was fixed on 2026-11-03; every figure here is from the corrected engine. The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
       (STH cost basis, LTH PVR bands) and would differ with another provider. Bitcoin is a volatile asset; the strategy's own maximum drawdown in the
       test was <span id="dd-foot"></span>. Nothing here is investment advice. BitWealth (Pty) Ltd · <span id="gen-date"></span>.
     </div>

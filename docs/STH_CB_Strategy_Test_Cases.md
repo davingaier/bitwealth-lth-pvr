@@ -187,6 +187,19 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | OP-04 | IP check on one-pager text | no numeric thresholds / σ / slice % | "three slices", "roughly three-quarters of the time" only | PASS |
 | OP-05 | `fee-model-sth-cb.html` loads `_scb*` data, anchors ✓, no JS errors | all 5 periods ✓ | 1y $6,591 · 3y $26,572 · 5y $76,026 · 7y $603,733 · 10y $21,486,424; rebate table "actual — sum of real per-day rebates"; 5 charts; 0 page errors | PASS |
 
+### Run `45c74a10` audit + true out-of-sample test (v0.6.180)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| OOS-01 | `usdpc_yield_usdt` = opening units × Δprice; implied daily rate on USD value | 1.10^(1/365)−1 = 0.0261158 % | exact on all 1,003 yielding days (max diff 9e-10) | PASS |
+| OOS-02 | 47 fills: implied fill price vs day's close; cash/BTC identities; NAV identity | within fee stack | all within 0.2 %; buys → cash 0, exits → BTC 0 | PASS |
+| OOS-03 | Lab reproduces DB run | $13,432,974 | identical | PASS |
+| OOS-04 | One-pager 7-y row vs lump-sum equivalent (2019-11-02 → 2026-11-02) | same multiple | $2.4k+$200/mo → $603,733 (31× cash); $19,400 lump → $2,464,570 (127×); $105k lump → $13.34 M (127×) | PASS (consistent) |
+| OOS-05 | Fit 2015–2019 (`--idea oos`, 31,490 configs) → test 2020–2026, $105k lump | — | in-sample 8.0×; **OOS median 1.90×** (1.56–2.36), 20/20 > HODL; ChartInspect raw 2.16×; v2.2 11.93× | FINDING |
+| OOS-06 | Fit 2020–2026 (31,573 configs) → test 2015–2019 | — | in-sample 15.5×; **OOS median 1.71×** (1.42–2.61), 20/20 > HODL; ChartInspect raw 2.00×; v2.2 3.76× | FINDING |
+| OOS-07 | Scorer bug: partial config without engine defaults ran with momentum gate off | v2.2 row = $13.43 M | first run showed $5.05 M; fixed by merging over `DEFAULT_STH_CB_CONFIG` | FIXED |
+| OOS-08 | `oos_data.ts` publishes `STHCB_OOS`; website/one-pager/fact-sheet/fee-model read it | panels populated, pages fit | sth-cb.html 52.7× / 1.9× panel + 5-row plan table; index tiles 52.7× · 1.9× · 30 % · 20/20; one-pager 4 pp (print-emulated bottoms 1199/1136/1173/1157 ≤ 1209), PDF 4 pages; fact sheet pages 1123/1124/1123/1123; fee model banner + anchors still ✓ | PASS |
+
 ---
 
 ## 2. Database / RPC

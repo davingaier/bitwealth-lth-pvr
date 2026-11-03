@@ -517,6 +517,50 @@ The fee model snaps to the anchors (✓ "matched to back-tester") when its input
 asserts that the one-pager's 5-year management row equals the fee-model anchor. `docs/STH_CB_One_Pager.pdf` is produced
 from the HTML with headless Chrome (`chrome --headless=new --print-to-pdf=… --no-pdf-header-footer docs/STH_CB_One_Pager.html`).
 
+### True out-of-sample test: `--idea oos` + `oos_score.ts` (2026-11-03) — **read this before quoting any multiple**
+
+Everything above (and every published fact sheet / website / one-pager figure) is **in-sample**: the parameters were fitted
+on 2017–2026 and then judged on windows inside 2017–2026. The lab's `--walk-forward` only re-runs each year with the
+*same* parameters — it tests path independence, not over-fitting. This test fits on one half of history and scores the
+other half untouched:
+
+```powershell
+# 1. fit on the TRAINING window only (full v2.2 design space, random 30k + climb 10 + WF on top 300, ~3–5 min)
+deno run -A tools/sth_cb_lab/optimize.ts --idea oos --mode random --samples 30000 --climb 10 --walk-forward --wf-top 300 --start 2015-01-04 --end 2019-12-31 --upfront 1000 --monthly 0
+# 2. score the winners on the TEST window they never saw (+ HODL, ChartInspect raw, production v2.2 as references)
+deno run -A tools/sth_cb_lab/oos_score.ts --csv tools/sth_cb_lab/results/<timestamp>_oos_nav_vs_hodl_wf.csv --test-start 2020-01-01 --test-end 2026-11-02 --upfront 105000
+```
+
+`oos_score.ts` ranks the training results under three honest selection rules (A: best in-sample NAV÷HODL, B: best
+training walk-forward, C: best Calmar) and prints the test-window result for the top-N of each. Results, $105k lump:
+
+| Split | Fitted in-sample ×HODL | **Out-of-sample ×HODL** (A median / range) | ChartInspect raw (never fitted) | Production v2.2 (fitted incl. test window) |
+|---|---|---|---|---|
+| fit 2015–19 → test **2020–26** | 8.0× | **1.90×** (1.56–2.36×, 20/20 beat HODL, DD ≈ 30 %) | 2.16× | 11.93× |
+| fit 2020–26 → test **2015–19** | 15.5× | **1.71×** (1.42–2.61×, 20/20 beat HODL, DD ≈ 60 %) | 2.00× | 3.76× |
+
+**Conclusion:** the idea generalises in *direction* — every out-of-sample winner still beats buy-and-hold, with a lower
+drawdown in the 2020s — but the *magnitude* does not: an honest expectation is **≈ 1.5–2× HODL over a multi-year window**,
+i.e. roughly what ChartInspect's un-optimised rules deliver. The 8–15× in-sample multiples (and the 52.7× / 439 825 %
+headline) are mostly curve-fit. Interestingly the 2015–19 fit independently re-discovered the v2.2 ladder
+(+0.5σ 50/20/10/0 %, momentum-gated), so the ladder shape is robust; it is the entry/exit thresholds that over-fit.
+Logs: `results/oos_train_2015_2019.log`, `oos_test_2020_2026.log`, `oos_train_2020_2026.log`, `oos_test_2015_2019.log`.
+
+Reminder when writing scorers: partial configs must be merged over `DEFAULT_STH_CB_CONFIG` (as `labArgsFrom` does) —
+passing `HYBRID_V2_2` raw silently runs with `momoEnabled` undefined (gate off) and gives a different NAV.
+
+**Publishing the OOS evidence — `oos_data.ts`.** Every public surface shows the in-sample and out-of-sample figures side by
+side (website, one-pager, v2.2 fact sheet, fee model). They all read one generated file:
+
+```powershell
+deno run -A tools/sth_cb_lab/oos_data.ts --forward results/<fit 2015-2019>.csv --reverse results/<fit 2020-2026>.csv
+#  → docs/sth_cb_oos_data.js + website/js/sth_cb_oos_data.js   (window.STHCB_OOS)
+```
+
+Re-run the two `--idea oos` fits and this script whenever the data end moves or the strategy changes; never hand-edit
+the numbers on the pages. The file also carries the forward #1 config run on the website's $2,400 + $200/mo plan
+(1/3/5 y) so the "same deposits, out-of-sample" table is like-for-like with the in-sample KPI tiles.
+
 ## Typical workflow
 
 ```powershell

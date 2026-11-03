@@ -3,11 +3,57 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.179)
+**Last updated:** 2026-11-03 (v0.6.181)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.181 – Option (b): in-sample and out-of-sample shown side by side on every public STH CB surface
+**Date:** 2026-11-03 · **Status:** ✅ DONE (website not yet deployed — Davin publishes)
+
+Follows the v0.6.180 finding. Davin chose to **show both numbers with an explicit explanation** rather than drop the
+in-sample headline. New reproducible data source **`tools/sth_cb_lab/oos_data.ts`** (`--forward <fit 2015–19 csv>
+--reverse <fit 2020–26 csv>`) → `docs/sth_cb_oos_data.js` + `website/js/sth_cb_oos_data.js` (`window.STHCB_OOS`): per
+split the training stats, test-window result of the #1 fit, top-20 median/min/max/beat-HODL, ChartInspect raw and
+production-v2.2 references; the full-history in-sample headline; and the forward #1 config run on the **website's
+$2,400 + $200/mo plan for 1/3/5 years** (all inside the 2020–26 test window) next to the in-sample rules and benchmarks —
+OOS $4,625 / $12,123 / $24,975 vs in-sample $6,591 / $26,572 / $76,026 vs DCA $4,343 / $13,421 / $24,786 vs HODL $3,509 /
+$21,614 / $18,025. With monthly deposits the OOS edge over DCA is thin and it trails both benchmarks over the trending
+3-year stretch — stated on every surface.
+
+Surfaces: **`website/sth-cb.html`** — "Two numbers, read together" panel under the hero KPIs (52.7× in-sample vs 1.9×
+out-of-sample, both explained, footer "plan on the out-of-sample number", ChartInspect 2.2× reference), KPI card relabelled
+"in-sample", new "The same deposits, out-of-sample" table in the performance section, "Not a guarantee" risk bullet
+rewritten; walk-forward tile sub-label corrected to "same rules re-run year by year". **`website/index.html`** — hero tiles
+now 52.7× in-sample · 1.9× out-of-sample · 30 % OOS drawdown (BTC 76 %) · 20/20 OOS fits beat holding, with a definition
+note and link; flagship card bullet; "Honest reporting" about-point. **`docs/STH_CB_One_Pager.html`/`.pdf`** — page-1
+KPI strip replaced by the two-column in-sample/OOS panel + "plan on" strip; page-3 table gains green **STH CB ·
+out-of-sample** rows for 1/3/5 y and an expanded note; page-4 risk card and a new FAQ "What do in-sample and
+out-of-sample mean?"; still exactly 4 A4 pages (charts 70 px, tighter diff cards). **`docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html`**
+— green OOS note under the KPI strip + rewritten "Important" footnote (also corrects the walk-forward description); main
+chart 112 → 94 px to keep page 1 on A4. **`docs/fee-model-sth-cb.html`** — prominent "In-sample revenue model" banner
+(plan on ≈ 1/6 of the shown 10-y fees) + disclaimer line.
+
+### v0.6.180 – ⚠️ STH_CB true out-of-sample test: the published multiples are mostly in-sample
+**Date:** 2026-11-03 · **Status:** ✅ DONE (research finding — marketing figures re-based side-by-side in v0.6.181)
+
+Triggered by Davin questioning run `45c74a10` ($105k lump 2020-01-01 → 2026-11-02 = $13.43 M, 128×). **Audit:** all 47
+fills reconcile (implied fill price = day's close ± 0.2 % fees; cash → 0 on buys, BTC → 0 on exits; NAV identity holds daily;
+`usdpc_yield_usdt` = exactly `1.10^(1/365) − 1` per day on the USD value — the column is in USDPC *units*, price → 1.92,
+which is why the yield looked inflated). Driver: BTC count 14.5 → 179.3 (12.4×) via 13 round trips × price 10.8× ≈ 128×.
+The one-pager's 7-y row ($603 k on $2.4k + $200/mo) is the *same* 127× — later deposits simply compound for less time
+(same $19,400 as a day-1 lump → $2.46 M).
+
+**True out-of-sample test** (new `--idea oos` grid spanning the whole v1→v2.2 design space + `tools/sth_cb_lab/oos_score.ts`):
+fit 2015–2019 only (8.0× in-sample) → score 2020–2026 untouched: **1.90× HODL** (top-20 median; 1.56–2.36×; all beat HODL;
+DD ≈ 30 %). Reverse: fit 2020–2026 (15.5×) → test 2015–2019: **1.71×** (1.42–2.61×). ChartInspect's never-optimised rules:
+2.16× / 2.00× on the same windows. Production v2.2 on the same windows (fitted *including* them): 11.93× / 3.76×.
+**Honest expectation ≈ 1.5–2× HODL with materially lower drawdown; the 52.7×/439 825 % headline is mostly curve-fit.**
+The 2015–19 fit independently re-derived the v2.2 ladder shape (+0.5σ 50/20/10/0, momentum-gated) — the ladder is robust,
+the entry/exit thresholds are not. Lab `--walk-forward` tests path independence with fixed parameters, not over-fitting —
+documented as such. Follow-up required: re-base or caveat the figures on `website/sth-cb.html`, `index.html`,
+`STH_CB_One_Pager`, the v2.x fact sheets and the fee model.
 
 ### v0.6.179 – STH CB client One-Pager (4 pp, PDF) + Commercial Fee Model for the STH Cost Basis Strategy
 **Date:** 2026-11-03 · **Status:** ✅ DONE (docs / internal tooling)

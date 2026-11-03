@@ -30,6 +30,31 @@
         .bt-stat .l { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
         .bt-stat .s { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
         .bt-note { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 14px; max-width: 900px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+        /* In-sample vs out-of-sample panel */
+        .is-oos { max-width: 1040px; margin: 26px auto 0; background: rgba(21, 27, 46, 0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 20px 22px; text-align: left; }
+        .is-oos-head { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); text-align: center; margin-bottom: 14px; }
+        .is-oos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .is-oos-col { border-radius: 10px; padding: 16px 18px; border: 1px solid rgba(255,255,255,0.08); background: var(--bg-darker); }
+        .is-oos-col.in { border-color: rgba(255,180,0,0.35); }
+        .is-oos-col.out { border-color: rgba(16,185,129,0.45); }
+        .is-oos-col .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); }
+        .is-oos-col.in .tag { color: var(--gold); } .is-oos-col.out .tag { color: #10B981; }
+        .is-oos-col .big { font-size: 40px; font-weight: 800; line-height: 1.1; margin-top: 8px; }
+        .is-oos-col.in .big { color: var(--gold); } .is-oos-col.out .big { color: #10B981; }
+        .is-oos-col .sub { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+        .is-oos-col p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 10px 0 0; }
+        .is-oos-foot { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .is-oos-foot strong { color: var(--text-primary); }
+        /* OOS row in the performance section */
+        .perf-kpi.oos { border-color: rgba(16,185,129,0.4); }
+        .perf-kpi.oos .k { color: #10B981; }
+        .oos-table { width: 100%; border-collapse: collapse; margin: 0 0 24px; font-size: 13.5px; }
+        .oos-table th, .oos-table td { padding: 9px 12px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .oos-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-tertiary); font-weight: 600; }
+        .oos-table td:first-child, .oos-table th:first-child { text-align: left; }
+        .oos-table td.in { color: var(--gold); font-weight: 700; } .oos-table td.out { color: #10B981; font-weight: 700; }
+        .oos-table td.dim { color: var(--text-secondary); }
+        @media (max-width: 900px) { .is-oos-grid { grid-template-columns: 1fr; } }
 
         /* Three pillars (shared design language with the LTH PVR page) */
         .section-heading { font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; text-align: center; margin: 8px 0 22px; }
@@ -209,10 +234,30 @@
                     <div class="bt-stat"><div class="v">52.7&times;</div><div class="l">buy-and-hold</div><div class="s">$1,000 &rarr; $4.40M vs $83k holding</div></div>
                     <div class="bt-stat"><div class="v">135%</div><div class="l">CAGR after all fees</div><div class="s">Bitcoin itself: 57%</div></div>
                     <div class="bt-stat"><div class="v">42%</div><div class="l">worst drawdown</div><div class="s">Bitcoin: 83%</div></div>
-                    <div class="bt-stat"><div class="v">8 / 10</div><div class="l">years beat holding</div><div class="s">out-of-sample walk-forward</div></div>
+                    <div class="bt-stat"><div class="v">8 / 10</div><div class="l">years beat holding</div><div class="s">same rules re-run year by year</div></div>
                 </div>
                 <p class="bt-note">Back-tested results, 1 Jan 2017 &rarr; 23 Oct 2026, single $1,000 investment, next-day fills, full BitWealth fee stack. The strategy has been researched and
                     back-tested, not yet traded live; it under-performed simple holding in 2023 and 2024. Past performance does not guarantee future results.</p>
+
+                <!-- In-sample vs out-of-sample: the honest pair of numbers -->
+                <div class="is-oos" id="isOos">
+                    <div class="is-oos-head">Two numbers, read together</div>
+                    <div class="is-oos-grid">
+                        <div class="is-oos-col in">
+                            <div class="tag">In-sample &middot; full-history back-test</div>
+                            <div class="big" id="oosIsX">&mdash;</div>
+                            <div class="sub">times buy-and-hold &middot; <span id="oosIsWin"></span></div>
+                            <p>Every rule parameter was chosen using the <em>whole</em> 2017&ndash;2026 history and the result is then measured on that same history. This is the best the rules ever did on the data they were tuned to.</p>
+                        </div>
+                        <div class="is-oos-col out">
+                            <div class="tag">Out-of-sample &middot; fitted on 2015&ndash;2019, tested on 2020&ndash;2026</div>
+                            <div class="big" id="oosX">&mdash;</div>
+                            <div class="sub">times buy-and-hold &middot; <span id="oosRange"></span></div>
+                            <p>The same optimisation was run using <em>only</em> data to the end of 2019; the winning rules were then run, untouched, on 2020&ndash;2026. <span id="oosBeat"></span> Reversing the halves gives <span id="oosRev"></span>&times;.</p>
+                        </div>
+                    </div>
+                    <div class="is-oos-foot">The out-of-sample figure is the one to plan on. It says the approach beats holding Bitcoin by roughly 1.5&ndash;2&times; over a multi-year window with a much smaller drawdown (<span id="oosDd"></span> vs <span id="oosHodlDd"></span> for holding) &mdash; and that most of the gap between 2&times; and 50&times; is the benefit of hindsight. ChartInspect's original, never-optimised version of this idea scores <span id="oosCi"></span>&times; on the same test window.</div>
+                </div>
             </div>
         </div>
     </section>
@@ -397,10 +442,14 @@
                 <div id="perfStatus" style="display:none; text-align:center; color: var(--text-tertiary); margin-bottom: 24px;"></div>
 
                 <div class="perf-kpis">
-                    <div class="perf-kpi"><div class="k">STH Cost Basis Strategy</div><div class="v gold" id="kStrat">&mdash;</div><div class="sub">after all fees &middot; max drawdown <span id="kStratDd">&mdash;</span> &middot; <span id="kInMarket">&mdash;</span> of days in BTC</div></div>
+                    <div class="perf-kpi"><div class="k">STH Cost Basis Strategy &middot; in-sample</div><div class="v gold" id="kStrat">&mdash;</div><div class="sub">after all fees &middot; max drawdown <span id="kStratDd">&mdash;</span> &middot; <span id="kInMarket">&mdash;</span> of days in BTC</div></div>
                     <div class="perf-kpi"><div class="k">Standard DCA</div><div class="v" id="kStd">&mdash;</div><div class="sub">same deposits, buy every month &middot; max drawdown <span id="kStdDd">&mdash;</span></div></div>
                     <div class="perf-kpi"><div class="k">Buy &amp; Hold (HODL)</div><div class="v" id="kHodl">&mdash;</div><div class="sub">whole stake on day 1 &middot; max drawdown <span id="kHodlDd">&mdash;</span></div></div>
                 </div>
+
+                <div class="section-heading" style="text-align:left; margin-top: 4px;">The same deposits, out-of-sample</div>
+                <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6; margin: -6px 0 14px;">The rows below run the <strong>out-of-sample</strong> rule set (fitted on 2015&ndash;2019 only, never shown 2020&ndash;2026) on exactly the same $2,400 + $200/month plan, next to the full-history (in-sample) rules and the two benchmarks. This is the fairest like-for-like view we can give you.</p>
+                <table class="oos-table" id="oosPlanTable"></table>
 
                 <div class="assumptions-box">
                     <h4>&#128202; Back-Test Parameters</h4>
@@ -450,7 +499,7 @@
                 <div class="risk-box">
                     <h4><svg class="ico"><use href="#i-alert"/></svg>What this strategy is not</h4>
                     <ul>
-                        <li><strong>Not a guarantee.</strong> Every parameter was optimised on history; walk-forward and stress tests are published in the fact sheet, but the future can differ.</li>
+                        <li><strong>Not a guarantee.</strong> Every parameter was optimised on history. Fitted on one half of history and tested on the other, the strategy beat holding by roughly 1.5&ndash;2&times; &mdash; not the 50&times; of the full-history back-test. Plan on the smaller number.</li>
                         <li><strong>Not always ahead.</strong> In strongly trending years with shallow pull-backs (2023, 2024 in the back-test) simple holding did better.</li>
                         <li><strong>Not low-volatility.</strong> When fully invested it carries Bitcoin's full daily volatility; a 40% drawdown occurred in the back-test.</li>
                         <li><strong>Not data-independent.</strong> Results rely on third-party on-chain series; a different provider or a data outage would change behaviour.</li>
@@ -565,6 +614,39 @@
     </footer>
 
     <script src="js/main.js"></script>
+    <script src="js/sth_cb_oos_data.js"></script>
+    <script>
+        // ── In-sample vs out-of-sample panel (window.STHCB_OOS, generated by tools/sth_cb_lab/oos_data.ts) ─────────
+        (function () {
+            var D = window.STHCB_OOS; if (!D) return;
+            var f = D.splits.forward, r = D.splits.reverse, H = D.headline_in_sample;
+            var t = function (id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
+            var yr = function (iso) { return iso.slice(0, 4); };
+            t('oosIsX', H.x_hodl.toFixed(1) + '\u00d7');
+            t('oosIsWin', yr(H.start) + '\u2013' + yr(H.end) + ', $' + H.upfront.toLocaleString() + ' once, after fees');
+            t('oosX', f.top_n.median_x.toFixed(1) + '\u00d7');
+            t('oosRange', 'median of the ' + f.top_n.n + ' best fits, range ' + f.top_n.min_x.toFixed(1) + '\u2013' + f.top_n.max_x.toFixed(1) + '\u00d7');
+            t('oosBeat', f.top_n.beat_hodl + ' of ' + f.top_n.n + ' still beat holding.');
+            t('oosRev', r.top_n.median_x.toFixed(1));
+            t('oosDd', Math.abs(f.top_n.median_dd).toFixed(0) + '%');
+            t('oosHodlDd', f.top1.hodl.raw_dd_pct.toFixed(0) + '%');
+            t('oosCi', f.chartinspect.x_hodl.toFixed(1));
+
+            // Deposit-plan table (1/3/5 years inside the out-of-sample window)
+            var usd = function (v) { return '$' + Math.round(v).toLocaleString('en-US'); };
+            var cls = function (v, hodl) { return v > hodl ? '' : ' style="opacity:.75"'; };
+            var rows = D.plan.map(function (p) {
+                return '<tr><td><strong>' + p.years + ' year' + (p.years > 1 ? 's' : '') + '</strong><br><span style="font-size:11px;color:var(--text-tertiary)">' + p.start + ' \u2192 ' + p.end + ' \u00b7 ' + usd(p.oos.invested) + ' deposited</span></td>' +
+                    '<td class="in">' + usd(p.in_sample.final_nav) + '<br><span style="font-size:11px;font-weight:400;color:var(--text-tertiary)">DD ' + p.in_sample.raw_dd_pct.toFixed(0) + '%</span></td>' +
+                    '<td class="out"' + cls(p.oos.final_nav, p.oos.hodl.final_nav) + '>' + usd(p.oos.final_nav) + '<br><span style="font-size:11px;font-weight:400;color:var(--text-tertiary)">DD ' + p.oos.raw_dd_pct.toFixed(0) + '%</span></td>' +
+                    '<td class="dim">' + usd(p.oos.std_dca.final_nav) + '<br><span style="font-size:11px;color:var(--text-tertiary)">DD ' + p.oos.std_dca.raw_dd_pct.toFixed(0) + '%</span></td>' +
+                    '<td class="dim">' + usd(p.oos.hodl.final_nav) + '<br><span style="font-size:11px;color:var(--text-tertiary)">DD ' + p.oos.hodl.raw_dd_pct.toFixed(0) + '%</span></td></tr>';
+            }).join('');
+            var tbl = document.getElementById('oosPlanTable');
+            if (tbl) tbl.innerHTML = '<tr><th>Period (to ' + D.plan_basis.end + ')</th><th>In-sample rules</th><th>Out-of-sample rules</th><th>Standard DCA</th><th>Buy &amp; Hold</th></tr>' + rows +
+                '<tr><td colspan="5" style="text-align:left;font-size:12px;color:var(--text-tertiary);line-height:1.6;padding-top:12px">Out-of-sample rules = fitted on 2015\u20132019 only. With monthly deposits the out-of-sample edge over simple DCA is thin and it can trail both benchmarks over a strongly trending 3-year stretch; its advantage is the smaller drawdown and the lump-sum / capitulation entries. In-sample rules were fitted on the very period shown. Both after the full fee stack; benchmarks exchange fees only.</td></tr>';
+        })();
+    </script>
     <script>
         // ── Live 5-year back-test data ───────────────────────────────────────────
         // Charts + narrative come from public.get_marketing_chart('sth_cb_5yr'), refreshed on the

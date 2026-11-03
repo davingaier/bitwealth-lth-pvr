@@ -134,6 +134,10 @@
     <div class="badge">BitWealth · November 2026 · Hybrid v2.2</div>
   </div>
 
+  <div class="assum" style="border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.05);color:var(--txt2);font-size:11px">
+    <strong style="color:#fff">⚠ In-sample revenue model.</strong> Every NAV and fee figure on this page is driven by the <strong>in-sample</strong> back-test — the strategy parameters were fitted on 2017–2026 and the trajectory is measured on that same history. In a <strong>true out-of-sample test</strong> (parameters fitted on 2015–2019 only, then run untouched on 2020–2026) the strategy beat buy-and-hold by <strong style="color:#10B981">≈ 1.9×</strong> (median of the 20 best fits, range 1.6–2.4×; 1.7× with the halves reversed) versus <strong>11.9×</strong> for the in-sample parameters on the same window. Performance-fee revenue scales with that gap: treat the <em>Perf Fee</em> column as an upper bound and plan on roughly <strong>one-sixth</strong> of the shown 10-year performance fee (management fee and exchange rebate scale with NAV, so ~1/6 of those too). Full method: <code>tools/sth_cb_lab/README.md</code> → "True out-of-sample test"; client-facing figures: <code>docs/STH_CB_One_Pager.html</code>.
+  </div>
+
   <!-- Print-only: snapshot of the inputs the figures are based on (populated on Print click) -->
   <div class="print-summary" id="printSummary" aria-hidden="true"></div>
 
@@ -320,7 +324,7 @@
     <strong>Drill-down:</strong> Raw STH CB back-test NAV for the original simulation portfolio (daily). At the daily level, fees are attributed to the day they are charged: <strong>platform</strong> on the contribution day (month start), <strong>exchange rebate</strong> on each BUY/SELL trade day (real daily order sizes, anchored config), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
     <strong>Date range:</strong> <strong>End Date</strong> re-anchors the 1/3/5/7/10-year windows to end on the chosen date (computed backwards from there). Setting both <strong>Custom Range</strong> dates replaces the standard periods with a single window covering exactly that span. Custom dates use the reconstruction estimate (the ✓ anchors apply only to the standard periods ending on the latest data date).<br>
     <strong>Export:</strong> <strong>Export Excel</strong> downloads a four-tab <code>.xlsx</code> workbook — <strong>Summary</strong> (per-period totals), <strong>Yearly Data</strong>, <strong>Monthly Data</strong> and <strong>Daily Data</strong> (every period's daily back-test NAV, daily return and attributed fees). Only the fee columns whose toggles are ON are included.<br>
-    <strong>Disclaimer:</strong> Back-test data November 2016 – November 2026 (windows end on the latest on-chain close; start = end − N years, the same convention as the website's trailing-5-year chart). The strategy has been researched and back-tested, not yet traded live. Past performance does not guarantee future results.
+    <strong>Disclaimer:</strong> Back-test data November 2016 – November 2026 (windows end on the latest on-chain close; start = end − N years, the same convention as the website's trailing-5-year chart). <strong>All figures are in-sample</strong> (see the banner at the top); out-of-sample the strategy's edge over buy-and-hold was ≈ 1.5–2×, not 12–50×. The strategy has been researched and back-tested, not yet traded live. Past performance does not guarantee future results.
   </div>
 
 </div>

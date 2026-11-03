@@ -25,7 +25,15 @@
         .stat-icon .ico { width: 36px; height: 36px; }
         .stat-value small { font-size: 22px; font-weight: 700; color: var(--gold); opacity: .85; margin-left: 2px; }
         .stat-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
-        .hero-stats-note { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 16px; line-height: 1.6; }
+        .hero-stats-note { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 16px; line-height: 1.6; max-width: 900px; margin-left: auto; margin-right: auto; }
+        .hero-stats-note a { color: var(--gold); }
+        .hero-stats-4 { grid-template-columns: repeat(4, 1fr); max-width: 1080px; }
+        .hero-stats-4 .stat-card { padding: 24px 16px; }
+        .hero-stats-4 .stat-value { font-size: 40px; }
+        .hero-stats-4 .stat-label { font-size: 12px; }
+        .stat-card--oos { border-color: rgba(16,185,129,0.45); }
+        .stat-card--oos .stat-value, .stat-card--oos .stat-value small, .stat-card--oos .ico { color: #10B981; }
+        @media (max-width: 1000px) { .hero-stats-4 { grid-template-columns: 1fr 1fr; } }
         .contact-icon { font-size: 0; }
         .contact-icon .ico { width: 26px; height: 26px; margin-top: 2px; }
         .contact-item p a { color: var(--text-secondary); }
@@ -108,28 +116,34 @@
                     <a href="sth-cb.html" class="btn-secondary btn-large">Explore the Strategy</a>
                 </div>
 
-                <!-- Back-tested headline figures (STH Cost Basis Strategy) -->
-                <div class="hero-stats">
+                <!-- Back-tested headline figures (STH Cost Basis Strategy) — in-sample and out-of-sample side by side -->
+                <div class="hero-stats hero-stats-4">
                     <div class="stat-card">
                         <div class="stat-icon"><svg class="ico"><use href="#i-multiply"/></svg></div>
                         <div class="stat-value"><span data-target="52.7">0</span><small>&times;</small></div>
-                        <div class="stat-label">vs Buy-and-Hold</div>
-                        <div class="stat-sub">$1,000 &rarr; $4.40M vs $83k holding</div>
+                        <div class="stat-label">vs Buy-and-Hold &middot; in-sample</div>
+                        <div class="stat-sub">full 2017&ndash;2026 history, rules fitted on the same data</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon"><svg class="ico"><use href="#i-trophy"/></svg></div>
-                        <div class="stat-value"><span data-target="8">0</span><small>/ 10</small></div>
-                        <div class="stat-label">Years Beat Holding</div>
-                        <div class="stat-sub">out-of-sample walk-forward</div>
+                    <div class="stat-card stat-card--oos">
+                        <div class="stat-icon"><svg class="ico"><use href="#i-check"/></svg></div>
+                        <div class="stat-value"><span data-target="1.9">0</span><small>&times;</small></div>
+                        <div class="stat-label">vs Buy-and-Hold &middot; out-of-sample</div>
+                        <div class="stat-sub">rules fitted on 2015&ndash;19 only, tested on 2020&ndash;26</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon"><svg class="ico"><use href="#i-drawdown"/></svg></div>
-                        <div class="stat-value"><span data-target="42">0</span><small>%</small></div>
-                        <div class="stat-label">Worst Drawdown</div>
-                        <div class="stat-sub">Bitcoin itself: 83%</div>
+                        <div class="stat-value"><span data-target="30">0</span><small>%</small></div>
+                        <div class="stat-label">Worst Drawdown &middot; out-of-sample</div>
+                        <div class="stat-sub">Bitcoin itself over the same test: 76%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon"><svg class="ico"><use href="#i-trophy"/></svg></div>
+                        <div class="stat-value"><span data-target="20">0</span><small>/ 20</small></div>
+                        <div class="stat-label">Out-of-sample fits beat holding</div>
+                        <div class="stat-sub">range 1.6&ndash;2.4&times; across the 20 best</div>
                     </div>
                 </div>
-                <p class="hero-stats-note">Back-tested STH Cost Basis Strategy, 1 Jan 2017 &rarr; 23 Oct 2026, single $1,000 investment, after all fees. Research results, not live trading. Past performance does not guarantee future results.</p>
+                <p class="hero-stats-note">Back-tested STH Cost Basis Strategy, after all fees. <strong>In-sample</strong> = parameters tuned on the whole history and judged on it; <strong>out-of-sample</strong> = tuned on one half, tested on the other &mdash; the number to plan on. Research results, not live trading. Past performance does not guarantee future results. <a href="sth-cb.html#isOos">How we tested &rarr;</a></p>
             </div>
         </div>
         <div class="hero-background">
@@ -247,7 +261,7 @@
                         <li>&#10003; Momentum-gated scale-out into euphoria</li>
                         <li>&#10003; Dip re-buys and a no-loss ladder</li>
                         <li>&#10003; Idle cash earns stable-coin yield</li>
-                        <li>&#10003; 52.7&times; buy-and-hold in back-test (2017&ndash;2026)</li>
+                        <li>&#10003; 52.7&times; buy-and-hold in-sample &middot; ~1.9&times; out-of-sample</li>
                         <li>&#10003; BTC/USDT on VALR &middot; interactive back-tester</li>
                     </ul>
                     <a href="sth-cb.html" class="btn-primary">Learn More &amp; Try Back-Tester</a>
@@ -349,7 +363,7 @@
                     <p>We build that discipline into software. Our strategies are researched, back-tested across full market cycles and published with their stress tests &mdash; then executed automatically in your own exchange account.</p>
                     <ul class="about-points">
                         <li><svg class="ico"><use href="#i-check"/></svg><span><strong>Research first.</strong> Every rule is tested out-of-sample and under moved assumptions before it touches client capital.</span></li>
-                        <li><svg class="ico"><use href="#i-check"/></svg><span><strong>Honest reporting.</strong> We publish the years the strategy lost to simple holding, not just the headline multiple.</span></li>
+                        <li><svg class="ico"><use href="#i-check"/></svg><span><strong>Honest reporting.</strong> We publish the out-of-sample result next to the full-history back-test, and the years the strategy lost to simple holding &mdash; not just the headline multiple.</span></li>
                         <li><svg class="ico"><use href="#i-check"/></svg><span><strong>South African roots, global asset.</strong> Rand funding, local support, Bitcoin exposure.</span></li>
                     </ul>
                 </div>
