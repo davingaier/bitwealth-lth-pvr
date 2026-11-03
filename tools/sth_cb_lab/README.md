@@ -496,6 +496,27 @@ JSON file when there are several — PowerShell mangles long inline JSON. `optim
 four no-loss flags; `--idea v3` the three rejected ideas from the `bbef4aaf` audit (block exits ≤ LTH −0.5σ, V-bottom exit
 skip, lighter first-rung gate).
 
+### Client one-pager & commercial fee model data: `one_pager_data.ts` (2026-11-03)
+
+```powershell
+deno run -A tools/sth_cb_lab/fetch.ts                       # refresh data/series.json to the latest close first
+deno run -A tools/sth_cb_lab/one_pager_data.ts [--end YYYY-MM-DD]
+```
+
+Runs the Hybrid v2.2 configuration (imported from `factsheet_data_configs.ts`, which now holds all promoted configs so
+scripts can import them without running a generator) on the deposit plan $2,400 + $200/month for 1/3/5/7/10-year windows
+ending on `--end` (default = latest close; **start = end − N years**, the website's trailing-window convention, so the
+5-year row equals the figure on `website/sth-cb.html`). Writes two files:
+
+| File | Consumer | Contents |
+|---|---|---|
+| `docs/sth_cb_one_pager_data.js` (`window.STHCB_OP`) | `docs/STH_CB_One_Pager.html` | headline ($1k lump 2017→end, ×HODL, CAGR, DD, walk-forward years won/lost), per-period strategy / Std DCA / HODL rows (final NAV, invested, CAGR, raw-NAV max DD, deposit-neutral Sharpe, ROI), weekly 5-y and 10-y NAV series |
+| `docs/chart-data-daily-sth-cb.js` (`_scb*`) | `docs/fee-model-sth-cb.html` | the exact contract of `gen-chart-js-daily.ps1` / `chart-data-daily.js` with prefix `_lth` → `_scb`: gross daily NAV (all fees 0, USDPC on), net daily NAV for the management and platform plans, per-period anchors (invested, netNav, fee, perfFee, exchRebate, days) for both plans, per-day 50 % VALR rebate series, monthly net NAV, plus weekly `_scb5_raw/_scb10_raw` |
+
+The fee model snaps to the anchors (✓ "matched to back-tester") when its inputs equal the product defaults; the script
+asserts that the one-pager's 5-year management row equals the fee-model anchor. `docs/STH_CB_One_Pager.pdf` is produced
+from the HTML with headless Chrome (`chrome --headless=new --print-to-pdf=… --no-pdf-header-footer docs/STH_CB_One_Pager.html`).
+
 ## Typical workflow
 
 ```powershell

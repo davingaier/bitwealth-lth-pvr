@@ -1,0 +1,1250 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STH Cost Basis Strategy — Commercial Fee Model | BitWealth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0A0F1E; --bg2:#151B2E; --bg3:#1A2138;
+      --gold:#FFB400; --gold-lt:#FFC933;
+      --white:#FFFFFF; --txt2:#A8B2D1; --txt3:#6B7896;
+      --green:#10B981; --red:#EF4444; --blue:#3B82F6;
+      --orange:#F59E0B; --purple:#8B5CF6; --teal:#06B6D4;
+      --border:rgba(255,180,0,0.15);
+    }
+    html,body{font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.55;color:var(--white);background:var(--bg);min-height:100vh;}
+    .container{max-width:1500px;margin:0 auto;padding:24px 20px 40px;}
+    .header{border-bottom:2px solid var(--gold);padding-bottom:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;}
+    .header h1{font-size:22px;font-weight:800;}
+    .header h1 span{color:var(--gold);}
+    .header .sub{color:var(--txt2);font-size:12px;margin-top:3px;}
+    .header .badge{font-size:11px;color:var(--txt3);}
+    .controls{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px 16px;align-items:start;}
+    .ctrl{display:flex;flex-direction:column;}
+    .ctrl label{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;min-height:26px;display:flex;align-items:flex-end;line-height:1.25;}
+    .ctrl input[type=number],.ctrl input[type=date]{width:100%;height:34px;background:var(--bg3);border:1px solid rgba(255,255,255,.09);border-radius:6px;padding:7px 10px;color:var(--white);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;color-scheme:dark;}
+    .ctrl input[type=number]:focus,.ctrl input[type=date]:focus{border-color:var(--gold);}
+    .ctrl .rw{display:flex;align-items:center;gap:8px;height:34px;min-width:0;}
+    .ctrl input[type=range]{flex:1;min-width:0;accent-color:var(--gold);height:3px;cursor:pointer;}
+    .ctrl .rv{font-size:13px;font-weight:700;color:var(--gold);min-width:44px;text-align:right;}
+    .ctrl input[type=number].rv-num{width:72px;flex:0 0 72px;height:30px;padding:4px 6px;font-weight:700;color:var(--gold);text-align:right;}
+    .ctrl-hint{font-size:10px;color:var(--txt3);margin-top:5px;line-height:1.5;}
+    .ctrl-hint strong{color:var(--txt2);}
+    .recalc{width:100%;background:var(--gold);color:#000;border:none;border-radius:6px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+    .recalc:hover{background:var(--gold-lt);}
+    .recalc2{width:100%;background:transparent;color:var(--gold);border:1px solid var(--border);border-radius:6px;padding:8px 16px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;margin-top:8px;}
+    .recalc2:hover{border-color:var(--gold);background:rgba(255,180,0,.08);}
+    .clear-link{font-size:10px;color:var(--blue);cursor:pointer;text-decoration:underline;margin-top:5px;align-self:flex-start;}
+    .clear-link:hover{color:var(--gold);}
+    .fee-row{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 20px;margin-top:8px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:18px;}
+    .fee-row .fl{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;}
+    .fee-row label{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:12px;font-weight:500;}
+    .fee-row input[type=checkbox]{accent-color:var(--gold);width:14px;height:14px;cursor:pointer;}
+    .fee-row .mgmt-col{color:var(--blue);}
+    .fee-row .exch-col{color:var(--green);}
+    .fee-row .plt-col{color:var(--orange);}
+    .fee-row .prf-col{color:var(--purple);}
+    .sh{font-size:14px;font-weight:700;color:var(--white);margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+    .sh::before{content:'';display:block;width:3px;height:16px;background:var(--gold);border-radius:2px;}
+    .sh-note{font-size:11px;font-weight:400;color:var(--txt3);margin-left:4px;}
+    .tw{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:22px;overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;min-width:680px;}
+    th{background:var(--bg3);padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);text-align:right;white-space:nowrap;}
+    th:first-child{text-align:left;}
+    td{padding:8px 12px;font-size:11.5px;text-align:right;border-top:1px solid rgba(255,255,255,.04);color:var(--txt2);white-space:nowrap;}
+    td:first-child{text-align:left;color:var(--white);font-weight:600;}
+    tr:hover td{background:rgba(255,255,255,.025);}
+    .vg{color:var(--gold);font-weight:600;}
+    .vgr{color:var(--green);font-weight:600;}
+    .vb{color:var(--blue);font-weight:600;}
+    .vor{color:var(--orange);font-weight:600;}
+    .vpr{color:var(--purple);font-weight:600;}
+    .vr{color:var(--red);font-weight:600;}
+    .dim{color:var(--txt3);}
+    .off{color:var(--txt3);opacity:.4;}
+    .drill-btn{background:transparent;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;color:var(--txt2);cursor:pointer;font-family:inherit;white-space:nowrap;}
+    .drill-btn:hover{border-color:var(--gold);color:var(--gold);}
+    .drill-btn.active{background:var(--gold);color:#000;border-color:var(--gold);}
+    .drill-box{background:var(--bg2);border:2px solid var(--gold);border-radius:10px;margin-bottom:22px;overflow:hidden;}
+    .drill-bar{background:var(--bg3);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .drill-title{font-size:13px;font-weight:700;color:var(--gold);}
+    .drill-bc{display:flex;align-items:center;gap:4px;font-size:11px;flex:1;flex-wrap:wrap;}
+    .bc-sep{color:var(--txt3);}
+    .bc-link{color:var(--blue);cursor:pointer;text-decoration:underline;}
+    .bc-link:hover{color:var(--gold);}
+    .bc-curr{color:var(--txt2);font-weight:600;}
+    .drill-close{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:4px;padding:3px 10px;color:var(--txt3);cursor:pointer;font-family:inherit;font-size:11px;}
+    .drill-close:hover{border-color:var(--red);color:var(--red);}
+    .drill-content{padding:12px 16px;}
+    .drill-info{font-size:11px;color:var(--txt2);line-height:1.7;margin-bottom:8px;padding:10px 12px;background:rgba(255,180,0,.04);border:1px solid rgba(255,180,0,.12);border-radius:6px;}
+    .drill-info strong{color:var(--gold);}
+    .drill-info small{font-size:10px;color:var(--txt3);}
+    .drill-row{cursor:pointer;}
+    .drill-row:hover td{background:rgba(255,180,0,.07)!important;}
+    .row-ref td{background:rgba(59,130,246,.07);}
+    .row-nxt td{background:rgba(255,180,0,.06);}
+    .cg{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;}
+    @media(max-width:860px){.cg{grid-template-columns:1fr;}}
+    .cc{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+    .cc h3{font-size:11px;font-weight:600;color:var(--txt2);margin-bottom:10px;}
+    .cc.full{grid-column:1/-1;}
+    canvas{max-width:100%;}
+    .ptabs{display:flex;gap:6px;flex-wrap:wrap;}
+    .ptab{padding:3px 9px;border-radius:14px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--border);color:var(--txt3);background:transparent;font-family:inherit;}
+    .ptab.on{background:var(--gold);color:#000;border-color:var(--gold);}
+    .assum{background:rgba(255,180,0,.04);border:1px solid rgba(255,180,0,.18);border-radius:8px;padding:12px 16px;font-size:10.5px;color:var(--txt3);line-height:1.75;margin-bottom:10px;}
+    .assum strong{color:var(--txt2);}
+    .status{font-size:10px;color:var(--txt3);text-align:right;margin-bottom:10px;min-height:14px;}
+    code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;}
+    .print-summary{display:none;}
+    @media print{
+      @page{size:A4 portrait;margin:0;}
+      html,body{background:var(--bg) !important;color:var(--white);}
+      body{padding:12mm;}
+      /* Preserve the dark theme + all fill/background colours in the printout */
+      *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+      .controls,.status,.ptabs,#btnPrint,#btnExport,#btnCalc{display:none !important;}
+      .container{max-width:none;}
+      .cc,.assum,.sh,table{break-inside:avoid;}
+      canvas{max-height:240px;}
+      .print-summary{display:block !important;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:18px;break-inside:avoid;}
+      .print-summary h2{font-size:13px;font-weight:700;color:var(--gold);margin:0 0 4px;}
+      .print-summary .ps-date{font-size:10px;color:var(--txt3);margin-bottom:10px;}
+      .print-summary .ps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 22px;}
+      .print-summary .ps-item{display:flex;flex-direction:column;gap:1px;}
+      .print-summary .ps-k{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);}
+      .print-summary .ps-v{font-size:13px;font-weight:700;color:var(--white);}
+      .print-summary .ps-note{margin-top:10px;font-size:9.5px;color:var(--txt3);line-height:1.6;}
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>STH Cost Basis Strategy — <span>Commercial Fee Model</span></h1>
+      <div class="sub">Management fee &amp; VALR exchange rebate forecast · toggle any fee stream on/off to compare structures</div>
+    </div>
+    <div class="badge">BitWealth · November 2026 · Hybrid v2.2</div>
+  </div>
+
+  <!-- Print-only: snapshot of the inputs the figures are based on (populated on Print click) -->
+  <div class="print-summary" id="printSummary" aria-hidden="true"></div>
+
+  <div class="controls">
+    <div class="ctrl">
+      <label>Initial Contribution (USD)</label>
+      <input type="number" id="iInitial" value="2400" min="0" step="100">
+    </div>
+    <div class="ctrl">
+      <label>Monthly Contribution (USD)</label>
+      <input type="number" id="iMonthly" value="200" min="0" step="50">
+    </div>
+    <div class="ctrl">
+      <label>Mgmt Fee Rate (% p.a.)</label>
+      <input type="number" id="iMgmt" value="1.0" min="0" step="0.1" max="5">
+    </div>
+    <div class="ctrl">
+      <label>Platform Fee (% on contributions)</label>
+      <input type="number" id="iPlatform" value="0.75" min="0" step="0.05" max="5">
+    </div>
+    <div class="ctrl">
+      <label>Perf Fee (% of profit above HWM)</label>
+      <input type="number" id="iPerf" value="10" min="0" step="1" max="50">
+    </div>
+    <div class="ctrl">
+      <label>End Date (period anchor)</label>
+      <input type="date" id="iEndDate">
+    </div>
+    <div class="ctrl">
+      <label>Custom Range — Start</label>
+      <input type="date" id="iRangeStart">
+    </div>
+    <div class="ctrl">
+      <label>Custom Range — End</label>
+      <input type="date" id="iRangeEnd">
+      <span class="clear-link" id="clearRange">Clear custom range</span>
+    </div>
+    <div class="ctrl">
+      <label>Number of Clients</label>
+      <div class="rw">
+        <input type="range" id="iClients" min="1" max="2000" value="1">
+        <input type="number" id="nClients" class="rv-num" min="1" max="2000" step="1" value="1">
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>&nbsp;</label>
+      <button class="recalc" id="btnCalc">Recalculate</button>
+      <button class="recalc2" id="btnExport">↓ Export Excel</button>
+      <button class="recalc2" id="btnPrint">🖨 Print / Save PDF</button>
+    </div>
+  </div>
+
+  <div class="fee-row">
+    <span class="fl">Fee Plan (choose one):</span>
+    <label><input type="radio" name="feePlan" class="planToggle" id="planMgmt" value="management" checked>
+      <span class="mgmt-col">Management Fee (1% p.a. on NAV)</span></label>
+    <label><input type="radio" name="feePlan" class="planToggle" id="planPlt" value="platform">
+      <span class="plt-col">Platform Fee (0.75% on contributions)</span></label>
+    <span class="fl" style="margin-left:18px">Always included:</span>
+    <span class="prf-col" style="font-weight:600">Performance Fee (10% HWM)</span>
+    <span style="color:var(--txt3)">+</span>
+    <span class="exch-col" style="font-weight:600">Exchange Rebate (50% VALR)</span>
+  </div>
+
+  <div class="status" id="status">Loading…</div>
+
+  <div class="sh">Revenue Summary
+    <span class="sh-note">active total reflects the selected fee plan (+ performance &amp; exchange) · click Detail to drill down into years, months, and daily back-test data</span>
+    <span id="anchorNote" style="display:none;font-size:11px;font-weight:600;color:var(--green);margin-left:8px">✓ matched to back-tester</span>
+  </div>
+  <div class="tw">
+    <table id="tSummary">
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Invested</th>
+          <th>Ending NAV</th>
+          <th>Return</th>
+          <th style="color:var(--blue)">Mgmt Fee</th>
+          <th style="color:var(--green)">Exch Rebate</th>
+          <th style="color:var(--orange)">Platform Fee</th>
+          <th style="color:var(--purple)">Perf Fee</th>
+          <th style="color:var(--gold)">Active Total</th>
+          <th>Avg/Month</th>
+          <th id="thBiz">Business (×1)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="bSummary"><tr><td colspan="12" style="text-align:center;padding:20px;color:var(--txt3)">Calculating…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="drill-box" id="drillBox" style="display:none">
+    <div class="drill-bar">
+      <span class="drill-title" id="drillTitle">Detail Explorer</span>
+      <div class="drill-bc" id="drillBc"></div>
+      <button class="drill-close" onclick="closeDrill()">✕ Close</button>
+    </div>
+    <div class="drill-content" id="drillContent"></div>
+  </div>
+
+  <div class="cg">
+    <div class="cc">
+      <h3>Portfolio NAV Growth — fresh client, historical returns (log scale)</h3>
+      <canvas id="cNav" height="240"></canvas>
+    </div>
+    <div class="cc">
+      <h3>Cumulative BitWealth Revenue — active fee selection, per client</h3>
+      <canvas id="cCumul" height="240"></canvas>
+    </div>
+  </div>
+
+  <div class="cg">
+    <div class="cc">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0">Annual Revenue — active fee selection, by year</h3>
+        <div class="ptabs">
+          <button class="ptab" data-m="12">1yr</button>
+          <button class="ptab" data-m="36">3yr</button>
+          <button class="ptab" data-m="60">5yr</button>
+          <button class="ptab" data-m="84">7yr</button>
+          <button class="ptab on" data-m="120">10yr</button>
+        </div>
+      </div>
+      <canvas id="cBreakdown" height="240"></canvas>
+    </div>
+    <div class="cc">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 id="hScale" style="margin:0">Revenue at Scale — active selection, annualised average</h3>
+        <div class="ptabs">
+          <button class="ptab on" data-scale="annual">Annualised</button>
+          <button class="ptab" data-scale="cumulative">Cumulative</button>
+        </div>
+      </div>
+      <canvas id="cScale" height="240"></canvas>
+    </div>
+  </div>
+
+  <div class="sh">Fee Structure Comparison — All Scenarios
+    <span class="sh-note">same portfolio trajectory · all fee structures shown for reference regardless of toggles above</span>
+  </div>
+  <div class="tw">
+    <table>
+      <thead>
+        <tr>
+          <th>Fee Structure</th>
+          <th>1 Year</th><th>3 Years</th><th>5 Years</th><th>7 Years</th><th>10 Years</th>
+        </tr>
+      </thead>
+      <tbody id="bCompare"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--txt3)">Calculating…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="cg">
+    <div class="cc full">
+      <h3>Fee Revenue Comparison — all periods, per single client (note: perf fee dominates in sustained bull markets)</h3>
+      <div style="position:relative;height:300px">
+        <canvas id="cCompare"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="sh">Exchange Fee Sharing Detail
+    <span class="sh-note">BitWealth keeps 50% of all VALR trading fees · anchored periods show the simulator's real per-day rebate, summed (ZAR→USDT 18 bps · USDT→BTC 8 bps · USDPC↔USDT 10 bps)</span>
+  </div>
+  <div class="tw">
+    <table>
+      <thead>
+        <tr>
+          <th>Period</th><th>Basis</th><th>Months</th><th>VALR Fee (100%)</th><th>BitWealth Share (50%)</th><th>Avg / Month</th>
+        </tr>
+      </thead>
+      <tbody id="bExch"></tbody>
+    </table>
+  </div>
+
+  <div class="assum">
+    <strong>Methodology &amp; Assumptions</strong><br>
+    <strong>Headline accuracy:</strong> When the inputs match the live product defaults ($2,400 start + $200/mo, 10% performance, and the selected plan's rate — 1% p.a. management <em>or</em> 0.75% platform), the summary's <strong>Ending NAV</strong> and fee figures are read straight from the strategy simulator (<code>_shared/sth_cb_simulator.ts</code> — the same engine as <code>ef_sth_cb_bt_execute</code>, USDPC 10% APY on) and match the public back-tester (sth-cb-backtest.html) and the STH CB One-Pager <strong>exactly</strong> (✓). Both fee plans are anchored to their own simulator run. Change any rate or contribution and the model falls back to the monthly return-extraction estimate described next.<br>
+    <strong>Portfolio model (estimate):</strong> Monthly returns extracted from the STH Cost Basis back-test. Pure return isolated: <code>r = (nav_next − monthly_contrib) / nav_prev − 1</code>. Applied to a fresh $2,400 start with $200/month additions. Sub-periods (1yr, 3yr, 7yr) use the most-recent N months, rebased to a fresh start.<br>
+    <strong>Management fee:</strong> charged monthly = NAV × (rate ÷ 12) on end-of-month portfolio value. At the product default (1% p.a.) it is anchored to the simulator's management-fee run; custom rates fall back to the estimate.<br>
+    <strong>Exchange fee sharing:</strong> 50% of VALR fees using simulator rates: USDT/ZAR 18 bps maker (contribution conversion); BTC/USDT 8 bps maker (trade fee, <code>maker_bps_trade=8</code>); USDPC/USDT 10 bps taker (sweep). For the anchored product config the rebate is the simulator's <strong>actual per-day</strong> total across all three legs. Note the STH CB strategy trades far less often than LTH PVR (a few dozen signal trades per decade plus monthly contribution deploys, all-in / all-out), so the exchange rebate is a much smaller revenue line and the performance fee dominates. Each period's daily rebates sum exactly to the anchored period total. Custom rates/ranges fall back to a per-contribution estimate (<code>amt × ½ × rate</code> per leg).<br>
+    <strong>Performance fee:</strong> 10% of monthly profit above the high-water mark (HWM).<br>
+    <strong>Drill-down:</strong> Raw STH CB back-test NAV for the original simulation portfolio (daily). At the daily level, fees are attributed to the day they are charged: <strong>platform</strong> on the contribution day (month start), <strong>exchange rebate</strong> on each BUY/SELL trade day (real daily order sizes, anchored config), <strong>management</strong> &amp; <strong>performance</strong> at month end. Monthly return formula: <code>r = (first_day_next_month − contrib) ÷ first_day_this_month − 1</code>.<br>
+    <strong>Date range:</strong> <strong>End Date</strong> re-anchors the 1/3/5/7/10-year windows to end on the chosen date (computed backwards from there). Setting both <strong>Custom Range</strong> dates replaces the standard periods with a single window covering exactly that span. Custom dates use the reconstruction estimate (the ✓ anchors apply only to the standard periods ending on the latest data date).<br>
+    <strong>Export:</strong> <strong>Export Excel</strong> downloads a four-tab <code>.xlsx</code> workbook — <strong>Summary</strong> (per-period totals), <strong>Yearly Data</strong>, <strong>Monthly Data</strong> and <strong>Daily Data</strong> (every period's daily back-test NAV, daily return and attributed fees). Only the fee columns whose toggles are ON are included.<br>
+    <strong>Disclaimer:</strong> Back-test data November 2016 – November 2026 (windows end on the latest on-chain close; start = end − N years, the same convention as the website's trailing-5-year chart). The strategy has been researched and back-tested, not yet traded live. Past performance does not guarantee future results.
+  </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Generated by tools/sth_cb_lab/one_pager_data.ts (local lab simulator — identical engine to ef_sth_cb_bt_execute) -->
+<script src="chart-data-daily-sth-cb.js"></script>
+<script>/* ═══════════════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════════════ */
+// Rates match the simulator (ef_sth_cb_bt_execute & _shared/sth_cb_simulator.ts):
+//   USDT/ZAR 18 bps maker, BTC/USDT 8 bps maker, USDPC/USDT 10 bps taker (market order)
+const VALR={usdtZar:0.0018, btcUsdt:0.0008, usdpc:0.0010};
+const PERIODS=[
+  {label:'1 Year',  months:12, src:'5yr', slice:'last'},
+  {label:'3 Years', months:36, src:'5yr', slice:'last'},
+  {label:'5 Years', months:60, src:'5yr', slice:'all'},
+  {label:'7 Years', months:84, src:'10yr',slice:'last'},
+  {label:'10 Years',months:120,src:'10yr',slice:'all'},
+];
+const PAL=['#FFB400','#3B82F6','#10B981','#8B5CF6','#F59E0B'];
+const CG={text:'#A8B2D1',grid:'rgba(255,255,255,0.055)'};
+const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/* ═══════════════════════════════════════════════════════════
+   DATA HELPERS
+═══════════════════════════════════════════════════════════ */
+let M5=null,M10=null;
+function sampleMonthly(raw){const out=[];let last='';for(const r of raw){const ym=r[0].slice(0,7);if(ym!==last){out.push(r);last=ym;}}return out;}
+function latestDate(){return M10?M10[M10.length-1][0]:(M5?M5[M5.length-1][0]:null);}
+function firstDate(){return M10?M10[0][0]:(M5?M5[0][0]:null);}
+// Resolve the monthly NAV window for a period. Supports:
+//   • default end date → original 5yr/10yr split (keeps anchors valid)
+//   • custom end date  → period ends at endDate, taken from the 10yr series
+//   • custom range     → exactly the rows between start and end (10yr series)
+function getWindow(period){
+  if(period.custom){
+    if(!M10)return null;
+    const w=M10.filter(r=>r[0]>=period.start&&r[0]<=period.end);
+    return w.length>=2?w:null;
+  }
+  if(period.isDefaultEnd){
+    const src=period.src==='5yr'?M5:M10;
+    if(!src)return null;
+    return period.slice==='all'?src:src.slice(Math.max(0,src.length-period.months-1));
+  }
+  // dated standard: end at endDate, take the last (months+1) monthly points from the 10yr series
+  const base=M10||M5;if(!base)return null;
+  const upto=base.filter(r=>r[0]<=period.endDate);
+  if(upto.length<2)return null;
+  return upto.slice(Math.max(0,upto.length-period.months-1));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   AUTHORITATIVE ANCHORS (chart-data-daily-sth-cb.js → _scbAnchors)
+   When the user's inputs match the live product defaults, the
+   summary snaps to the simulator's real net NAV + fee breakdown
+   so the headline numbers match the public back-tester EXACTLY.
+   Any custom rate falls back to the monthly return-extraction
+   reconstruction below.
+───────────────────────────────────────────────────────────── */
+const ANCHORS=(typeof _scbAnchors!=='undefined')?_scbAnchors:null;
+const MGMT_ANCHORS=(typeof _scbMgmtAnchors!=='undefined')?_scbMgmtAnchors:null;
+const NET5 =(typeof _scb5_daily_net !=='undefined')?sampleMonthly(_scb5_daily_net) :null;
+const NET10=(typeof _scb10_daily_net!=='undefined')?sampleMonthly(_scb10_daily_net):null;
+const NET5_MGMT =(typeof _scb5_daily_net_mgmt !=='undefined')?sampleMonthly(_scb5_daily_net_mgmt) :null;
+const NET10_MGMT=(typeof _scb10_daily_net_mgmt!=='undefined')?sampleMonthly(_scb10_daily_net_mgmt):null;
+// Real per-day exchange rebate (50% of all three VALR legs) for each anchored period.
+// Keyed by period label; each series sums to the matching anchor's exchRebate. Both the
+// platform and management runs have their own series (fees change trade sizes slightly).
+const REBATE_DAILY=(typeof _scbRebateDaily!=='undefined')?_scbRebateDaily:null;
+const REBATE_DAILY_MGMT=(typeof _scbMgmtRebateDaily!=='undefined')?_scbMgmtRebateDaily:null;
+// Plan-aware selectors: 'management' → management-fee run, else the platform-fee run.
+function anchorsForPlan(plan){return plan==='management'?MGMT_ANCHORS:ANCHORS;}
+function rebateStore(plan){return plan==='management'?REBATE_DAILY_MGMT:REBATE_DAILY;}
+function netMonthlyStore(plan){return plan==='management'?NET_MONTHLY_MGMT:NET_MONTHLY;}
+function netFallback(plan,src){return plan==='management'?(src==='5yr'?NET5_MGMT:NET10_MGMT):(src==='5yr'?NET5:NET10);}
+function rebateDailyMap(label,plan){
+  const R=rebateStore(plan);
+  if(!R||!R[label])return null;
+  const m=new Map();for(const e of R[label])m.set(e[0],e[1]);return m;
+}
+function rebateMonthMap(dailyMap){
+  if(!dailyMap)return null;
+  const m=new Map();for(const [d,v] of dailyMap){const ym=d.slice(0,7);m.set(ym,(m.get(ym)||0)+v);}return m;
+}
+const PRODUCT_DEFAULTS={initial:2400,monthly:200,pltRate:0.0075,mgmtRate:0.01,prfRate:0.10};
+// Whether the inputs match the anchored product for the given plan. Both plans share the
+// contribution + performance defaults; the plan picks which fee rate must also match.
+function isProductRates(p,plan){
+  const base= Math.abs(p.initial-PRODUCT_DEFAULTS.initial)<1e-6
+           && Math.abs(p.monthly-PRODUCT_DEFAULTS.monthly)<1e-6
+           && Math.abs(p.prfRate-PRODUCT_DEFAULTS.prfRate)<1e-9;
+  if(plan==='management') return base && Math.abs(p.mgmtRate-PRODUCT_DEFAULTS.mgmtRate)<1e-9;
+  return base && Math.abs(p.pltRate-PRODUCT_DEFAULTS.pltRate)<1e-9;
+}
+// Per-period monthly NET NAV (each period's own fresh-client curve, ending at its anchored final
+// NAV). Preferred for the chart so EVERY anchored period (incl. 1/3/7yr) plots its true curve
+// instead of a mis-scaled tail of the 5yr/10yr run. One set per plan.
+const NET_MONTHLY=(typeof _scbNetMonthly!=='undefined')?_scbNetMonthly:null;
+const NET_MONTHLY_MGMT=(typeof _scbMgmtNetMonthly!=='undefined')?_scbMgmtNetMonthly:null;
+// Net monthly NAV series (real fees) for the chart when anchored — plan-aware.
+function netMonthly(period,plan){
+  const NM=netMonthlyStore(plan);
+  if(NM&&NM[period.label])return NM[period.label];
+  const s=netFallback(plan,period.src);          // fallback: tail of 5yr/10yr run
+  if(!s)return null;
+  return period.slice==='all'?s:s.slice(Math.max(0,s.length-period.months-1));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PORTFOLIO MODEL
+   Fees ARE deducted from client NAV when their toggle is ON.
+   Deducted fees = BitWealth revenue. Off fees = client keeps them.
+═══════════════════════════════════════════════════════════ */
+function buildPortfolio(win,p,t,rebMonth){
+  // Initial contribution fees
+  // Exchange fee = VALR's charge, always borne by client regardless of toggle (toggle is BitWealth revenue only)
+  // When a real per-day rebate series is available (anchored config) the exchange rebate is
+  // the simulator's actual monthly trade-leg total; otherwise fall back to the contribution estimate.
+  const ym0=win[0][0].slice(0,7);
+  const initExch=rebMonth?(rebMonth.get(ym0)||0):exchRebate(p.initial);
+  const initPlt=p.initial*p.pltRate;
+  let nav=Math.max(0,p.initial-(t.plt?initPlt:0));
+  let hwm=nav;
+  const navs=[nav],rets=[null];
+  const mgmtArr=[],exchArr=[initExch],currArr=[{plt:initPlt,prf:0}];
+  const hwmArr=[hwm];                              // running high-water mark (net NAV peak) per month
+  for(let i=1;i<win.length;i++){
+    const r=(win[i][1]-p.monthly)/win[i-1][1]-1;
+    rets.push(r);
+    // Gross NAV after market return and contribution
+    const gross=Math.max(0,nav*(1+r)+p.monthly);
+    // Fee amounts (stored regardless of toggle for reference)
+    const mf=gross*(p.mgmtRate/12);
+    const ef=rebMonth?(rebMonth.get(win[i][0].slice(0,7))||0):exchRebate(p.monthly);
+    const pf=p.monthly*p.pltRate;
+    // Apply mgmt fee first (standard practice)
+    const navM=gross-(t.mgmt?mf:0);
+    // Performance fee on gain above HWM
+    let prfFee=0;
+    if(navM>hwm){prfFee=(navM-hwm)*p.prfRate;}
+    // Net client NAV — exchange fee excluded (VALR's charge, always paid)
+    nav=Math.max(0,navM-(t.plt?pf:0)-(t.prf?prfFee:0));
+    hwm=Math.max(hwm,nav);
+    navs.push(nav);mgmtArr.push(mf);exchArr.push(ef);currArr.push({plt:pf,prf:prfFee});
+    hwmArr.push(hwm);
+  }
+  return{navs,rets,mgmt:mgmtArr,exch:exchArr,curr:currArr,hwm:hwmArr};
+}
+
+function buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily,hwm){
+  const winStart=win[0][0],winEnd=win[win.length-1][0];
+  const raw2=rawSrc.filter(r=>r[0]>=winStart&&r[0]<=winEnd);
+  const isDaily=raw2.length>win.length*2;  // daily has ~7× more entries than weekly
+  return navs.map((nav,m)=>{
+    const ym=win[m][0].slice(0,7);
+    const nextYm=m+1<win.length?win[m+1][0].slice(0,7):null;
+    const thisW=raw2.filter(r=>r[0].slice(0,7)===ym);
+    const weeks=thisW.map((r,wi,arr)=>({date:r[0],histNav:r[1],wkRet:wi>0?(r[1]/arr[wi-1][1]-1):null,isRef:wi===0,exchDay:rebDaily?(rebDaily.get(r[0])||0):null}));
+    if(nextYm){const nxt=raw2.find(r=>r[0].slice(0,7)===nextYm);if(nxt)weeks.push({date:nxt[0],histNav:nxt[1],wkRet:null,isNextRef:true,exchDay:null});}
+    return{
+      m,ym,dateLabel:MO[+ym.slice(5,7)-1]+' '+ym.slice(0,4),
+      freshNav:nav,histNavRef:win[m][1],histRet:rets[m],
+      hwm:hwm?(hwm[m]||0):0,
+      contrib:m===0?p.initial:p.monthly,
+      mgmtFee:m>0?(mgmt[m-1]||0):0,
+      exchFee:exch[m]||0,
+      pltFee:curr[m]?curr[m].plt:0,
+      prfFee:curr[m]?curr[m].prf:0,
+      realReb:!!rebDaily,
+      weeks,isDaily,
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FEE ENGINE — returns BitWealth's 50% share of VALR fees
+═══════════════════════════════════════════════════════════ */
+// Fallback per-contribution estimate used ONLY for custom rates / custom date ranges (the standard
+// periods use the simulator's real per-day rebate). Assumes a fixed 75/25 BTC/USDPC contribution
+// split (the long-run product default) instead of a user-tunable slider.
+const BTC_ALLOC_EST=0.75;
+function exchRebate(amt){
+  return amt*VALR.usdtZar*.5                          // USDT/ZAR 18 bps maker
+        +amt*BTC_ALLOC_EST*VALR.btcUsdt*.5            // BTC/USDT 8 bps maker
+        +amt*(1-BTC_ALLOC_EST)*VALR.usdpc*.5;        // USDPC/USDT 10 bps taker
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FORMATTERS & HELPERS
+═══════════════════════════════════════════════════════════ */
+const fmtK=v=>v==null?'—':'$'+(Math.abs(v)>=1e6?(v/1e6).toFixed(2)+'M':Math.abs(v)>=1e3?(v/1e3).toFixed(1)+'k':v.toFixed(2));
+const fmtN=(v,dp=0)=>v==null?'—':'$'+v.toFixed(dp).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+// Strips trailing zeros up to 4 dp — $0.3600→$0.36, $0.0250→$0.025
+const fmtFee=v=>v==null?'—':'$'+parseFloat(v.toFixed(4));
+const fmtDate=d=>{const p=d.split('-');return p[2]+' '+MO[+p[1]-1]+' '+p[0];};
+
+// Robust numeric read — preserves an explicit 0 (the `+v||def` idiom wrongly treats 0 as falsy)
+function numVal(id,def){const el=document.getElementById(id);if(!el)return def;const v=el.value;if(v===''||v==null)return def;const n=+v;return isNaN(n)?def:n;}
+function getP(){
+  return{
+    initial: Math.max(0,numVal('iInitial',2400)),
+    monthly: Math.max(0,numVal('iMonthly',200)),
+    mgmtRate:Math.max(0,numVal('iMgmt',0))/100,
+    pltRate: Math.max(0,numVal('iPlatform',0))/100,
+    prfRate: Math.max(0,numVal('iPerf',0))/100,
+    clients: Math.max(1,Math.round(numVal('iClients',1))),
+    endDate: document.getElementById('iEndDate')?document.getElementById('iEndDate').value:'',
+    rangeStart: document.getElementById('iRangeStart')?document.getElementById('iRangeStart').value:'',
+    rangeEnd: document.getElementById('iRangeEnd')?document.getElementById('iRangeEnd').value:'',
+  };
+}
+function getT(){
+  const sel=document.querySelector('input[name="feePlan"]:checked');
+  const plan=sel?sel.value:'management';
+  // Performance fee + exchange rebate apply to BOTH plans; the plan picks mgmt XOR platform.
+  return{mgmt:plan==='management',exch:true,plt:plan==='platform',prf:true,plan};
+}
+function atot(r,t){return(t.mgmt?r.totMgmt:0)+(t.exch?r.totExch:0)+(t.plt?r.totPlt:0)+(t.prf?r.totPrf:0);}
+
+// Each plan (platform XOR management, both + performance) has its own simulator anchor.
+// In either of those exact toggle states we can show the simulator's authoritative net NAV.
+function productState(t){return t.prf&&((t.plan==='platform'&&t.plt&&!t.mgmt)||(t.plan==='management'&&t.mgmt&&!t.plt));}
+// Resolve the figures shown in the summary row: authoritative anchor when the config
+// matches an anchored plan, otherwise the reconstruction estimate.
+function summaryFigures(r,t){
+  if(r.anchor&&productState(t)){
+    const a=r.anchor;
+    const totExch=a.exchRebate;
+    if(t.plan==='management'){
+      const totMgmt=a.managementFee;
+      const active=totMgmt+a.perfFee+(t.exch?totExch:0);
+      return{endNav:a.netNav,invested:a.invested,totMgmt,totExch,totPlt:r.totPlt,totPrf:a.perfFee,active,anchored:true};
+    }
+    const active=a.platformFee+a.perfFee+(t.exch?totExch:0);
+    return{endNav:a.netNav,invested:a.invested,totMgmt:r.totMgmt,totExch,totPlt:a.platformFee,totPrf:a.perfFee,active,anchored:true};
+  }
+  return{endNav:r.endNav,invested:r.invested,totMgmt:r.totMgmt,totExch:r.totExch,totPlt:r.totPlt,totPrf:r.totPrf,active:atot(r,t),anchored:false};
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN CALCULATION
+═══════════════════════════════════════════════════════════ */
+let RESULTS=[],ACTIVE_CUSTOM=false;
+// Decide which periods to show: a single custom-range window when both range dates
+// are set, otherwise the standard 1/3/5/7/10-year windows re-anchored to End Date.
+function resolvePeriods(p){
+  const rs=p.rangeStart,re=p.rangeEnd;
+  if(rs&&re&&rs<re){
+    ACTIVE_CUSTOM=true;
+    return[{label:'Custom Range',custom:true,start:rs,end:re,src:'10yr'}];
+  }
+  ACTIVE_CUSTOM=false;
+  const ld=latestDate();
+  const isDefaultEnd=!p.endDate||p.endDate>=ld;
+  return PERIODS.map(period=>({...period,endDate:p.endDate||ld,isDefaultEnd}));
+}
+function runAll(p,t){
+  const periods=resolvePeriods(p);
+  // Daily gross series from chart-data-daily-sth-cb.js (weekly _scb*_raw kept as a fallback)
+  const rawSrc5 =(typeof _scb5_daily !=='undefined')?_scb5_daily :_scb5_raw;
+  const rawSrc10=(typeof _scb10_daily!=='undefined')?_scb10_daily:_scb10_raw;
+  RESULTS=periods.map(period=>{
+    const win=getWindow(period);if(!win||win.length<2)return null;
+    // Custom range / non-default end date can reach before the 5yr series → use the 10yr daily series for drill-down
+    const useTen=period.custom||!period.isDefaultEnd||period.src==='10yr';
+    const rawSrc=useTen?rawSrc10:rawSrc5;
+    // Authoritative simulator figures apply only to the standard periods ending at the latest
+    // data date, and only for the plan the user has selected (platform XOR management anchors).
+    const anchorsObj=anchorsForPlan(t.plan);
+    const anchor=(anchorsObj&&isProductRates(p,t.plan)&&!period.custom&&period.isDefaultEnd)?(anchorsObj[period.label]||null):null;
+    // Real per-day exchange rebate available only when anchored (matches the simulator run).
+    const rebDaily=anchor?rebateDailyMap(period.label,t.plan):null;
+    const rebMonth=rebateMonthMap(rebDaily);
+    const{navs,rets,mgmt,exch,curr,hwm}=buildPortfolio(win,p,t,rebMonth);
+    const months=navs.length-1;
+    const totMgmt=mgmt.reduce((a,b)=>a+b,0),totExch=exch.reduce((a,b)=>a+b,0);
+    const totPlt=curr.reduce((a,b)=>a+b.plt,0),totPrf=curr.reduce((a,b)=>a+b.prf,0);
+    const detail=buildDetail(win,navs,rets,mgmt,exch,curr,rawSrc,p,rebDaily,hwm);
+    return{period,win,navs,rets,mgmt,exch,curr,months,totMgmt,totExch,totPlt,totPrf,anchor,
+      totCurr:totPlt+totPrf,totNew:totPrf+totMgmt+totExch,
+      invested:p.initial+p.monthly*months,endNav:navs[navs.length-1],detail};
+  }).filter(Boolean);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER TABLES
+═══════════════════════════════════════════════════════════ */
+function renderSummary(clients,t){
+  document.getElementById('thBiz').textContent='Business (×'+clients.toLocaleString()+')';
+  let anyAnchored=false;
+  const rows=RESULTS.map((r,idx)=>{
+    const f=summaryFigures(r,t);
+    if(f.anchored)anyAnchored=true;
+    const roi=((f.endNav-f.invested)/f.invested*100).toFixed(1);
+    const at=f.active;
+    const mC=t.mgmt?'vb':'off',eC=t.exch?'vgr':'off',pC=t.plt?'vor':'off',rC=t.prf?'vpr':'off';
+    const active=DS.open&&DS.idx===idx?' active':'';
+    const navBadge=f.anchored?' <span title="Taken directly from the simulator — matches the public back-tester" style="color:var(--green);font-size:11px">✓</span>':'';
+    return `<tr>
+      <td>${r.period.label}</td>
+      <td>${fmtN(f.invested)}</td>
+      <td class="vg">${fmtN(f.endNav)}${navBadge}</td>
+      <td class="${+roi>=0?'vgr':'vr'}">${roi}%</td>
+      <td class="${mC}">${fmtN(f.totMgmt,2)}</td>
+      <td class="${eC}">${fmtN(f.totExch,2)}</td>
+      <td class="${pC}">${fmtN(f.totPlt,2)}</td>
+      <td class="${rC}">${fmtN(f.totPrf,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
+      <td class="dim">${fmtN(at/r.months,2)}/mo</td>
+      <td class="vg">${fmtN(at*clients)}</td>
+      <td><button class="drill-btn${active}" onclick="openDrill(${idx})">Detail ▼</button></td>
+    </tr>`;
+  });
+  document.getElementById('bSummary').innerHTML=rows.join('');
+  const note=document.getElementById('anchorNote');
+  if(note)note.style.display=anyAnchored?'inline':'none';
+}
+
+function renderComparison(){
+  // This table always contrasts the CURRENT (platform) product vs the NEW (management)
+  // product, so it resolves each side's anchor independently of the selected plan.
+  const p=getP();
+  const okStd=r=>r.period.isDefaultEnd&&!r.period.custom;
+  const pltA=r=>(ANCHORS&&isProductRates(p,'platform')&&okStd(r))?ANCHORS[r.period.label]:null;
+  const mgA =r=>(MGMT_ANCHORS&&isProductRates(p,'management')&&okStd(r))?MGMT_ANCHORS[r.period.label]:null;
+  // Current (platform) streams:
+  const cPlt =r=>{const a=pltA(r);return a?a.platformFee:r.totPlt;};
+  const cPrf =r=>{const a=pltA(r);return a?a.perfFee   :r.totPrf;};
+  // New (management) streams:
+  const nMgmt=r=>{const a=mgA(r);return a?a.managementFee:r.totMgmt;};
+  const nPrf =r=>{const a=mgA(r);return a?a.perfFee     :r.totPrf;};
+  const nExch=r=>{const a=mgA(r);return a?a.exchRebate  :r.totExch;};
+  const rows=[
+    {label:'Current — Platform Fee Only',          cls:'dim', key:cPlt},
+    {label:'Current — Performance Fee Only (HWM)', cls:'vpr', key:cPrf},
+    {label:'Current — Full (Platform + Perf 10%)', cls:'vor', key:r=>cPlt(r)+cPrf(r),bold:true},
+    {label:'New — Management Fee',                 cls:'vb',  key:nMgmt},
+    {label:'New — Exchange Rebate (50% VALR)',      cls:'vgr', key:nExch},
+    {label:'New — Perf + Mgmt + Exchange Rebate',   cls:'vgr', key:r=>nPrf(r)+nMgmt(r)+nExch(r), bold:true},
+    {label:'Δ New vs Current (full)',               cls:'',    diff:true},
+  ];
+  const html=rows.map(row=>{
+    const cells=RESULTS.map(r=>{
+      if(row.diff){const d=(nPrf(r)+nMgmt(r)+nExch(r))-(cPlt(r)+cPrf(r));return `<td class="${d>=0?'vgr':'vr'}">${d>=0?'+':''}${fmtN(d,2)}</td>`;}
+      return `<td class="${row.cls}"${row.bold?' style="font-weight:700"':''}>${fmtN(row.key(r),2)}</td>`;
+    }).join('');
+    return `<tr><td${row.bold?' style="font-weight:700"':''}>${row.label}</td>${cells}</tr>`;
+  }).join('');
+  document.getElementById('bCompare').innerHTML=html;
+}
+
+function renderExchDetail(p){
+  const t=getT();
+  const rows=RESULTS.map(r=>{
+    // The exchange rebate uses the simulator's REAL per-day data whenever that period has it
+    // (standard product window, default rates) — independent of the fee toggles. Only custom
+    // ranges / custom rates fall back to the per-contribution estimate.
+    const real=r.detail.some(mo=>mo.realReb);
+    const share=r.totExch, valr=share*2, perMo=r.months?share/r.months:0;
+    const basis=real
+      ? `<span class="vgr">actual</span> — sum of real per-day rebates`
+      : `<span class="dim">estimate</span> — per-contribution model`;
+    return `<tr><td><strong>${r.period.label}</strong></td>
+      <td class="dim">${basis}</td>
+      <td class="dim">${r.months}</td>
+      <td class="dim">${fmtFee(valr)}</td>
+      <td class="vgr">${fmtFee(share)}</td>
+      <td class="vb">${fmtFee(perMo)}/mo</td></tr>`;
+  });
+  document.getElementById('bExch').innerHTML=rows.join('');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHARTS
+═══════════════════════════════════════════════════════════ */
+const charts={};
+function kc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+const bOpts={
+  responsive:true,maintainAspectRatio:true,animation:{duration:350},
+  // Robust hover/tooltip: trigger on the nearest x-index without needing to land exactly on a point
+  interaction:{mode:'index',intersect:false,axis:'x'},
+  hover:{mode:'index',intersect:false},
+  plugins:{
+    legend:{labels:{color:CG.text,font:{family:'Inter',size:10},padding:10,boxWidth:12}},
+    tooltip:{enabled:true,mode:'index',intersect:false,position:'nearest',
+      backgroundColor:'#151B2E',borderColor:'rgba(255,180,0,0.3)',borderWidth:1,padding:10,
+      titleColor:'#fff',bodyColor:CG.text,
+      callbacks:{label:ctx=>ctx.parsed.y==null?null:` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}
+  },
+  scales:{
+    x:{ticks:{color:CG.text,font:{size:9},maxTicksLimit:14},grid:{color:CG.grid}},
+    y:{ticks:{color:CG.text,font:{size:9},callback:v=>fmtK(v)},grid:{color:CG.grid}},
+  }
+};
+
+function chartNav(){
+  kc('nav');const ctx=document.getElementById('cNav').getContext('2d');
+  // The anchored net curve is a FIXED snapshot of the live product (platform + performance, no
+  // management). Only plot it when the toggles + inputs match that exact config; otherwise plot the
+  // reconstruction (r.navs), which responds to the fee toggles so the chart actually moves.
+  // NOTE: the Exchange toggle never moves the line — VALR's fee is always borne by the client (the
+  // toggle only switches BitWealth's revenue share), so only Mgmt/Platform/Performance reshape NAV.
+  const t=getT(),p=getP();
+  const useAnchor=productState(t)&&isProductRates(p,t.plan);
+  const maxM=Math.max(...RESULTS.map(r=>r.months));
+  const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
+  const datasets=RESULTS.map((r,i)=>{
+    let series=r.navs;
+    if(r.anchor&&useAnchor){const nm=netMonthly(r.period,t.plan);if(nm&&nm.length)series=nm.map(x=>x[1]);}
+    const d=[...series];while(d.length<maxM+1)d.push(null);
+    return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
+  });
+  charts['nav']=new Chart(ctx,{type:'line',data:{labels,datasets},options:{...bOpts,
+    scales:{x:bOpts.scales.x,y:{type:'logarithmic',ticks:{color:CG.text,font:{size:9},callback:v=>fmtK(v)},grid:{color:CG.grid}}}}});
+}
+
+function chartCumul(t){
+  kc('cumul');const ctx=document.getElementById('cCumul').getContext('2d');
+  const maxM=Math.max(...RESULTS.map(r=>r.months));
+  const labels=Array.from({length:maxM+1},(_,i)=>i===0?'Start':'M'+i);
+  const datasets=RESULTS.map((r,i)=>{
+    let cum=0;const d=[0];
+    for(let j=0;j<r.months;j++){
+      cum+=(t.mgmt?r.mgmt[j]||0:0)+(t.exch?r.exch[j+1]||0:0)+(t.plt?r.curr[j+1]?.plt||0:0)+(t.prf?r.curr[j+1]?.prf||0:0);
+      d.push(cum);
+    }
+    while(d.length<maxM+1)d.push(null);
+    return{label:r.period.label,data:d,borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:0};
+  });
+  charts['cumul']=new Chart(ctx,{type:'line',data:{labels,datasets},options:bOpts});
+}
+
+let BD_M=120;
+let SCALE_MODE='annual';
+function chartBreakdown(months,t){
+  BD_M=months;kc('bd');const ctx=document.getElementById('cBreakdown').getContext('2d');
+  const r=RESULTS.find(x=>x.period.months===months)||RESULTS[RESULTS.length-1];if(!r)return;
+  const yrs=Math.ceil(r.months/12);
+  const aM=[],aE=[],aPl=[],aPr=[];
+  for(let y=0;y<yrs;y++){
+    const s=y*12,e=Math.min((y+1)*12,r.months);
+    let m=0,ex=y===0?r.exch[0]||0:0,pl=y===0?r.curr[0]?.plt||0:0,pr=0;
+    for(let i=s;i<e;i++){
+      m+=t.mgmt?r.mgmt[i]||0:0;ex+=t.exch?r.exch[i+1]||0:0;
+      pl+=t.plt?r.curr[i+1]?.plt||0:0;pr+=t.prf?r.curr[i+1]?.prf||0:0;
+    }
+    aM.push(m);aE.push(ex);aPl.push(pl);aPr.push(pr);
+  }
+  const labels=Array.from({length:yrs},(_,i)=>'Y'+(i+1));
+  const ds=[];
+  if(t.mgmt)ds.push({label:'Mgmt Fee',data:aM,backgroundColor:'#3B82F6BB',borderColor:'#3B82F6',borderWidth:1,stack:'s'});
+  if(t.exch)ds.push({label:'Exch Rebate',data:aE,backgroundColor:'#10B981BB',borderColor:'#10B981',borderWidth:1,stack:'s'});
+  if(t.plt)ds.push({label:'Platform',data:aPl,backgroundColor:'#F59E0BBB',borderColor:'#F59E0B',borderWidth:1,stack:'s'});
+  if(t.prf)ds.push({label:'Perf Fee',data:aPr,backgroundColor:'#8B5CF6BB',borderColor:'#8B5CF6',borderWidth:1,stack:'s'});
+  if(!ds.length)ds.push({label:'(none selected)',data:Array(yrs).fill(0),backgroundColor:'#6B789644'});
+  charts['bd']=new Chart(ctx,{type:'bar',data:{labels,datasets:ds},
+    options:{...bOpts,scales:{x:{...bOpts.scales.x,stacked:true},y:{...bOpts.scales.y,stacked:true}}}});
+}
+
+function chartScale(t){
+  kc('sc');const ctx=document.getElementById('cScale').getContext('2d');
+  const cumul=SCALE_MODE==='cumulative';
+  const counts=[1,5,10,25,50,100,250,500,1000,2000];
+  const datasets=RESULTS.map((r,i)=>({
+    label:r.period.label+(cumul?' total':' avg/yr'),
+    data:counts.map(c=>(cumul?atot(r,t):atot(r,t)/(r.months/12))*c),
+    borderColor:PAL[i],backgroundColor:'transparent',tension:.3,borderWidth:1.5,pointRadius:2,
+  }));
+  const h=document.getElementById('hScale');
+  if(h)h.textContent=cumul
+    ?'Revenue at Scale — active selection, cumulative total'
+    :'Revenue at Scale — active selection, annualised average';
+  charts['sc']=new Chart(ctx,{type:'line',data:{labels:counts.map(c=>c.toLocaleString()),datasets},
+    options:{...bOpts,scales:{x:{...bOpts.scales.x,title:{display:true,text:'Number of Clients',color:CG.text,font:{size:10}}},y:bOpts.scales.y}}});
+}
+
+function chartCompare(){
+  kc('cmp');const ctx=document.getElementById('cCompare').getContext('2d');
+  charts['cmp']=new Chart(ctx,{type:'bar',
+    data:{labels:RESULTS.map(r=>r.period.label),datasets:[
+      {label:'Current — Platform Only', data:RESULTS.map(r=>r.totPlt),backgroundColor:'#6B789644',borderColor:'#6B7896',borderWidth:1},
+      {label:'Current — Full (Plt+Perf)',data:RESULTS.map(r=>r.totCurr),backgroundColor:'#F59E0BAA',borderColor:'#F59E0B',borderWidth:1},
+      {label:'New — Mgmt Fee',           data:RESULTS.map(r=>r.totMgmt),backgroundColor:'#3B82F6AA',borderColor:'#3B82F6',borderWidth:1},
+      {label:'New — Perf+Mgmt+Exch Rebate',   data:RESULTS.map(r=>r.totNew), backgroundColor:'#10B981AA',borderColor:'#10B981',borderWidth:1},
+    ]},
+    options:{...bOpts,maintainAspectRatio:false,
+      scales:{x:{...bOpts.scales.x,offset:true},y:bOpts.scales.y},
+      plugins:{...bOpts.plugins,tooltip:{...bOpts.plugins.tooltip,callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}`}}}}});
+  // Full-width responsive canvas can be laid out before the container reaches its final
+  // width, leaving bar x-positions computed for a wider area (rightmost group clips off the
+  // edge). Re-measure on the next frame so bar geometry matches the final chart width.
+  requestAnimationFrame(()=>{if(charts['cmp'])charts['cmp'].resize();});
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DRILL-DOWN — state & helpers
+═══════════════════════════════════════════════════════════ */
+const DS={open:false,idx:null,level:'year',yearNum:null,detailIdx:null};
+
+function openDrill(idx){
+  DS.open=true;DS.idx=idx;DS.level='year';DS.yearNum=null;DS.detailIdx=null;
+  renderDrill();
+  document.querySelectorAll('.drill-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  setTimeout(()=>document.getElementById('drillBox').scrollIntoView({behavior:'smooth',block:'start'}),80);
+}
+function closeDrill(){
+  DS.open=false;document.getElementById('drillBox').style.display='none';
+  document.querySelectorAll('.drill-btn').forEach(b=>b.classList.remove('active'));
+}
+
+function getYearGroups(detail){
+  const months=detail.length-1,numYrs=Math.ceil(months/12);
+  return Array.from({length:numYrs},(_,y)=>{
+    const yi=y+1,mS=y*12+1,mE=Math.min(yi*12,months);
+    const mRows=detail.slice(mS,mE+1);if(!mRows.length)return null;
+    const initR=yi===1?detail[0]:null;
+    const sum=k=>(initR?initR[k]:0)+mRows.reduce((a,b)=>a+b[k],0);
+    return{y:yi,dateStart:(initR||mRows[0]).ym,dateEnd:mRows[mRows.length-1].ym,
+      navStart:detail[(yi-1)*12].freshNav,navEnd:mRows[mRows.length-1].freshNav,
+      contrib:sum('contrib'),totMgmt:mRows.reduce((a,b)=>a+b.mgmtFee,0),
+      totExch:sum('exchFee'),totPlt:sum('pltFee'),totPrf:mRows.reduce((a,b)=>a+b.prfFee,0),
+      months:mRows,initR};
+  }).filter(Boolean);
+}
+
+function renderDrill(){
+  const box=document.getElementById('drillBox');
+  if(!DS.open||DS.idx==null){box.style.display='none';return;}
+  box.style.display='block';
+  const r=RESULTS[DS.idx];if(!r)return;
+  // Breadcrumb
+  let bc='',backFn='closeDrill()';
+  if(DS.level==='year'){
+    bc='<span class="bc-curr">Year Overview</span>';
+  } else if(DS.level==='month'){
+    bc=`<span class="bc-link" onclick="DS.level='year';DS.yearNum=null;renderDrill()">Year Overview</span>`
+      +`<span class="bc-sep"> › </span><span class="bc-curr">Year ${DS.yearNum} — Months</span>`;
+    backFn=`DS.level='year';DS.yearNum=null;renderDrill()`;
+  } else {
+    const row=r.detail[DS.detailIdx];
+    bc=`<span class="bc-link" onclick="DS.level='year';DS.yearNum=null;renderDrill()">Year Overview</span>`
+      +`<span class="bc-sep"> › </span>`
+      +`<span class="bc-link" onclick="DS.level='month';DS.detailIdx=null;renderDrill()">Year ${DS.yearNum} — Months</span>`
+      +`<span class="bc-sep"> › </span>`
+      +`<span class="bc-curr">${row?row.dateLabel:'—'} — Weekly Data</span>`;
+    backFn=`DS.level='month';DS.detailIdx=null;renderDrill()`;
+  }
+  document.getElementById('drillTitle').textContent=`${r.period.label} — Detail Explorer`;
+  document.getElementById('drillBc').innerHTML=`<span class="bc-link" style="margin-right:6px" onclick="${backFn}">← Back</span>${bc}`;
+  if(DS.level==='year')renderDrillYears(r);
+  else if(DS.level==='month')renderDrillMonths(r);
+  else renderDrillWeeks(r);
+}
+
+function renderDrillYears(r){
+  const t=getT(),ygs=getYearGroups(r.detail);
+  const head=`<tr><th>Year</th><th>Date Range</th><th>Contributions</th><th>NAV Start</th><th>NAV End</th><th>Return</th>
+    <th style="color:var(--blue)">Mgmt Fee</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--orange)">Platform</th><th style="color:var(--purple)">Perf Fee</th>
+    <th style="color:var(--gold)">Active Total</th></tr>`;
+  const rows=ygs.map(yr=>{
+    const at=(t.mgmt?yr.totMgmt:0)+(t.exch?yr.totExch:0)+(t.plt?yr.totPlt:0)+(t.prf?yr.totPrf:0);
+    const ret=((yr.navEnd-yr.navStart)/yr.navStart*100).toFixed(1);
+    const ds=yr.dateStart,de=yr.dateEnd;
+    const drng=MO[+ds.slice(5,7)-1]+' '+ds.slice(0,4)+' – '+MO[+de.slice(5,7)-1]+' '+de.slice(0,4);
+    return `<tr class="drill-row" onclick="DS.yearNum=${yr.y};DS.level='month';renderDrill()">
+      <td><strong>Year ${yr.y}</strong></td>
+      <td class="dim">${drng}</td>
+      <td>${fmtN(yr.contrib)}</td>
+      <td class="dim">${fmtK(yr.navStart)}</td>
+      <td class="vg">${fmtK(yr.navEnd)}</td>
+      <td class="${+ret>=0?'vgr':'vr'}">${ret}%</td>
+      <td class="${t.mgmt?'vb':'off'}">${fmtN(yr.totMgmt,2)}</td>
+      <td class="${t.exch?'vgr':'off'}">${fmtN(yr.totExch,2)}</td>
+      <td class="${t.plt?'vor':'off'}">${fmtN(yr.totPlt,2)}</td>
+      <td class="${t.prf?'vpr':'off'}">${fmtN(yr.totPrf,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info">Click any year row to see monthly breakdown. Active Total reflects the fee toggles above.</div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderDrillMonths(r){
+  const t=getT(),ygs=getYearGroups(r.detail),yr=ygs[DS.yearNum-1];
+  if(!yr){document.getElementById('drillContent').innerHTML='<div class="drill-info">No data.</div>';return;}
+  const allRows=yr.initR?[yr.initR,...yr.months]:yr.months;
+  let cumTotal=0;
+  const head=`<tr><th>#</th><th>Month</th><th>Contribution</th><th>Portfolio NAV</th><th>HWM</th><th>Return</th>
+    <th style="color:var(--blue)">Mgmt Fee</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--orange)">Platform</th><th style="color:var(--purple)">Perf Fee</th>
+    <th style="color:var(--gold)">Active Total</th><th>Cumulative</th></tr>`;
+  const rows=allRows.map(row=>{
+    const isInit=row.m===0;
+    const at=(t.mgmt?row.mgmtFee:0)+(t.exch?row.exchFee:0)+(t.plt?row.pltFee:0)+(t.prf?row.prfFee:0);
+    cumTotal+=at;
+    const retS=row.histRet!=null?((row.histRet*100).toFixed(2)+'%'):'—';
+    const retC=row.histRet!=null?(row.histRet>=0?'vgr':'vr'):'dim';
+    const drillOnClick=isInit?'':`onclick="DS.detailIdx=${row.m};DS.level='week';renderDrill()"`;
+    return `<tr class="${isInit?'':'drill-row'}" ${drillOnClick} style="cursor:${isInit?'default':'pointer'}">
+      <td>${isInit?'<span class="dim">Init</span>':'M'+row.m}</td>
+      <td>${row.dateLabel}</td>
+      <td>${fmtN(row.contrib)}</td>
+      <td class="vg" style="font-family:monospace">${fmtK(row.freshNav)}</td>
+      <td class="dim" style="font-family:monospace" title="High-water mark — perf fee is only charged on NAV above this peak">${fmtK(row.hwm)}</td>
+      <td class="${retC}">${retS}</td>
+      <td class="${t.mgmt?'vb':'off'}">${fmtN(row.mgmtFee,2)}</td>
+      <td class="${t.exch?'vgr':'off'}">${fmtN(row.exchFee,2)}</td>
+      <td class="${t.plt?'vor':'off'}">${fmtN(row.pltFee,2)}</td>
+      <td class="${t.prf?'vpr':'off'}">${fmtN(row.prfFee,2)}</td>
+      <td class="vg" style="font-weight:700">${fmtN(at,2)}</td>
+      <td class="dim">${fmtN(cumTotal,2)}</td>
+    </tr>`;
+  }).join('');
+  const granNote=allRows[1]&&allRows[1].isDaily?'daily':'weekly';
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info">Click any monthly row (except Initial) to see ${granNote} back-test data for that month. ${granNote==='weekly'?'<span style="color:var(--orange)">Daily granularity requires running <code>gen-chart-js-daily.ps1</code> to generate <code>chart-data-daily.js</code>.</span>':''}</div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderDrillWeeks(r){
+  const row=r.detail[DS.detailIdx];
+  if(!row){document.getElementById('drillContent').innerHTML='<div class="drill-info">No data.</div>';return;}
+  const prev=DS.detailIdx>0?r.detail[DS.detailIdx-1]:null;
+  const contrib=r.detail[1]?r.detail[1].contrib:200;
+  let calcNote='';
+  if(row.histRet!=null&&prev){
+    calcNote=`<br>Monthly return formula: <code>r = (${fmtN(row.histNavRef,2)} &minus; $${contrib}) &divide; ${fmtN(prev.histNavRef,2)} &minus; 1 = <strong>${(row.histRet*100).toFixed(4)}%</strong></code>`
+      +`<br>Applied to fresh portfolio: <code>${fmtK(prev.freshNav)} &times; (1+r) + $${contrib} = <strong>${fmtK(row.freshNav)}</strong></code>`;
+  }
+  const isDaily=row.isDaily;
+  const t=getT();
+  const entryLbl=isDaily?'Day':'Week';
+  // Index of the last entry that still belongs to THIS month (excludes the appended next-month reference row)
+  let lastInMonth=-1;row.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
+  const head=`<tr><th>${entryLbl}</th><th>Date</th><th>Hist. STH CB NAV</th><th>${isDaily?'Day-on-Day':'Week-on-Week'} Δ</th>
+    <th>Contribution</th><th style="color:var(--orange)">Platform</th><th style="color:var(--green)">Exchange</th>
+    <th style="color:var(--blue)">Mgmt</th><th style="color:var(--purple)">Perf</th><th>Note</th></tr>`;
+  const feeCell=(v,on,cls)=>v?`<td class="${on?cls:'off'}">${fmtN(v,2)}</td>`:`<td class="dim">—</td>`;
+  const rows=row.weeks.map((w,i)=>{
+    const wRet=w.wkRet!=null?((w.wkRet*100).toFixed(2)+'%'):'—';
+    const wC=w.wkRet!=null?(w.wkRet>=0?'vgr':'vr'):'dim';
+    let note='',rowCls='';
+    if(w.isRef){note=row.realReb?'◀ Month start — contribution charged (platform); exchange rebate accrues per trade':'◀ Month start — contribution charged (platform + exchange)';rowCls='row-ref';}
+    else if(w.isNextRef){note='▶ Start of NEXT month';rowCls='row-nxt';}
+    else if(i===lastInMonth){note='■ Month end — management + performance fee charged';}
+    // Fee attribution: contribution-day fees on the month-start row, NAV-based fees on the month-end row.
+    // Exchange rebate is per-trade-day when real simulator data is available, else month-start estimate.
+    const onStart=w.isRef, onEnd=(i===lastInMonth)&&!w.isNextRef;
+    const cont=onStart?row.contrib:0, plt=onStart?row.pltFee:0;
+    const exf=row.realReb?(w.exchDay||0):(onStart?row.exchFee:0);
+    const mgf=onEnd?row.mgmtFee:0, prf=onEnd?row.prfFee:0;
+    return `<tr class="${rowCls}">
+      <td>${w.isNextRef?'→ Next':entryLbl+(i+1)}</td>
+      <td>${fmtDate(w.date)}</td>
+      <td class="${w.isRef?'vb':w.isNextRef?'vg':'dim'}" style="font-family:monospace;font-size:12px">${fmtN(w.histNav,2)}</td>
+      <td class="${wC}">${wRet}</td>
+      ${cont?`<td>${fmtN(cont,2)}</td>`:'<td class="dim">—</td>'}
+      ${feeCell(plt,t.plt,'vor')}
+      ${feeCell(exf,t.exch,'vgr')}
+      ${feeCell(mgf,t.mgmt,'vb')}
+      ${feeCell(prf,t.prf,'vpr')}
+      <td class="dim" style="font-size:10px">${note}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('drillContent').innerHTML=
+    `<div class="drill-info"><strong>${isDaily?'Daily':'Weekly'} back-test data for ${row.dateLabel}</strong>${calcNote}<br>
+    <small>Hist. NAV = raw back-test portfolio for the original simulation (started at beginning of ${r.period.label} period). Fees are charged: <span style="color:var(--orange)">platform</span> on the contribution day (month start), <span style="color:var(--green)">exchange rebate</span> ${row.realReb?'on every BUY/SELL trade day (real daily order sizes)':'on the contribution day (month start)'}, <span style="color:var(--blue)">management</span> &amp; <span style="color:var(--purple)">performance</span> at month end. Dimmed = that fee toggle is off.</small></div>`
+    +`<div class="tw" style="margin-top:8px"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EXCEL EXPORT — 4 sheets: Summary · Yearly Data · Monthly Data · Daily Data
+═══════════════════════════════════════════════════════════ */
+const r2=v=>(v==null||isNaN(v))?'':Math.round(v*100)/100;
+const r4=v=>(v==null||isNaN(v))?'':Math.round(v*10000)/10000;
+function exportXLSX(){
+  if(!RESULTS.length){alert('Nothing to export yet — run a calculation first.');return;}
+  if(typeof XLSX==='undefined'){alert('Excel export library failed to load (check your connection).');return;}
+  const t=getT();
+  // Only export the fee columns whose toggle is currently ON (mirrors the on-screen Active Total selection)
+  const feeCols=[
+    {key:'plt', on:t.plt,  head:'PlatformFee'},
+    {key:'exch',on:t.exch, head:'ExchangeRebate'},
+    {key:'mgmt',on:t.mgmt, head:'MgmtFee'},
+    {key:'prf', on:t.prf,  head:'PerfFee'},
+  ].filter(c=>c.on);
+  const wb=XLSX.utils.book_new();
+
+  /* 1 ── SUMMARY ─────────────────────────────────────────── */
+  const sumRows=[['Period','InvestedUSD','EndingNAV','ROIPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal','AvgPerMonth','Basis']];
+  RESULTS.forEach(r=>{
+    const f=summaryFigures(r,t);
+    const pick={plt:f.totPlt,exch:f.totExch,mgmt:f.totMgmt,prf:f.totPrf};
+    const feeVals=feeCols.map(c=>pick[c.key]);
+    sumRows.push([r.period.label,r2(f.invested),r2(f.endNav),
+      r2(f.invested?(f.endNav-f.invested)/f.invested*100:0),
+      ...feeVals.map(r2),r2(f.active),r2(r.months?f.active/r.months:0),
+      f.anchored?'anchored (actual)':'estimate']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sumRows),'Summary');
+
+  /* 2 ── YEARLY DATA ─────────────────────────────────────── */
+  const yrRows=[['Period','Year','DateStart','DateEnd','ContributionsUSD','NAVStart','NAVEnd','ReturnPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal']];
+  RESULTS.forEach(r=>{
+    getYearGroups(r.detail).forEach(yr=>{
+      const pick={plt:yr.totPlt,exch:yr.totExch,mgmt:yr.totMgmt,prf:yr.totPrf};
+      const feeVals=feeCols.map(c=>pick[c.key]);
+      const at=feeVals.reduce((a,v)=>a+v,0);
+      yrRows.push([r.period.label,'Year '+yr.y,yr.dateStart,yr.dateEnd,
+        r2(yr.contrib),r2(yr.navStart),r2(yr.navEnd),
+        r2(yr.navStart?(yr.navEnd-yr.navStart)/yr.navStart*100:0),
+        ...feeVals.map(r2),r2(at)]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(yrRows),'Yearly Data');
+
+  /* 3 ── MONTHLY DATA ────────────────────────────────────── */
+  const moRows=[['Period','Month','ContributionUSD','ReconstructedNAV','HWM','HistBacktestNAV','MonthlyReturnPercent',
+    ...feeCols.map(c=>c.head),'ActiveTotal']];
+  RESULTS.forEach(r=>{
+    r.detail.forEach(mo=>{
+      const pick={plt:mo.pltFee,exch:mo.exchFee,mgmt:mo.mgmtFee,prf:mo.prfFee};
+      const feeVals=feeCols.map(c=>pick[c.key]);
+      const at=feeVals.reduce((a,v)=>a+v,0);
+      moRows.push([r.period.label,mo.dateLabel,r2(mo.contrib),r2(mo.freshNav),r2(mo.hwm),
+        mo.histNavRef!=null?r2(mo.histNavRef):'',
+        mo.histRet!=null?r4(mo.histRet*100):'',
+        ...feeVals.map(r2),r2(at)]);
+    });
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(moRows),'Monthly Data');
+
+  /* 4 ── DAILY DATA ──────────────────────────────────────── */
+  const dRows=[['Period','Date','HistBacktestNAV','DailyReturnPct','ReconstructedNAV','Contribution',
+    ...feeCols.map(c=>c.head),'HWM','ActiveTotal']];
+  RESULTS.forEach(r=>{
+    r.detail.forEach(mo=>{
+      let lastInMonth=-1;mo.weeks.forEach((w,i)=>{if(!w.isNextRef)lastInMonth=i;});
+      mo.weeks.forEach((w,i)=>{
+        if(w.isNextRef)return;                       // avoid duplicating the next month's first row
+        const onStart=w.isRef, onEnd=(i===lastInMonth);
+        const cont=onStart?mo.contrib:0;
+        const feeVals=feeCols.map(c=>{
+          if(c.key==='plt') return onStart?mo.pltFee:0;
+          if(c.key==='exch')return mo.realReb?(w.exchDay||0):(onStart?mo.exchFee:0);
+          if(c.key==='mgmt')return onEnd?mo.mgmtFee:0;
+          return onEnd?mo.prfFee:0;
+        });
+        const act=feeVals.reduce((a,v)=>a+v,0);
+        dRows.push([r.period.label,w.date,
+          w.histNav!=null?r2(w.histNav):'',
+          w.wkRet!=null?r4(w.wkRet*100):'',
+          w.isRef?r2(mo.freshNav):'',
+          cont?r2(cont):'',
+          ...feeVals.map(v=>v?r4(v):0),
+          onEnd?r2(mo.hwm):'',
+          r4(act)]);
+      });
+    });
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(dRows),'Daily Data');
+
+  const date=(typeof latestDate==='function'&&latestDate())||new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`sth-cb-fee-model-${ACTIVE_CUSTOM?'custom':'periods'}-${date}.xlsx`);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN CONTROLLER
+═══════════════════════════════════════════════════════════ */
+let recalcTimer=null;
+function scheduleRecalc(){clearTimeout(recalcTimer);recalcTimer=setTimeout(calc,280);}
+
+function calc(){
+  document.getElementById('status').textContent='Calculating…';
+  if(!M5){
+    // Prefer the DAILY series (chart-data-daily-sth-cb.js) — it is the fresh, USDPC-on
+    // GROSS NAV generated straight from the simulator, so the monthly returns
+    // extracted below match the public back-tester / Admin simulator exactly.
+    // Fall back to the weekly _scb*_raw series only if the daily arrays are missing.
+    const src5 =(typeof _scb5_daily !=='undefined')?_scb5_daily :(typeof _scb5_raw !=='undefined'?_scb5_raw :null);
+    const src10=(typeof _scb10_daily!=='undefined')?_scb10_daily:(typeof _scb10_raw!=='undefined'?_scb10_raw:null);
+    if(!src5||!src10){
+      document.getElementById('status').textContent='⚠ chart data not found — ensure fee-model-sth-cb.html and chart-data-daily-sth-cb.js are in the same folder (regenerate with deno run -A tools/sth_cb_lab/one_pager_data.ts).';
+      return;
+    }
+    M5=sampleMonthly(src5);M10=sampleMonthly(src10);
+    // Initialise date controls once the data span is known
+    const ed=document.getElementById('iEndDate');
+    if(ed){ed.min=firstDate();ed.max=latestDate();if(!ed.value)ed.value=latestDate();}
+    ['iRangeStart','iRangeEnd'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=firstDate();el.max=latestDate();}});
+  }
+  const p=getP(),t=getT();
+  runAll(p,t);
+  renderSummary(p.clients,t);
+  renderComparison();
+  renderExchDetail(p);
+  chartNav();chartCumul(t);chartBreakdown(BD_M,t);chartScale(t);chartCompare();
+  if(DS.open)renderDrill();
+  const s5=M5[0][0]+' – '+M5[M5.length-1][0]+'('+M5.length+' mo)';
+  const s10=M10[0][0]+' – '+M10[M10.length-1][0]+'('+M10.length+' mo)';
+  let modeNote;
+  if(ACTIVE_CUSTOM){modeNote=`Custom range ${p.rangeStart} → ${p.rangeEnd} (${RESULTS[0]?RESULTS[0].months:0} mo)`;}
+  else if(p.endDate&&p.endDate<latestDate()){modeNote=`Periods ending ${p.endDate}`;}
+  else{modeNote=`5yr: ${s5} · 10yr: ${s10}`;}
+  document.getElementById('status').textContent=
+    `Updated · ${modeNote} · Client: $${p.initial.toLocaleString()}+$${p.monthly}/mo · ${p.clients.toLocaleString()} client${p.clients!==1?'s':''}`;
+}
+
+// Re-render client-count column only (no fee impact on NAV)
+function softRender(){
+  if(!RESULTS.length)return;
+  const p=getP(),t=getT();
+  renderSummary(p.clients,t);
+}
+
+// Build the print-only input snapshot shown at the top of the PDF, so investors can
+// see the assumptions the figures are based on. Populated fresh on each Print click.
+function buildPrintSummary(){
+  const box=document.getElementById('printSummary');if(!box)return;
+  const p=getP(),t=getT();
+  const pct=v=>(v*100).toFixed(2).replace(/\.00$/,'')+'%';
+  let dateBasis;
+  if(ACTIVE_CUSTOM){dateBasis=`${p.rangeStart||'—'} → ${p.rangeEnd||'—'} (custom range)`;}
+  else if(p.endDate){dateBasis=`Periods ending ${fmtDate(p.endDate)}`;}
+  else{dateBasis=`Latest data (${fmtDate(latestDate())})`;}
+  const streams=[
+    t.mgmt?'Management fee':null,
+    t.exch?'Exchange rebate':null,
+    t.plt?'Platform fee':null,
+    t.prf?'Performance fee':null,
+  ].filter(Boolean);
+  const items=[
+    ['Initial contribution','$'+p.initial.toLocaleString()],
+    ['Monthly contribution','$'+p.monthly.toLocaleString()],
+    ['Number of clients',p.clients.toLocaleString()],
+    ['Fee plan',t.plan==='management'?'Management (1% p.a. on NAV)':'Platform (0.75% on contributions)'],
+    ['Management fee (p.a.)',pct(p.mgmtRate)],
+    ['Platform fee (on contributions)',pct(p.pltRate)],
+    ['Performance fee (above HWM)',pct(p.prfRate)],
+    ['Date basis',dateBasis],
+    ['Active fee streams',streams.length?streams.join(', '):'none'],
+    ['Exchange rebate','50% of VALR trading/conversion fees'],
+  ];
+  box.innerHTML=
+    `<h2>Model Inputs</h2>`+
+    `<div class="ps-date">Generated ${fmtDate(new Date().toISOString().slice(0,10))} · figures shown per single client unless a client multiplier is indicated</div>`+
+    `<div class="ps-grid">`+
+      items.map(([k,v])=>`<div class="ps-item"><span class="ps-k">${k}</span><span class="ps-v">${v}</span></div>`).join('')+
+    `</div>`+
+    `<div class="ps-note">Projections use the historical STH Cost Basis Strategy (Hybrid v2.2) back-test trajectory applied to a fresh client contribution schedule. Performance-fee figures are market-dependent and assume the historical BTC cycle repeats; they are illustrative, not guaranteed.</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EVENT WIRING
+═══════════════════════════════════════════════════════════ */
+document.getElementById('btnCalc').addEventListener('click',calc);
+document.getElementById('btnExport').addEventListener('click',exportXLSX);
+document.getElementById('btnPrint').addEventListener('click',()=>{buildPrintSummary();window.print();});
+
+// Numeric inputs — debounced full recalc
+['iInitial','iMonthly','iMgmt','iPlatform','iPerf'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',scheduleRecalc);
+});
+
+// Date controls — End Date re-anchors periods; Custom Range overrides them
+['iEndDate','iRangeStart','iRangeEnd'].forEach(id=>{
+  const el=document.getElementById(id);if(el)el.addEventListener('change',scheduleRecalc);
+});
+const clr=document.getElementById('clearRange');
+if(clr)clr.addEventListener('click',()=>{
+  document.getElementById('iRangeStart').value='';
+  document.getElementById('iRangeEnd').value='';
+  calc();
+});
+
+// Number of Clients — slider and type-in box stay in sync (either can drive)
+const _iClients=document.getElementById('iClients');
+const _nClients=document.getElementById('nClients');
+const _clientsMin=+_iClients.min,_clientsMax=+_iClients.max;
+_iClients.addEventListener('input',function(){
+  _nClients.value=this.value;softRender();
+});
+_nClients.addEventListener('input',function(){
+  const raw=parseInt(this.value,10);
+  if(!Number.isFinite(raw))return;                 // let the box be empty mid-edit
+  const v=Math.min(_clientsMax,Math.max(_clientsMin,raw));
+  _iClients.value=v;softRender();
+});
+_nClients.addEventListener('change',function(){    // clamp + tidy once editing ends
+  let v=parseInt(this.value,10);
+  if(!Number.isFinite(v))v=_clientsMin;
+  v=Math.min(_clientsMax,Math.max(_clientsMin,v));
+  this.value=v;_iClients.value=v;softRender();
+});
+
+// Fee toggles — fees affect NAV so a full recompute is needed
+document.querySelectorAll('.planToggle').forEach(cb=>cb.addEventListener('change',scheduleRecalc));
+
+// Period tabs for annual breakdown chart
+document.querySelectorAll('.ptab[data-m]').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.ptab[data-m]').forEach(b=>b.classList.remove('on'));
+    this.classList.add('on');
+    chartBreakdown(+this.dataset.m,getT());
+  });
+});
+
+// Scale chart — annualised vs cumulative toggle
+document.querySelectorAll('.ptab[data-scale]').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.ptab[data-scale]').forEach(b=>b.classList.remove('on'));
+    this.classList.add('on');
+    SCALE_MODE=this.dataset.scale;
+    chartScale(getT());
+  });
+});
+
+window.addEventListener('load',()=>setTimeout(calc,120));
+</script>
+</body>
+</html>

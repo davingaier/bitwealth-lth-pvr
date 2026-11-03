@@ -177,6 +177,16 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | WEB-12 | `index.html`: no `lth-pvr` links, no emoji icons, stat counters animate with suffix | 0 / 0 / "52.7×", "8/ 10", "42%" | confirmed | PASS |
 | WEB-13 | Netlify deploy | — | not done (Davin publishes) | SKIP |
 
+### STH CB One-Pager + Commercial Fee Model (v0.6.179)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| OP-01 | `one_pager_data.ts` 5-year management row vs website `sth_cb_5yr` chart | equal | both $76,026 (script asserts one-pager row = fee-model anchor) | PASS |
+| OP-02 | Headline vs daily tracker `hybrid_v2_2` (to 2026-11-02) | equal | $4,187,988 both | PASS |
+| OP-03 | Print layout: each `.page` ≤ A4 under print emulation; headless Chrome PDF page count | 4 × 210×297 mm | 4 pages, 210×297 mm (ABC original prints 2 side-by-side Letter pages — cascade bug documented) | PASS |
+| OP-04 | IP check on one-pager text | no numeric thresholds / σ / slice % | "three slices", "roughly three-quarters of the time" only | PASS |
+| OP-05 | `fee-model-sth-cb.html` loads `_scb*` data, anchors ✓, no JS errors | all 5 periods ✓ | 1y $6,591 · 3y $26,572 · 5y $76,026 · 7y $603,733 · 10y $21,486,424; rebate table "actual — sum of real per-day rebates"; 5 charts; 0 page errors | PASS |
+
 ---
 
 ## 2. Database / RPC

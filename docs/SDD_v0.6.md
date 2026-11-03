@@ -3,11 +3,38 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.178)
+**Last updated:** 2026-11-03 (v0.6.179)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.179 – STH CB client One-Pager (4 pp, PDF) + Commercial Fee Model for the STH Cost Basis Strategy
+**Date:** 2026-11-03 · **Status:** ✅ DONE (docs / internal tooling)
+
+**`docs/STH_CB_One_Pager.html`** (+ `docs/STH_CB_One_Pager.pdf`, 4 × A4): the client-facing counterpart of
+`ABC_One_Pager.html`, built on the same stylesheet and page grammar but with new content. Page 1 — hero, four back-tested
+KPIs ($1k 2017→latest: 52.7× HODL · 133 % CAGR · 42 % DD · WF 8/10, all labelled research/not live), "The Strategy" in
+concepts only, a **three-state diagram** (cash → capitulation hold → trend hold) in place of the σ-bubble bar, benchmark
+strips, a one-line fee note. Page 2 — three pillars (regime signal / decisive allocation / scale-out & re-buy), the cycle
+illustration from the website, four guard-rail cards. Page 3 — 5-y and 10-y NAV charts and the 1/3/5/7/10-year table
+(strategy / Std DCA / HODL) rendered from data, six "why" cards. Page 4 (new) — six "what this strategy is not" risk cards,
+seven FAQs, CTA footer with the office address. IP level per Davin: "three slices", "roughly a quarter of the time in cash",
+no numeric thresholds. Audience line "Confidential — For Prospective Client Review"; no LTH PVR comparison row.
+Basis: $2,400 + $200/mo, periods ending the **latest close (2026-11-02)**, start = end − N years (ties to the website's
+5-year figure, $76,026). **Print fix:** the ABC stylesheet's `@media print { .screen-wrap{display:block} }` is declared
+before the screen `display:flex` rule and loses the cascade, so ABC prints its pages side by side; the new sheet forces
+`display:block !important`, sets `@page A4/0`, and zooms each page to 0.9 with a compensated width so every sheet fits one
+A4 page (verified: headless Chrome → exactly 4 × 210×297 mm).
+
+**`docs/fee-model-sth-cb.html`** + **`docs/chart-data-daily-sth-cb.js`**: a clone of `fee-model.html` (LTH version kept)
+reading `_scb*` data generated locally by **`tools/sth_cb_lab/one_pager_data.ts`** from the lab simulator (same engine as
+`ef_sth_cb_bt_execute`) — gross/net daily NAV for both fee plans, per-period anchors, per-day 50 % VALR rebate, monthly
+net NAV. Both plans (management 1 % default · platform 0.75 %) + 10 % performance + exchange rebate kept. Anchors reconcile
+(✓): 1 y $6,591 · 3 y $26,572 · 5 y $76,026 · 7 y $603,733 · 10 y $21,486,424 (management plan); 10-y revenue per client
+≈ $3.21 M of which performance fee $2.59 M, management $443 k, exchange rebate $176 k. Methodology text notes that STH CB
+trades far less than LTH PVR, so the rebate is a minor line. Promoted configs moved to `factsheet_data_configs.ts`
+(side-effect-free import; `factsheet_data.ts` re-exports). Lab README section added.
 
 ### v0.6.178 – Website: STH Cost Basis Strategy replaces LTH PVR as the public product (new pages, public back-tester backend, brand refresh)
 **Date:** 2026-11-03 · **Status:** ✅ DONE (not yet deployed to Netlify — Davin publishes)
