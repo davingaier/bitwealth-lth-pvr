@@ -430,6 +430,9 @@ historical re-buys were cheaper than their slice; the Mar-21 and Dec-24 re-buys 
 `lthSellTiers: [{1→0.3},{1.5→0.2},{2→0.1},{2.5→0}]`, everything else as v2 → **$4 304 977 · 430 398 % · 51.6× HODL ·
 49 trades · DD 48 % · WF 8/10**. Default Admin UI preset, tracker row `hybrid_v2_1`, fact sheet
 `docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html` (`factsheet_data.ts --variant v2_1`, compares against v2).
+Page 4 of the v2 / v2.1 sheets mirrors the LTH PVR one-pager's "Back-Test Performance" page ($2 400 + $200/mo over
+1/3/5/7/10 years); the generator's `--period-end YYYY-MM-DD` (default `2026-06-09`, the one-pager's end date) sets the
+period end — re-run with a later date when you want the page to move forward in time.
 
 > **Engine fix 2026-11-03 — v2 / v2.1 numbers above this line were produced with a bug.** A slice (R15) and a dip re-buy
 > (R16) could cancel each other inside one daily decision (the re-buy saw the fresh slice; the ≤ `dipRebuyAtCbRatio`

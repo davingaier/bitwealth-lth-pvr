@@ -3,11 +3,33 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.175)
+**Last updated:** 2026-11-03 (v0.6.176)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.176 – Fact sheets v2 / v2.1: page 4 "Back-Test Performance & Strategy Rationale" (One-Pager side-by-side)
+**Date:** 2026-11-03 · **Status:** ✅ DONE (docs only)
+
+Both STH_CB fact sheets gain a fourth A4 page that mirrors page 3 of `docs/ABC_One_Pager.html` so the two products can be
+compared line by line: 5-year and 10-year NAV-growth charts (strategy / Std DCA / HODL) and the 1 / 3 / 5 / 7 / 10-year
+table (Final NAV, Total invested, CAGR, Max drawdown, Sharpe, Total ROI) with the One-Pager's bracketed benchmark rows,
+plus the previous version (v2 on the v2.1 sheet, v1 on the v2 sheet) as an extra row, and a three-line rationale strip.
+
+**Basis is deliberately identical to the One-Pager:** $2 400 upfront + $200 / month, periods ending **9 Jun 2026**
+(`factsheet_data.ts --period-end`, default 2026-06-09), fills next close, full BitWealth fee stack; Std DCA and HODL carry
+exchange fees only and HODL deposits the whole schedule as a day-1 lump (the simulator already did this). Our benchmark
+rows reproduce the One-Pager's to within rounding (5-y Std DCA $22 228 vs $22 210, HODL $24 556 vs $24 749; 10-y HODL
+$2.87 M vs $2.85 M; Std DCA drawdown 61.5 % vs 61.8 %), which also established that the One-Pager measures **max drawdown
+on raw NAV** — adopted for all rows on this page (the rest of the sheet uses contribution-adjusted unit returns).
+**Sharpe** is deposit-neutral (unit returns) for all rows and footnoted as *not* comparable with the One-Pager's column,
+whose convention could not be reproduced (raw-NAV Sharpe is inflated by the monthly deposits — Std DCA would show 1.19).
+
+Headline read-across (10 y to 9 Jun 2026, $26 600 deposited): **Hybrid v2.1 $22.10 M · CAGR 95.8 % · DD 41.5 %** vs
+LTH PVR Progressive $5.14 M · 69.3 % · 62.4 %; HODL $2.87 M; Std DCA $0.56 M. 5 y: $73 888 vs $49 959 (HODL $24 556).
+Generator: `periods` / `periods_compare` / `period_basis` blocks in all three data files (`v1` data has it but the v1 sheet
+does not render it). Both sheets verified at 4 pages within A4 (page 4: 41 px spare), no script errors.
 
 ### v0.6.175 – Rules audit of run `bbef4aaf`: same-tick slice/re-buy bug fixed, v2.1 re-buy knobs corrected
 **Date:** 2026-11-03 · **Status:** ✅ DEPLOYED (`ef_sth_cb_bt_execute`, `ef_sth_cb_tracker`; migration `20261103_sth_cb_tracker_hybrid_v2_1_knobs.sql`)

@@ -132,6 +132,15 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | A-15 | Full `v3` grid (375) + walk-forward | best = baseline | every top row has the flags inert; $4,026,777 / 8/10 | PASS |
 | A-16 | EFs redeployed with the v3 flags (inert by default); run `9f892b1f` | = $4,026,776.53 / 52 | identical | PASS |
 
+### Fact-sheet page 4 — One-Pager side-by-side (v0.6.176)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| P4-01 | Benchmark rows vs `ABC_One_Pager.html` (same dates/deposits) | ≈ equal | 5-y Std DCA $22,228 vs $22,210; HODL $24,556 vs $24,749; 10-y HODL $2.87M vs $2.85M; DCA DD 61.5 % vs 61.8 % | PASS |
+| P4-02 | Drawdown convention | One-Pager = raw NAV | confirmed (DCA DD ≠ HODL DD only on raw NAV); adopted for page 4 | PASS |
+| P4-03 | Sharpe convention | reproduce One-Pager | not reproducible; deposit-neutral Sharpe used and footnoted as non-comparable | DOCUMENTED |
+| P4-04 | Both sheets 4 pages within A4, no JS errors | spare ≥ 0 | v2.1 31/22/4/41 px, v2 46/27/48/41 px | PASS |
+
 ---
 
 ## 2. Database / RPC

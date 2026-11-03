@@ -143,11 +143,62 @@ if (V.compare) {
 // Sanity: the "as tested" battery row must equal the headline run.
 if (Math.abs(robustness.base.nav - m.final_nav_usd) > 1) throw new Error(`robustness base ${robustness.base.nav} ≠ headline ${m.final_nav_usd}`);
 
+// ── One-Pager-style period table (ABC_One_Pager page 3): 1/3/5/7/10 years, $2 400 + $200/mo ────────────────────────
+// Default period end = 2026-06-09 so the rows line up with the LTH PVR one-pager; override with --period-end YYYY-MM-DD.
+// Benchmarks: Std DCA = same schedule bought monthly (exchange fees only); HODL = the full schedule as one lump on day 1
+// (exchange fees only); ROI/CAGR against nominal cash. Max drawdown for ALL THREE rows is measured on the raw NAV curve —
+// the one-pager's method (its Std DCA drawdown is visibly softer than HODL's, which only happens on raw NAV; our values
+// match it to within 0.3 pp). Sharpe is deposit-neutral (unit returns) for all three rows, so that column is NOT
+// like-for-like with the one-pager (which used another convention for it). The rest of this sheet uses unit returns.
+const PERIOD_UPFRONT = 2400, PERIOD_MONTHLY = 200;
+const periodEnd = String(args["period-end"] ?? "2026-06-09") <= series.to ? String(args["period-end"] ?? "2026-06-09") : series.to;
+const shiftYears = (iso: string, y: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCFullYear(d.getUTCFullYear() - y); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+type Bal = { trade_date: string; nav_usd: number; contrib_net_usdt_cum: number; contrib_gross_usdt_cum: number; total_roi_percent: number; cagr_percent: number };
+const rawRisk = (navs: number[]) => {
+  let peak = 0, dd = 0;
+  for (const v of navs) { if (v > peak) peak = v; if (peak > 0) dd = Math.min(dd, v / peak - 1); }
+  return { max_dd_pct: +(dd * 100).toFixed(1) };
+};
+// Deposit-neutral Sharpe: daily unit return = nav ÷ (prevNav + today's net contribution) − 1, annualised √365 (the strategy's own convention).
+const unitSharpe = (bal: Bal[]) => {
+  let sum = 0, sq = 0, n = 0;
+  for (let i = 1; i < bal.length; i++) {
+    const prev = bal[i - 1], cur = bal[i];
+    const base = prev.nav_usd + (cur.contrib_net_usdt_cum - prev.contrib_net_usdt_cum);
+    if (prev.nav_usd <= 0 || base <= 0) continue;
+    const r = cur.nav_usd / base - 1; sum += r; sq += r * r; n++;
+  }
+  const mean = n ? sum / n : 0, va = n > 1 ? Math.max(0, sq / n - mean * mean) : 0;
+  return +(va > 0 ? (mean / Math.sqrt(va)) * Math.sqrt(365) : 0).toFixed(2);
+};
+const periodRun = (years: number, cfg: Record<string, unknown>) => {
+  const start = shiftYears(periodEnd, years);
+  const l = labArgsFrom({ start, end: periodEnd, upfront: String(PERIOD_UPFRONT), monthly: String(PERIOD_MONTHLY), extras: JSON.stringify(cfg) }, series.to);
+  const data = series.rows.filter((r) => r.close_date <= periodEnd);
+  const s = simulateSthCb(data, simParams(l), { ledger: false, daily: true });
+  const m = s.summary.sth_cb, std = s.stdBalances as Bal[], hodl = s.hodlBalances as Bal[];
+  const lastStd = std[std.length - 1], lastHodl = hodl[hodl.length - 1];
+  const pr = rawRisk(s.results.map((d) => d.nav_usd)), sr = rawRisk(std.map((b) => b.nav_usd)), hr = rawRisk(hodl.map((b) => b.nav_usd));
+  return {
+    years, start, end: periodEnd,
+    strategy: { final_nav: +m.final_nav_usd.toFixed(0), invested: +m.total_contrib_gross_usdt.toFixed(0), cagr_pct: +m.final_cagr_percent.toFixed(1), roi_pct: +m.final_roi_percent.toFixed(1), trades: m.trades, unit_dd_pct: +(m.max_drawdown * 100).toFixed(1), sharpe: +m.sharpe.toFixed(2), ...pr },
+    std_dca: { final_nav: +lastStd.nav_usd.toFixed(0), invested: +lastStd.contrib_gross_usdt_cum.toFixed(0), cagr_pct: +lastStd.cagr_percent.toFixed(1), roi_pct: +lastStd.total_roi_percent.toFixed(1), sharpe: unitSharpe(std), ...sr },
+    hodl: { final_nav: +lastHodl.nav_usd.toFixed(0), invested: +lastHodl.contrib_gross_usdt_cum.toFixed(0), cagr_pct: +lastHodl.cagr_percent.toFixed(1), roi_pct: +lastHodl.total_roi_percent.toFixed(1), sharpe: unitSharpe(hodl), ...hr },
+    series: years === 5 || years === 10
+      ? s.results.map((d, i) => [d.trade_date, +d.nav_usd.toFixed(0), +(std[i]?.nav_usd ?? NaN).toFixed(0), +(hodl[i]?.nav_usd ?? NaN).toFixed(0)])
+      : undefined,
+  };
+};
+const periods = [1, 3, 5, 7, 10].map((y) => periodRun(y, CONFIG));
+const periodsCompare = V.compare ? [1, 3, 5, 7, 10].map((y) => { const p = periodRun(y, V.compare!.config); return { years: y, strategy: p.strategy }; }) : undefined;
+
 const out = {
   generated_at: new Date().toISOString().slice(0, 10),
   variant,
   window: { start: lab.start, end: lab.end, upfront: lab.upfront, monthly: lab.monthly, fills: lab.sameDay ? "same-day" : "next-day", fees: lab.fees },
   config: CONFIG,
+  period_basis: { upfront: PERIOD_UPFRONT, monthly: PERIOD_MONTHLY, end: periodEnd },
+  periods, periods_compare: periodsCompare,
   summary: {
     final_nav: +m.final_nav_usd.toFixed(0), roi_pct: +m.final_roi_percent.toFixed(0), cagr_pct: +m.final_cagr_percent.toFixed(1),
     max_dd_pct: +(m.max_drawdown * 100).toFixed(1), sharpe: +m.sharpe.toFixed(2), calmar: +m.calmar.toFixed(2),
