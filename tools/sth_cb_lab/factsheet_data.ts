@@ -4,6 +4,7 @@
 //   deno run -A tools/sth_cb_lab/factsheet_data.ts                   → docs/sth_cb_factsheet_data.js      (Hybrid v1 sheet)
 //   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2      → docs/sth_cb_factsheet_data_v2.js   (Hybrid v2 sheet, compares with v1)
 //   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2_1    → docs/sth_cb_factsheet_data_v2_1.js (Hybrid v2.1 sheet, compares with v2)
+//   deno run -A tools/sth_cb_lab/factsheet_data.ts --variant v2_2    → docs/sth_cb_factsheet_data_v2_2.js (Hybrid v2.2 sheet, compares with v2.1)
 
 import { simulateSthCb } from "../../supabase/functions/_shared/sth_cb_simulator.ts";
 import { SthCbConfig } from "../../supabase/functions/_shared/sth_cb_strategy_logic.ts";
@@ -35,10 +36,24 @@ export const HYBRID_V2_1 = {
   dipRebuyAtCbRatio: 1.05, dipRebuyMax: 1, scaleCooldownDays: 2,
 };
 
+// v2.2 = v2.1 + the "no-loss ladder" rule (sliceAboveLastBuyPct 0: a slice is only sold above the last buy / re-buy
+// price) which replaces the cooldown, plus an earlier first rung found by ladder_optimize.ts on that base (2026-11-03):
+// 50/20/10/0 % at +0.5/1/1.5/2.5σ. Table basis ($2.4k + $200/mo to 2026-06-09) +9–12 % vs v2.1 on every horizon,
+// walk-forward 8/10 standard / 7/11 table (v2.1: 6/11).
+export const HYBRID_V2_2 = (() => {
+  const { scaleCooldownDays: _cd, ...rest } = HYBRID_V2_1;
+  return {
+    ...rest,
+    lthSellTiers: [{ sigma: 0.5, alloc: 0.5 }, { sigma: 1, alloc: 0.2 }, { sigma: 1.5, alloc: 0.1 }, { sigma: 2.5, alloc: 0 }],
+    sliceAboveLastBuyPct: 0,
+  };
+})();
+
 const VARIANTS: Record<string, { config: Record<string, unknown>; file: string; compare?: { label: string; config: Record<string, unknown> } }> = {
   v1: { config: HYBRID_V1, file: "sth_cb_factsheet_data.js" },
   v2: { config: HYBRID_V2, file: "sth_cb_factsheet_data_v2.js", compare: { label: "Hybrid v1", config: HYBRID_V1 } },
   v2_1: { config: HYBRID_V2_1, file: "sth_cb_factsheet_data_v2_1.js", compare: { label: "Hybrid v2", config: HYBRID_V2 } },
+  v2_2: { config: HYBRID_V2_2, file: "sth_cb_factsheet_data_v2_2.js", compare: { label: "Hybrid v2.1", config: HYBRID_V2_1 } },
 };
 
 const args = parseArgs(Deno.args);

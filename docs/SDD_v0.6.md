@@ -3,11 +3,47 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.176)
+**Last updated:** 2026-11-03 (v0.6.177)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.177 – STH_CB Hybrid **v2.2** promoted: "no-loss ladder" rule, earlier +0.5σ rung, CB-% rungs rejected (new default)
+**Date:** 2026-11-03 · **Status:** ✅ DONE
+
+Task: prevent the six loss-making trades highlighted in the corrected `bbef4aaf` CSV, test STH-CB-% ladder rungs in 5 %
+steps, and raise the 1/3/5/7/10-year table (page 4 of the fact sheet) without compromising walk-forward.
+
+**Rules engine (`_shared/sth_cb_strategy_logic.ts`)** — four new optional flags, all off unless set, plus state
+`lastBuyPx / lastSlicePx / lastExitPx`: `sliceAboveLastBuyPct` (R15 slice only when price is above the last buy/re-buy by
+≥ pct), `rebuyBelowLastSellPct` (R16 only below the last slice), `reentryBelowLastExitPct` (trend re-entry only below the
+last exit), `exitMinGainPct` (no full exit below entry × (1+pct)). `lthSellTiers` entries accept `cbRatio` as an
+alternative to `sigma` (`tierLevel()` / `tierLabel()`); R15 deferral notes now say *momentum / below last buy / cooldown*.
+Simulator: `EXTRA_CONFIG_KEYS` extended; `configNeedsBands` only when a σ tier exists; rolling low `lowN` for the
+(rejected) V-bottom idea. 42 unit tests pass; the v2.1 baseline is bit-identical with all flags off.
+
+**Findings (10-y table basis $2 400 + $200/mo to 2026-06-09 unless stated):**
+- `sliceAboveLastBuyPct: 0` — removes every ladder round-trip loss, +5–6 % NAV, and makes the 2-day cooldown redundant.
+- Re-entry-below-exit guard and no-loss exit both **hurt** (miss the Sep-24 / May-25 legs; ride draw-downs). Re-buy-below-slice guard slightly negative once the slice guard is on. Flags kept (inert) for the lab.
+- **CB-% ladder rungs (5 % steps, `ladder_optimize.ts --kind cb`) reach ≈ $11.4 M vs $22.1 M for the LTH-band ladder** — rejected; euphoria is a deviation from the cost basis, which the σ bands measure directly.
+- With the slice guard, re-searching the LTH ladder found an **earlier first rung at +0.5σ** (which hurt on v2) now profitable: `+0.5σ→50 %, +1σ→20 %, +1.5σ→10 %, +2.5σ→0 %`.
+
+**Hybrid v2.2** = corrected v2.1 + `sliceAboveLastBuyPct 0`, ladder above, **no cooldown** (`scaleCooldownDays` removed):
+standard basis **$4 399 250 · 439 825 % · 52.7× HODL · 61 trades · DD 41.6 % · WF 8/10** (v2.1 $4 026 777 / 48.3× / 52);
+table basis 1 y $6 012 · 3 y $27 790 · 5 y $82 031 · 7 y $637 464 · **10 y $24 174 129** (v2.1 $5 991 / $24 734 / $73 888 /
+$584 067 / $22 100 781 → +0.4 / +12.4 / +11.0 / +9.1 / +9.4 %), table-basis WF **7/11** (v2.1 6/11), lower draw-downs on
+every multi-year period. `robustness.ts` ≥ v2.1 on every stress row. Deployed `ef_sth_cb_bt_execute` reproduces the lab
+exactly (run `9d83751c`: $4 399 249.74, 61 trades).
+
+**Promotion:** both EFs redeployed (first deploy carrying the v2.2 flags + `cbRatio`); Admin UI back-tester preset
+`hybrid_v2_2` (new default) with a new field *Slice only above last buy by (%)* (`btCbSliceGain` → `sliceAboveLastBuyPct`,
+blank = off); tracker row `hybrid_v2_2` (migration `20261103_sth_cb_tracker_hybrid_v2_2.sql`, applied via REST; rebuilt to
+2026-11-02: v1 $2.60 M · v2 $3.49 M · v2.1 $3.83 M · **v2.2 $4.19 M**); `HYBRID_V2_2` / `--variant v2_2` in
+`factsheet_data.ts`; **`docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html`** (4 pages, compares with v2.1; rule-card trigger dates
+re-verified — entries and full exits are identical to v2.1, only the slices differ).
+**Lab:** `periods.ts` (1/3/5/7/10-y table + WF on both bases, `--file candidates.json`), `ladder_optimize.ts --kind cb`
+with `--samples/--max-rungs`, `optimize.ts --idea v22`, README section "v2.2".
 
 ### v0.6.176 – Fact sheets v2 / v2.1: page 4 "Back-Test Performance & Strategy Rationale" (One-Pager side-by-side)
 **Date:** 2026-11-03 · **Status:** ✅ DONE (docs only)

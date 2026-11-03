@@ -20,7 +20,7 @@ import {
   Objective, OBJECTIVES, objectiveValue, parseArgs, RESULTS_DIR, timestamp, toCsv,
 } from "./lab_core.ts";
 
-type Tier = { sigma: number; alloc: number };
+type Tier = { sigma?: number; cbRatio?: number; alloc: number };
 
 const args = parseArgs(Deno.args);
 const series = await loadSeries();
@@ -29,17 +29,23 @@ const objective = (OBJECTIVES.includes(args.objective as Objective) ? args.objec
 const topN = Number(args.top ?? 15);
 const walkForward = args["walk-forward"] === true;
 const workersN = Math.max(1, Number(args.workers ?? navigator.hardwareConcurrency ?? 4));
-const levels = String(args.levels ?? "0,0.5,1,1.5,2,2.5").split(",").map(Number);
+// --kind lth (default): rungs at LTH PVR σ bands.  --kind cb: rungs at multiples of the STH cost basis (e.g. 1.05 … 2.0).
+const kind = String(args.kind ?? "lth") === "cb" ? "cb" : "lth";
+const levels = String(args.levels ?? (kind === "cb" ? "1.05,1.1,1.15,1.2,1.25,1.3,1.35,1.4,1.45,1.5,1.6,1.7,1.8,2" : "0,0.5,1,1.5,2,2.5")).split(",").map(Number);
 const step = Number(args.step ?? 0.1);
 const gateMode = String(args.gate ?? "both");
+const maxRungs = Number(args["max-rungs"] ?? (kind === "cb" ? 4 : levels.length));
+const samples = Number(args.samples ?? 6000);
 const dp = Math.max(0, Math.round(-Math.log10(step)));
 const r1 = (v: number) => Number(v.toFixed(dp));
+const lvl = (t: Tier) => t.sigma ?? t.cbRatio ?? 0;
+const mkTier = (level: number, alloc: number): Tier => kind === "cb" ? { cbRatio: level, alloc } : { sigma: level, alloc };
 
 const baseCfg: SthCbConfig = { ...lab.config, ...(typeof args.base === "string" ? JSON.parse(args.base) : {}) };
 if (!baseCfg.lthSellTiers?.length) { console.error("--base must contain lthSellTiers (use the Hybrid v2 JSON)"); Deno.exit(1); }
-const baseLadder: Tier[] = [...baseCfg.lthSellTiers].sort((a, b) => a.sigma - b.sigma);
+const baseLadder: Tier[] = [...baseCfg.lthSellTiers].sort((a, b) => lvl(a) - lvl(b));
 
-const ladderTxt = (t: Tier[]) => t.map((x) => `${x.sigma >= 0 ? "+" : ""}${x.sigma}σ→${Math.round(x.alloc * 100)}%`).join(" ");
+const ladderTxt = (t: Tier[]) => t.map((x) => (typeof x.cbRatio === "number" ? `${Math.round(x.cbRatio * 100)}%CB` : `${(x.sigma ?? 0) >= 0 ? "+" : ""}${x.sigma}σ`) + `→${Math.round(x.alloc * 100)}%`).join(" ");
 const withLadder = (tiers: Tier[], gate: boolean): SthCbConfig => {
   const c = { ...baseCfg, lthSellTiers: tiers, lthSellMomoGate: gate } as Record<string, unknown>;
   if (!tiers.length) delete c.lthSellTiers;
@@ -49,23 +55,24 @@ const cfgKey = (c: SthCbConfig) => configKey(c);
 const score = (r: EvalResult) => { const v = objectiveValue(r.metrics, objective); return Number.isFinite(v) ? v : -Infinity; };
 
 console.log(`Ladder optimiser · window ${lab.start} → ${lab.end} · $${lab.upfront} + $${lab.monthly}/mo · fees=${lab.fees} · objective=${objective}`);
-console.log(`Base ladder: ${ladderTxt(baseLadder)} · gate=${baseCfg.lthSellMomoGate ? "on" : "off"} · bands ${levels.join("/")}σ · step ${step}`);
+console.log(`Base ladder: ${ladderTxt(baseLadder)} · gate=${baseCfg.lthSellMomoGate ? "on" : "off"} · kind=${kind} · levels ${levels.join("/")} · step ${step} · max rungs ${maxRungs}`);
 
 const pool = await createPool(lab, workersN);
 const all = new Map<string, EvalResult>();
 const remember = (rs: EvalResult[]) => { for (const r of rs) all.set(cfgKey(r.config), r); };
 
-// ── Phase 0: small sells at the mean / +0.5σ on top of the base ladder ─────
-console.log("\nPhase 0 — add a small early sell to the base ladder");
+// ── Phase 0: small sells at the mean / +0.5σ on top of the base ladder (LTH kind only) ─────
 const baseRes = (await pool.evalAll([baseCfg], false, "base"))[0];
 remember([baseRes]);
+if (kind === "lth") {
+console.log("\nPhase 0 — add a small early sell to the base ladder");
 const early: Array<{ label: string; tiers: Tier[] }> = [{ label: "base ladder (no early sell)", tiers: baseLadder }];
-const lowBands = levels.filter((l) => l < Math.min(...baseLadder.map((t) => t.sigma)));
+const lowBands = levels.filter((l) => l < Math.min(...baseLadder.map(lvl)));
 for (const a of [0.9, 0.8, 0.7]) {
-  for (const l of lowBands) early.push({ label: `+ ${l === 0 ? "mean" : "+" + l + "σ"} → ${Math.round(a * 100)} %`, tiers: [{ sigma: l, alloc: a }, ...baseLadder] });
+  for (const l of lowBands) early.push({ label: `+ ${l === 0 ? "mean" : "+" + l + "σ"} → ${Math.round(a * 100)} %`, tiers: [mkTier(l, a), ...baseLadder] });
   if (lowBands.length >= 2) {
     const [l1, l2] = lowBands;
-    early.push({ label: `+ ${l1 === 0 ? "mean" : "+" + l1 + "σ"} → ${Math.round(a * 100)} % and +${l2}σ → ${Math.round((a - 0.1) * 100)} %`, tiers: [{ sigma: l1, alloc: a }, { sigma: l2, alloc: r1(a - 0.1) }, ...baseLadder] });
+    early.push({ label: `+ ${l1 === 0 ? "mean" : "+" + l1 + "σ"} → ${Math.round(a * 100)} % and +${l2}σ → ${Math.round((a - 0.1) * 100)} %`, tiers: [mkTier(l1, a), mkTier(l2, r1(a - 0.1)), ...baseLadder] });
   }
 }
 const earlyCfgs = early.slice(1).map((e) => withLadder(e.tiers, !!baseCfg.lthSellMomoGate));
@@ -76,20 +83,45 @@ for (const e of early) {
   const d = r.metrics.final_nav_usd / baseRes.metrics.final_nav_usd - 1;
   console.log(`  ${e.label.padEnd(42)} ${fmtUsd(r.metrics.final_nav_usd).padStart(12)} ${((d >= 0 ? "+" : "") + (d * 100).toFixed(1) + "%").padStart(10)} ${fmtX(r.metrics.nav_vs_hodl, 1).padStart(7)} ${fmtPct(r.metrics.max_drawdown * 100, 0).padStart(6)} ${String(r.metrics.trades).padStart(6)}`);
 }
+}
 
 // ── Phase 1: every non-increasing 1-dp ladder over the chosen bands ────────
 const allocs: number[] = []; for (let v = 1; v > -1e-9; v -= step) allocs.push(r1(v));
 const ladders: Tier[][] = [];
-(function rec(i: number, maxAlloc: number, acc: Tier[]) {
-  if (i === levels.length) { if (acc.length) ladders.push(acc); return; }
-  for (const a of allocs) {
-    // alloc 1.0 = no rung at this band (always allowed); otherwise a rung must sell something relative to the previous one
-    if (a >= 1 - 1e-9) { rec(i + 1, maxAlloc, acc); continue; }
-    if (a > maxAlloc + 1e-9) continue;
-    if (acc.length && Math.abs(a - acc[acc.length - 1].alloc) < 1e-9) continue;
-    rec(i + 1, a, [...acc, { sigma: levels[i], alloc: a }]);
+// Count first; enumerate fully when feasible, otherwise draw random ladders (≤ maxRungs rungs, last rung may be 0 = all-out).
+const countLadders = (): number => { let n = 0; (function rec(i: number, maxAlloc: number, len: number) { if (i === levels.length) { if (len) n++; return; } for (const a of allocs) { if (a >= 1 - 1e-9) { rec(i + 1, maxAlloc, len); continue; } if (a > maxAlloc + 1e-9 || len >= maxRungs) continue; if (len && Math.abs(a - maxAlloc) < 1e-9) continue; rec(i + 1, a, len + 1); } })(0, 1, 0); return n; };
+const total = countLadders();
+if (total <= samples) {
+  (function rec(i: number, maxAlloc: number, acc: Tier[]) {
+    if (i === levels.length) { if (acc.length) ladders.push(acc); return; }
+    for (const a of allocs) {
+      // alloc 1.0 = no rung at this band (always allowed); otherwise a rung must sell something relative to the previous one
+      if (a >= 1 - 1e-9) { rec(i + 1, maxAlloc, acc); continue; }
+      if (a > maxAlloc + 1e-9 || acc.length >= maxRungs) continue;
+      if (acc.length && Math.abs(a - acc[acc.length - 1].alloc) < 1e-9) continue;
+      rec(i + 1, a, [...acc, mkTier(levels[i], a)]);
+    }
+  })(0, 1, []);
+} else {
+  console.log(`\n${total.toLocaleString()} possible ladders > --samples ${samples}: drawing random ladders`);
+  let seed = Number(args.seed ?? 7); const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+  const seen = new Set<string>();
+  let guard = 0;
+  while (ladders.length < samples && guard++ < samples * 50) {
+    const n = 1 + Math.floor(rnd() * maxRungs);
+    const idx = [...new Set(Array.from({ length: n }, () => Math.floor(rnd() * levels.length)))].sort((a, b) => a - b);
+    const al: number[] = []; let max = 1;
+    for (let k = 0; k < idx.length; k++) {
+      const choices = allocs.filter((a) => a < max - 1e-9 && (k < idx.length - 1 ? a > 0 : true));
+      if (!choices.length) break;
+      const a = choices[Math.floor(rnd() * choices.length)]; al.push(a); max = a;
+    }
+    if (al.length !== idx.length) continue;
+    const t = idx.map((i, k) => mkTier(levels[i], al[k]));
+    const key = JSON.stringify(t); if (seen.has(key)) continue; seen.add(key); ladders.push(t);
   }
-})(0, 1, []);
+  if (!ladders.some((t) => JSON.stringify(t) === JSON.stringify(baseLadder))) ladders.push(baseLadder);
+}
 const gates = gateMode === "on" ? [true] : gateMode === "off" ? [false] : [true, false];
 const phase1 = gates.flatMap((g) => ladders.map((t) => withLadder(t, g))).filter((c) => !all.has(cfgKey(c)));
 console.log(`\nPhase 1 — ${ladders.length.toLocaleString()} ladders × gate ${gates.map((g) => g ? "on" : "off").join("/")} = ${phase1.length.toLocaleString()} configs`);
@@ -164,10 +196,10 @@ results.slice(0, topN).forEach((r, i) => {
 // How much does each band matter? Marginal view over phase-1 results: best NAV with vs without a rung at each band.
 console.log("\nBest result that uses / does not use a rung at each band (gate on):");
 for (const l of levels) {
-  const withR = results.filter((r) => r.config.lthSellMomoGate && r.config.lthSellTiers?.some((t) => t.sigma === l));
-  const without = results.filter((r) => r.config.lthSellMomoGate && !r.config.lthSellTiers?.some((t) => t.sigma === l));
+  const withR = results.filter((r) => r.config.lthSellMomoGate && r.config.lthSellTiers?.some((t) => lvl(t) === l));
+  const without = results.filter((r) => r.config.lthSellMomoGate && !r.config.lthSellTiers?.some((t) => lvl(t) === l));
   const best = (xs: EvalResult[]) => xs.length ? fmtUsd(Math.max(...xs.map((x) => x.metrics.final_nav_usd))) : "–";
-  console.log(`  ${(l === 0 ? "mean" : "+" + l + "σ").padEnd(6)} with rung ${best(withR).padStart(12)}   without ${best(without).padStart(12)}`);
+  console.log(`  ${(kind === "cb" ? Math.round(l * 100) + "%CB" : l === 0 ? "mean" : "+" + l + "σ").padEnd(7)} with rung ${best(withR).padStart(12)}   without ${best(without).padStart(12)}`);
 }
 console.log(`\nAll ${results.length} results → ${outFile}`);
 console.log(`\nTo reproduce #1 in the Admin UI, paste this into "Advanced (extras JSON)":\n  ${JSON.stringify(results[0].config)}`);

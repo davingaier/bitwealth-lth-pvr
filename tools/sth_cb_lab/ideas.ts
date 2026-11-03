@@ -238,6 +238,16 @@ export const IDEAS: Record<string, IdeaSpec> = {
       lthFirstRungMomoThreshold: [null, -0.01, 0, 0.01, 1],
     },
   },
+  v22: {
+    title: "v2.2 no-loss rules (2026-11-03 loss-making round-trip review)",
+    description: "Re-buy only below the last slice, slice only above the last buy, cheap re-entry only at/below the exit price, exits only at a gain. 256 combos — enumerate with --walk-forward.",
+    grid: {
+      rebuyBelowLastSellPct: [null, 0, 0.02, 0.05],
+      sliceAboveLastBuyPct: [null, 0, 0.02, 0.05],
+      reentryBelowLastExitPct: [null, 0, 0.05, 0.1],
+      exitMinGainPct: [null, 0, 0.03, 0.05],
+    },
+  },
   v2knobs: {
     title: "v2 knobs — everything except the ladder",
     description: "Re-buy depth, gate, cooldown, momentum, trailing stop, min-hold, post-exit wait, trend exit — the ladder in --base is kept as-is (pair with ladder_optimize.ts).",

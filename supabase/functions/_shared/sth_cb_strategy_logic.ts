@@ -117,8 +117,9 @@ export interface SthCbConfig {
   capBuyAtLthSigma?: number;
 
   // ── v2 — Idea 15: scale OUT at LTH PVR upper bands (needs `extra.bands`) ────
-  /** Tiers keyed by LTH PVR sigma, e.g. [{sigma:1.5,alloc:0.75},{sigma:2,alloc:0.5},{sigma:2.5,alloc:0}]. alloc 0 = full exit (same as distributeAtSigma). Tiers latch per hold. */
-  lthSellTiers?: Array<{ sigma: number; alloc: number }>;
+  /** Tiers keyed by LTH PVR sigma, e.g. [{sigma:1.5,alloc:0.75},{sigma:2,alloc:0.5},{sigma:2.5,alloc:0}], OR by a multiple of the STH cost basis,
+   *  e.g. [{cbRatio:1.25,alloc:0.3},{cbRatio:1.5,alloc:0}] (v2.2 experiment). Do not mix the two kinds in one ladder. alloc 0 = full exit. Tiers latch per hold. */
+  lthSellTiers?: Array<{ sigma?: number; cbRatio?: number; alloc: number }>;
   /** Momentum-gate the partial tiers too (sell only once ROC ≤ momoThreshold). Default false = sell at the band. */
   lthSellMomoGate?: boolean;
 
@@ -143,6 +144,16 @@ export interface SthCbConfig {
   exitLowWindow?: number;
   /** Idea ④: ROC threshold for the momentum gate on the FIRST ladder rung only (e.g. −0.01 or 0); the other rungs keep momoThreshold. */
   lthFirstRungMomoThreshold?: number;
+
+  // ── v2.2 candidates (2026-11-03, "loss-making round-trips" review) ─────────
+  /** No-loss ladder: a dip re-buy only when price ≤ last slice price × (1 − pct). 0 = simply below the slice. */
+  rebuyBelowLastSellPct?: number;
+  /** No-loss ladder: a partial slice only when price ≥ last buy / re-buy price × (1 + pct). 0 = simply above. */
+  sliceAboveLastBuyPct?: number;
+  /** Re-entry guard: the cheap R5 / R8 re-entries only while price ≤ last exit price × (1 + pct); above that the full R3 entry is required. */
+  reentryBelowLastExitPct?: number;
+  /** No-loss exit: R2 / R3 exits only when price ≥ last buy price × (1 + pct). Trailing stop, ladder full exit and R4 are unaffected. */
+  exitMinGainPct?: number;
 }
 
 export interface SthCbState {
@@ -172,6 +183,12 @@ export interface SthCbState {
   dipRebuys?: number;
   /** v2: days since the last scale-out or re-buy (for the cooldown) */
   sinceScaleEvent?: number;
+  /** v2.2: signal price of the last buy / re-buy (no-loss rules) */
+  lastBuyPx?: number;
+  /** v2.2: signal price of the last partial slice (no-loss ladder) */
+  lastSlicePx?: number;
+  /** v2.2: signal price of the last full exit to cash (re-entry guard) */
+  lastExitPx?: number;
 }
 
 export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
@@ -276,9 +293,16 @@ function allocFor(s: SthCbState, config: SthCbConfig): number {
   return Math.max(0, Math.min(1, alloc));
 }
 
-function lthTiers(config: SthCbConfig): Array<{ sigma: number; alloc: number }> {
-  return (config.lthSellTiers ?? []).slice().sort((a, b) => a.sigma - b.sigma);
+function lthTiers(config: SthCbConfig): Array<{ sigma?: number; cbRatio?: number; alloc: number }> {
+  return (config.lthSellTiers ?? []).slice().sort((a, b) => (a.sigma ?? a.cbRatio ?? 0) - (b.sigma ?? b.cbRatio ?? 0));
 }
+/** Price level of a scale-out tier: LTH PVR band (sigma) or a multiple of the STH cost basis (cbRatio). */
+function tierLevel(t: { sigma?: number; cbRatio?: number }, cb: number, bands?: Record<string, number | null | undefined>): number {
+  if (typeof t.cbRatio === "number") return cb * t.cbRatio;
+  const key = typeof t.sigma === "number" ? sigmaKey(t.sigma) : null;
+  return key ? Number(bands?.[key]) : NaN;
+}
+const tierLabel = (t: { sigma?: number; cbRatio?: number }) => typeof t.cbRatio === "number" ? `${Math.round(t.cbRatio * 100)}% CB` : `+${t.sigma}σ`;
 
 // ========================================================================================
 // CORE DECISION
@@ -317,6 +341,9 @@ export function decideSthCb(
     postSellPeak: prev?.postSellPeak ?? 0,
     dipRebuys: prev?.dipRebuys ?? 0,
     sinceScaleEvent: (prev?.sinceScaleEvent ?? 9999) + 1,
+    lastBuyPx: prev?.lastBuyPx,
+    lastSlicePx: prev?.lastSlicePx,
+    lastExitPx: prev?.lastExitPx,
   };
   const wasInMarket = s.capLatch || s.trendLatch;
   if (wasInMarket) {
@@ -402,9 +429,14 @@ export function decideSthCb(
     s.scaledAlloc = undefined;
     s.postSellPeak = 0;
     s.dipRebuys = 0;
+    s.lastExitPx = px;
+    s.lastSlicePx = undefined;
   };
-  const markEntry = () => { s.holdDays = 0; s.peakPx = px; s.lthTierLevel = 0; s.scaledAlloc = undefined; s.postSellPeak = 0; s.dipRebuys = 0; s.sinceScaleEvent = 9999; };
+  const markEntry = () => { s.holdDays = 0; s.peakPx = px; s.lthTierLevel = 0; s.scaledAlloc = undefined; s.postSellPeak = 0; s.dipRebuys = 0; s.sinceScaleEvent = 9999; s.lastBuyPx = px; s.lastSlicePx = undefined; };
   const cooldownOk = !config.scaleCooldownDays || (s.sinceScaleEvent ?? 9999) >= Math.trunc(config.scaleCooldownDays);
+  // v2.2 no-loss rules (all opt-in). Prices compared are signal closes.
+  const gainOk = (ref: number | undefined, pct: number | undefined) => typeof pct !== "number" || !(typeof ref === "number" && ref > 0) || px >= ref * (1 + pct);
+  const exitGainOk = gainOk(s.lastBuyPx, config.exitMinGainPct);
 
   // ── Capitulation latch (idea 2 generalises the single 70 % level to tiers) ─
   const cTiers = config.capBuyTiers?.length ? capTiers(config) : [{ ratio: capBuyRatio, alloc: 1 }];
@@ -431,10 +463,10 @@ export function decideSthCb(
       note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB but ROC ${(roc * 100).toFixed(1)}% < thr`;
     } else if (s.capLatch && !s.trendLatch && ratio >= capExitRatio && !holdLocked) {
       const gated = config.momoEnabled && config.momoOnCapExit;
-      if (inBuyZone) {
+      if (inBuyZone || !exitGainOk) {
         sellDeferred = true;
-        rule = "R2 deferred (LTH buy zone)";
-        note = `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB but ≤ LTH ${exitBlockKey} ${exitBlockLevel.toFixed(0)} — holding`;
+        rule = inBuyZone ? "R2 deferred (LTH buy zone)" : "R2 deferred (below entry)";
+        note = inBuyZone ? `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB but ≤ LTH ${exitBlockKey} ${exitBlockLevel.toFixed(0)} — holding` : `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB but ${px.toFixed(0)} < entry ${(s.lastBuyPx ?? 0).toFixed(0)} × ${(1 + (config.exitMinGainPct ?? 0)).toFixed(2)} — holding`;
       } else if (!gated || momoWeak) {
         enterCash();
         rule = "R2 Capitulation exit";
@@ -448,10 +480,12 @@ export function decideSthCb(
   }
 
   // ── Trend latch ───────────────────────────────────────────────────────────
-  const ladder = s.reentryArmed && !!config.trendReentryRatio;
+  // v2.2 re-entry guard: the cheap R5 / R8 re-entries are only allowed while price ≤ last exit × (1 + pct)
+  const reentryPriceOk = typeof config.reentryBelowLastExitPct !== "number" || !(typeof s.lastExitPx === "number" && s.lastExitPx > 0) || px <= s.lastExitPx * (1 + config.reentryBelowLastExitPct);
+  const ladder = s.reentryArmed && !!config.trendReentryRatio && reentryPriceOk;
   const enterRatio = ladder ? Number(config.trendReentryRatio) : trendEnterRatio;
   // Idea 8: momentum re-entry — armed after a trend exit, fires when ROC recovers (ratio floor = ladder ratio or 1.0)
-  const momoReentry = s.reentryArmed && typeof config.reentryRocThreshold === "number" && !s.trendLatch
+  const momoReentry = s.reentryArmed && reentryPriceOk && typeof config.reentryRocThreshold === "number" && !s.trendLatch
     && roc >= config.reentryRocThreshold && ratio >= (config.trendReentryRatio ?? 1.0);
   if (!s.trendLatch && (ratio >= enterRatio || momoReentry) && !entryBlocked) {
     const wasCap = s.capLatch;
@@ -474,7 +508,7 @@ export function decideSthCb(
     s.exitConfirmCount = (s.exitConfirmCount ?? 0) + 1;
     const confirmed = s.exitConfirmCount >= confirmDays;
     const gated = config.momoEnabled && config.momoOnTrendExit;
-    if (confirmed && (!gated || momoWeak) && slopeOk && !inBuyZone && !recovered) {
+    if (confirmed && (!gated || momoWeak) && slopeOk && !inBuyZone && !recovered && exitGainOk) {
       enterCash();
       s.reentryArmed = true;
       rule = "R3 Trend exit";
@@ -484,7 +518,7 @@ export function decideSthCb(
         (slopeActive ? " and CB slope ≤ 0" : "");
     } else {
       sellDeferred = true;
-      const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : (gated && !momoWeak) ? "momentum" : inBuyZone ? "LTH buy zone" : "recovered from low");
+      const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : (gated && !momoWeak) ? "momentum" : inBuyZone ? "LTH buy zone" : !exitGainOk ? "below entry" : "recovered from low");
       rule = `R3 deferred (${why})`;
       note = `price ${pct(ratio)} ≤ ${pct(trendExitRatio)} of STH CB but ${why} — holding`;
     }
@@ -537,45 +571,47 @@ export function decideSthCb(
     }
   }
 
-  // ── v2 Idea 15: scale OUT at LTH PVR upper bands ─────────────────────────
+  // ── v2 Idea 15: scale OUT at LTH PVR upper bands (or at multiples of the STH cost basis, v2.2) ──
   const lTiers = lthTiers(config);
   let slicedThisTick = false;
   if ((s.capLatch || s.trendLatch) && lTiers.length) {
     let hit = 0;
     for (const t of lTiers) {
-      const key = sigmaKey(t.sigma);
-      const level = key ? Number(extra.bands?.[key]) : NaN;
+      const level = tierLevel(t, cb, extra.bands);
       if (fin(level) && level > 0 && px >= level) hit++;
     }
     if (hit > (s.lthTierLevel ?? 0)) {
       // Idea ④: the first rung may use its own (lighter) momentum threshold
       const rungThr = hit === 1 && typeof config.lthFirstRungMomoThreshold === "number" ? config.lthFirstRungMomoThreshold : config.momoThreshold;
       const gateOk = !config.lthSellMomoGate || !config.momoEnabled || rocGate <= rungThr;
+      const tier = lTiers[hit - 1];
+      // v2.2 no-loss ladder: a partial slice must clear the last buy / re-buy price (full exits are not held back)
+      const sliceGainOk = tier.alloc <= 0 || gainOk(s.lastBuyPx, config.sliceAboveLastBuyPct);
       // A hold that was *entered* above a tier must not scale out on day 1: initialise the level at entry instead
       const freshEntry = (s.holdDays ?? 0) === 0;
       if (freshEntry) {
         s.lthTierLevel = hit;
-      } else if (gateOk && (cooldownOk || lTiers[hit - 1].alloc <= 0)) {
+      } else if (gateOk && sliceGainOk && (cooldownOk || tier.alloc <= 0)) {
         s.lthTierLevel = hit;
         s.sinceScaleEvent = 0;
-        const tier = lTiers[hit - 1];
         if (tier.alloc <= 0) {
           enterCash();
           s.reentryArmed = false;
           s.distLatch = true;
-          rule = `R15 LTH scale-out tier ${hit} (full exit at +${tier.sigma}σ)`;
+          rule = `R15 LTH scale-out tier ${hit} (full exit at ${tierLabel(tier)})`;
         } else {
           s.scaledAlloc = tier.alloc;
           s.postSellPeak = px;
+          s.lastSlicePx = px;
           slicedThisTick = true;
-          rule = `R15 LTH scale-out tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC (+${tier.sigma}σ)`;
+          rule = `R15 LTH scale-out tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC (${tierLabel(tier)})`;
         }
-        note = `price ${px.toFixed(0)} ≥ LTH PVR +${tier.sigma}σ`;
+        note = `price ${px.toFixed(0)} ≥ ${typeof tier.cbRatio === "number" ? "" : "LTH PVR "}${tierLabel(tier)}`;
         sellDeferred = false;
       } else {
         sellDeferred = true;
-        rule = `R15 deferred (momentum)`;
-        note = `price above LTH +${lTiers[hit - 1].sigma}σ but ${rocTxt} > thr — holding`;
+        rule = `R15 deferred (${!gateOk ? "momentum" : !sliceGainOk ? "below last buy" : "cooldown"})`;
+        note = `price above ${tierLabel(tier)} but ${!gateOk ? rocTxt + " > thr" : !sliceGainOk ? `${px.toFixed(0)} < last buy ${(s.lastBuyPx ?? 0).toFixed(0)}` : "cooldown"} — holding`;
       }
     }
   }
@@ -584,7 +620,9 @@ export function decideSthCb(
   // Never in the same tick as the slice it would reverse: `cooldownOk` was evaluated before R15 ran, and the
   // ≤ dipRebuyAtCbRatio trigger can be true at the moment of a slice — without this guard the slice is silently
   // cancelled while still consuming a re-buy and resetting the cooldown / tier level (bug found 2026-11-03).
-  if (!slicedThisTick && (s.capLatch || s.trendLatch) && typeof s.scaledAlloc === "number" && s.scaledAlloc < 1
+  // v2.2 no-loss ladder: the re-buy must be below the last slice price × (1 − rebuyBelowLastSellPct).
+  const rebuyPriceOk = typeof config.rebuyBelowLastSellPct !== "number" || !(typeof s.lastSlicePx === "number" && s.lastSlicePx > 0) || px <= s.lastSlicePx * (1 - config.rebuyBelowLastSellPct);
+  if (!slicedThisTick && rebuyPriceOk && (s.capLatch || s.trendLatch) && typeof s.scaledAlloc === "number" && s.scaledAlloc < 1
     && (typeof config.dipRebuyPct === "number" || typeof config.dipRebuyAtCbRatio === "number")
     && (config.dipRebuyMax == null || (s.dipRebuys ?? 0) < config.dipRebuyMax) && cooldownOk) {
     const peak = s.postSellPeak ?? px;
@@ -595,6 +633,7 @@ export function decideSthCb(
       s.scaledAlloc = 1;
       s.dipRebuys = (s.dipRebuys ?? 0) + 1;
       s.sinceScaleEvent = 0;
+      s.lastBuyPx = px;
       // Allow the SAME tiers to fire again on the next leg up: reset the tier level to the tiers still below price
       s.lthTierLevel = 0;
       rule = `R16 Dip re-buy → 100% BTC`;

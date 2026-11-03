@@ -141,6 +141,24 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | P4-03 | Sharpe convention | reproduce One-Pager | not reproducible; deposit-neutral Sharpe used and footnoted as non-comparable | DOCUMENTED |
 | P4-04 | Both sheets 4 pages within A4, no JS errors | spare ≥ 0 | v2.1 31/22/4/41 px, v2 46/27/48/41 px | PASS |
 
+### Hybrid v2.2 — no-loss ladder, CB-% rungs, multi-period table (v0.6.177)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| V22-01 | New flags inert by default: v2.1 baseline bit-identical with all v2.2 flags off | $4,026,777 / 52 | identical; 42 unit tests pass (slice guard, re-buy guard, re-entry guard, min-gain exit, `cbRatio` tiers) | PASS |
+| V22-02 | `sliceAboveLastBuyPct 0` on corrected v2.1 (10-y table basis) | removes ladder round-trip losses | +5.2 % NAV; no slice below its re-buy in the trail; cooldown redundant (C = no cooldown → $23,545,565 vs $22,100,781) | PASS |
+| V22-03 | `rebuyBelowLastSellPct` on top of V22-02 | ≥ baseline? | slightly negative | REJECTED |
+| V22-04 | `reentryBelowLastExitPct` (Sep-24 / May-25 losses) | ≥ baseline? | misses the following legs — hurts | REJECTED |
+| V22-05 | `exitMinGainPct` (Nov-22 / Mar-25 losses) | ≥ baseline? | rides draw-downs — hurts badly | REJECTED |
+| V22-06 | CB-% ladder rungs in 5 % steps (`ladder_optimize.ts --kind cb`, 10-y table) | ≥ LTH ladder? | best ≈ $11.4 M vs $22.1 M (≈ half) | REJECTED |
+| V22-07 | LTH ladder re-search on C (`--kind lth`) | better ladder | `+0.5σ→50 % · +1σ→20 % · +1.5σ→10 % · +2.5σ→0 %` → 10-y $24,174,129, table WF 7/11 (was 6/11) | PASS |
+| V22-08 | `periods.ts --file candidates_v22b.json` — v2.2 vs v2.1 on 1/3/5/7/10 y | ≥ v2.1 on every horizon, WF not worse | $6,012 / $27,790 / $82,031 / $637,464 / $24,174,129 (+0.4 / +12.4 / +11.0 / +9.1 / +9.4 %); DD lower on 3/5/7/10 y; WF 8/10 std (=), 7/11 table (+1) | PASS |
+| V22-09 | `robustness.ts` on v2.2 (standard basis) | ≥ v2.1 every row | $4,399,250 · 52.7× · 61 trades · DD 42 % · 8/10; all stress rows ≥ v2.1 | PASS |
+| V22-10 | Deployed `ef_sth_cb_bt_execute` with v2.2 extras (run `9d83751c`) | = lab | $4,399,249.74 / 61 trades — identical | PASS |
+| V22-11 | Tracker row `hybrid_v2_2` upserted + `ef_sth_cb_tracker` rebuild | 4 trackers to latest close | v1 $2.60 M / v2 $3.49 M / v2.1 $3.83 M / v2.2 $4.19 M to 2026-11-02 | PASS |
+| V22-12 | Admin UI preset `hybrid_v2_2` default; new field `btCbSliceGain`; all presets blank it; scripts parse | no syntax errors | 20/20 inline scripts OK; preset note updated | PASS |
+| V22-13 | `docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html` renders 4 A4 pages, no JS errors; rule-card trigger dates vs v2.2 trade list | fit; dates match | 0 px overflow on all 4 pages; R1/R14/R2/R3/R5/R12/final-rung dates identical to v2.1 (only slices differ) | PASS |
+
 ---
 
 ## 2. Database / RPC

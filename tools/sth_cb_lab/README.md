@@ -444,6 +444,58 @@ period end — re-run with a later date when you want the page to move forward i
 > prints keys a config *removes* relative to the base as `key=off` (an optimiser winner with no cooldown used to print
 > as "(defaults)").
 
+### v2.2 — the "no-loss ladder", CB-% rungs tested, and the multi-period harness (2026-11-03)
+
+Starting point: six loss-making trades highlighted in the corrected `bbef4aaf` CSV — (a) ladder round-trips (slice sold
+below its re-buy, re-buy above its slice), (b) re-entries above the previous exit (Sep-24, May-25, two ~0.5 % whipsaws),
+(c) exits below the entry (Nov-22, Mar-25). Four candidate rules were added as flags (all **off** unless set):
+
+| Flag | Rule | Verdict (10-y table basis, see below) |
+|---|---|---|
+| `sliceAboveLastBuyPct` | a partial R15 slice is only taken when price ≥ last buy / re-buy × (1 + pct). `0` = simply above | **+5–6 % NAV, removes every (a) loss, replaces the cooldown → adopted** |
+| `rebuyBelowLastSellPct` | an R16 re-buy only when price ≤ last slice × (1 − pct) | slightly negative once the slice guard is on — rejected |
+| `reentryBelowLastExitPct` | a trend re-entry (R3/R5/R8) only below the last exit price | hurts: misses the Sep-24 / May-25 legs — rejected |
+| `exitMinGainPct` | no full exit (R2/R3/R12) unless price ≥ entry × (1 + pct) | hurts badly (rides draw-downs) — rejected |
+
+`lthSellTiers` entries may now use **`cbRatio`** instead of `sigma` (e.g. `{"cbRatio":1.3,"alloc":0.5}` = a rung at 130 %
+of the STH cost basis). `ladder_optimize.ts --kind cb --levels 1.05,1.10,…` enumerates such ladders (random sampling with
+`--samples N` and `--max-rungs K` when the enumeration is too large). **Result: CB-% ladders in 5 % steps reach ≈ $11.4 M
+on the 10-y table basis vs $22.1 M for the LTH-band ladder — about half.** The cost basis is a trend line; euphoria is a
+*deviation* and the σ bands measure exactly that. Rejected.
+
+With the slice guard in place, the ladder was re-searched (`ladder_optimize.ts --kind lth --base results/base_C.json`):
+an **earlier first rung at +0.5σ** — which hurt on v2 (−3…−11 %) — now helps, because the losing early slices are the ones
+the guard skips. **Hybrid v2.2** = corrected v2.1 + `"sliceAboveLastBuyPct":0`, **no cooldown**,
+`lthSellTiers: [{0.5→0.5},{1→0.2},{1.5→0.1},{2.5→0}]`:
+
+| | v2.1 (corrected) | **v2.2** | Δ |
+|---|---|---|---|
+| $1 000 lump 2017-01-01 → 2026-10-23 | $4 026 777 · 48.3× · 52 trades · DD 42 % | **$4 399 250 · 52.7× · 61 trades · DD 42 %** | +9.2 % |
+| Walk-forward (standard / 10-y table basis) | 8/10 · 6/11 | **8/10 · 7/11** | better |
+| 1 y to 2026-06-09 ($2 400 + $200/mo) | $5 991 | **$6 012** | +0.4 % |
+| 3 y | $24 734 | **$27 790** | +12.4 % |
+| 5 y | $73 888 | **$82 031** | +11.0 % |
+| 7 y | $584 067 | **$637 464** | +9.1 % |
+| 10 y | $22 100 781 | **$24 174 129** | +9.4 % |
+
+Drawdowns on the table basis fall too (3 y 22 → 15 %, 5 y 26 → 21 %, 7 y 28 → 24 %). `robustness.ts` beats v2.1 on every
+stress row. Deployed EF reproduces the lab exactly (run `9d83751c`). Promoted: default Admin UI preset `hybrid_v2_2`
+(new field *Slice only above last buy by %*), tracker row `hybrid_v2_2`, `HYBRID_V2_2` in `factsheet_data.ts`
+(`--variant v2_2`, compares with v2.1), fact sheet `docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html`.
+
+**`periods.ts` — the multi-period harness** used for the table above:
+
+```powershell
+deno run -A tools/sth_cb_lab/periods.ts --file tools/sth_cb_lab/results/candidates_v22b.json   # [{label, config}, …]
+deno run -A tools/sth_cb_lab/periods.ts --extras '{…}' --period-end 2026-06-09 --upfront 2400 --monthly 200
+```
+
+For each config it prints the 1/3/5/7/10-year NAVs on the fact-sheet / One-Pager deposit plan (with Std DCA and HODL),
+the raw-NAV drawdown per period, and walk-forward on both the standard basis and the 10-y table basis. Pass configs via a
+JSON file when there are several — PowerShell mangles long inline JSON. `optimize.ts --idea v22` holds the grid for the
+four no-loss flags; `--idea v3` the three rejected ideas from the `bbef4aaf` audit (block exits ≤ LTH −0.5σ, V-bottom exit
+skip, lighter first-rung gate).
+
 ## Typical workflow
 
 ```powershell

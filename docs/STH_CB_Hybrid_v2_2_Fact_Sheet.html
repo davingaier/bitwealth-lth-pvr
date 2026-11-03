@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STH Cost Basis Hybrid v2.2 — BitWealth Fact Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="sth_cb_factsheet_data_v2_2.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0A0F1E; --bg2: #151B2E; --bg3: #1A2138; --gold: #FFB400; --gold-lt: #FFC933;
+      --white: #fff; --txt2: #A8B2D1; --txt3: #6B7896; --green: #10B981; --red: #EF4444;
+      --orange: #F97316; --blue: #38BDF8; --purple: #A855F7; --rose: #FB7185; --border: rgba(255,180,0,0.15);
+    }
+    html, body { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: var(--white); background: var(--bg); }
+    .screen-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 28px; background: #060a12; min-height: 100vh; }
+    .page { width: 210mm; min-height: 297mm; padding: 10mm 14mm 10mm; background: var(--bg); box-shadow: 0 0 60px rgba(0,0,0,.8); position: relative; }
+    @media print {
+      body { background: #fff !important; }
+      .screen-wrap { display: block; padding: 0; gap: 0; background: transparent; }
+      .page { box-shadow: none !important; margin: 0; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page:last-child { break-after: auto; }
+      .no-print { display: none !important; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    .print-btn { position: fixed; top: 16px; right: 16px; z-index: 10; background: var(--gold); color: #0A0F1E; border: 0; padding: 9px 16px; border-radius: 8px; font: 600 13px Inter, sans-serif; cursor: pointer; }
+    .hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); margin-bottom: 9px; }
+    .hero-logo img { height: 48px; border-radius: 8px; background: #fff; padding: 4px; }
+    .hero-text { flex: 1; text-align: right; }
+    .hero-text h1 { font-size: 21px; font-weight: 800; color: var(--gold); letter-spacing: -.4px; line-height: 1.1; }
+    .hero-text h1 .v { font-size: 12px; font-weight: 700; color: #0A0F1E; background: var(--gold); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 6px; letter-spacing: .5px; }
+    .hero-text .tagline { font-size: 11.5px; color: var(--txt2); margin-top: 3px; }
+    .hero-text .meta { font-size: 9.5px; color: var(--txt3); margin-top: 2px; }
+    .sh { font-size: 10.2px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); margin: 7px 0 4px; display: flex; align-items: center; gap: 8px; }
+    .sh::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    p { color: var(--txt2); font-size: 10.8px; line-height: 1.45; }
+    p strong { color: var(--white); }
+    .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; margin: 8px 0 4px; }
+    .stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+    .stat .v { font-size: 17px; font-weight: 800; color: var(--gold); line-height: 1.1; }
+    .stat .v.g { color: var(--green); }
+    .stat .l { font-size: 8.5px; color: var(--txt3); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
+    .stat .s { font-size: 8.8px; color: var(--txt2); margin-top: 1px; }
+    .stat .s em { color: var(--txt3); font-style: normal; display: block; }
+    .chart-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px 5px; }
+    .chart-box + .chart-box { margin-top: 6px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 4px 11px; font-size: 8.3px; color: var(--txt2); margin: 3px 2px 0; }
+    .legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 5px; vertical-align: middle; background: var(--c); border-radius: 2px; }
+    .legend span.dash::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
+    .legend span.dot::before { background: repeating-linear-gradient(90deg, var(--c) 0 2px, transparent 2px 4px); }
+    .legend span.mk::before { width: 8px; height: 8px; border-radius: 50%; }
+    .legend span.mk.sm::before { width: 6px; height: 6px; }
+    .legend span.tri::before { width: 0; height: 0; background: none; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--c); border-radius: 0; }
+    .legend span.tri.sm::before { border-left-width: 4px; border-right-width: 4px; border-bottom-width: 7px; }
+    .legend span.tri.down::before { border-bottom: 0; border-top: 9px solid var(--c); }
+    .legend span.tri.down.sm::before { border-top-width: 7px; }
+    .legend span.area::before { height: 9px; opacity: .55; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .two > * { min-width: 0; }
+    #cmpTable { table-layout: fixed; }
+    #cmpTable td { white-space: normal; line-height: 1.25; }
+    #cmpTable td:first-child { width: 36%; }
+    .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; }
+    .card.new { border-color: rgba(255,180,0,.45); background: linear-gradient(180deg, rgba(255,180,0,.07), var(--bg2) 60%); }
+    .card h3 { font-size: 10.8px; font-weight: 700; color: var(--white); margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
+    .card h3 .pill { font-size: 8.3px; font-weight: 700; padding: 1px 6px; border-radius: 10px; letter-spacing: .4px; }
+    .pill.buy { background: rgba(16,185,129,.18); color: var(--green); }
+    .pill.sell { background: rgba(239,68,68,.18); color: var(--red); }
+    .pill.scale { background: rgba(251,113,133,.18); color: var(--rose); }
+    .pill.filter { background: rgba(56,189,248,.18); color: var(--blue); }
+    .pill.v2 { background: var(--gold); color: #0A0F1E; }
+    .card ul { list-style: none; }
+    .card li { font-size: 9.3px; color: var(--txt2); padding: 1.2px 0 1.2px 11px; position: relative; line-height: 1.33; }
+    .card li::before { content: "▸"; position: absolute; left: 0; color: var(--gold); }
+    .card li b { color: var(--white); font-weight: 600; }
+    .card li code { font-family: ui-monospace, Consolas, monospace; font-size: 9.3px; color: var(--gold-lt); background: rgba(255,180,0,.08); padding: 0 4px; border-radius: 3px; }
+    .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 6px; margin: 5px 0 2px; }
+    .state { background: var(--bg3); border: 1px solid var(--border); border-radius: 9px; padding: 6px 10px; text-align: center; }
+    .state .n { font-size: 12px; font-weight: 800; }
+    .state .d { font-size: 9px; color: var(--txt3); margin-top: 2px; }
+    .state.cash .n { color: var(--txt2); } .state.cap .n { color: var(--green); } .state.trend .n { color: var(--orange); }
+    .arrow { font-size: 9px; color: var(--txt3); text-align: center; line-height: 1.3; }
+    .arrow b { display: block; font-size: 14px; color: var(--gold); }
+    .ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 6px; }
+    .rung { background: var(--bg3); border: 1px solid var(--border); border-radius: 7px; padding: 4px 6px; text-align: center; position: relative; }
+    .rung .s { font-size: 8.5px; color: var(--purple); font-weight: 700; letter-spacing: .4px; }
+    .rung .a { font-size: 15px; font-weight: 800; color: var(--white); line-height: 1.1; margin-top: 1px; }
+    .rung .a small { font-size: 8.5px; color: var(--txt3); font-weight: 500; }
+    .rung .d { font-size: 8px; color: var(--txt3); margin-top: 2px; }
+    .rung.full .a { color: var(--red); }
+    .rung.in .a { color: var(--green); }
+    .page:nth-child(2) .card li { font-size: 9px; line-height: 1.28; padding: 0.8px 0 0.8px 11px; }
+    .page:nth-child(2) .sh { margin: 6px 0 3px; }
+    .page:nth-child(2) .three { gap: 8px; }
+    .page:nth-child(3) .trades td { padding: 0.2px 4px; font-size: 7.3px; line-height: 1.2; }
+    .trades.compact td { padding: 0.2px 3px; font-size: 7px; line-height: 1.18; }
+    .trades.compact th { padding: 1px 3px; font-size: 7.5px; }
+    .page:nth-child(3) .sh { margin: 5px 0 3px; }
+    .page:nth-child(4) .card li { font-size: 8.8px; line-height: 1.3; padding: 0 0 0 11px; }
+    .page:nth-child(4) .foot { font-size: 7.6px; line-height: 1.35; margin-top: 6px; padding-top: 5px; }
+    .page:nth-child(4) .sh { margin: 6px 0 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    th { text-align: left; font-size: 8.3px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt3); padding: 3px 5px; border-bottom: 1px solid var(--border); font-weight: 600; }
+    td { padding: 1.8px 5px; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--txt2); white-space: nowrap; }
+    td.r, th.r { text-align: right; }
+    td b { color: var(--white); font-weight: 600; }
+    td.g { color: var(--green); } td.rd { color: var(--red); } td.gold { color: var(--gold); font-weight: 600; } td.rose { color: var(--rose); } td.dim { color: var(--txt3); }
+    tr.year td { background: rgba(255,180,0,.05); }
+    .trades td { padding: 0.4px 4px; font-size: 7.7px; line-height: 1.25; }
+    .trades th { padding: 2px 4px; }
+    .trades td.part { color: var(--rose); } .trades td.rebuy { color: #86EFAC; }
+    #cmpTable td { padding: 1.5px 5px; }
+    #robustA td, #robustB td { padding: 0.7px 5px; }
+    .foot { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 7.9px; color: var(--txt3); line-height: 1.4; }
+    .pageno { position: absolute; bottom: 6mm; right: 14mm; font-size: 8.5px; color: var(--txt3); }
+    .note { font-size: 8.9px; color: var(--txt3); margin-top: 3px; }
+    .badge-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+    .badge { font-size: 8.3px; padding: 2px 7px; border-radius: 10px; background: rgba(255,255,255,.06); color: var(--txt2); border: 1px solid rgba(255,255,255,.08); }
+    .badge.new { border-color: rgba(255,180,0,.5); color: var(--gold-lt); }
+
+    /* ── Page 4: One-Pager-style performance comparison ── */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+    .cmp-chart { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 5px; }
+    .cmp-chart .ct { font-size: 9.5px; font-weight: 700; color: var(--txt2); margin-bottom: 4px; text-align: center; letter-spacing: .02em; }
+    .cmp-legend { display: flex; justify-content: center; gap: 12px; margin-top: 3px; flex-wrap: wrap; }
+    .cmp-legend span { display: flex; align-items: center; gap: 4px; font-size: 8px; color: var(--txt3); }
+    .cmp-legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+    .perf-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 6px; }
+    .perf-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .perf-table th { background: var(--bg3); color: var(--txt3); font-size: 8px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .perf-table th.period-col { text-align: left; padding-left: 10px; }
+    .perf-table td { padding: 2px 8px; font-size: 9.8px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.04); color: var(--txt2); white-space: nowrap; }
+    .perf-table td.period-cell { text-align: left; padding-left: 10px; font-weight: 600; color: var(--txt3); font-size: 9.5px; }
+    .perf-table tr:last-child td { border-bottom: none; }
+    .perf-table .period-header td { background: var(--bg3) !important; color: var(--txt3); font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-top: 1px solid var(--border); }
+    .perf-table .row-strat td { background: rgba(255,180,0,.07); }
+    .perf-table .row-prev td { background: rgba(10,74,110,.18); }
+    .perf-table .row-bench td { background: rgba(107,120,150,.10); font-style: italic; }
+    .perf-table .bench-start td { border-top: 1.5px solid rgba(107,120,150,.6) !important; }
+    .perf-table .bench-end td { border-bottom: 1.5px solid rgba(107,120,150,.6) !important; }
+    .perf-table .row-bench td.period-cell { box-shadow: inset 3px 0 0 rgba(107,120,150,.7); }
+    .slabel { display: inline-block; font-size: 8.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: .04em; font-style: normal; }
+    .slabel.strat { background: rgba(255,180,0,.15); color: var(--gold-lt); }
+    .slabel.prev { background: rgba(56,189,248,.14); color: #7dd3fc; }
+    .slabel.bench { background: rgba(107,120,150,.12); color: #8892A4; }
+    .nav-val { color: var(--white); font-weight: 600; }
+    .pos { color: var(--green); font-weight: 600; } .neg { color: var(--red); font-weight: 600; }
+    .dd-val { color: #f97316; } .contrib-val { color: var(--txt3); font-size: 9.5px; }
+  </style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨 Print / Save PDF</button>
+<div class="screen-wrap">
+
+  <!-- ═══════════════════════════ PAGE 1 ═══════════════════════════ -->
+  <div class="page">
+    <div class="hero">
+      <div class="hero-logo"><img id="logo1" alt="BitWealth" /></div>
+      <div class="hero-text">
+        <h1>STH Cost Basis Hybrid Strategy <span class="v">v2.2</span></h1>
+        <div class="tagline">All-in at capitulation · scale <em>out</em> into euphoria · re-buy the pull-back — driven by on-chain holder cost bases</div>
+        <div class="meta" id="meta1">Prepared by BitWealth · Confidential — For Review Only</div>
+      </div>
+    </div>
+
+    <div class="sh">The strategy in one paragraph</div>
+    <p>
+      The <strong>Short-Term-Holder (STH) cost basis</strong> is the average price paid for every bitcoin that moved on-chain in the last 155 days — the
+      break-even line of the market's most price-sensitive participants. Bull markets hold above it, bear markets live below it, and capitulation
+      happens 25–35 % beneath it. The strategy <strong>buys everything</strong> at <strong>75 % of the STH cost basis</strong> (or at the Long-Term-Holder PVR −0.5σ band), rides
+      established up-trends from <strong>12 % above</strong> the line, and <strong>sells in four slices</strong> as price climbs through the LTH PVR +0.5σ,
+      +1σ, +1.5σ and +2.5σ bands — each slice <strong>only once short-term momentum has turned negative</strong> — <strong>buying the slices back</strong> after a
+      10 % pull-back (or when price returns to within 5 % of the cost basis — once per hold). <strong>Version 2.2 adds one rule: a slice is never sold below the price of the last buy.</strong>
+      A trade-by-trade audit of v2.1 found that every loss-making ladder round-trip was a slice sold <em>under</em> its re-buy price; the "no-loss ladder" rule removes them,
+      replaces the cooldown, and — because weak slices are now skipped — makes an earlier first rung profitable (keeping <strong>50 → 20 → 10 → 0 %</strong> at
+      +0.5 / +1 / +1.5 / +2.5σ). Worth <span id="p1-uplift"></span> more than v2.1 on $1,000, and 9–12 % more on every horizon of the deposit-plan table (page 4).
+      Idle cash earns stable-coin yield.
+    </p>
+
+    <div class="stats" id="stats"></div>
+    <div class="note" id="basis-note"></div>
+
+    <div class="sh">Price, bands and every trade · 2017 → 2026</div>
+    <div class="chart-box">
+      <canvas id="mainChart" height="112"></canvas>
+      <div class="legend">
+        <span style="--c:#CBD5E1">BTC price (log)</span>
+        <span style="--c:#F97316">STH cost basis</span>
+        <span class="dash" style="--c:#10B981">75 % of CB — capitulation buy</span>
+        <span class="dash" style="--c:#38BDF8">112 % of CB — trend entry</span>
+        <span class="dash" style="--c:#FBBF24">95 % / 97 % of CB — exits</span>
+        <span class="dash" style="--c:#A855F7">LTH PVR −0.5σ (buy) · +2.5σ (final exit)</span>
+        <span class="dot" style="--c:#C084FC">LTH PVR +0.5σ / +1σ / +1.5σ — scale-out rungs</span>
+        <span class="area" style="--c:#10B981">capitulation hold</span>
+        <span class="area" style="--c:#F97316">trend hold</span>
+        <span class="tri" style="--c:#22C55E">all-in (below the price line)</span>
+        <span class="tri sm" style="--c:#86EFAC">dip re-buy</span>
+        <span class="tri down sm" style="--c:#FB7185">scale-out slice (above the line)</span>
+        <span class="tri down" style="--c:#EF4444">all-out</span>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title" style="font-size:9.5px;color:var(--txt2)">Share of the portfolio held in bitcoin</div>
+      <canvas id="allocChart" height="22"></canvas>
+    </div>
+
+    <div class="sh">Portfolio value vs buy-and-hold — and vs version 2</div>
+    <div class="chart-box">
+      <canvas id="navChart" height="52"></canvas>
+      <div class="legend">
+        <span style="--c:#FFB400">Hybrid v2.2 (after all fees)</span>
+        <span class="dash" style="--c:#FDE68A">Hybrid v2 (after all fees)</span>
+        <span style="--c:#A855F7">HODL — buy day 1, never sell</span>
+        <span class="area" style="--c:#10B981">in market</span>
+      </div>
+    </div>
+
+    <div class="foot">Back-test on Research Bitcoin on-chain data, $1 000 single investment, 2017-01-01 → 2026-10-23, fills at the close <em>after</em> the signal day, VALR exchange fees (8 / 18 bps), BitWealth management fee 1 % p.a. and performance fee 10 % above high-water mark, idle cash in USDPC at 10 % p.a. Past performance is not indicative of future results. See page 3 for the v2 comparison, robustness tests and full disclosures; page 4 for the like-for-like comparison with the LTH PVR one-pager.</div>
+    <div class="pageno">1 / 4</div>
+  </div>
+
+  <!-- ═══════════════════════════ PAGE 2 ═══════════════════════════ -->
+  <div class="page">
+    <div class="hero">
+      <div class="hero-logo"><img id="logo2" alt="BitWealth" /></div>
+      <div class="hero-text"><h1>How the rules work</h1><div class="tagline">Three states, a four-rung ladder, nine rules, four filters — evaluated once a day on the daily close</div></div>
+    </div>
+
+    <div class="sh">The three states</div>
+    <div class="flow">
+      <div class="state cash"><div class="n">CASH</div><div class="d">100 % USDT → USDPC yield</div></div>
+      <div class="arrow">capitulation<br>buy<b>⇄</b>exit at<br>cost basis</div>
+      <div class="state cap"><div class="n">CAPITULATION HOLD</div><div class="d">100 % BTC · bought ≥ 25 % below the cost basis</div></div>
+      <div class="arrow">price &gt;<br>112 % CB<b>⇄</b>trend exit /<br>trailing stop</div>
+      <div class="state trend"><div class="n">TREND HOLD</div><div class="d">10–100 % BTC · riding an up-trend, scaling out at the top</div></div>
+    </div>
+    <p class="note">A capitulation hold is <em>upgraded</em> to a trend hold if price rallies straight through the cost basis to +12 % — no round-trip sale. The scale-out ladder below applies inside <em>either</em> hold state.</p>
+
+    <div class="sh">The scale-out ladder and the dip re-buy (v2) — slices optimised in v2.1, loss-proofed in v2.2</div>
+    <div class="three">
+      <div class="card new"><h3><span class="pill scale">SCALE OUT</span> R15 · Ladder</h3><ul>
+        <li>Inside a hold, each time price closes above the next <b>LTH PVR upper band</b> the BTC share steps down: <b>+0.5σ → 50 %</b>, <b>+1σ → 20 %</b>, <b>+1.5σ → 10 %</b>, <b>+2.5σ → 0 %</b></li>
+        <li><b>No-loss rule (v2.2):</b> a slice is only sold when price is <b>above the last buy or re-buy price</b> — a rung that is armed below it simply waits</li>
+        
+        <li>A hold <em>entered</em> above a rung starts there; nothing is sold on day one</li>
+      </ul></div>
+      <div class="card new"><h3><span class="pill filter">GATE</span> Momentum gate</h3><ul>
+        <li>A rung is <b>armed</b> when price crosses the band, but the slice is only <b>sold once the 2-day rate of change is ≤ −2 %</b> — the strategy sells the first sign of weakness at height, never into strength</li>
+        
+        <li>Without this gate a ladder <em>under</em>-performs the single all-out — tested, not assumed</li>
+      </ul></div>
+      <div class="card new"><h3><span class="pill buy">RE-BUY</span> R16 · Dip re-buy</h3><ul>
+        <li>After a slice, go back to <b>100 % BTC</b> when price is <b>10 % below</b> its post-slice peak <em>or</em> back at <b>≤ 105 %</b> of the STH cost basis</li>
+        <li>Re-arms the ladder for the next leg up; <b>one re-buy</b> per hold (v2's three at ≤ 110 % oscillate against the first rung)</li>
+        <li><b>No cooldown needed:</b> the no-loss rule blocks the slice→re-buy→slice flip-flop that v2.1's 2-day cooldown was papering over</li>
+        <li><b>Why +0.5σ now?</b> Before v2.2 an early rung lost money on whipsaws; with slices only taken above the last buy, selling half at +0.5σ on weakness and re-buying ~10 % lower adds cash at every leg of the cycle; +2.5σ still catches the blow-off</li>
+      </ul></div>
+    </div>
+    <div class="ladder">
+      <div class="rung in"><div class="s">BELOW +0.5σ</div><div class="a">100<small>% BTC</small></div><div class="d">fully invested</div></div>
+      <div class="rung"><div class="s">LTH PVR +0.5σ</div><div class="a">50<small>% BTC</small></div><div class="d">sell 50 % on weakness</div></div>
+      <div class="rung"><div class="s">LTH PVR +1σ</div><div class="a">20<small>% BTC</small></div><div class="d">sell another 30 %</div></div>
+      <div class="rung"><div class="s">LTH PVR +1.5σ</div><div class="a">10<small>% BTC</small></div><div class="d">sell another 10 %</div></div>
+      <div class="rung full"><div class="s">LTH PVR +2.5σ</div><div class="a">0<small>% BTC</small></div><div class="d">final exit → cash</div></div>
+    </div>
+
+    <div class="sh">Entry rules — when cash becomes bitcoin (unchanged from v1)</div>
+    <div class="three">
+      <div class="card"><h3><span class="pill buy">BUY</span> R1 · Capitulation</h3><ul>
+        <li>Price closes at or below <b>75 % of the STH cost basis</b> and the 2-day rate of change is <b>≥ 0</b> — the knife has stopped falling</li>
+        <li>Deploy <b>100 %</b> of cash</li>
+        <li>Fired: Apr-18 $7.0k · Mar-20 $5.3k · Jun-21 $33.9k · Jan-22 $37.5k · Jun-22 $21.0k · Feb-26 $69.4k</li>
+      </ul></div>
+      <div class="card"><h3><span class="pill buy">BUY</span> R14 · LTH −0.5σ</h3><ul>
+        <li>Price closes at or below the <b>Long-Term-Holder PVR −0.5σ band</b> — catches bottoms where STH capitulation is shallow but long-term holders are under water</li>
+        <li>Fired: Nov-18 $5.2k · Nov-19 $7.3k · Jan-20 $8.1k · <b>Nov-22 $16.7k</b> · Sep/Oct-23 $26–27k · Jun-26 $59.9k</li>
+      </ul></div>
+      <div class="card"><h3><span class="pill buy">BUY</span> R3 / R5 / R8 · Trend</h3><ul>
+        <li><b>R3</b> fresh trend: price ≥ <b>112 %</b> of the cost basis · <b>R5</b> after a trend exit, re-enter at <b>102 %</b> · <b>R8</b> or as soon as 2-day momentum ≥ <b>+10 %</b> above the line</li>
+        <li>Fired: Aug-21 $48.8k · Sep-24 $63.7k · May-25 $97.0k</li>
+      </ul></div>
+    </div>
+
+    <div class="sh">Exit rules — when bitcoin becomes cash</div>
+    <div class="three">
+      <div class="card"><h3><span class="pill sell">SELL</span> R2 · Capitulation exit</h3><ul>
+        <li>From a capitulation hold, price recovers to <b>95 %</b> of the cost basis; sell only once 2-day momentum ≤ <b>−2 %</b></li>
+        <li>Fired: Jul-18 $8.2k · Jan-20 $8.1k · Aug-21 $45.4k · Apr-22 $46.4k · Nov-22 $19.4k · Oct-23 $26.8k · May-26 $80.5k</li>
+      </ul></div>
+      <div class="card"><h3><span class="pill sell">SELL</span> R3 / R12 · Trend exit</h3><ul>
+        <li><b>R3</b> price ≤ <b>97 %</b> of the cost basis, momentum ≤ −2 % <em>and</em> the cost basis flat or falling over 21 days · <b>R12</b> trailing stop <b>35 %</b> below the peak since entry</li>
+        <li>Fired: Sep-19 $8.1k (stop) · Mar-20 $7.95k · Sep-23 $25.8k · Aug-24 $59.9k · Mar-25 $88.9k · Oct-25 $109.5k</li>
+      </ul></div>
+      <div class="card"><h3><span class="pill sell">SELL</span> R15 · Final rung (+2.5σ)</h3><ul>
+        <li>The last rung of the ladder is the v1 euphoria exit: price ≥ the <b>LTH PVR +2.5σ</b> band, momentum turned → <b>sell everything</b>. Replaces v1's "2× cost basis" rule</li>
+        <li>Fired: <b>Dec-17 $16.6k</b> · <b>Apr-21 $61.4k</b> · <b>Oct-21 $61.1k</b></li>
+      </ul></div>
+    </div>
+
+    <div class="sh">Filters — what stops bad trades</div>
+    <div class="three">
+      <div class="card"><h3><span class="pill filter">FILTER</span> Minimum hold</h3><ul><li>No exit rule may fire within <b>15 days</b> of an entry — removes same-week whipsaws (ladder slices are exempt)</li></ul></div>
+      <div class="card"><h3><span class="pill filter">FILTER</span> Post-exit wait</h3><ul><li>After a final-rung exit, no trend re-entry until price has come back to <b>85 %</b> of the cost basis (v1: 90 %) — sits out the top-formation chop</li></ul></div>
+      <div class="card"><h3><span class="pill filter">FILTER</span> Macro top</h3><ul><li>No trend entries while price is above the LTH PVR +2.5σ band; capitulation buys are never blocked</li></ul></div>
+    </div>
+
+    <div class="sh">Why these two on-chain lines</div>
+    <div class="two">
+      <div class="card"><h3>STH cost basis — the regime line</h3><ul>
+        <li>Average acquisition price of coins younger than 155 days (Research Bitcoin <code>realized_price_sth</code>); reacts within weeks and has separated bull from bear since 2012</li>
+      </ul></div>
+      <div class="card"><h3>LTH PVR bands — the cycle extremes</h3><ul>
+        <li>BitWealth's Long-Term-Holder Profit-to-Volatility model. −0.5σ = long-term holders near break-even (accumulate); +0.5σ…+2.5σ = elevated-to-extreme unrealised profit (distribute in steps)</li>
+      </ul></div>
+    </div>
+    <div class="badge-row" id="cfg-badges"></div>
+    <div class="pageno">2 / 4</div>
+  </div>
+
+  <!-- ═══════════════════════════ PAGE 3 ═══════════════════════════ -->
+  <div class="page">
+    <div class="hero">
+      <div class="hero-logo"><img id="logo3" alt="BitWealth" /></div>
+      <div class="hero-text"><h1>Performance, v2 comparison &amp; robustness</h1><div class="tagline">Back-test 2017-01-01 → 2026-10-23 · $1 000 single investment · all fees included</div></div>
+    </div>
+
+    <div class="sh">Every trade — <span style="color:var(--rose);text-transform:none;letter-spacing:0">rose</span> = scale-out slice · <span style="color:#86EFAC;text-transform:none;letter-spacing:0">light green</span> = dip re-buy</div>
+    <div class="two" id="tradeCols">
+      <table class="trades" id="tradeTableA"></table>
+      <table class="trades" id="tradeTableB"></table>
+      <table class="trades" id="tradeTableC" style="display:none"></table>
+    </div>
+
+    <div class="two" style="margin-top:4px">
+      <div>
+        <div class="sh">Year by year</div>
+        <table id="annualTable"></table>
+        <p class="note">Calendar-year changes within the continuous back-test. "Walk-fwd" re-runs each year as an independent out-of-sample test seeded only with history to 1 January; "v2.1 WF" = the previous version.</p>
+      </div>
+      <div>
+        <div class="sh">v2.1 → v2.2 at a glance</div>
+        <table id="cmpTable"></table>
+        <p class="note" id="cmp-note"></p>
+      </div>
+    </div>
+
+    <div class="sh">Stress tests — v2.1 and v2.2 under the same moved assumptions</div>
+    <div class="two">
+      <table id="robustA"></table>
+      <table id="robustB"></table>
+    </div>
+    <p class="note">±3 % / ±6 % shift the whole STH cost-basis series (a different data provider); ±5 % does the same for the LTH bands. Start-date rows run identical rules from other starting points to the same end. "×" = final value ÷ buy-and-hold over the same period; green where v2.2 ≥ v2.1.</p>
+
+    <p class="note" id="feeStats" style="margin-top:3px"></p>
+
+    <div class="foot">
+      <strong>Important.</strong> This document describes a research strategy that has been back-tested, not traded. All rule parameters — including the
+      ladder levels and re-buy thresholds — were optimised on the 2017–2026 window shown; the walk-forward and stress tests are provided so the
+      reader can judge how much of the result is likely to persist. The no-loss rule guarantees that no <em>slice</em> is sold below its preceding buy; it does not prevent a full exit (rules R2/R3/R12) below an entry, nor a re-entry above a previous exit (trades: <span id="trades-foot"></span>). Rules-engine note: a defect that let a slice and a re-buy cancel inside one daily decision was fixed on 2026-11-03; every figure here is from the corrected engine. The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
+      (STH cost basis, LTH PVR bands) and would differ with another provider. Bitcoin is a volatile asset; the strategy's own maximum drawdown in the
+      test was <span id="dd-foot"></span>. Nothing here is investment advice. BitWealth (Pty) Ltd · <span id="gen-date"></span>.
+    </div>
+    <div class="pageno">3 / 4</div>
+  </div>
+
+  <!-- ═══════════════════════════ PAGE 4 ═══════════════════════════ -->
+  <div class="page">
+    <div class="hero">
+      <div class="hero-logo"><img id="logo4" alt="BitWealth" /></div>
+      <div class="hero-text"><h1>Back-Test Performance &amp; Strategy Rationale</h1><div class="tagline">Same basis as the LTH PVR Bitcoin DCA one-pager — $2 400 upfront + $200 / month, periods ending <span id="p4-end"></span> — for a side-by-side comparison</div></div>
+    </div>
+
+    <div class="sh">Performance vs Standard DCA</div>
+    <div class="charts-row">
+      <div class="cmp-chart"><div class="ct" id="ct5"></div><canvas id="chart5yr" height="72"></canvas><div class="cmp-legend" id="lg5"></div></div>
+      <div class="cmp-chart"><div class="ct" id="ct10"></div><canvas id="chart10yr" height="72"></canvas><div class="cmp-legend" id="lg10"></div></div>
+    </div>
+
+    <div class="sh">Back-tested performance</div>
+    <div class="perf-wrap"><table class="perf-table" id="perfTable"></table></div>
+    <p class="note" id="p4-note"></p>
+
+    <div class="sh">Why this strategy — the rationale in three lines</div>
+    <div class="card" style="padding:6px 10px;"><ul style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 14px;">
+      <li><b>Buy fear, measured.</b> Capital goes in only when price is ≥ 25 % below what recent buyers paid (STH cost basis) or long-term holders are near break-even (LTH PVR −0.5σ) — the conditions at every major bottom since 2017</li>
+      <li><b>Ride the trend, filter the noise.</b> An up-trend ≥ 12 % above the line is held through ordinary pull-backs: an exit needs price below the line, negative momentum <em>and</em> a flattening cost basis, after a 15-day minimum hold</li>
+      <li><b>Sell greed, in steps.</b> Through LTH PVR +1σ … +2.5σ the BTC share is stepped down — each slice only once momentum turns — and partly re-bought on the pull-back, so the strategy is never all-in at a cycle top</li>
+    </ul></div>
+    <div class="foot">
+      Back-test parameters match the LTH PVR one-pager: $2 400 upfront + $200 / month, periods ending <span id="p4-end2"></span>; idle USDT swept to USDPC (~10 % p.a.), conversion fee 0.1 % per sweep; VALR exchange fees 8 bps trading / 18 bps conversion; BitWealth 1 % p.a. management fee on NAV and 10 % performance fee on monthly profits above high-water mark; fills at the close after the signal day. Std DCA and HODL benchmark rows carry exchange fees only — no platform, performance or USDPC fee; HODL deposits the full multi-year contribution schedule as a single lump sum on day 1 and ROI / CAGR are measured against that nominal cash deposit. <strong>Max drawdown</strong> is measured on the raw NAV curve for all rows (the one-pager's convention; its benchmark rows agree with ours to within 0.3 pp). <strong>Sharpe</strong> is deposit-neutral (daily unit returns, annualised) for all rows and is <em>not</em> comparable with the one-pager's Sharpe column, which used a different convention. The <em>Hybrid v2</em> row repeats the previous version on the same basis. Past performance is not indicative of future results. Data: BitWealth simulator on Research Bitcoin on-chain data.
+    </div>
+    <div class="pageno">4 / 4</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var D = window.STHCB; if (!D) return;
+  var S = D.summary, V1 = D.compare, S1 = V1.summary;
+  var usd0 = function (v) { return '$' + Math.round(v).toLocaleString('en-US'); };
+  var usdK = function (v) { return v >= 1e6 ? '$' + (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? '$' + Math.round(v / 1e3) + 'K' : '$' + Math.round(v); };
+  var pct = function (v, d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d == null ? 1 : d) + '%'; };
+  var x = function (v) { return Number(v).toFixed(1) + '×'; };
+
+  var LOGO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="140" height="48"><text x="6" y="32" font-family="Inter,Arial" font-weight="800" font-size="22" fill="#0A0F1E">Bit<tspan fill="#E6A200">Wealth</tspan></text></svg>');
+  ['logo1', 'logo2', 'logo3'].forEach(function (id) { document.getElementById(id).src = LOGO; });
+  document.getElementById('meta1').textContent = 'Prepared by BitWealth · ' + D.generated_at + ' · Confidential — For Review Only';
+  document.getElementById('gen-date').textContent = 'Generated ' + D.generated_at;
+  document.getElementById('dd-foot').textContent = Math.abs(S.max_dd_pct).toFixed(0) + '%';
+  document.getElementById('trades-foot').textContent = S.trades + ' in v2.2 vs ' + S1.trades + ' in v2.1';
+  document.getElementById('p1-uplift').textContent = Math.round((S.final_nav / S1.final_nav - 1) * 100) + ' %';
+
+  // KPI strip (v1 value in the sub-line)
+  var stats = [
+    [usdK(S.final_nav), 'Final value of $1,000', pct(S.roi_pct, 0) + '<em>' + V1.label + ' ' + usdK(S1.final_nav) + '</em>'],
+    [S.nav_vs_hodl.toFixed(1) + '×', 'vs buy-and-hold', 'HODL ' + usd0(S.hodl_nav) + '<em>' + V1.label + ' ' + S1.nav_vs_hodl.toFixed(1) + '×</em>'],
+    [S.cagr_pct.toFixed(0) + '%', 'CAGR', 'HODL ' + S.hodl_cagr_pct.toFixed(0) + '%<em>' + V1.label + ' ' + S1.cagr_pct.toFixed(0) + '%</em>'],
+    [Math.abs(S.max_dd_pct).toFixed(0) + '%', 'Max drawdown', 'HODL −83%<em>' + V1.label + ' ' + Math.abs(S1.max_dd_pct).toFixed(0) + '%</em>'],
+    [S.trades, 'Trades in ' + (D.daily.length / 365).toFixed(1) + ' yrs', S.pct_in_market.toFixed(0) + '% of days in BTC<em>' + V1.label + ' ' + S1.trades + '</em>'],
+    [S.wf_beat + ' / ' + S.wf_total, 'Years beating HODL', 'walk-forward<em>' + V1.label + ' ' + S1.wf_beat + ' / ' + S1.wf_total + '</em>'],
+  ];
+  document.getElementById('stats').innerHTML = stats.map(function (s, i) {
+    return '<div class="stat"><div class="v' + (i === 1 ? ' g' : '') + '">' + s[0] + '</div><div class="l">' + s[1] + '</div><div class="s">' + s[2] + '</div></div>';
+  }).join('');
+  document.getElementById('basis-note').textContent = 'Basis: ' + D.window.start + ' → ' + D.window.end + ', $' + D.window.upfront.toLocaleString() + ' single investment, ' + D.window.fills + ' fills, full BitWealth fee stack. Sharpe ' + S.sharpe.toFixed(2) + ' (' + V1.label + ' ' + S1.sharpe.toFixed(2) + ') · Calmar ' + S.calmar.toFixed(2) + ' (' + V1.label + ' ' + S1.calmar.toFixed(2) + ').';
+
+  // Config badges
+  var C = D.config;
+  var P = function (v) { return Math.round(v * 100); };
+  var badges = [
+    ['cap buy ≤ ' + P(C.capBuyRatio) + '% CB'], ['cap exit ≥ ' + P(C.capExitRatio) + '% CB'], ['trend entry ≥ ' + P(C.trendEnterRatio) + '%'], ['re-entry ' + P(C.trendReentryRatio) + '%'], ['trend exit ≤ ' + P(C.trendExitRatio) + '%'],
+    ['trailing stop ' + P(C.trailingStopPct) + '%'], ['LTH buy ' + C.capBuyAtLthSigma + 'σ'], ['momentum ROC-' + C.momoLength + ' ≤ ' + P(C.momoThreshold) + '%'], ['CB slope ' + C.cbSlopeDays + 'd'], ['min hold ' + C.minHoldDays + 'd'],
+    ['ladder ' + C.lthSellTiers.map(function (t) { return '+' + t.sigma + 'σ→' + P(t.alloc) + '%'; }).join(' · '), 1], ['momentum-gated slices', 1],
+    ['re-buy −' + P(C.dipRebuyPct) + '% or ≤ ' + P(C.dipRebuyAtCbRatio) + '% CB, max ' + C.dipRebuyMax, 1], ['slice only above last buy', 1], ['post-exit wait ' + P(C.distReentryClearRatio) + '%', 1]
+  ];
+  document.getElementById('cfg-badges').innerHTML = badges.map(function (b) { return '<span class="badge' + (b[1] ? ' new' : '') + '">' + b[0] + '</span>'; }).join('');
+
+  // ── Main chart ─────────────────────────────────────────────────────────
+  var labels = D.daily.map(function (d) { return d[0]; });
+  var yearAt = {}; var seenY = {}; labels.forEach(function (l, i) { var y = l.slice(0, 4); if (!seenY[y]) { seenY[y] = 1; yearAt[i] = y; } });
+  var px = D.daily.map(function (d) { return d[1]; });
+  var cb = D.daily.map(function (d) { return d[2]; });
+  var pos = D.daily.map(function (d) { return d[6]; });
+  var alloc = D.daily.map(function (d) { return d[9]; });
+  var col = function (k) { return D.daily.map(function (d) { return d[k]; }); };
+  var line = function (k) { return cb.map(function (v) { return v * k; }); };
+  var tradeByDate = {}; D.trades.forEach(function (t) { tradeByDate[t.date] = t; });
+  // Markers sit clear of the price line: buys below it (× 0.74), sells above it (× 1.32) — multiplicative so the gap is constant on the log axis
+  var mk = function (act, partial, k) { return labels.map(function (l) { var t = tradeByDate[l]; return t && t.action === act && !!t.partial === partial ? t.price * k : null; }); };
+  var maxPx = Math.max.apply(null, px.concat(col(8).filter(function (v) { return v != null; })));
+  var shadePlugin = {
+    id: 'shade',
+    beforeDatasetsDraw: function (chart) {
+      var ctx = chart.ctx, xs = chart.scales.x, area = chart.chartArea;
+      var p = chart.config.options.plugins.shade; if (!p) return;
+      var arr = p.pos, i = 0;
+      while (i < arr.length) {
+        if (arr[i] === 0) { i++; continue; }
+        var j = i; while (j + 1 < arr.length && arr[j + 1] === arr[i]) j++;
+        var x0 = xs.getPixelForValue(i), x1 = xs.getPixelForValue(j);
+        ctx.fillStyle = arr[i] === 2 ? 'rgba(249,115,22,0.09)' : 'rgba(16,185,129,0.11)';
+        ctx.fillRect(x0, area.top, Math.max(1, x1 - x0), area.bottom - area.top);
+        i = j + 1;
+      }
+    }
+  };
+  Chart.register(shadePlugin);
+  var axisCommon = { ticks: { color: '#6B7896', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.05)' }, border: { color: 'rgba(255,255,255,0.1)' } };
+  var xAxis = { ticks: { color: '#6B7896', font: { size: 8 }, maxRotation: 0, autoSkip: false, callback: function (v, i) { return yearAt[i] || null; } }, grid: { display: false }, border: { color: 'rgba(255,255,255,0.1)' } };
+  var yLog = Object.assign({}, axisCommon, { type: 'logarithmic', ticks: { color: '#6B7896', font: { size: 8 }, callback: function (v) { return [1000, 3000, 10000, 30000, 100000].indexOf(v) >= 0 ? usdK(v) : ''; } }, min: 700, max: Math.max(200000, maxPx * 1.1) });
+  var ds = function (data, color, w, dash, extra) { return Object.assign({ data: data, borderColor: color, borderWidth: w, borderDash: dash || [], pointRadius: 0, tension: 0, spanGaps: true, backgroundColor: 'transparent' }, extra || {}); };
+  var marker = function (data, style, r, fill, border, rot) { return ds(data, 'transparent', 0, [], { pointRadius: r, pointStyle: style, pointBackgroundColor: fill, pointBorderColor: border, pointBorderWidth: 1, pointRotation: rot || 0, showLine: false }); };
+  new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: { labels: labels, datasets: [
+      // Chart.js paints dataset 0 on top — markers first so they are never hidden by the price line
+      marker(mk('BUY', false, 0.74), 'triangle', 5.5, '#22C55E', '#052e16'),
+      marker(mk('BUY', true, 0.74), 'triangle', 4.5, '#86EFAC', '#052e16'),
+      marker(mk('SELL', true, 1.32), 'triangle', 4.5, '#FB7185', '#4c0519', 180),
+      marker(mk('SELL', false, 1.32), 'triangle', 5.5, '#EF4444', '#450a0a', 180),
+      ds(px, '#CBD5E1', 1.3),
+      ds(cb, '#F97316', 1.6),
+      ds(line(C.capBuyRatio), '#10B981', 1, [4, 3]),
+      ds(line(C.trendEnterRatio), '#38BDF8', 0.9, [3, 3]),
+      ds(line(C.capExitRatio), '#FBBF24', 0.8, [2, 3]),
+      ds(col(7), '#A855F7', 1, [5, 3]),
+      ds(col(8), '#A855F7', 1, [5, 3]),
+      ds(col(10), '#C084FC', 0.7, [1.5, 2.5]),
+      ds(col(11), '#C084FC', 0.7, [1.5, 2.5]),
+      ds(col(12), '#C084FC', 0.7, [1.5, 2.5])
+    ] },
+    options: { responsive: true, animation: false, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, shade: { pos: pos }, decimation: { enabled: false } },
+      scales: { x: xAxis, y: yLog }, elements: { line: { capBezierPoints: false } } }
+  });
+
+  // ── Allocation strip ───────────────────────────────────────────────────
+  new Chart(document.getElementById('allocChart'), {
+    type: 'line',
+    data: { labels: labels, datasets: [ ds(alloc.map(function (a) { return a * 100; }), '#FFB400', 1, [], { stepped: true, fill: 'origin', backgroundColor: 'rgba(255,180,0,0.28)' }) ] },
+    options: { responsive: true, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: Object.assign({}, xAxis, { ticks: Object.assign({}, xAxis.ticks, { display: false }) }), y: Object.assign({}, axisCommon, { min: 0, max: 100, ticks: { color: '#6B7896', font: { size: 7.5 }, stepSize: 50, callback: function (v) { return v + '%'; } } }) },
+      layout: { padding: { left: 0, right: 0 } } }
+  });
+
+  // ── NAV chart ──────────────────────────────────────────────────────────
+  var navMax = Math.max.apply(null, col(3));
+  var yLog2 = Object.assign({}, axisCommon, { type: 'logarithmic', ticks: { color: '#6B7896', font: { size: 8 }, callback: function (v) { return [1000, 10000, 100000, 1000000].indexOf(v) >= 0 ? usdK(v) : ''; } }, min: 500, max: navMax * 1.25 });
+  new Chart(document.getElementById('navChart'), {
+    type: 'line',
+    data: { labels: labels, datasets: [ ds(col(3), '#FFB400', 1.6), ds(V1.nav, '#FDE68A', 0.9, [3, 3]), ds(col(4), '#A855F7', 1.1) ] },
+    options: { responsive: true, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false }, shade: { pos: pos.map(function (p) { return p ? 1 : 0; }) } }, scales: { x: xAxis, y: yLog2 } }
+  });
+
+  // ── Trade tables (split in two columns) ────────────────────────────────
+  var th = '<tr><th>Date</th><th></th><th>Rule</th><th class="r">Price</th><th class="r">% CB</th><th class="r">BTC</th><th class="r">Value</th></tr>';
+  var ruleShort = function (r) {
+    return r.replace(/^Initial deploy.*$/, 'Carried in from 2016').replace(/^R\d+ /, '').replace('Capitulation buy (LTH m050)', 'LTH −0.5σ buy')
+      .replace('Trend re-entry (ladder)', 'Trend re-entry').replace(' (35%)', '')
+      .replace(/LTH scale-out tier \d+ \(full exit at \+([\d.]+)σ\)/, 'Final rung +$1σ — all out')
+      .replace(/LTH scale-out tier \d+ → (\d+)% BTC \(\+([\d.]+)σ\)/, 'Slice at +$2σ → $1 %')
+      .replace('Dip re-buy → 100% BTC', 'Dip re-buy → 100 %');
+  };
+  var tr = function (t) {
+    var b = t.action === 'BUY';
+    var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
+    return '<tr><td>' + t.date + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
+  };
+  var compact = D.trades.length > 54;
+  if (compact) {
+    th = '<tr><th>Date</th><th></th><th>Rule</th><th class="r">Price</th><th class="r">% CB</th><th class="r">BTC</th></tr>';
+    tr = function (t) {
+      var b = t.action === 'BUY';
+      var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
+      return '<tr><td>' + t.date.slice(2) + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule).replace('Capitulation', 'Cap.').replace('Trend re-entry', 'Re-entry').replace(' — all out', '') + '</td><td class="r"><b>' + usdK(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td></tr>';
+    };
+    var cols = document.getElementById('tradeCols'); cols.className = 'three'; cols.style.gap = '6px';
+    document.getElementById('tradeTableC').style.display = '';
+    document.querySelectorAll('.trades').forEach(function (t) { t.classList.add('compact'); });
+    var third = Math.ceil(D.trades.length / 3);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, third).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(third, 2 * third).map(tr).join('');
+    document.getElementById('tradeTableC').innerHTML = th + D.trades.slice(2 * third).map(tr).join('');
+  } else {
+    var half = Math.ceil(D.trades.length / 2);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(half).map(tr).join('');
+  }
+
+  // ── Annual table ───────────────────────────────────────────────────────
+  var wfBy = {}; D.wf.forEach(function (w) { wfBy[w.year] = w; });
+  var wf1By = {}; V1.wf.forEach(function (w) { wf1By[w.year] = w; });
+  var ah = '<tr><th>Year</th><th class="r">BTC close</th><th class="r">BTC</th><th class="r">v2.2</th><th class="r">Value</th><th class="r">Walk-fwd</th><th class="r dim">v2.1 WF</th></tr>';
+  document.getElementById('annualTable').innerHTML = ah + D.annual.map(function (a) {
+    var w = wfBy[a.year], w1 = wf1By[a.year];
+    return '<tr><td><b>' + a.year + '</b></td><td class="r">' + usd0(a.price_end) + '</td><td class="r ' + (a.btc_ret >= 0 ? 'g' : 'rd') + '">' + pct(a.btc_ret, 0) + '</td><td class="r ' + (a.strat_ret >= 0 ? 'g' : 'rd') + '"><b>' + pct(a.strat_ret, 0) + '</b></td><td class="r">' + usd0(a.nav_end) + '</td><td class="r ' + (w && w.beat ? 'g' : 'rd') + '">' + (w ? x(w.x) + (w.beat ? ' ✓' : '') : '') + '</td><td class="r dim">' + (w1 ? x(w1.x) + (w1.beat ? ' ✓' : '') : '') + '</td></tr>';
+  }).join('') + '<tr class="year"><td><b>Total</b></td><td></td><td class="r g">' + pct(S.hodl_roi_pct, 0) + '</td><td class="r gold">' + pct(S.roi_pct, 0) + '</td><td class="r"><b>' + usd0(S.final_nav) + '</b></td><td class="r gold">' + S.wf_beat + '/' + S.wf_total + '</td><td class="r dim">' + S1.wf_beat + '/' + S1.wf_total + '</td></tr>';
+
+  // ── v1 vs v2 comparison ────────────────────────────────────────────────
+  var cmpRows = [
+    ['Final value of $1 000', usd0(S1.final_nav), usd0(S.final_nav), S.final_nav / S1.final_nav - 1, 'pct'],
+    ['Total return', pct(S1.roi_pct, 0), pct(S.roi_pct, 0), null],
+    ['CAGR', S1.cagr_pct.toFixed(1) + '%', S.cagr_pct.toFixed(1) + '%', (S.cagr_pct - S1.cagr_pct), 'pp'],
+    ['× buy-and-hold', x(S1.nav_vs_hodl), x(S.nav_vs_hodl), null],
+    ['Max drawdown', Math.abs(S1.max_dd_pct).toFixed(1) + '%', Math.abs(S.max_dd_pct).toFixed(1) + '%', null],
+    ['Sharpe · Calmar', S1.sharpe.toFixed(2) + ' · ' + S1.calmar.toFixed(2), S.sharpe.toFixed(2) + ' · ' + S.calmar.toFixed(2), null],
+    ['Trades (partial)', S1.trades + ' (' + D.trades.filter(function (t) { return t.partial; }).length + ')', S.trades + ' (' + D.trades.filter(function (t) { return t.partial; }).length + ')', null],
+    ['Days in bitcoin', S1.pct_in_market.toFixed(0) + '%', S.pct_in_market.toFixed(0) + '%', null],
+    ['Walk-fwd years > HODL', S1.wf_beat + ' / ' + S1.wf_total, S.wf_beat + ' / ' + S.wf_total, null],
+    ['Ladder (BTC kept)', '30 / 20 / 10 / 0 % at +1…2.5σ', '50 / 20 / 10 / 0 % at +0.5…2.5σ', null],
+    ['Slice guard · cooldown', 'none · 2 days', 'above last buy · none', null],
+  ];
+  document.getElementById('cmpTable').innerHTML = '<tr><th>Metric</th><th class="r">Hybrid v2.1</th><th class="r">Hybrid v2.2</th><th class="r">Δ</th></tr>' + cmpRows.map(function (r) {
+    var d = r[3] == null ? '' : r[4] === 'pp' ? (r[3] >= 0 ? '+' : '') + r[3].toFixed(1) + ' pp' : pct(r[3] * 100, 0);
+    return '<tr><td>' + r[0] + '</td><td class="r dim">' + r[1] + '</td><td class="r"><b>' + r[2] + '</b></td><td class="r g">' + d + '</td></tr>';
+  }).join('');
+  var slices = D.trades.filter(function (t) { return t.partial && t.action === 'SELL'; }), rebuys = D.trades.filter(function (t) { return t.partial && t.action === 'BUY'; });
+  var cheaper = 0; rebuys.forEach(function (rb) { var prev = null; D.trades.forEach(function (t) { if (t.date < rb.date && t.partial && t.action === 'SELL') prev = t; }); if (prev && rb.price < prev.price) cheaper++; });
+  document.getElementById('cmp-note').textContent = 'Where the edge comes from: ' + slices.length + ' slices sold at ' + usdK(Math.min.apply(null, slices.map(function (t) { return t.price; }))) + '–' + usdK(Math.max.apply(null, slices.map(function (t) { return t.price; }))) + ' and ' + rebuys.length + ' re-buys, ' + cheaper + ' of them below the price of the slice they reversed. Unlike v2 → v2.1, the trigger dates differ: the first rung is earlier (+0.5σ) and weak slices are skipped.';
+
+  // ── Robustness tables (v1 | v2 side by side) ───────────────────────────
+  var R = D.robustness, R1 = V1.robustness;
+  var row = function (label, r, r1, hi) {
+    return '<tr><td' + (hi ? ' class="gold"' : '') + '>' + label + '</td><td class="r dim">' + usdK(r1.nav) + '</td><td class="r dim">' + x(r1.x) + '</td><td class="r"><b>' + usdK(r.nav) + '</b></td><td class="r ' + (r.x >= r1.x ? 'g' : 'rd') + '">' + x(r.x) + '</td><td class="r">' + Math.abs(r.dd) + '%</td></tr>';
+  };
+  var hdr = function (first) { return '<tr><th>' + first + '</th><th class="r dim">v2.1</th><th class="r dim">v2.1 ×</th><th class="r">v2.2</th><th class="r">v2.2 ×</th><th class="r">v2.2 DD</th></tr>'; };
+  document.getElementById('robustA').innerHTML = hdr('Scenario') +
+    row('As tested (next-day fills, all fees)', R.base, R1.base, true) +
+    row('Same-day fills', R.same_day, R1.same_day) +
+    row('No BitWealth fees (gross)', R.gross, R1.gross) +
+    row('STH cost basis −6 %', R.cb_shift['0.94'], R1.cb_shift['0.94']) + row('STH cost basis −3 %', R.cb_shift['0.97'], R1.cb_shift['0.97']) +
+    row('STH cost basis +3 %', R.cb_shift['1.03'], R1.cb_shift['1.03']) + row('STH cost basis +6 %', R.cb_shift['1.06'], R1.cb_shift['1.06']) +
+    row('LTH PVR bands −5 %', R.lth_shift['0.95'], R1.lth_shift['0.95']) + row('LTH PVR bands +5 %', R.lth_shift['1.05'], R1.lth_shift['1.05']);
+  var starts = Object.keys(R.starts);
+  document.getElementById('robustB').innerHTML = hdr('Start date ($1 000)') +
+    starts.map(function (s) { return row('Start ' + s, R.starts[s], R1.starts[s], s === D.window.start); }).join('') +
+    row('$10 000 + $500 / month', R.dca['10000+500'], R1.dca['10000+500']) + row('$1 000 + $100 / month', R.dca['1000+100'], R1.dca['1000+100']) + row('$0 + $100 / month', R.dca['0+100'], R1.dca['0+100']);
+
+  // ── Fees ───────────────────────────────────────────────────────────────
+  var F = S.fees;
+  document.getElementById('feeStats').innerHTML = '<b style="color:var(--gold)">Fees paid in the back-test:</b> ' + [
+    [usd0(F.mgmt), 'management fee', '1 % p.a. on value'], [usd0(F.perf), 'performance fee', '10 % above high-water mark'],
+    [usd0(F.usdpc), 'USDPC conversions', '0.1 % per sweep'], [F.exch_btc.toFixed(3) + ' BTC', 'exchange trading fees', '8 bps per trade'],
+    [usdK(R.gross.nav), 'gross result', 'before BitWealth fees']
+  ].map(function (s) { return '<b style="color:#fff">' + s[0] + '</b> ' + s[1] + ' (' + s[2] + ')'; }).join(' · ');
+
+
+  // ── Page 4: One-Pager-style comparison ─────────────────────────────────
+  (function () {
+    var P = D.periods; if (!P) return;
+    document.getElementById('logo4').src = LOGO;
+    var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var fmtD = function (iso) { var d = new Date(iso + 'T00:00:00Z'); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+    var endTxt = fmtD(D.period_basis.end);
+    document.getElementById('p4-end').textContent = endTxt; document.getElementById('p4-end2').textContent = endTxt;
+    var byY = {}; P.forEach(function (p) { byY[p.years] = p; });
+    var prevBy = {}; (D.periods_compare || []).forEach(function (p) { prevBy[p.years] = p.strategy; });
+    var money = function (v) { return v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1000 ? '$' + Math.round(v / 1000) + 'K' : '$' + Math.round(v); };
+    var chartOpts = { responsive: true, maintainAspectRatio: true, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { ticks: { color: '#4A5568', font: { size: 7 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.1)' } },
+                y: { ticks: { color: '#4A5568', font: { size: 7 }, callback: money }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.1)' } } },
+      elements: { point: { radius: 0 }, line: { borderWidth: 1.5, tension: 0.2 } } };
+    var mkChart = function (years, canvasId, titleId, legendId) {
+      var p = byY[years]; if (!p || !p.series) return;
+      document.getElementById(titleId).innerHTML = years + '-Year Back-Test: NAV Growth Comparison &nbsp;&middot;&nbsp; ' + fmtD(p.start) + ' &ndash; ' + fmtD(p.end);
+      new Chart(document.getElementById(canvasId), { type: 'line', data: { labels: p.series.map(function (d) { return d[0]; }), datasets: [
+        { data: p.series.map(function (d) { return d[1]; }), borderColor: '#FFB400', backgroundColor: 'transparent' },
+        { data: p.series.map(function (d) { return d[2]; }), borderColor: '#6B7896', backgroundColor: 'transparent' },
+        { data: p.series.map(function (d) { return d[3]; }), borderColor: '#A855F7', backgroundColor: 'transparent' } ] }, options: chartOpts });
+      document.getElementById(legendId).innerHTML = '<span><i style="background:#FFB400"></i>Hybrid v2.2 — final ' + usd0(p.strategy.final_nav) + '</span><span><i style="background:#6B7896"></i>Standard DCA — final ' + usd0(p.std_dca.final_nav) + '</span><span><i style="background:#A855F7"></i>Buy &amp; Hold (HODL) — final ' + usd0(p.hodl.final_nav) + '</span>';
+    };
+    mkChart(5, 'chart5yr', 'ct5', 'lg5'); mkChart(10, 'chart10yr', 'ct10', 'lg10');
+    var sgn = function (v, d) { return '<span class="' + (v >= 0 ? 'pos' : 'neg') + '">' + (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d == null ? 1 : d) + '%</span>'; };
+    var row = function (cls, label, lcls, m, extraCls) {
+      return '<tr class="' + cls + (extraCls ? ' ' + extraCls : '') + '"><td class="period-cell"><span class="slabel ' + lcls + '">' + label + '</span></td><td><span class="nav-val">' + usd0(m.final_nav) + '</span></td><td class="contrib-val">' + usd0(m.invested) + '</td><td>' + sgn(m.cagr_pct) + '</td><td><span class="dd-val">' + Math.abs(m.max_dd_pct).toFixed(1) + '%</span></td><td>' + (m.sharpe < 0 ? '−' : '') + Math.abs(m.sharpe).toFixed(2) + '</td><td>' + sgn(m.roi_pct) + '</td></tr>';
+    };
+    var html = '<thead><tr><th class="period-col">Period / Strategy</th><th>Final NAV</th><th>Total invested</th><th>CAGR</th><th>Max drawdown</th><th>Sharpe</th><th>Total ROI</th></tr></thead><tbody>';
+    [1, 3, 5, 7, 10].forEach(function (y) {
+      var p = byY[y]; if (!p) return;
+      html += '<tr class="period-header"><td class="period-cell" colspan="7">' + y + ' year' + (y > 1 ? 's' : '') + ' &nbsp;(' + fmtD(p.start) + ' – ' + fmtD(p.end) + ')' + (y === 1 ? ' &nbsp;·&nbsp; $200 / month + $2 400 upfront' : '') + '</td></tr>';
+      html += row('row-strat', 'Hybrid v2.2', 'strat', p.strategy);
+      if (prevBy[y]) html += row('row-prev', 'Hybrid v2', 'prev', prevBy[y]);
+      html += row('row-bench', 'Std DCA', 'bench', p.std_dca, 'bench-start');
+      html += row('row-bench', 'HODL', 'bench', p.hodl, 'bench-end');
+    });
+    document.getElementById('perfTable').innerHTML = html + '</tbody>';
+    var p10 = byY[10], p5 = byY[5];
+    document.getElementById('p4-note').textContent = 'Read across to the LTH PVR one-pager (same dates, same deposits): over 10 years Hybrid v2.2 ends at ' + usdK(p10.strategy.final_nav) + ' vs HODL ' + usdK(p10.hodl.final_nav) + ' (' + (p10.strategy.final_nav / p10.hodl.final_nav).toFixed(1) + '×) and Std DCA ' + usdK(p10.std_dca.final_nav) + '; over 5 years ' + usdK(p5.strategy.final_nav) + ' vs HODL ' + usdK(p5.hodl.final_nav) + ' and Std DCA ' + usdK(p5.std_dca.final_nav) + ', with a worst drawdown of ' + Math.abs(p5.strategy.max_dd_pct).toFixed(0) + '% against HODL\u2019s ' + Math.abs(p5.hodl.max_dd_pct).toFixed(0) + '%.';
+  })();
+})();
+</script>
+</body>
+</html>

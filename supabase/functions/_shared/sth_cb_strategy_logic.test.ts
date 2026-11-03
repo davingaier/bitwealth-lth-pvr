@@ -428,6 +428,55 @@ Deno.test("v3 ④: lthFirstRungMomoThreshold applies to rung 1 only", () => {
   assertEquals(d.targetAlloc, 0.2);
 });
 
+Deno.test("v2.2: no-loss ladder — re-buy only below the last slice, slice only above the last buy", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 2.5, alloc: 0 }], dipRebuyPct: 0.1, rebuyBelowLastSellPct: 0, sliceAboveLastBuyPct: 0 };
+  const bands = { p100: 100_000, p250: 300_000 };
+  // entry at 90k (below +1σ) then slice at 101k
+  let d = decideSthCb(90_000, 80_000, 0, CASH, cfg, { bands }); assertEquals(d.position, "trend_hold");
+  d = decideSthCb(101_000, 80_000, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.3); assertEquals(d.state.lastSlicePx, 101_000);
+  // −10 % from the post-slice peak but ABOVE the slice price (peak ran to 120k, now 106k) → blocked
+  d = decideSthCb(120_000, 80_000, 0, d.state, cfg, { bands });
+  d = decideSthCb(106_000, 80_000, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.3, "re-buy above the slice price is blocked");
+  // below the slice price → allowed
+  d = decideSthCb(100_000, 80_000, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 1); assertEquals(d.state.lastBuyPx, 100_000);
+  // next slice attempt below the re-buy price (99k ≥ +1σ? no — use 100.5k ≥ p100 but ≥ lastBuy) — set p100 lower to force the rung
+  const cfg2 = { ...cfg, lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 2.5, alloc: 0 }] };
+  d = decideSthCb(99_500, 80_000, 0, d.state, cfg2, { bands: { p100: 95_000, p250: 300_000 } }); assertEquals(d.targetAlloc, 1, "slice below the last buy is blocked"); assertEquals(d.rule, "R15 deferred (below last buy)");
+  d = decideSthCb(100_500, 80_000, 0, d.state, cfg2, { bands: { p100: 95_000, p250: 300_000 } }); assertEquals(d.targetAlloc, 0.3);
+});
+
+Deno.test("v2.2: reentryBelowLastExitPct — cheap re-entry only at or below the exit price; full entry still works", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, trendEnterRatio: 1.12, trendExitRatio: 0.97, trendReentryRatio: 1.02, reentryBelowLastExitPct: 0 };
+  let d = decideSthCb(100_000, 85_000, 0, CASH, cfg); assertEquals(d.position, "trend_hold");
+  d = decideSthCb(80_000, 85_000, 0, { ...d.state, holdDays: 40 }, cfg); assertEquals(d.inMarket, false); assertEquals(d.state.lastExitPx, 80_000);
+  // 102 % of CB but above the exit price → no R5
+  d = decideSthCb(86_700, 85_000, 0, d.state, cfg); assertEquals(d.inMarket, false);
+  // 102 % of CB and ≤ exit price → R5
+  d = decideSthCb(78_000, 76_000, 0, d.state, cfg); assertEquals(d.inMarket, true); assertEquals(d.rule, "R5 Trend re-entry (ladder)");
+  // full 112 % entry is never guarded
+  const e = decideSthCb(96_000, 85_000, 0, { capLatch: false, trendLatch: false, reentryArmed: true, lastExitPx: 80_000 }, cfg); assertEquals(e.inMarket, true); assertEquals(e.rule, "R3 Trend entry");
+});
+
+Deno.test("v2.2: exitMinGainPct — R2 / R3 wait for a gain over the entry; trailing stop still exits", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, exitMinGainPct: 0, trailingStopPct: 0.35 };
+  // cap hold entered at 22k (CB 32k); later price 21k at 102 % of CB → R2 condition met but below entry → blocked
+  let d = decideSthCb(22_000, 32_000, 0, CASH, cfg); assertEquals(d.position, "cap_hold");
+  d = decideSthCb(21_000, 20_500, 0, { ...d.state, holdDays: 40 }, cfg);
+  assertEquals(d.inMarket, true); assertEquals(d.rule, "R2 deferred (below entry)");
+  d = decideSthCb(22_500, 22_000, 0, d.state, cfg); assertEquals(d.inMarket, false);
+  assertEquals(d.rule, "R2 Capitulation exit");
+  // trend hold entered at 95k, falls 36 % → trailing stop fires even though below entry
+  let t = decideSthCb(95_000, 80_000, 0, CASH, cfg); assertEquals(t.position, "trend_hold");
+  t = decideSthCb(60_000, 80_000, 0, { ...t.state, holdDays: 40, peakPx: 95_000 }, cfg); assertEquals(t.inMarket, false); assertEquals(t.rule, "R12 Trailing stop (35%)");
+});
+
+Deno.test("v2.2: ladder rungs as multiples of the STH cost basis (cbRatio)", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ cbRatio: 1.25, alloc: 0.5 }, { cbRatio: 1.5, alloc: 0 }] };
+  let d = decideSthCb(100_000, 90_000, 0, { capLatch: false, trendLatch: true, holdDays: 30 }, cfg); assertEquals(d.targetAlloc, 1);
+  d = decideSthCb(113_000, 90_000, 0, d.state, cfg); assertEquals(d.targetAlloc, 0.5); assertEquals(d.rule, "R15 LTH scale-out tier 1 → 50% BTC (125% CB)");
+  d = decideSthCb(136_000, 90_000, 0, d.state, cfg); assertEquals(d.inMarket, false);
+});
+
 Deno.test("v2: scaleCooldownDays blocks a re-buy / next partial sell inside the window; full exit always allowed", () => {
   const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 2, alloc: 0.5 }, { sigma: 2.5, alloc: 0 }], dipRebuyAtCbRatio: 1.0, scaleCooldownDays: 3 };
   const bands = { p200: 200_000, p250: 250_000 };

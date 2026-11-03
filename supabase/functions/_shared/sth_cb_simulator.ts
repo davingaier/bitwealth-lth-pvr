@@ -254,6 +254,7 @@ export const EXTRA_CONFIG_KEYS = [
   "distReentryClearRatio", "capBuyAtLthSigma",
   "lthSellTiers", "lthSellMomoGate", "dipRebuyPct", "dipRebuyAtCbRatio", "dipRebuyMax", "rebalanceDrift", "scaleCooldownDays",
   "exitBlockBelowLthSigma", "exitSkipAboveLowPct", "exitLowWindow", "lthFirstRungMomoThreshold",
+  "rebuyBelowLastSellPct", "sliceAboveLastBuyPct", "reentryBelowLastExitPct", "exitMinGainPct",
 ] as const;
 
 /** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
@@ -279,7 +280,7 @@ export function unknownExtraKeys(extras: Record<string, unknown>): string[] {
 
 /** Does this config need LTH PVR bands joined onto the series? */
 export function configNeedsBands(config: SthCbConfig): boolean {
-  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number" || !!config.lthSellTiers?.length || typeof config.exitBlockBelowLthSigma === "number";
+  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number" || !!config.lthSellTiers?.some((t) => typeof t.sigma === "number") || typeof config.exitBlockBelowLthSigma === "number";
 }
 
 /**
