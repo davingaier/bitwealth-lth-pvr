@@ -1,62 +1,68 @@
 # BitWealth Website
 
-Welcome to your new BitWealth website! This is a modern, professional website for your Bitcoin DCA investment platform.
+Static marketing site + client/partner portals for BitWealth, deployed on Netlify (see `QUICK_START.md`).
+Backed by Supabase (anon key only in the browser; everything sensitive goes through SECURITY DEFINER RPCs and edge functions).
 
 ## 🎨 Design
 
-The website uses your brand colors:
-- **Primary Dark Blue**: #003F5C
-- **Gold/Yellow**: #FFB400
-- **Dark background with modern, clean aesthetic**
-- **Similar style to ultrasound.money** with data-driven design
+Brand palette and typography follow `docs/Marketing/BitWealth_Brand_Guide.html`:
+- **Primary Dark Blue** `#003F5C` · **Gold** `#FFB400` · dark backgrounds `#0A0F1E` / `#050A14` / cards `#151B2E`
+- **Inter** from Google Fonts
+- Nav logo = `images/bitwealth_icon_ondark_cropped.png` (icon-on-dark mark, no border) + "BitWealth" wordmark text
+- Icons are **inline SVG sprites** (stroke = currentColor, brand gold) — no icon font / CDN
 
 ## 📁 File Structure
 
 ```
 website/
-├── index.html          # Main homepage
-├── portal.html         # Client portal/dashboard
-├── css/
-│   ├── styles.css      # Main website styles
-│   └── portal.css      # Client portal styles
-├── js/
-│   ├── main.js         # Main website JavaScript
-│   └── portal.js       # Portal functionality
-└── images/
-    └── logo.svg        # BitWealth logo
+├── index.html               # Homepage: hero (back-tested facts), approach, how it works, product pipeline, about, sign-up, contact (physical address)
+├── sth-cb.html              # PRODUCT: STH Cost Basis Strategy (Hybrid v2.2) — concepts only (no thresholds), live 5-yr chart, pricing, risks
+├── sth-cb-backtest.html     # PUBLIC BACK-TESTER for the STH Cost Basis Strategy (email + reCAPTCHA, 10 runs/day, USDPC toggle)
+├── lth-pvr.html             # Legacy LTH PVR product page (kept, no longer linked from the site)
+├── lth-pvr-backtest.html    # Legacy LTH PVR public back-tester (kept, linked only from lth-pvr.html)
+├── login.html / register.html / customer-portal.html   # Client auth + portal
+├── partner-login.html / partner-portal.html             # Partner (custodian) portal
+├── upload-kyc.html          # KYC document upload
+├── legal/                   # privacy-policy, terms-of-service, investment-disclaimer
+├── css/  styles.css (site) · portal.css (portal) · landing.css (unused legacy)
+├── js/   main.js (nav, counters, animations) · landing-chart.js
+├── images/  bitwealth_icon_ondark_cropped.png (nav/login icon) · logo.png (old, unused)
+└── favicon/
 ```
 
-## 🚀 How to View the Website
+## 🔌 Supabase wiring (public pages)
 
-### Option 1: Open Directly in Browser
-1. Navigate to the `website` folder
-2. Double-click `index.html` to open in your browser
-3. For the portal, double-click `portal.html`
+| Page | Reads | Writes / triggers |
+|---|---|---|
+| `index.html` | — | `ef_prospect_submit` (sign-up form), `ef_contact_form_submit` (contact form) |
+| `sth-cb.html` | `rpc/get_marketing_chart('sth_cb_5yr')` — cached trailing-5-year back-test refreshed monthly by `ef_refresh_marketing_charts` | — |
+| `sth-cb-backtest.html` | polls `rpc/get_sth_cb_backtest_results(request_id)` every 2 s | `ef_submit_public_backtest` with `p_strategy: 'sth_cb'` → `create_public_sth_cb_backtest_run` → `ef_sth_cb_bt_execute` |
+| `lth-pvr.html` | `rpc/get_lth_pvr_marketing_chart()` | — |
+| `lth-pvr-backtest.html` | polls `rpc/get_backtest_results` | `ef_submit_public_backtest` (default strategy `lth_pvr`) |
 
-### Option 2: Use Live Server (Recommended)
-1. Install VS Code extension: "Live Server" by Ritwick Dey
-2. Right-click on `index.html`
-3. Select "Open with Live Server"
-4. Your website will open at `http://localhost:5500`
+The public STH CB back-tester always runs the **live Hybrid v2.2 configuration** — the run copies `extras` from
+`sth_cb.tracker_config` (`hybrid_v2_2`), so the website, the daily tracker and the Admin UI preset share one source of truth.
+Fee model on the public tool and product page: 1 % p.a. management + 10 % performance (HWM), VALR 8/18 bps, USDPC optional.
 
-### Option 3: Use Python (if installed)
-1. Open terminal in the `website` folder
-2. Run: `python -m http.server 8000`
-3. Open browser to: `http://localhost:8000`
+## 🚀 How to View the Website Locally
 
-## 📄 Pages
+1. Double-click `index.html`, or
+2. VS Code → "Live Server" extension → *Open with Live Server*, or
+3. `python -m http.server 8000` inside `website/`
+
+reCAPTCHA shows "Invalid domain for site key" on `file://` / localhost — expected; it works on the production domain.
+
+## 📄 Pages (details)
 
 ### Homepage (index.html)
-- **Hero Section**: Eye-catching header with animated stats
-- **Strategy Section**: Overview of your investment approach
-- **How It Works**: Step-by-step timeline
-- **Pricing**: Three pricing tiers (Starter, Professional, Enterprise)
-- **About**: Company information
-- **Sign-up Form**: Email collection
-- **Contact**: Contact form and information
-- **Footer**: Links and legal information
+- **Hero**: "Intelligent Bitcoin Accumulation" + three **back-tested** STH CB facts (52.7× HODL · 8/10 walk-forward years · 42 % max DD) with an explicit "research results, not live trading" note
+- **Our Approach**: six SVG-icon cards (on-chain intelligence, rules not opinions, buy fear/sell greed, guard-rails, own exchange sub-account, transparency)
+- **How It Works**: four-step timeline (interest → onboard & fund → automate → track)
+- **Product Pipeline**: flagship STH Cost Basis Strategy card → `sth-cb.html`, plus five "coming soon" cards
+- **About**: mission copy + SVG cycle illustration (no fabricated AUM/client numbers)
+- **Express Your Interest** form (individual / entity) and **Contact** (info@, support@, office address: 89 Bloekom Curve, Terenure, Kempton Park, Gauteng, South Africa, 1619)
 
-### Client Portal (portal.html)
+### Client Portal (customer-portal.html)
 - **Login Screen**: Secure client authentication
 - **Dashboard**: 
   - Portfolio overview with key metrics
@@ -84,7 +90,7 @@ website/
 ## 🔧 Customization
 
 ### Update Logo
-Replace `website/images/logo.svg` with your actual logo file.
+The nav/login mark is `website/images/bitwealth_icon_ondark_cropped.png` (copied from `/logos`). Keep the wordmark as text next to it.
 
 ### Update Content
 Edit `index.html` to change:

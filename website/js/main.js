@@ -71,9 +71,10 @@ const observer = new IntersectionObserver((entries) => {
             entry.target.classList.add('animate-in');
             
             // Animate stat counters when they come into view
-            if (entry.target.classList.contains('stat-value')) {
+            if (entry.target.hasAttribute('data-target')) {
                 const target = parseFloat(entry.target.getAttribute('data-target'));
                 animateValue(entry.target, 0, target, 2000);
+                observer.unobserve(entry.target);
             }
         }
     });
@@ -84,8 +85,8 @@ document.querySelectorAll('.stat-card, .strategy-card, .timeline-item, .pricing-
     observer.observe(el);
 });
 
-// Observe stat values
-document.querySelectorAll('.stat-value').forEach(el => {
+// Observe stat counters (the number may be a <span data-target> inside .stat-value so a unit suffix can follow it)
+document.querySelectorAll('[data-target]').forEach(el => {
     observer.observe(el);
 });
 
@@ -171,5 +172,4 @@ window.addEventListener('load', () => {
 
 // Console message for developers
 console.log('%cBitWealth', 'font-size: 48px; font-weight: bold; background: linear-gradient(135deg, #003F5C, #FFB400); -webkit-background-clip: text; -webkit-text-fill-color: transparent;');
-console.log('%cAdvanced Bitcoin DCA Strategy', 'font-size: 18px; color: #FFB400;');
-console.log('Want to work with us? Send your resume to careers@bitwealth.com');
+console.log('%cIntelligent Bitcoin Accumulation', 'font-size: 18px; color: #FFB400;');

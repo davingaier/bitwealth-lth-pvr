@@ -3,11 +3,56 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.177)
+**Last updated:** 2026-11-03 (v0.6.178)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.178 – Website: STH Cost Basis Strategy replaces LTH PVR as the public product (new pages, public back-tester backend, brand refresh)
+**Date:** 2026-11-03 · **Status:** ✅ DONE (not yet deployed to Netlify — Davin publishes)
+
+**Brand / UX (all pages):** nav logo is now `images/bitwealth_icon_ondark_cropped.png` (icon-on-dark mark from the Brand Guide)
+with the white box / goldenrod border removed (`index`, `lth-pvr`, `lth-pvr-backtest`, `customer-portal`; icon also added above
+the `login` / `register` / `partner-login` headers; `portal.css` sidebar img `width:auto`). Header **Sign Up** text was washed out
+because `.nav-links a` (0,1,1) out-ranked `.btn-primary` (0,1,0) — fixed with `.nav-links a.btn-primary { color: var(--bg-darker) }`.
+
+**New product page `website/sth-cb.html`** ("STH Cost Basis Strategy", Hybrid v2.2). Deliberately **IP-safe**: concepts only —
+capitulation buy vs STH cost basis, confirmed-trend hold, momentum-gated scale-out into on-chain euphoria, dip re-buy, no-loss
+ladder, guard-rails (momentum confirmation, minimum hold, trailing stop, macro filter), optional USDPC yield — with **no
+thresholds, percentages or σ levels** anywhere. Hero carries the fact-sheet headline figures (52.7× HODL · 135 % CAGR · 42 % DD ·
+WF 8/10) labelled as back-tested, plus an honest "what this strategy is not" box (2023/2024 under-performance, DD, data
+dependence). Inline SVG icon sprite and a stylised one-cycle SVG illustration (no external icon library). Historical-performance
+section is the same auto-refreshed trailing-5-year chart pattern as the LTH page, reading `public.get_marketing_chart('sth_cb_5yr')`.
+Pricing section identical to the LTH page (1 % p.a. management + 10 % performance HWM).
+
+**New public back-tester `website/sth-cb-backtest.html`** — a clone of `lth-pvr-backtest.html` with the **same fields only**
+(email, start/end, upfront, monthly, USDPC toggle + APY, reCAPTCHA, 10/day); submits `p_strategy: 'sth_cb'`, polls
+`get_sth_cb_backtest_results`, treats `run_status = 'ok'` as complete (so it does not wait for the 1-min status-sync poller),
+shows Time-in-Bitcoin and Signal-Trades, values BTC-denominated exchange fees at the real final BTC price. Min start 2015-01-01.
+
+**Backend (migration `20261103_public_sth_cb_backtest.sql`, applied):** `backtest_requests.strategy_code` (`lth_pvr` default |
+`sth_cb`; FK to `lth_pvr_bt.bt_runs` dropped so `bt_run_id` can point into `sth_cb_bt`); `create_public_sth_cb_backtest_run(...)`
+(service_role only; same validations/rate limit; **copies `extras` from `sth_cb.tracker_config` `hybrid_v2_2`** so website,
+tracker and Admin preset share one definition; fee plan management 1 % + perf 10 %, VALR 8/18 bps, lag 1, USDPC from the form);
+`get_sth_cb_backtest_results(uuid)` (anon; `strategy_*` keys, `in_market` flag, `pct_time_in_market`, `trades` excluding
+"Deploy contribution" fills); generic `get_marketing_chart(p_chart_key)` (allow-listed keys) + seed row `sth_cb_5yr`.
+`ef_submit_public_backtest` routes by `p_strategy` (creator RPC + executor), resolves `bt_run_id` for the LTH creator (which
+returns only `request_id`); `ef_execute_public_backtests` routes recovery by `strategy_code` (schema + executor);
+`ef_refresh_marketing_charts` refactored to a `CHARTS[]` loop (`lth_pvr_5yr` + `sth_cb_5yr`; body `{chart_key}` refreshes one) —
+the existing monthly cron now refreshes both without a schedule change. All three EFs redeployed (`--no-verify-jwt`).
+Verified: creator → `ef_sth_cb_bt_execute` → anon poller end-to-end (2020-01-01→2026-11-01, $10k+$1k/mo: $2.55 M vs HODL
+$998 k vs DCA $331 k); anon cannot call the creator (401); `sth_cb_5yr` populated (5 y to 2026-11-02, $2.4k+$200/mo:
+**$76,026 vs DCA $24,786 vs HODL $18,025**, DD 19.5 %, 76 % of days in BTC, 29 signal trades).
+
+**`index.html` overhaul:** title/headline repositioned from "DCA" to **"Intelligent Bitcoin Accumulation"**; fabricated
+hero/about figures (156 clients, 2.4 BTC, "Avg. Score 87", founded 2021, $5 M AUM, 99.9 % uptime) removed — hero now shows the
+three back-tested facts with a research disclaimer (counters support a unit suffix via `<span data-target>`; `main.js` observes
+`[data-target]`); "Our Approach" six cards with SVG icons; four-step onboarding timeline; flagship product card →
+`sth-cb.html` ("Flagship · Now Onboarding"), five coming-soon cards kept; About rewritten with an SVG cycle visual; contact adds
+the office address **89 Bloekom Curve, Terenure, Kempton Park, Gauteng, South Africa, 1619** with SVG icons and mailto links;
+dead "Careers" link dropped; footer links to the back-tester and legal pages; © 2026. `lth-pvr.html` / `lth-pvr-backtest.html`
+are kept but no longer linked from the site. `website/README.md` rewritten to the current page set and Supabase wiring.
 
 ### v0.6.177 – STH_CB Hybrid **v2.2** promoted: "no-loss ladder" rule, earlier +0.5σ rung, CB-% rungs rejected (new default)
 **Date:** 2026-11-03 · **Status:** ✅ DONE

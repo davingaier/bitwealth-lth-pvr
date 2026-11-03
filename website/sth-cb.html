@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STH Cost Basis Strategy - Intelligent Bitcoin Accumulation - BitWealth</title>
+    <meta name="description" content="BitWealth's STH Cost Basis Strategy buys Bitcoin capitulation, rides confirmed up-trends and scales out into on-chain euphoria — fully automated, rules-based and back-tested against standard DCA and buy-and-hold.">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* ===== Page-specific adjustments to the shared stylesheet ===== */
+        .hero { min-height: auto; padding-top: 120px; padding-bottom: 40px; }
+        .hero-cta { margin-bottom: 0; }
+        .hero-cta .btn-secondary { margin-left: 12px; }
+        .chart-container { position: relative; height: 350px; }
+        .section-pad { padding: 56px 0; }
+        .card-16 { padding: 48px; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; }
+
+        /* Icons: inline SVG, stroke = currentColor (brand gold by default) */
+        .ico { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); flex: none; }
+        .ico-sm { width: 20px; height: 20px; }
+
+        /* Back-test headline strip */
+        .bt-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 40px auto 0; max-width: 1040px; }
+        .bt-stat { background: rgba(21, 27, 46, 0.85); border: 1px solid rgba(255, 180, 0, 0.25); border-radius: 12px; padding: 20px 18px; text-align: center; }
+        .bt-stat .v { font-size: 30px; font-weight: 800; color: var(--gold); line-height: 1.1; }
+        .bt-stat .l { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+        .bt-stat .s { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
+        .bt-note { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 14px; max-width: 900px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+        /* Three pillars (shared design language with the LTH PVR page) */
+        .section-heading { font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; text-align: center; margin: 8px 0 22px; }
+        .pillars-diagram { display: grid; grid-template-columns: 1fr 32px 1fr 32px 1fr; align-items: stretch; margin-bottom: 24px; }
+        .pillar-box { background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-darker) 100%); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 3px solid var(--gold); border-radius: 10px; padding: 20px 16px; text-align: center; }
+        .pillar-box .pillar-num { display: inline-block; width: 30px; height: 30px; line-height: 30px; border-radius: 50%; background: var(--gold); color: var(--bg-darker); font-size: 15px; font-weight: 800; margin-bottom: 10px; }
+        .pillar-box .pillar-name { font-size: 18px; font-weight: 800; color: var(--gold); line-height: 1.2; }
+        .pillar-box .pillar-tag { font-size: 11px; color: var(--text-tertiary); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .pillar-arrow { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 28px; font-weight: 700; opacity: 0.6; }
+        .pillars-combine { font-size: 15px; color: var(--text-secondary); text-align: center; margin: 0 auto 32px; max-width: 940px; line-height: 1.65; }
+        .pillars-combine strong { color: var(--gold); }
+        .pillar-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 32px; }
+        .pillar-col { background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; }
+        .pillar-col .pillar-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+        .pillar-col h3 { font-size: 18px; font-weight: 800; color: var(--gold); margin: 0; }
+        .pillar-col .pillar-sub { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+        .pillar-col p { font-size: 14px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 12px; }
+        .pillar-col p strong { color: var(--text-primary); }
+        .adv-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 8px; margin-bottom: 10px; padding-top: 14px; border-top: 1px solid rgba(255, 180, 0, 0.15); }
+        ul.adv-list { list-style: none; padding: 0; margin: 0; }
+        ul.adv-list li { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-left: 18px; position: relative; margin-bottom: 8px; }
+        ul.adv-list li::before { content: "\25B8"; position: absolute; left: 0; top: 0; color: var(--gold); }
+
+        /* Cycle illustration */
+        .cycle-box { background: var(--bg-darker); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 24px; margin-bottom: 32px; }
+        .cycle-box .cb-title { font-size: 15px; font-weight: 700; color: var(--text-secondary); text-align: center; margin-bottom: 14px; }
+        .cycle-box svg { width: 100%; height: auto; display: block; }
+        .cycle-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; margin-top: 14px; font-size: 12px; color: var(--text-secondary); }
+        .cycle-legend span { display: inline-flex; align-items: center; gap: 7px; }
+        .cycle-legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+        .cycle-foot { font-size: 13px; color: var(--text-secondary); text-align: center; margin-top: 14px; line-height: 1.6; max-width: 880px; margin-left: auto; margin-right: auto; }
+
+        /* Three states */
+        .states { display: grid; grid-template-columns: 1fr 48px 1fr 48px 1fr; align-items: center; margin: 8px 0 32px; }
+        .state { border-radius: 12px; padding: 20px 18px; text-align: center; border: 1px solid rgba(255,255,255,0.1); background: var(--bg-card); }
+        .state .sn { font-size: 16px; font-weight: 800; letter-spacing: 0.04em; }
+        .state .sd { font-size: 12.5px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+        .state.cash .sn { color: #A8B2D1; }
+        .state.cap { border-color: rgba(16,185,129,0.45); } .state.cap .sn { color: #10B981; }
+        .state.trend { border-color: rgba(255,180,0,0.45); } .state.trend .sn { color: var(--gold); }
+        .state-arrow { text-align: center; font-size: 11px; color: var(--text-tertiary); line-height: 1.3; }
+        .state-arrow b { display: block; color: var(--gold); font-size: 22px; line-height: 1; margin: 2px 0; }
+
+        /* Guard-rails */
+        .guards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 8px; }
+        .guard { background: var(--bg-darker); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; }
+        .guard .gh { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
+        .guard p { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 0; }
+
+        /* Fourth pillar (USDPC) */
+        .pillar-four { background: linear-gradient(180deg, rgba(16, 185, 129, 0.07), var(--bg-card) 60%); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 32px; margin-top: 8px; }
+        .pillar-four .p4-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #10B981; border: 1px solid rgba(16, 185, 129, 0.45); border-radius: 999px; padding: 4px 12px; margin-bottom: 14px; }
+        .pillar-four h3 { font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; }
+        .pillar-four h3 .p4-num { color: #10B981; }
+        .pillar-four .pillar-sub { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 18px; }
+        .pillar-four p { font-size: 14px; line-height: 1.7; color: var(--text-secondary); margin-bottom: 12px; }
+        .pillar-four p strong { color: var(--text-primary); }
+        .pillar-four .p4-yield { color: #10B981; font-weight: 700; }
+        .pillar-four ul.adv-list li::before { color: #10B981; }
+        .pillar-four .adv-label { border-top-color: rgba(16, 185, 129, 0.2); }
+        .p4-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 32px; align-items: center; }
+        .p4-disclaimer { font-size: 12px; color: var(--text-tertiary); line-height: 1.6; margin-top: 14px; }
+
+        /* Performance section */
+        .assumptions-box { background: var(--bg-card); border-left: 4px solid var(--gold); padding: 20px; margin: 30px 0; border-radius: 8px; }
+        .assumptions-box h4 { color: var(--text-primary); margin-bottom: 15px; }
+        .assumptions-box ul { list-style: none; padding: 0; }
+        .assumptions-box li { padding: 5px 0; color: var(--text-secondary); }
+        .perf-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 0 0 28px; }
+        .perf-kpi { background: var(--bg-darker); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px 20px; }
+        .perf-kpi .k { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; }
+        .perf-kpi .v { font-size: 26px; font-weight: 800; margin-top: 4px; }
+        .perf-kpi .v.gold { color: var(--gold); }
+        .perf-kpi .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .feature-card { background: var(--bg-card); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 32px; }
+
+        /* Honest-risk box */
+        .risk-box { background: var(--bg-card); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 28px 32px; margin-top: 32px; }
+        .risk-box h4 { display: flex; align-items: center; gap: 10px; color: var(--text-primary); font-size: 18px; margin-bottom: 14px; }
+        .risk-box h4 .ico { color: #EF4444; }
+        .risk-box ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+        .risk-box li { font-size: 13.5px; color: var(--text-secondary); line-height: 1.55; padding-left: 18px; position: relative; }
+        .risk-box li::before { content: "\25B8"; position: absolute; left: 0; color: #EF4444; }
+
+        /* Pricing (same as LTH PVR page) */
+        .highlight-box { background: var(--bg-card); border: 2px solid var(--gold); border-radius: 10px; padding: 25px; margin: 40px 0; }
+        .highlight-box h4 { color: var(--gold); font-size: 20px; margin-bottom: 15px; }
+        .highlight-box .example { background: var(--bg-darker); padding: 15px; border-radius: 5px; margin-top: 15px; font-family: 'Courier New', monospace; color: var(--text-secondary); }
+        .disclaimer { font-size: 14px; color: var(--text-tertiary); margin-top: 20px; }
+
+        @media (max-width: 1000px) {
+            .bt-strip { grid-template-columns: 1fr 1fr; }
+            .guards { grid-template-columns: 1fr 1fr; }
+            .perf-kpis { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 900px) {
+            .pillars-diagram, .pillar-cols, .p4-grid, .states { grid-template-columns: 1fr; gap: 12px; }
+            .pillar-arrow { transform: rotate(90deg); padding: 4px 0; }
+            .state-arrow b { transform: rotate(90deg); display: inline-block; }
+            .risk-box ul { grid-template-columns: 1fr; }
+            .card-16 { padding: 28px; }
+        }
+        @media (max-width: 640px) {
+            .bt-strip, .guards { grid-template-columns: 1fr; }
+            .hero-cta .btn-secondary { margin-left: 0; margin-top: 10px; }
+        }
+    </style>
+    <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="favicon/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/favicon-180x180.png">
+</head>
+<body>
+    <!-- SVG icon sprite (inline, no external dependency) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="i-chain" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></symbol>
+            <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></symbol>
+            <symbol id="i-stairs" viewBox="0 0 24 24"><path d="M3 20h5v-5h4v-5h4V5h5"/><path d="M14 4l3 1-1 3"/></symbol>
+            <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0"/><path d="M12 13l4-4"/><circle cx="12" cy="13" r="1.3"/></symbol>
+            <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+            <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+            <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="6" ry="2.5"/><path d="M3 7v5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7"/><path d="M3 12v5c0 1.4 2.7 2.5 6 2.5 1.2 0 2.3-.1 3.2-.4"/><path d="M15 12.5c3 .2 6 1.2 6 2.5v4c0 1.4-2.7 2.5-6 2.5"/></symbol>
+            <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".8"/></symbol>
+            <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+            <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+        </defs>
+    </svg>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-wrapper">
+                <div class="logo">
+                    <a href="index.html" style="display: contents;">
+                        <img src="images/bitwealth_icon_ondark_cropped.png" alt="BitWealth">
+                        <span>BitWealth</span>
+                    </a>
+                </div>
+                <div class="nav-links">
+                    <a href="index.html">Home</a>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                    <a href="login.html" class="btn-secondary">Client Login</a>
+                    <a href="index.html#signup" class="btn-primary">Sign Up</a>
+                </div>
+                <div class="mobile-menu-toggle"><span></span><span></span><span></span></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-background">
+            <div class="gradient-orb orb-1"></div>
+            <div class="gradient-orb orb-2"></div>
+        </div>
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title"><span class="gradient-text">STH Cost Basis</span> Strategy</h1>
+                <p class="hero-subtitle">Buy the capitulation &middot; Ride the trend &middot; Sell the euphoria</p>
+                <p class="hero-description">
+                    A fully automated, rules-based Bitcoin allocation strategy driven by the on-chain cost basis of the market's most
+                    price-sensitive holders. It goes all-in when they capitulate, stays invested while the up-trend is confirmed, and
+                    steps out into cash &mdash; in slices &mdash; as the market reaches euphoric extremes.
+                </p>
+                <div class="hero-cta">
+                    <a href="sth-cb-backtest.html" class="btn-primary">Try the Interactive Back-Tester &rarr;</a>
+                    <a href="index.html#signup" class="btn-secondary">Express Interest</a>
+                </div>
+
+                <div class="bt-strip">
+                    <div class="bt-stat"><div class="v">52.7&times;</div><div class="l">buy-and-hold</div><div class="s">$1,000 &rarr; $4.40M vs $83k holding</div></div>
+                    <div class="bt-stat"><div class="v">135%</div><div class="l">CAGR after all fees</div><div class="s">Bitcoin itself: 57%</div></div>
+                    <div class="bt-stat"><div class="v">42%</div><div class="l">worst drawdown</div><div class="s">Bitcoin: 83%</div></div>
+                    <div class="bt-stat"><div class="v">8 / 10</div><div class="l">years beat holding</div><div class="s">out-of-sample walk-forward</div></div>
+                </div>
+                <p class="bt-note">Back-tested results, 1 Jan 2017 &rarr; 23 Oct 2026, single $1,000 investment, next-day fills, full BitWealth fee stack. The strategy has been researched and
+                    back-tested, not yet traded live; it under-performed simple holding in 2023 and 2024. Past performance does not guarantee future results.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section-pad">
+        <div class="container">
+            <div class="card-16">
+                <h2 style="margin-bottom: 24px;">How the Strategy Works</h2>
+                <p class="section-subtitle" style="margin-bottom: 40px;">Three pillars &mdash; plus an optional fourth &mdash; combined into one fully automated Bitcoin allocation engine. One decision per day, no discretion, no emotion.</p>
+
+                <div class="section-heading">How the components combine</div>
+                <div class="pillars-diagram">
+                    <div class="pillar-box"><div class="pillar-num">1</div><div class="pillar-name">On-Chain Regime Signal</div><div class="pillar-tag">Short-Term-Holder cost basis</div></div>
+                    <div class="pillar-arrow">&rarr;</div>
+                    <div class="pillar-box"><div class="pillar-num">2</div><div class="pillar-name">Decisive Allocation</div><div class="pillar-tag">All-in &middot; hold &middot; all-out</div></div>
+                    <div class="pillar-arrow">&rarr;</div>
+                    <div class="pillar-box"><div class="pillar-num">3</div><div class="pillar-name">Scale-Out &amp; Re-Buy</div><div class="pillar-tag">Momentum-gated distribution</div></div>
+                </div>
+                <p class="pillars-combine">
+                    The <strong>on-chain signal</strong> tells us which regime Bitcoin is in &mdash; capitulation, trend or euphoria &mdash; by comparing price with what recent buyers
+                    actually paid. <strong>Decisive allocation</strong> turns that regime into a position: fully invested when the odds favour it, in cash when they don't.
+                    <strong>Scale-out &amp; re-buy</strong> harvests the top of each cycle in steps and redeploys part of the proceeds after the pull-back. Idle cash can earn
+                    stable-coin yield while it waits.
+                </p>
+
+                <div class="pillar-cols">
+                    <div class="pillar-col">
+                        <div class="pillar-head"><svg class="ico"><use href="#i-chain"/></svg><h3>1 &middot; On-Chain Regime Signal</h3></div>
+                        <div class="pillar-sub">The signal layer</div>
+                        <p>The <strong>Short-Term-Holder (STH) cost basis</strong> is the average price paid for every bitcoin that changed hands in roughly the last five months &mdash;
+                            the break-even line of the market's most price-sensitive participants. Bull markets hold above it, bear markets live below it, and capitulation happens well beneath it.</p>
+                        <p>Because it is computed from blockchain transaction data rather than from price patterns, it reflects <em>real capital at risk</em> and reacts within weeks,
+                            not months. A second on-chain series &mdash; the profit position of long-term holders &mdash; marks the cycle extremes where distribution begins.</p>
+                        <div class="adv-label">Why it matters</div>
+                        <ul class="adv-list">
+                            <li>Separates the bull and bear regimes cleanly since 2012</li>
+                            <li>Responds fast enough to catch capitulation lows within days</li>
+                            <li>Independent of price-only technicals and sentiment</li>
+                            <li>One decision per day &mdash; low frequency, low noise, low churn</li>
+                        </ul>
+                    </div>
+                    <div class="pillar-col">
+                        <div class="pillar-head"><svg class="ico"><use href="#i-target"/></svg><h3>2 &middot; Decisive Allocation</h3></div>
+                        <div class="pillar-sub">The position engine</div>
+                        <p>Rather than drip-feeding a fixed amount regardless of conditions, the strategy is <strong>binary by design</strong>: it deploys <em>all</em> available cash when price
+                            collapses to a capitulation discount against the cost basis, or when an up-trend is confirmed above it &mdash; and moves back to cash when the trend breaks.</p>
+                        <p>Monthly contributions follow the same logic: they are invested immediately while the strategy is in the market and held as cash (earning yield) while it is not.
+                            Over the back-test the strategy was in Bitcoin for roughly three-quarters of all days.</p>
+                        <div class="adv-label">Advantages</div>
+                        <ul class="adv-list">
+                            <li>Full exposure in the regimes that produce the returns</li>
+                            <li>Sidesteps the deepest part of each bear market</li>
+                            <li>Cash on hand exactly when capitulation buys appear</li>
+                            <li>No lump-sum timing risk &mdash; entries are rule-driven, not date-driven</li>
+                        </ul>
+                    </div>
+                    <div class="pillar-col">
+                        <div class="pillar-head"><svg class="ico"><use href="#i-stairs"/></svg><h3>3 &middot; Scale-Out &amp; Re-Buy</h3></div>
+                        <div class="pillar-sub">The distribution engine</div>
+                        <p>Cycle tops are processes, not moments. As long-term holders' unrealised profit climbs through progressively more extreme levels, the strategy
+                            <strong>steps its Bitcoin share down in slices</strong> &mdash; but each slice is only sold once short-term <strong>momentum has turned</strong>, never into strength.</p>
+                        <p>After a meaningful pull-back the position is <strong>rebuilt</strong>, re-arming the ladder for the next leg. A <strong>no-loss rule</strong> ensures a slice is never sold below
+                            the price it was last bought at, so the ladder cannot churn capital away in a sideways market.</p>
+                        <div class="adv-label">Advantages</div>
+                        <ul class="adv-list">
+                            <li>Never all-in at a cycle top &mdash; profit is banked in stages</li>
+                            <li>Raises cash on weakness and redeploys it lower</li>
+                            <li>Final rung exits completely at the blow-off extreme</li>
+                            <li>Tested against single all-out exits and un-gated ladders &mdash; the gated ladder wins</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Cycle illustration -->
+                <div class="cycle-box">
+                    <div class="cb-title">One Bitcoin cycle through the strategy's eyes</div>
+                    <svg viewBox="0 0 1000 300" role="img" aria-label="Stylised Bitcoin cycle showing the capitulation, trend and euphoria regimes relative to the short-term-holder cost basis">
+                        <defs>
+                            <linearGradient id="gCap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#10B981" stop-opacity=".22"/><stop offset="1" stop-color="#10B981" stop-opacity="0"/></linearGradient>
+                            <linearGradient id="gTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB400" stop-opacity=".18"/><stop offset="1" stop-color="#FFB400" stop-opacity="0"/></linearGradient>
+                            <linearGradient id="gEu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A855F7" stop-opacity=".22"/><stop offset="1" stop-color="#A855F7" stop-opacity="0"/></linearGradient>
+                        </defs>
+                        <!-- regime shading -->
+                        <rect x="40" y="20" width="200" height="250" fill="url(#gCap)"/>
+                        <rect x="240" y="20" width="440" height="250" fill="url(#gTrend)"/>
+                        <rect x="680" y="20" width="160" height="250" fill="url(#gEu)"/>
+                        <rect x="840" y="20" width="130" height="250" fill="rgba(107,120,150,0.10)"/>
+                        <!-- cost basis line -->
+                        <path d="M40 215 C 120 210, 170 200, 240 190 S 420 150, 520 125 S 700 85, 760 80 S 880 95, 970 130" fill="none" stroke="#F97316" stroke-width="2.5"/>
+                        <!-- euphoria band -->
+                        <path d="M560 78 C 640 42, 700 22, 760 16 S 850 30, 900 58" fill="none" stroke="#A855F7" stroke-width="1.5" stroke-dasharray="6 5"/>
+                        <!-- price path -->
+                        <path d="M40 150 C 80 200, 110 255, 150 250 S 200 215, 240 200 S 320 150, 380 140 S 440 125, 500 105 S 600 60, 660 48 S 730 25, 770 30 S 820 60, 860 120 S 920 205, 970 225" fill="none" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+                        <!-- markers: buys below the price line, sells above it -->
+                        <polygon points="150,268 140,284 160,284" fill="#22C55E"/>
+                        <polygon points="640,42 630,28 650,28" fill="#F43F5E" opacity=".9"/>
+                        <polygon points="705,30 695,16 715,16" fill="#F43F5E" opacity=".9"/>
+                        <polygon points="770,22 760,8 780,8" fill="#F43F5E"/>
+                        <polygon points="700,66 690,82 710,82" fill="#86EFAC" opacity=".9"/>
+                        <!-- labels -->
+                        <text x="140" y="40" fill="#10B981" font-family="Inter,Arial" font-size="13" font-weight="700" text-anchor="middle">CAPITULATION</text>
+                        <text x="140" y="56" fill="#A8B2D1" font-family="Inter,Arial" font-size="11" text-anchor="middle">price far below cost basis &rarr; buy everything</text>
+                        <text x="440" y="40" fill="#FFB400" font-family="Inter,Arial" font-size="13" font-weight="700" text-anchor="middle">CONFIRMED TREND</text>
+                        <text x="440" y="56" fill="#A8B2D1" font-family="Inter,Arial" font-size="11" text-anchor="middle">price holds above cost basis &rarr; stay fully invested</text>
+                        <text x="745" y="262" fill="#A855F7" font-family="Inter,Arial" font-size="13" font-weight="700" text-anchor="middle">EUPHORIA</text>
+                        <text x="745" y="278" fill="#A8B2D1" font-family="Inter,Arial" font-size="11" text-anchor="middle">scale out on weakness, re-buy the dip</text>
+                        <text x="905" y="40" fill="#A8B2D1" font-family="Inter,Arial" font-size="13" font-weight="700" text-anchor="middle">CASH</text>
+                        <text x="905" y="56" fill="#6B7896" font-family="Inter,Arial" font-size="11" text-anchor="middle">trend breaks &rarr; wait</text>
+                        <text x="905" y="70" fill="#6B7896" font-family="Inter,Arial" font-size="11" text-anchor="middle">in cash, earn yield</text>
+                        <text x="48" y="232" fill="#F97316" font-family="Inter,Arial" font-size="11" font-weight="600">STH cost basis</text>
+                        <text x="560" y="222" fill="#A855F7" font-family="Inter,Arial" font-size="11" font-weight="600" text-anchor="middle">on-chain euphoria band</text>
+                        <path d="M560 210 L 592 84" stroke="#A855F7" stroke-width="1" opacity=".6"/>
+                    </svg>
+                    <div class="cycle-legend">
+                        <span><i style="background:#E2E8F0"></i>BTC price</span>
+                        <span><i style="background:#F97316"></i>STH cost basis</span>
+                        <span><i style="background:#A855F7"></i>Long-term-holder profit extreme</span>
+                        <span><i style="background:#22C55E"></i>All-in buy</span>
+                        <span><i style="background:#F43F5E"></i>Scale-out slice / final exit</span>
+                        <span><i style="background:#86EFAC"></i>Dip re-buy</span>
+                    </div>
+                    <p class="cycle-foot">Illustrative, not to scale. The exact trigger levels, slice sizes and confirmation rules are proprietary; the interactive back-tester shows the real
+                        trades the strategy would have made on your chosen dates.</p>
+                </div>
+
+                <!-- Three states -->
+                <div class="section-heading">The three states the portfolio can be in</div>
+                <div class="states">
+                    <div class="state cash"><div class="sn">CASH</div><div class="sd">100% stable-coin, earning yield. Waiting for a capitulation discount or a confirmed up-trend.</div></div>
+                    <div class="state-arrow">capitulation buy<b>&rarr;</b>exit at cost basis</div>
+                    <div class="state cap"><div class="sn">CAPITULATION HOLD</div><div class="sd">100% Bitcoin bought far below the cost basis. Sold back into cash once price recovers to it &mdash; or upgraded straight into a trend hold if the rally keeps going.</div></div>
+                    <div class="state-arrow">trend confirmed<b>&rarr;</b>trend breaks / stop</div>
+                    <div class="state trend"><div class="sn">TREND HOLD</div><div class="sd">Fully invested while the up-trend holds, scaling out in slices at euphoric extremes and re-buying pull-backs.</div></div>
+                </div>
+
+                <!-- Guard-rails -->
+                <div class="section-heading">Guard-rails that stop bad trades</div>
+                <div class="guards">
+                    <div class="guard"><div class="gh"><svg class="ico ico-sm"><use href="#i-gauge"/></svg>Momentum confirmation</div><p>No exit or scale-out fires on a single bad close &mdash; short-term momentum must have turned first, so the strategy sells weakness, not strength.</p></div>
+                    <div class="guard"><div class="gh"><svg class="ico ico-sm"><use href="#i-clock"/></svg>Minimum holding period</div><p>Fresh entries are protected from same-week whipsaws; the on-chain line is allowed to do its work before an exit is even considered.</p></div>
+                    <div class="guard"><div class="gh"><svg class="ico ico-sm"><use href="#i-shield"/></svg>Trailing protection</div><p>A trailing stop below the post-entry peak caps the damage if a confirmed trend reverses violently.</p></div>
+                    <div class="guard"><div class="gh"><svg class="ico ico-sm"><use href="#i-lock"/></svg>No-loss ladder &amp; macro filter</div><p>Partial sales are never made below the last purchase price, and no new trend entry is opened at a cycle-top extreme.</p></div>
+                </div>
+
+                <!-- Fourth pillar -->
+                <div class="pillar-four" style="margin-top: 32px;">
+                    <div class="p4-grid">
+                        <div>
+                            <span class="p4-badge">Optional &middot; On by default</span>
+                            <h3><span class="p4-num">4 &middot;</span> Idle-Cash Yield with USDPC</h3>
+                            <div class="pillar-sub">The cash-efficiency layer</div>
+                            <p>Roughly a quarter of the time the strategy is deliberately <strong>out of Bitcoin</strong>. Instead of idling, that cash is swept into a
+                                <strong>yield-bearing stable-coin</strong> and converted back just-in-time when the next buy signal fires. The yield is modest, but it compounds
+                                across every cash period &mdash; and it is earned precisely in the bear-market stretches when Bitcoin is falling.</p>
+                            <p>In the trailing five-year back-test below, idle-cash yield is assumed at <span class="p4-yield">~10% APY</span> with a small conversion fee on each sweep.
+                                You can switch it off in the back-tester to see the strategy on its own.</p>
+                        </div>
+                        <div>
+                            <div class="adv-label">Advantages</div>
+                            <ul class="adv-list">
+                                <li>Cash earns while waiting &mdash; no &ldquo;dead&rdquo; capital</li>
+                                <li>Conversion is automated and just-in-time; no manual steps</li>
+                                <li>Yield accrues exactly when the strategy is de-risked</li>
+                                <li>Fully transparent: every sweep and conversion fee is on your statement</li>
+                            </ul>
+                            <p class="p4-disclaimer">Stable-coin yields are variable and not guaranteed; the back-test assumption is illustrative. Stable-coins carry issuer and smart-contract risk.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Historical Performance (auto-refreshed) -->
+    <section class="section-pad" style="padding-top: 0;">
+        <div class="container">
+            <div class="card-16">
+                <h2 style="margin-bottom: 24px;">Historical Performance <span id="perfPeriod">(Last 5 Years)</span></h2>
+                <p class="section-subtitle" style="margin-bottom: 32px;">How the STH Cost Basis Strategy compares with standard monthly DCA and buy-and-hold over the trailing five years &mdash; refreshed automatically on the 1st of every month</p>
+
+                <div id="perfStatus" style="display:none; text-align:center; color: var(--text-tertiary); margin-bottom: 24px;"></div>
+
+                <div class="perf-kpis">
+                    <div class="perf-kpi"><div class="k">STH Cost Basis Strategy</div><div class="v gold" id="kStrat">&mdash;</div><div class="sub">after all fees &middot; max drawdown <span id="kStratDd">&mdash;</span> &middot; <span id="kInMarket">&mdash;</span> of days in BTC</div></div>
+                    <div class="perf-kpi"><div class="k">Standard DCA</div><div class="v" id="kStd">&mdash;</div><div class="sub">same deposits, buy every month &middot; max drawdown <span id="kStdDd">&mdash;</span></div></div>
+                    <div class="perf-kpi"><div class="k">Buy &amp; Hold (HODL)</div><div class="v" id="kHodl">&mdash;</div><div class="sub">whole stake on day 1 &middot; max drawdown <span id="kHodlDd">&mdash;</span></div></div>
+                </div>
+
+                <div class="assumptions-box">
+                    <h4>&#128202; Back-Test Parameters</h4>
+                    <ul>
+                        <li>&bull; <strong>Window:</strong> <span id="bpStart">&mdash;</span> &rarr; <span id="bpEnd">&mdash;</span> (trailing five years)</li>
+                        <li>&bull; <strong>Deposits:</strong> <span id="bpUpfront">$2,400</span> upfront + <span id="bpMonthly">$200</span> per month (<span id="bpTotal">$14,600</span> in total)</li>
+                        <li>&bull; <strong>Idle-cash yield:</strong> USDT swept to USDPC (<span id="bpUsdpc">~10% APY, 0.1% per sweep</span>)</li>
+                        <li>&bull; <strong>Exchange:</strong> VALR (BTC/USDT) &mdash; 8 bps trade, 18 bps conversion</li>
+                        <li>&bull; <strong>Management Fee:</strong> 1% p.a. on portfolio value (charged monthly)</li>
+                        <li>&bull; <strong>Performance Fee:</strong> 10% (high-water mark)</li>
+                        <li>&bull; <strong>Execution:</strong> signal on the daily close, filled at the next day's close</li>
+                    </ul>
+                    <p style="margin-top: 16px; color: var(--text-tertiary); font-size: 14px; line-height: 1.6;">
+                        The <strong>HODL benchmark</strong> assumes the investor commits the <em>entire</em> five-year stake on day one and never trades again &mdash; a theoretical
+                        upper bound for perfectly-timed buy-and-hold that very few investors can fund up front. Std DCA and HODL bear exchange fees only (no management,
+                        performance or yield fees).
+                    </p>
+                </div>
+
+                <div class="feature-card" style="margin-bottom: 32px;">
+                    <h3 style="text-align:center;">Return on Contributions: Strategy vs Standard DCA vs HODL</h3>
+                    <div class="chart-container"><canvas id="roiChart"></canvas></div>
+                </div>
+                <div class="feature-card" style="margin-bottom: 32px;">
+                    <h3 style="text-align:center;">Portfolio Value: Strategy vs Standard DCA vs HODL</h3>
+                    <div class="chart-container"><canvas id="navChart"></canvas></div>
+                </div>
+
+                <div class="feature-card" style="margin-bottom: 8px;">
+                    <h3 style="margin-bottom: 16px;">What the numbers say</h3>
+                    <p style="line-height: 1.7; color: var(--text-secondary);">
+                        Over the trailing five-year window (<span id="nStart">&mdash;</span> &rarr; <span id="nEnd">&mdash;</span>) the strategy turned <span id="nInvested">&mdash;</span> of deposits
+                        into roughly <strong id="nStrat">&mdash;</strong> &mdash; versus <strong id="nStd">&mdash;</strong> for vanilla monthly DCA and <strong id="nHodl">&mdash;</strong> for the
+                        theoretical HODL benchmark.
+                    </p>
+                    <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                        Along the way, HODL endured a maximum drawdown of <strong id="nHodlDd">&mdash;</strong> and standard DCA <strong id="nStdDd">&mdash;</strong> &mdash; levels at which most
+                        investors capitulate. The strategy's worst drawdown was <strong id="nStratDd">&mdash;</strong>, because it spent the deepest part of the bear market in cash and
+                        re-entered at the capitulation low. It was invested on <strong id="nInMarket">&mdash;</strong> of days and made <strong id="nTrades">&mdash;</strong> signal-driven trades.
+                    </p>
+                    <p style="line-height: 1.7; color: var(--text-secondary); margin-top: 12px;">
+                        In short: this is a strategy designed to be <em>lived with</em> through a full cycle &mdash; aggressive when on-chain data says Bitcoin is cheap, patient when it says
+                        Bitcoin is expensive, and in cash when the trend has broken.
+                    </p>
+                </div>
+
+                <div class="risk-box">
+                    <h4><svg class="ico"><use href="#i-alert"/></svg>What this strategy is not</h4>
+                    <ul>
+                        <li><strong>Not a guarantee.</strong> Every parameter was optimised on history; walk-forward and stress tests are published in the fact sheet, but the future can differ.</li>
+                        <li><strong>Not always ahead.</strong> In strongly trending years with shallow pull-backs (2023, 2024 in the back-test) simple holding did better.</li>
+                        <li><strong>Not low-volatility.</strong> When fully invested it carries Bitcoin's full daily volatility; a 40% drawdown occurred in the back-test.</li>
+                        <li><strong>Not data-independent.</strong> Results rely on third-party on-chain series; a different provider or a data outage would change behaviour.</li>
+                    </ul>
+                </div>
+
+                <p style="text-align: center; color: var(--text-tertiary); margin-top: 32px;">
+                    &#9888;&#65039; <em>Past performance does not guarantee future results. All investments carry risk.</em>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing-section">
+        <div class="container">
+            <h2>Transparent Pricing</h2>
+            <p class="section-subtitle">Align our success with yours</p>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">10% Performance Fee</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">With High-Water Mark Protection</span></div>
+                    <ul>
+                        <li>Charged only on <strong>new profits</strong> above previous peak NAV</li>
+                        <li>If portfolio drops and recovers, no fee on recovery</li>
+                        <li>Calculated and charged monthly</li>
+                        <li>You never pay twice for reaching the same value</li>
+                    </ul>
+                </div>
+                <div class="pricing-card">
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">1% Management Fee</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">Per Year on Portfolio Value</span></div>
+                    <ul>
+                        <li>Charged monthly at 1% p.a. on portfolio NAV</li>
+                        <li>No contribution-based platform fee</li>
+                        <li>Covers infrastructure, on-chain data feeds, compliance and support</li>
+                        <li>Example: $10,000 portfolio &rarr; about $8.33/month</li>
+                    </ul>
+                </div>
+                <div class="pricing-card">
+                    <h3 style="text-align: center; color: var(--gold); margin-bottom: 16px;">No Hidden Fees</h3>
+                    <div class="fee-rate"><span style="text-align: center; font-size: 18px; font-weight: 400; color: var(--text-secondary);">What You Won&rsquo;t Pay</span></div>
+                    <ul>
+                        <li>No platform fee on deposits</li>
+                        <li>No withdrawal fees (beyond exchange costs)</li>
+                        <li>No inactivity fees</li>
+                        <li>Full fee transparency in the client portal</li>
+                        <li>Detailed monthly statements</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="highlight-box">
+                <h4>&#128161; What is a High-Water Mark?</h4>
+                <p>A high-water mark protects you from paying performance fees twice on the same profits. We only charge fees on <strong>new profits</strong> that exceed your portfolio's previous highest value.</p>
+                <div class="example">
+                    <strong>Example Timeline:</strong><br>
+                    Jan: NAV $100k (peak) &rarr; Fee charged on profits<br>
+                    Mar: NAV drops to $80k &rarr; No fee (below peak)<br>
+                    Jun: NAV recovers to $100k &rarr; No fee (same as peak)<br>
+                    Sep: NAV grows to $120k &rarr; Fee charged on $20k NEW profit only
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta-section">
+        <div class="container">
+            <h2 style="margin-bottom: 32px;">See How It Would Have Worked for You</h2>
+            <p class="cta-text" style="font-size: 20px; line-height: 1.8; margin-bottom: 48px;">
+                Pick your own start date, lump sum and monthly contribution. The interactive back-tester replays every daily decision the strategy would have made
+                and compares the result with standard DCA and buy-and-hold &mdash; after all fees.
+            </p>
+            <div class="cta-buttons">
+                <a href="sth-cb-backtest.html" class="btn-primary btn-large">Launch Interactive Back-Tester &rarr;</a>
+            </div>
+            <p class="disclaimer" style="margin-top: 32px; line-height: 1.8;">Past performance doesn't guarantee future results. All investments carry risk.</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>BitWealth</h4>
+                    <p>Intelligent Bitcoin accumulation driven by on-chain cost-basis intelligence.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <a href="index.html#strategy">Strategy</a>
+                    <a href="index.html#products">Products</a>
+                    <a href="sth-cb-backtest.html">Back-Tester</a>
+                    <a href="login.html">Client Portal</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <a href="index.html#about">About</a>
+                    <a href="index.html#contact">Contact</a>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <a href="legal/privacy-policy.html">Privacy Policy</a>
+                    <a href="legal/terms-of-service.html">Terms of Service</a>
+                    <a href="legal/investment-disclaimer.html">Disclaimer</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 BitWealth. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+    <script>
+        // ── Live 5-year back-test data ───────────────────────────────────────────
+        // Charts + narrative come from public.get_marketing_chart('sth_cb_5yr'), refreshed on the
+        // 1st of each month by ef_refresh_marketing_charts (trailing 5 years, $2,400 + $200/month,
+        // USDPC swept at ~10% APY, 1% p.a. management + 10% performance fees).
+        const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_8HEKObrmj01h7fd04xOl0w_7QSd89In';
+
+        const fmtUsd = (v) => '$' + Math.round(Number(v) || 0).toLocaleString('en-US');
+        const fmtDd  = (v) => (Number(v) || 0).toFixed(1) + '%';
+        const fmtPct = (v) => Math.round(Number(v) || 0) + '%';
+        function fmtMonthLabel(iso) {
+            const d = new Date(iso + 'T00:00:00Z');
+            return isNaN(d) ? iso : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+        }
+        function fmtFullDate(iso) {
+            const d = new Date(iso + 'T00:00:00Z');
+            return isNaN(d) ? iso : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        }
+
+        const baseOptions = (yFormatter, tooltipFormatter, beginAtZero) => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top',
+                    labels: { usePointStyle: true, padding: 20, color: '#A8B2D1', font: { size: 14, weight: '600' } } },
+                tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.9)', padding: 12,
+                    titleFont: { size: 14, weight: '600' }, bodyFont: { size: 13 },
+                    callbacks: { label: (ctx) => (ctx.dataset.label ? ctx.dataset.label + ': ' : '') +
+                        (ctx.parsed.y !== null ? tooltipFormatter(ctx.parsed.y) : '') } }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#A8B2D1', font: { size: 12 }, maxTicksLimit: 12, autoSkip: true } },
+                y: { beginAtZero: beginAtZero, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#A8B2D1', font: { size: 12 }, callback: yFormatter } }
+            }
+        });
+
+        // One point per calendar quarter → smooth bezier instead of a 260-point zigzag
+        function quarterlyIndices(isoLabels) {
+            let lastQKey = -1;
+            return isoLabels.reduce((out, iso, i) => {
+                const d = new Date(iso + 'T00:00:00Z');
+                const key = d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3);
+                if (key !== lastQKey) { lastQKey = key; out.push(i); }
+                return out;
+            }, []);
+        }
+
+        function buildDatasets(series, key) {
+            return [
+                { label: 'STH Cost Basis Strategy', data: series.strategy[key], borderColor: '#FFB400', backgroundColor: 'rgba(255, 180, 0, 0.1)', borderWidth: 3,
+                  pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: 'transparent', pointBorderColor: '#FFB400', pointBorderWidth: 2, tension: 0.4, fill: true },
+                { label: 'Standard DCA', data: series.stdDca[key], borderColor: '#6B7896', backgroundColor: 'rgba(107, 120, 150, 0.1)', borderWidth: 2,
+                  pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: 'transparent', pointBorderColor: '#6B7896', pointBorderWidth: 2, tension: 0.4, fill: true },
+                { label: 'HODL (lump-sum day 1)', data: series.hodl[key], borderColor: '#A855F7', backgroundColor: 'transparent', borderWidth: 1.5, borderDash: [4, 3],
+                  pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: 'transparent', pointBorderColor: '#A855F7', pointBorderWidth: 2, tension: 0.4, fill: false }
+            ];
+        }
+
+        function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+        function renderCharts(data) {
+            const p = data.payload;
+            const qi = quarterlyIndices(p.labels);
+            const qLabels = qi.map(i => fmtMonthLabel(p.labels[i]));
+            const pick = (s, k) => qi.map(i => s[k][i]);
+            const qSeries = {
+                strategy: { nav: pick(p.series.strategy, 'nav'), roi: pick(p.series.strategy, 'roi') },
+                stdDca:   { nav: pick(p.series.stdDca, 'nav'),   roi: pick(p.series.stdDca, 'roi') },
+                hodl:     { nav: pick(p.series.hodl, 'nav'),     roi: pick(p.series.hodl, 'roi') }
+            };
+
+            new Chart(document.getElementById('roiChart').getContext('2d'), {
+                type: 'line', data: { labels: qLabels, datasets: buildDatasets(qSeries, 'roi') },
+                options: baseOptions((v) => (v >= 0 ? '+' : '') + v + '%', (v) => (v >= 0 ? '+' : '') + v + '%', true)
+            });
+            new Chart(document.getElementById('navChart').getContext('2d'), {
+                type: 'line', data: { labels: qLabels, datasets: buildDatasets(qSeries, 'nav') },
+                options: baseOptions((v) => '$' + (v / 1000).toFixed(0) + 'k', (v) => '$' + Number(v).toLocaleString('en-US'), false)
+            });
+
+            const S = p.summary.strategy, D = p.summary.stdDca, H = p.summary.hodl;
+            setText('kStrat', fmtUsd(S.final_nav)); setText('kStratDd', fmtDd(S.max_drawdown)); setText('kInMarket', fmtPct(S.pct_time_in_market));
+            setText('kStd', fmtUsd(D.final_nav)); setText('kStdDd', fmtDd(D.max_drawdown));
+            setText('kHodl', fmtUsd(H.final_nav)); setText('kHodlDd', fmtDd(H.max_drawdown));
+
+            setText('bpStart', fmtFullDate(data.window_start));
+            setText('bpEnd', fmtFullDate(data.window_end));
+            setText('bpUpfront', fmtUsd(data.params.upfront_usdt));
+            setText('bpMonthly', fmtUsd(data.params.monthly_usdt));
+            setText('bpTotal', fmtUsd(H.contrib_gross));
+            setText('bpUsdpc', '~' + data.params.usdpc_apy_percent + '% APY, ' + data.params.usdpc_conversion_fee_percent + '% per sweep');
+
+            setText('nStart', fmtMonthLabel(data.window_start));
+            setText('nEnd', fmtMonthLabel(data.window_end));
+            setText('nInvested', fmtUsd(S.contrib_gross));
+            setText('nStrat', fmtUsd(S.final_nav));
+            setText('nStd', fmtUsd(D.final_nav));
+            setText('nHodl', fmtUsd(H.final_nav));
+            setText('nStratDd', fmtDd(S.max_drawdown));
+            setText('nStdDd', fmtDd(D.max_drawdown));
+            setText('nHodlDd', fmtDd(H.max_drawdown));
+            setText('nInMarket', fmtPct(S.pct_time_in_market));
+            setText('nTrades', String(S.trades ?? '—'));
+
+            const status = document.getElementById('perfStatus');
+            if (status && data.generated_at) {
+                status.style.display = 'block';
+                status.textContent = 'Last refreshed ' + fmtFullDate(String(data.generated_at).split('T')[0]) + ' · updates automatically on the 1st of each month';
+            }
+        }
+
+        function showChartError(msg) {
+            const status = document.getElementById('perfStatus');
+            if (status) { status.style.display = 'block'; status.textContent = msg; }
+        }
+
+        async function loadMarketingChart() {
+            try {
+                const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_marketing_chart`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+                    body: JSON.stringify({ p_chart_key: 'sth_cb_5yr' })
+                });
+                const raw = await res.json();
+                const data = raw && raw.get_marketing_chart ? raw.get_marketing_chart : raw;
+                if (!data || data.status !== 'ready' || !data.payload) {
+                    showChartError('Performance data is being prepared — please check back shortly.');
+                    return;
+                }
+                renderCharts(data);
+            } catch (e) {
+                console.error('Failed to load marketing chart:', e);
+                showChartError('Unable to load performance data right now. Please try again later.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadMarketingChart);
+    </script>
+</body>
+</html>

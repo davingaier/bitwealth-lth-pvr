@@ -3,27 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BitWealth - Intelligent Bitcoin DCA Strategy</title>
-    <meta name="description" content="Medium to long-term Bitcoin investment strategy with intelligent dollar-cost averaging (DCA)">
+    <title>BitWealth - Intelligent Bitcoin Accumulation</title>
+    <meta name="description" content="BitWealth turns on-chain data into daily, rules-based Bitcoin allocation decisions — buying capitulation, riding confirmed trends and banking profit into euphoria. Fully automated, transparent, back-tested.">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-    <!-- deploy: 2026-03-03 -->
+    <!-- deploy: 2026-11-03 -->
     <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="favicon/favicon-48x48.png">
     <link rel="apple-touch-icon" sizes="180x180" href="favicon/favicon-180x180.png">
+    <style>
+        /* Inline SVG icons (stroke = currentColor) replace the old emoji icons */
+        .ico { stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--gold); display: block; }
+        .card-icon { font-size: 0; margin-bottom: 20px; }
+        .card-icon .ico { width: 44px; height: 44px; padding: 9px; border-radius: 12px; background: rgba(255, 180, 0, 0.1); border: 1px solid rgba(255, 180, 0, 0.25); box-sizing: content-box; }
+        .stat-icon { font-size: 0; margin-bottom: 14px; display: flex; justify-content: center; }
+        .stat-icon .ico { width: 36px; height: 36px; }
+        .stat-value small { font-size: 22px; font-weight: 700; color: var(--gold); opacity: .85; margin-left: 2px; }
+        .stat-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 6px; }
+        .hero-stats-note { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 16px; line-height: 1.6; }
+        .contact-icon { font-size: 0; }
+        .contact-icon .ico { width: 26px; height: 26px; margin-top: 2px; }
+        .contact-item p a { color: var(--text-secondary); }
+        .contact-item p a:hover { color: var(--gold); }
+        .popular-badge.flagship { background: var(--gradient-gold); }
+        /* About illustration */
+        .about-visual { width: 100%; background: var(--bg-card); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; padding: 28px; }
+        .about-visual svg { width: 100%; height: auto; display: block; }
+        .about-visual .cap { text-align: center; font-size: 12px; color: var(--text-tertiary); margin-top: 12px; }
+        .about-points { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 12px; }
+        .about-points li { display: flex; gap: 12px; align-items: flex-start; color: var(--text-secondary); font-size: 16px; line-height: 1.6; }
+        .about-points .ico { width: 22px; height: 22px; flex: none; margin-top: 3px; }
+        .about-points strong { color: var(--text-primary); }
+        @media (max-width: 768px) { .hero-stats { grid-template-columns: 1fr; } }
+    </style>
 </head>
 <body>
+    <!-- SVG icon sprite -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="i-chain" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></symbol>
+            <symbol id="i-rules" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+            <symbol id="i-cycle" viewBox="0 0 24 24"><path d="M3 17l5-7 4 4 4-6 5 3"/><path d="M17 8h4v4"/></symbol>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+            <symbol id="i-vault" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5V7M12 17v-1.5M8.5 12H7M17 12h-1.5"/></symbol>
+            <symbol id="i-report" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 17V11M11 17V6M16 17v-4"/></symbol>
+            <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="6" ry="2.5"/><path d="M3 7v5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7"/><path d="M3 12v5c0 1.4 2.7 2.5 6 2.5 1.2 0 2.3-.1 3.2-.4"/><path d="M15 12.5c3 .2 6 1.2 6 2.5v4c0 1.4-2.7 2.5-6 2.5"/></symbol>
+            <symbol id="i-multiply" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+            <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M9 20h6"/></symbol>
+            <symbol id="i-drawdown" viewBox="0 0 24 24"><path d="M3 6l6 8 4-4 8 8"/><path d="M15 18h6v-6"/></symbol>
+            <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+            <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+            <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.5-7-11.5a7 7 0 0 1 14 0C19 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+            <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12l2.5 2.5 5-5"/></symbol>
+        </defs>
+    </svg>
+
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container">
             <div class="nav-wrapper">
                 <div class="logo">
-                    <img src="images/logo.png" alt="BitWealth Logo" style="padding: 4px; background-color: white; border-style: solid; border-color: goldenrod; border-width: 2px; border-radius: 8px; height: 40px;">
+                    <img src="images/bitwealth_icon_ondark_cropped.png" alt="BitWealth">
                     <span>BitWealth</span>
                 </div>
                 <div class="nav-links">
@@ -49,37 +94,42 @@
         <div class="container">
             <div class="hero-content">
                 <h1 class="hero-title">
-                    Intelligent Bitcoin <span class="gradient-text">DCA</span>
+                    Intelligent Bitcoin <span class="gradient-text">Accumulation</span>
                 </h1>
                 <p class="hero-subtitle">
-                    MEDIUM- TO LONG-TERM INVESTMENT STRATEGY
+                    ON-CHAIN DRIVEN &middot; RULES-BASED &middot; FULLY AUTOMATED
                 </p>
                 <p class="hero-description">
-                    A sophisticated approach to Bitcoin accumulation using dollar-cost averaging with intelligent timing and market analysis.
+                    BitWealth turns on-chain data into one disciplined Bitcoin decision every day &mdash; buying capitulation, riding confirmed
+                    trends and banking profit into euphoria &mdash; so you capture the cycle without living on the charts.
                 </p>
                 <div class="hero-cta">
                     <a href="#signup" class="btn-primary btn-large">Get Started</a>
-                    <a href="#strategy" class="btn-secondary btn-large">Learn More</a>
+                    <a href="sth-cb.html" class="btn-secondary btn-large">Explore the Strategy</a>
                 </div>
-                
-                <!-- Live Stats -->
+
+                <!-- Back-tested headline figures (STH Cost Basis Strategy) -->
                 <div class="hero-stats">
                     <div class="stat-card">
-                        <div class="stat-icon">📈</div>
-                        <div class="stat-value" data-target="156">0</div>
-                        <div class="stat-label">Active Clients</div>
+                        <div class="stat-icon"><svg class="ico"><use href="#i-multiply"/></svg></div>
+                        <div class="stat-value"><span data-target="52.7">0</span><small>&times;</small></div>
+                        <div class="stat-label">vs Buy-and-Hold</div>
+                        <div class="stat-sub">$1,000 &rarr; $4.40M vs $83k holding</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">₿</div>
-                        <div class="stat-value" data-target="2.4">0</div>
-                        <div class="stat-label">BTC Managed</div>
+                        <div class="stat-icon"><svg class="ico"><use href="#i-trophy"/></svg></div>
+                        <div class="stat-value"><span data-target="8">0</span><small>/ 10</small></div>
+                        <div class="stat-label">Years Beat Holding</div>
+                        <div class="stat-sub">out-of-sample walk-forward</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">🎯</div>
-                        <div class="stat-value" data-target="87">0</div>
-                        <div class="stat-label">Avg. Score</div>
+                        <div class="stat-icon"><svg class="ico"><use href="#i-drawdown"/></svg></div>
+                        <div class="stat-value"><span data-target="42">0</span><small>%</small></div>
+                        <div class="stat-label">Worst Drawdown</div>
+                        <div class="stat-sub">Bitcoin itself: 83%</div>
                     </div>
                 </div>
+                <p class="hero-stats-note">Back-tested STH Cost Basis Strategy, 1 Jan 2017 &rarr; 23 Oct 2026, single $1,000 investment, after all fees. Research results, not live trading. Past performance does not guarantee future results.</p>
             </div>
         </div>
         <div class="hero-background">
@@ -92,44 +142,44 @@
     <!-- Strategy Section -->
     <section id="strategy" class="strategy-section">
         <div class="container">
-            <h2 class="section-title">Our Strategy</h2>
-            <p class="section-subtitle">Intelligent Bitcoin accumulation designed for long-term wealth creation</p>
-            
+            <h2 class="section-title">Our Approach</h2>
+            <p class="section-subtitle">Bitcoin rewards patience and punishes emotion. We replace both with data and rules.</p>
+
             <div class="strategy-grid">
                 <div class="strategy-card">
-                    <div class="card-icon">🎯</div>
-                    <h3>Systematic Approach</h3>
-                    <p>Regular automated purchases reduce the impact of market volatility through dollar-cost averaging.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-chain"/></svg></div>
+                    <h3>On-Chain Intelligence</h3>
+                    <p>We read the blockchain itself &mdash; what recent buyers actually paid and how much profit long-term holders are sitting on &mdash; to tell whether Bitcoin is in capitulation, trend or euphoria.</p>
                 </div>
-                
+
                 <div class="strategy-card">
-                    <div class="card-icon">📊</div>
-                    <h3>Market Analysis</h3>
-                    <p>Advanced algorithms analyze market conditions to optimize purchase timing and amounts.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-rules"/></svg></div>
+                    <h3>Rules, Not Opinions</h3>
+                    <p>Every buy and sell follows a written rule set that has been back-tested across multiple Bitcoin cycles. No forecasts, no discretion, no gut feel &mdash; one decision per day.</p>
                 </div>
-                
+
                 <div class="strategy-card">
-                    <div class="card-icon">🔐</div>
-                    <h3>Secure Custody</h3>
-                    <p>Enterprise-grade security with institutional custody solutions and insurance coverage.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-cycle"/></svg></div>
+                    <h3>Buy Fear, Sell Greed</h3>
+                    <p>All-in when the market capitulates, fully invested while the up-trend is confirmed, and scaling out in slices &mdash; only on weakness &mdash; as the cycle reaches euphoric extremes.</p>
                 </div>
-                
+
                 <div class="strategy-card">
-                    <div class="card-icon">📈</div>
-                    <h3>Performance Tracking</h3>
-                    <p>Real-time portfolio monitoring with detailed analytics and performance reports.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-shield"/></svg></div>
+                    <h3>Built-In Guard-Rails</h3>
+                    <p>Momentum confirmation, minimum holding periods, trailing protection and a no-loss rule on partial sales filter out the whipsaws that erode returns.</p>
                 </div>
-                
+
                 <div class="strategy-card">
-                    <div class="card-icon">⚡</div>
-                    <h3>Low Fees</h3>
-                    <p>Competitive pricing structure with transparent fees and no hidden costs.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-vault"/></svg></div>
+                    <h3>Your Own Exchange Account</h3>
+                    <p>Assets are held in a dedicated sub-account in your name at VALR, a regulated South African exchange. BitWealth trades it; it never pools or re-hypothecates your coins.</p>
                 </div>
-                
+
                 <div class="strategy-card">
-                    <div class="card-icon">🎓</div>
-                    <h3>Expert Support</h3>
-                    <p>Dedicated support team to guide you through your Bitcoin investment journey.</p>
+                    <div class="card-icon"><svg class="ico"><use href="#i-report"/></svg></div>
+                    <h3>Radical Transparency</h3>
+                    <p>A client portal with every order, fee and balance, monthly statements, and a public back-tester so you can verify the strategy before you commit a cent.</p>
                 </div>
             </div>
         </div>
@@ -139,38 +189,38 @@
     <section class="how-it-works">
         <div class="container">
             <h2 class="section-title">How It Works</h2>
-            <p class="section-subtitle">Simple steps to start your Bitcoin investment journey</p>
-            
+            <p class="section-subtitle">From first contact to a fully automated Bitcoin allocation in four steps</p>
+
             <div class="timeline">
                 <div class="timeline-item">
                     <div class="timeline-number">1</div>
                     <div class="timeline-content">
-                        <h3>Sign Up</h3>
-                        <p>Create your account in minutes with our simple onboarding process.</p>
+                        <h3>Express Interest</h3>
+                        <p>Tell us about your goals below. We respond within 24 hours and walk you through the strategy, fees and risks.</p>
                     </div>
                 </div>
-                
+
                 <div class="timeline-item">
                     <div class="timeline-number">2</div>
                     <div class="timeline-content">
-                        <h3>Set Your Strategy</h3>
-                        <p>Choose your investment amount, frequency, and risk tolerance.</p>
+                        <h3>Onboard &amp; Fund</h3>
+                        <p>Complete KYC, receive your dedicated exchange sub-account and fund it in Rand &mdash; a lump sum, a monthly debit, or both.</p>
                     </div>
                 </div>
-                
+
                 <div class="timeline-item">
                     <div class="timeline-number">3</div>
                     <div class="timeline-content">
                         <h3>Automate</h3>
-                        <p>Our system automatically executes your strategy based on market conditions.</p>
+                        <p>Our engine reads the latest on-chain data every day and places exactly the trades the rules call for &mdash; nothing more, nothing less.</p>
                     </div>
                 </div>
-                
+
                 <div class="timeline-item">
                     <div class="timeline-number">4</div>
                     <div class="timeline-content">
-                        <h3>Track & Grow</h3>
-                        <p>Monitor your portfolio growth with detailed analytics and reports.</p>
+                        <h3>Track &amp; Grow</h3>
+                        <p>Follow every decision in the client portal, receive monthly statements, and compare your result with simple DCA and holding at any time.</p>
                     </div>
                 </div>
             </div>
@@ -182,26 +232,27 @@
         <div class="container">
             <h2 class="section-title">Our Product Pipeline</h2>
             <p class="section-subtitle">Intelligent investment strategies for every risk profile</p>
-            
+
             <div class="pricing-grid">
-                <!-- Active Product: LTH PVR BTC DCA -->
+                <!-- Flagship: STH Cost Basis Strategy -->
                 <div class="pricing-card featured">
-                    <div class="popular-badge">Available Now</div>
+                    <div class="popular-badge flagship">Flagship &middot; Now Onboarding</div>
                     <div class="pricing-header">
-                        <h3>LTH PVR Bitcoin DCA</h3>
-                        <p>Smart Bitcoin Accumulation Using On-Chain Intelligence</p>
+                        <h3>STH Cost Basis Strategy</h3>
+                        <p>Buy the capitulation &middot; Ride the trend &middot; Sell the euphoria</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>✓ On-chain LTH PVR metrics</li>
-                        <li>✓ Automated daily rebalancing</li>
-                        <li>✓ Transparent rules-based strategy</li>
-                        <li>✓ Full audit trail</li>
-                        <li>✓ Low risk profile</li>
-                        <li>✓ BTC/USDT pair</li>
+                        <li>&#10003; On-chain cost-basis regime signal</li>
+                        <li>&#10003; All-in capitulation buys, confirmed trend holds</li>
+                        <li>&#10003; Momentum-gated scale-out into euphoria</li>
+                        <li>&#10003; Dip re-buys and a no-loss ladder</li>
+                        <li>&#10003; Idle cash earns stable-coin yield</li>
+                        <li>&#10003; 52.7&times; buy-and-hold in back-test (2017&ndash;2026)</li>
+                        <li>&#10003; BTC/USDT on VALR &middot; interactive back-tester</li>
                     </ul>
-                    <a href="lth-pvr.html" class="btn-primary">Learn More & Try Back-Tester</a>
+                    <a href="sth-cb.html" class="btn-primary">Learn More &amp; Try Back-Tester</a>
                 </div>
-                
+
                 <!-- Coming Soon Product 1 -->
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -209,15 +260,15 @@
                         <p>Growth Strategy</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>⏳ Coming Soon</li>
-                        <li>✓ Balanced BTC/Alt exposure</li>
-                        <li>✓ Market cycle optimization</li>
-                        <li>✓ Risk-adjusted rebalancing</li>
-                        <li>✓ Medium risk profile</li>
+                        <li>&#9203; Coming Soon</li>
+                        <li>&#10003; Balanced BTC/Alt exposure</li>
+                        <li>&#10003; Market cycle optimization</li>
+                        <li>&#10003; Risk-adjusted rebalancing</li>
+                        <li>&#10003; Medium risk profile</li>
                     </ul>
                     <a href="#signup" class="btn-secondary" style="opacity: 0.6; cursor: not-allowed;">Join Waitlist</a>
                 </div>
-                
+
                 <!-- Coming Soon Product 2 -->
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -225,15 +276,15 @@
                         <p>Including Non-Crypto Assets</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>⏳ Coming Soon</li>
-                        <li>✓ Strategic debt leveraging</li>
-                        <li>✓ Multi-asset diversification</li>
-                        <li>✓ Various risk appetites</li>
-                        <li>✓ Institutional-grade management</li>
+                        <li>&#9203; Coming Soon</li>
+                        <li>&#10003; Strategic debt leveraging</li>
+                        <li>&#10003; Multi-asset diversification</li>
+                        <li>&#10003; Various risk appetites</li>
+                        <li>&#10003; Institutional-grade management</li>
                     </ul>
                     <a href="#signup" class="btn-secondary" style="opacity: 0.6; cursor: not-allowed;">Join Waitlist</a>
                 </div>
-                
+
                 <!-- Coming Soon Product 3 -->
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -241,33 +292,33 @@
                         <p>Retirement Income Generation Strategy</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>⏳ Coming Soon</li>
-                        <li>✓ Loan against BTC holdings</li>
-                        <li>✓ Fund retirement lifestyle</li>
-                        <li>✓ BTC continues appreciating</li>
-                        <li>✓ Precision lending</li>
-                        <li>✓ Medium risk profile</li>
+                        <li>&#9203; Coming Soon</li>
+                        <li>&#10003; Loan against BTC holdings</li>
+                        <li>&#10003; Fund retirement lifestyle</li>
+                        <li>&#10003; BTC continues appreciating</li>
+                        <li>&#10003; Precision lending</li>
+                        <li>&#10003; Medium risk profile</li>
                     </ul>
                     <a href="#signup" class="btn-secondary" style="opacity: 0.6; cursor: not-allowed;">Join Waitlist</a>
                 </div>
-                
+
                 <!-- Coming Soon Product 4 -->
                 <div class="pricing-card">
                     <div class="pricing-header">
                         <h3>Bitcoin Income Generator</h3>
-                        <p>Yield & Stability Strategy</p>
+                        <p>Yield &amp; Stability Strategy</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>⏳ Coming Soon</li>
-                        <li>✓ Lending, staking, covered calls</li>
-                        <li>✓ Predictable income generation</li>
-                        <li>✓ Conservative approach</li>
-                        <li>✓ Income-focused investors</li>
-                        <li>✓ Low risk profile</li>
+                        <li>&#9203; Coming Soon</li>
+                        <li>&#10003; Lending, staking, covered calls</li>
+                        <li>&#10003; Predictable income generation</li>
+                        <li>&#10003; Conservative approach</li>
+                        <li>&#10003; Income-focused investors</li>
+                        <li>&#10003; Low risk profile</li>
                     </ul>
                     <a href="#signup" class="btn-secondary" style="opacity: 0.6; cursor: not-allowed;">Join Waitlist</a>
                 </div>
-                
+
                 <!-- Coming Soon Product 5 -->
                 <div class="pricing-card">
                     <div class="pricing-header">
@@ -275,12 +326,12 @@
                         <p>Aggressive Growth Strategy</p>
                     </div>
                     <ul class="pricing-features">
-                        <li>⏳ Coming Soon</li>
-                        <li>✓ Carefully selected altcoins</li>
-                        <li>✓ Momentum-based allocation</li>
-                        <li>✓ High growth potential</li>
-                        <li>✓ Active management</li>
-                        <li>✓ High risk profile</li>
+                        <li>&#9203; Coming Soon</li>
+                        <li>&#10003; Carefully selected altcoins</li>
+                        <li>&#10003; Momentum-based allocation</li>
+                        <li>&#10003; High growth potential</li>
+                        <li>&#10003; Active management</li>
+                        <li>&#10003; High risk profile</li>
                     </ul>
                     <a href="#signup" class="btn-secondary" style="opacity: 0.6; cursor: not-allowed;">Join Waitlist</a>
                 </div>
@@ -294,27 +345,35 @@
             <div class="about-content">
                 <div class="about-text">
                     <h2 class="section-title">About BitWealth</h2>
-                    <p>BitWealth was founded with a simple mission: make sophisticated Bitcoin investment strategies accessible to everyone.</p>
-                    <p>We combine advanced market analysis, automated execution, and institutional-grade security to help our clients build wealth through Bitcoin over the long term.</p>
-                    <p>Our team brings together expertise in finance, technology, and cryptocurrency to deliver a best-in-class investment platform.</p>
-                    <div class="about-stats">
-                        <div class="about-stat">
-                            <div class="stat-number">2021</div>
-                            <div class="stat-text">Founded</div>
-                        </div>
-                        <div class="about-stat">
-                            <div class="stat-number">$5M+</div>
-                            <div class="stat-text">Assets Under Management</div>
-                        </div>
-                        <div class="about-stat">
-                            <div class="stat-number">99.9%</div>
-                            <div class="stat-text">Uptime</div>
-                        </div>
-                    </div>
+                    <p>BitWealth was founded on a simple observation: most people who buy Bitcoin lose to the asset itself &mdash; they buy late, sell early and get shaken out at the bottom. The data to avoid that is public, on the blockchain. The discipline to act on it, every day, is not.</p>
+                    <p>We build that discipline into software. Our strategies are researched, back-tested across full market cycles and published with their stress tests &mdash; then executed automatically in your own exchange account.</p>
+                    <ul class="about-points">
+                        <li><svg class="ico"><use href="#i-check"/></svg><span><strong>Research first.</strong> Every rule is tested out-of-sample and under moved assumptions before it touches client capital.</span></li>
+                        <li><svg class="ico"><use href="#i-check"/></svg><span><strong>Honest reporting.</strong> We publish the years the strategy lost to simple holding, not just the headline multiple.</span></li>
+                        <li><svg class="ico"><use href="#i-check"/></svg><span><strong>South African roots, global asset.</strong> Rand funding, local support, Bitcoin exposure.</span></li>
+                    </ul>
                 </div>
                 <div class="about-image">
-                    <div class="placeholder-image">
-                        <span>📊</span>
+                    <div class="about-visual">
+                        <svg viewBox="0 0 400 300" role="img" aria-label="Stylised Bitcoin price cycle with the strategy's buy, hold and sell regimes">
+                            <defs>
+                                <linearGradient id="agGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB400" stop-opacity=".35"/><stop offset="1" stop-color="#FFB400" stop-opacity="0"/></linearGradient>
+                            </defs>
+                            <rect x="20" y="20" width="110" height="230" fill="rgba(16,185,129,0.10)"/>
+                            <rect x="130" y="20" width="170" height="230" fill="rgba(255,180,0,0.08)"/>
+                            <rect x="300" y="20" width="80" height="230" fill="rgba(168,85,247,0.12)"/>
+                            <path d="M20 250 L20 160 C 50 200, 80 240, 110 230 S 170 150, 220 120 S 290 50, 320 40 S 365 80, 380 130 L380 250 Z" fill="url(#agGold)"/>
+                            <path d="M20 160 C 50 200, 80 240, 110 230 S 170 150, 220 120 S 290 50, 320 40 S 365 80, 380 130" fill="none" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+                            <path d="M20 205 C 90 200, 160 180, 230 150 S 340 95, 380 100" fill="none" stroke="#F97316" stroke-width="2"/>
+                            <polygon points="108,248 98,262 118,262" fill="#22C55E"/>
+                            <polygon points="296,30 286,16 306,16" fill="#F43F5E"/>
+                            <polygon points="322,26 312,12 332,12" fill="#F43F5E"/>
+                            <text x="75" y="45" fill="#10B981" font-family="Inter,Arial" font-size="12" font-weight="700" text-anchor="middle">BUY FEAR</text>
+                            <text x="215" y="45" fill="#FFB400" font-family="Inter,Arial" font-size="12" font-weight="700" text-anchor="middle">RIDE THE TREND</text>
+                            <text x="340" y="275" fill="#A855F7" font-family="Inter,Arial" font-size="12" font-weight="700" text-anchor="middle">SELL GREED</text>
+                            <text x="26" y="242" fill="#F97316" font-family="Inter,Arial" font-size="10" font-weight="600">on-chain cost basis</text>
+                        </svg>
+                        <div class="cap">One cycle, three regimes, zero emotion.</div>
                     </div>
                 </div>
             </div>
@@ -455,24 +514,24 @@
                 <div class="contact-info">
                     <h3>Contact Information</h3>
                     <div class="contact-item">
-                        <span class="contact-icon">📧</span>
+                        <span class="contact-icon"><svg class="ico"><use href="#i-mail"/></svg></span>
                         <div>
                             <strong>Email</strong>
-                            <p>info@bitwealth.co.za</p>
+                            <p><a href="mailto:info@bitwealth.co.za">info@bitwealth.co.za</a></p>
                         </div>
                     </div>
                     <div class="contact-item">
-                        <span class="contact-icon">💬</span>
+                        <span class="contact-icon"><svg class="ico"><use href="#i-chat"/></svg></span>
                         <div>
                             <strong>Support</strong>
-                            <p>support@bitwealth.co.za</p>
+                            <p><a href="mailto:support@bitwealth.co.za">support@bitwealth.co.za</a></p>
                         </div>
                     </div>
                     <div class="contact-item">
-                        <span class="contact-icon">🌍</span>
+                        <span class="contact-icon"><svg class="ico"><use href="#i-pin"/></svg></span>
                         <div>
-                            <strong>Location</strong>
-                            <p>Remote-first company</p>
+                            <strong>Office</strong>
+                            <p>89 Bloekom Curve, Terenure<br>Kempton Park, Gauteng<br>South Africa, 1619</p>
                         </div>
                     </div>
                 </div>
@@ -499,19 +558,19 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>BitWealth</h4>
-                    <p>Intelligent Bitcoin DCA strategy for long-term wealth creation.</p>
+                    <p>Intelligent Bitcoin accumulation driven by on-chain intelligence.</p>
                 </div>
                 <div class="footer-section">
                     <h4>Product</h4>
                     <a href="#strategy">Strategy</a>
                     <a href="#products">Products</a>
+                    <a href="sth-cb-backtest.html">Back-Tester</a>
                     <a href="login.html">Client Portal</a>
                 </div>
                 <div class="footer-section">
                     <h4>Company</h4>
                     <a href="#about">About</a>
                     <a href="#contact">Contact</a>
-                    <a href="#">Careers</a>
                 </div>
                 <div class="footer-section">
                     <h4>Legal</h4>
@@ -521,7 +580,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>&copy; 2025 BitWealth. All rights reserved.</p>
+                <p>&copy; 2026 BitWealth. All rights reserved.</p>
             </div>
         </div>
     </footer>

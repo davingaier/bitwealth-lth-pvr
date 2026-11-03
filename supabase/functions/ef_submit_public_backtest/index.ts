@@ -6,9 +6,12 @@
  *
  * Flow:
  *   1. Verify reCAPTCHA token with Google (Deno fetch — no DB connection held)
- *   2. Call public.create_public_backtest_run() to create DB records
- *   3. Fire-and-forget ef_bt_execute to run the back-test asynchronously
+ *   2. Call the strategy's creator RPC (p_strategy 'lth_pvr' | 'sth_cb'):
+ *        lth_pvr → public.create_public_backtest_run()        (lth_pvr_bt.*)
+ *        sth_cb  → public.create_public_sth_cb_backtest_run() (sth_cb_bt.*, Hybrid v2.2)
+ *   3. Fire-and-forget the matching executor (ef_bt_execute / ef_sth_cb_bt_execute)
  *   4. Return request_id to the website for polling
+ *      (get_backtest_results / get_sth_cb_backtest_results)
  *
  * Deploy with --no-verify-jwt (called from public website, no auth token).
  */
@@ -56,7 +59,16 @@ Deno.serve(async (req) => {
       p_usdpc_enabled,
       p_usdpc_apy_percent,
       p_usdpc_conversion_fee_percent,
+      p_strategy,
     } = body;
+
+    // Which engine runs the request. 'lth_pvr' is the legacy default so older
+    // callers keep working; the STH Cost Basis page sends 'sth_cb'.
+    const strategy: "lth_pvr" | "sth_cb" = p_strategy === "sth_cb" ? "sth_cb" : "lth_pvr";
+    const ROUTE = {
+      lth_pvr: { createRpc: "create_public_backtest_run", execFn: "ef_bt_execute" },
+      sth_cb: { createRpc: "create_public_sth_cb_backtest_run", execFn: "ef_sth_cb_bt_execute" },
+    }[strategy];
 
     // ── 1. Validate required fields ─────────────────────────────────────────
     if (!p_email || !p_captcha_token || !p_start_date || !p_end_date) {
@@ -91,7 +103,7 @@ Deno.serve(async (req) => {
 
     // ── 3. Create DB records (pure SQL — no http() calls inside) ────────────
     const { data: result, error: rpcError } = await supabase.rpc(
-      "create_public_backtest_run",
+      ROUTE.createRpc,
       {
         p_email:         p_email.toLowerCase().trim(),
         p_start_date,
@@ -105,7 +117,7 @@ Deno.serve(async (req) => {
     );
 
     if (rpcError) {
-      console.error("create_public_backtest_run error:", rpcError);
+      console.error(`${ROUTE.createRpc} error:`, rpcError);
       return json({ success: false, error: rpcError.message }, 500);
     }
 
@@ -113,21 +125,32 @@ Deno.serve(async (req) => {
       return json(result, 400);
     }
 
-    // ── 4. Fire-and-forget: trigger ef_bt_execute asynchronously ────────────
-    //    We do NOT await this; the website polls get_backtest_results separately.
-    fetch(`${supabaseUrl}/functions/v1/ef_bt_execute`, {
+    // ── 4. Fire-and-forget: trigger the strategy's executor asynchronously ──
+    //    We do NOT await this; the website polls the results RPC separately.
+    //    create_public_sth_cb_backtest_run returns bt_run_id directly; the LTH
+    //    creator only returns request_id, so resolve it from backtest_requests.
+    let btRunId: string | undefined = result.bt_run_id;
+    if (!btRunId) {
+      const { data: reqRow } = await supabase
+        .from("backtest_requests")
+        .select("bt_run_id")
+        .eq("id", result.request_id)
+        .single();
+      btRunId = reqRow?.bt_run_id;
+    }
+    fetch(`${supabaseUrl}/functions/v1/${ROUTE.execFn}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${supabaseServiceKey}`,
       },
-      body: JSON.stringify({ bt_run_id: result.bt_run_id }),
+      body: JSON.stringify({ bt_run_id: btRunId }),
     }).catch((err) => {
-      console.error("Failed to trigger ef_bt_execute:", err);
+      console.error(`Failed to trigger ${ROUTE.execFn}:`, err);
     });
 
     // ── 5. Return request_id to website for polling ──────────────────────────
-    return json(result, 200);
+    return json({ ...result, strategy }, 200);
 
   } catch (err) {
     console.error("Unexpected error in ef_submit_public_backtest:", err);

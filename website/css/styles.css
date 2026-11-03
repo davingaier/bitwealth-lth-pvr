@@ -155,6 +155,13 @@ a {
     color: var(--gold);
 }
 
+/* .nav-links a (0,1,1) out-ranks .btn-primary (0,1,0) and was washing the
+   header "Sign Up" text out to light grey on gold — pin it to dark. */
+.nav-links a.btn-primary,
+.nav-links a.btn-primary:hover {
+    color: var(--bg-darker);
+}
+
 .mobile-menu-toggle {
     display: none;
     flex-direction: column;

@@ -20,7 +20,7 @@ Deno.serve(async (_req) => {
     const { data: requests, error: fetchError } = await supabase
       .schema("public")
       .from("backtest_requests")
-      .select("id, bt_run_id, email")
+      .select("id, bt_run_id, email, strategy_code")
       .eq("status", "running")
       .limit(5); // Process max 5 at a time
 
@@ -47,12 +47,17 @@ Deno.serve(async (_req) => {
     // Process each request
     for (const request of requests) {
       try {
-        // ── Check bt_runs status BEFORE deciding whether to fire ef_bt_execute ──
+        // Each strategy keeps its runs in its own schema and has its own executor.
+        const isSthCb = request.strategy_code === "sth_cb";
+        const btSchema = isSthCb ? "sth_cb_bt" : "lth_pvr_bt";
+        const execFn = isSthCb ? "ef_sth_cb_bt_execute" : "ef_bt_execute";
+
+        // ── Check bt_runs status BEFORE deciding whether to fire the executor ──
         // This prevents the double-execution race condition where ef_submit_public_backtest
-        // has already fired ef_bt_execute, and this poller fires it again concurrently,
+        // has already fired the executor, and this poller fires it again concurrently,
         // causing a duplicate-key violation on bt_results_daily.
         const { data: btRun } = await supabase
-          .schema("lth_pvr_bt")
+          .schema(btSchema)
           .from("bt_runs")
           .select("status, error, started_at")
           .eq("bt_run_id", request.bt_run_id)
@@ -100,8 +105,8 @@ Deno.serve(async (_req) => {
         }
 
         // Run is stale (> 5 min without completing) — trigger recovery
-        console.log(`🔄 Stale back-test for ${request.email} (${Math.round(ageMs/1000)}s old) — re-firing ef_bt_execute.`);
-        fetch(`${supabaseUrl}/functions/v1/ef_bt_execute`, {
+        console.log(`🔄 Stale back-test for ${request.email} (${Math.round(ageMs/1000)}s old) — re-firing ${execFn}.`);
+        fetch(`${supabaseUrl}/functions/v1/${execFn}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -109,7 +114,7 @@ Deno.serve(async (_req) => {
           },
           body: JSON.stringify({ bt_run_id: request.bt_run_id }),
         }).catch((err) => {
-          console.error(`Failed to trigger ef_bt_execute for ${request.id}:`, err);
+          console.error(`Failed to trigger ${execFn} for ${request.id}:`, err);
         });
 
         results.push({ request_id: request.id, status: "recovery_triggered", bt_run_id: request.bt_run_id });
@@ -123,7 +128,7 @@ Deno.serve(async (_req) => {
           .from("backtest_requests")
           .update({
             status: "failed",
-            error_message: error.message || "Unknown error",
+            error_message: (error as Error)?.message || "Unknown error",
             updated_at: new Date().toISOString(),
           })
           .eq("id", request.id);
@@ -131,7 +136,7 @@ Deno.serve(async (_req) => {
         results.push({
           request_id: request.id,
           status: "failed",
-          error: error.message,
+          error: (error as Error)?.message,
         });
       }
     }
@@ -147,7 +152,7 @@ Deno.serve(async (_req) => {
   } catch (error) {
     console.error("❌ Error in ef_execute_public_backtests:", error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: (error as Error)?.message }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

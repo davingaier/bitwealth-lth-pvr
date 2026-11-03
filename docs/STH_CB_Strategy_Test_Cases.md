@@ -159,6 +159,24 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | V22-12 | Admin UI preset `hybrid_v2_2` default; new field `btCbSliceGain`; all presets blank it; scripts parse | no syntax errors | 20/20 inline scripts OK; preset note updated | PASS |
 | V22-13 | `docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html` renders 4 A4 pages, no JS errors; rule-card trigger dates vs v2.2 trade list | fit; dates match | 0 px overflow on all 4 pages; R1/R14/R2/R3/R5/R12/final-rung dates identical to v2.1 (only slices differ) | PASS |
 
+### Public website — STH Cost Basis Strategy pages + back-tester backend (v0.6.178)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| WEB-01 | Migration `20261103_public_sth_cb_backtest.sql` applies (strategy_code, FK drop, 3 functions, seed row) | success | applied via MCP; follow-up `trades` fix applied | PASS |
+| WEB-02 | `create_public_sth_cb_backtest_run` as service_role → `ef_sth_cb_bt_execute {bt_run_id}` → `get_sth_cb_backtest_results` as **anon** | full daily series + summaries | 2020-01-01→2026-11-01, $10k+$1k/mo: 2 497 days, strategy $2,546,317 / HODL $998,444 / DCA $331,128; `run_status=ok` | PASS |
+| WEB-03 | anon calls `create_public_sth_cb_backtest_run` directly | rejected | HTTP 401 | PASS |
+| WEB-04 | `trades` in results excludes monthly "Deploy contribution" fills | signal trades only | 63 → 29 on the 5-y marketing run | PASS (after fix) |
+| WEB-05 | `ef_refresh_marketing_charts {chart_key:'sth_cb_5yr'}` | row `ready`, payload with `series.strategy` | 27.6 s; $76,026 vs DCA $24,786 vs HODL $18,025; DD 19.5 %; 76.1 % in BTC; 262 weekly points | PASS |
+| WEB-06 | `deno check` on `ef_submit_public_backtest`, `ef_execute_public_backtests`, `ef_refresh_marketing_charts`; deploy all three `--no-verify-jwt` | clean, deployed | 3 pre-existing `unknown`-catch errors in the poller fixed; all deployed | PASS |
+| WEB-07 | `sth-cb-backtest.html` renders the real RPC payload through `displayResults` (file://) | all tiles + 2 charts | NAV/ROI/CAGR/contrib/time-in-BTC/trades/fees + Std DCA + HODL tiles populated; `roiChart`/`navChart` created | PASS |
+| WEB-08 | `sth-cb.html` loads `get_marketing_chart('sth_cb_5yr')` | KPIs, params, narrative, 2 charts | "Last refreshed Nov 3, 2026"; KPIs $76,026 / $24,786 / $18,025; window 2 Nov 2021 → 2 Nov 2026 | PASS |
+| WEB-09 | IP check: `sth-cb.html` + `index.html` contain no numeric thresholds / σ levels / slice sizes | none | manual read — only back-test outcome figures and fee rates are numeric | PASS |
+| WEB-10 | Nav "Sign Up" text colour on all pages | dark on gold | computed `rgb(5, 10, 20)` | PASS |
+| WEB-11 | Logo: no `images/logo.png` references left; icon renders at 40 px without border | 0 refs | 0 refs; icon 40 px high, aspect preserved (`portal.css` width:auto) | PASS |
+| WEB-12 | `index.html`: no `lth-pvr` links, no emoji icons, stat counters animate with suffix | 0 / 0 / "52.7×", "8/ 10", "42%" | confirmed | PASS |
+| WEB-13 | Netlify deploy | — | not done (Davin publishes) | SKIP |
+
 ---
 
 ## 2. Database / RPC
