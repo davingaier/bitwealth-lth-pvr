@@ -376,6 +376,58 @@ Deno.test("Idea 16: dipRebuyMax caps re-accumulations; dipRebuyAtCbRatio alterna
   d = decideSthCb(99_000, CB, 0, d.state, cfg, { bands }); assertEquals(d.targetAlloc, 0.5, "max 1 re-buy per hold");
 });
 
+Deno.test("v2: a slice and a dip re-buy never happen in the same tick (same-tick cancellation bug, 2026-11-03)", () => {
+  // Price above +1σ with negative momentum AND ≤ 110 % of CB on the same close: the slice must stand.
+  const cfg: SthCbConfig = { ...NO_MOMO, momoEnabled: true, momoLength: 2, momoThreshold: -0.02, lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 2.5, alloc: 0 }], lthSellMomoGate: true, dipRebuyAtCbRatio: 1.1, dipRebuyMax: 3 };
+  const bands = { p100: 100_000, p250: 300_000 };
+  const cb = 95_000; // price 102k → 107 % of CB (≤ 110 %) while ≥ +1σ
+  const d = decideSthCb(102_000, cb, -0.05, { capLatch: false, trendLatch: true, holdDays: 30 }, cfg, { bands });
+  assertEquals(d.targetAlloc, 0.3, "slice to 30 % must not be reversed in the same tick");
+  assertEquals(d.state.dipRebuys ?? 0, 0, "no re-buy consumed");
+  assertEquals(d.state.lthTierLevel, 1);
+  // Next day (no cooldown configured) the ≤ 110 % CB trigger may legitimately re-buy
+  const n = decideSthCb(101_000, cb, 0.0, d.state, cfg, { bands });
+  assertEquals(n.targetAlloc, 1);
+  assertEquals(n.state.dipRebuys, 1);
+});
+
+Deno.test("v3 ①: exitBlockBelowLthSigma suppresses R2 / R3 / R12 while price ≤ the LTH band", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, exitBlockBelowLthSigma: -0.5, trailingStopPct: 0.35 };
+  const bands = { m050: 27_200 };
+  // cap hold, price ≥ capExitRatio × CB but below the LTH −0.5σ band → no R2
+  let d = decideSthCb(27_000, 26_500, 0, { capLatch: true, trendLatch: false, holdDays: 40 }, cfg, { bands });
+  assertEquals(d.inMarket, true); assertEquals(d.rule, "R2 deferred (LTH buy zone)");
+  // same price, band lower → R2 fires
+  d = decideSthCb(27_000, 26_500, 0, { capLatch: true, trendLatch: false, holdDays: 40 }, cfg, { bands: { m050: 25_000 } });
+  assertEquals(d.inMarket, false); assertEquals(d.rule, "R2 Capitulation exit");
+  // trend hold at 92 % of CB below the band → R3 deferred; trailing stop also held
+  d = decideSthCb(25_900, 28_200, 0, { capLatch: false, trendLatch: true, holdDays: 200, peakPx: 45_000 }, cfg, { bands });
+  assertEquals(d.inMarket, true); assertEquals(d.rule, "R3 deferred (LTH buy zone)");
+});
+
+Deno.test("v3 ②: exitSkipAboveLowPct skips the trend exit after a V-bottom recovery", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, exitSkipAboveLowPct: 0.10 };
+  // price 59k, 10-day low 53.3k → +10.7 % above the low → skip
+  let d = decideSthCb(59_000, 64_600, 0, { capLatch: false, trendLatch: true, holdDays: 100 }, cfg, { lowN: 53_300 });
+  assertEquals(d.inMarket, true); assertEquals(d.rule, "R3 deferred (recovered from low)");
+  // low closer to price → exit allowed
+  d = decideSthCb(59_000, 64_600, 0, { capLatch: false, trendLatch: true, holdDays: 100 }, cfg, { lowN: 57_000 });
+  assertEquals(d.inMarket, false); assertEquals(d.rule, "R3 Trend exit");
+});
+
+Deno.test("v3 ④: lthFirstRungMomoThreshold applies to rung 1 only", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, momoEnabled: true, momoLength: 2, momoThreshold: -0.02, lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 1.5, alloc: 0.2 }, { sigma: 2.5, alloc: 0 }], lthSellMomoGate: true, lthFirstRungMomoThreshold: 0 };
+  const bands = { p100: 100_000, p150: 150_000, p250: 300_000 };
+  // rung 1 with ROC −1 % (> −2 % but ≤ 0) → sells under the lighter threshold
+  let d = decideSthCb(110_000, 90_000, -0.01, { capLatch: false, trendLatch: true, holdDays: 30 }, cfg, { bands });
+  assertEquals(d.targetAlloc, 0.3);
+  // rung 2 with ROC −1 % → regular threshold (−2 %) still gates
+  d = decideSthCb(160_000, 90_000, -0.01, d.state, cfg, { bands });
+  assertEquals(d.targetAlloc, 0.3); assertEquals(d.rule, "R15 deferred (momentum)");
+  d = decideSthCb(160_000, 90_000, -0.03, d.state, cfg, { bands });
+  assertEquals(d.targetAlloc, 0.2);
+});
+
 Deno.test("v2: scaleCooldownDays blocks a re-buy / next partial sell inside the window; full exit always allowed", () => {
   const cfg: SthCbConfig = { ...NO_MOMO, lthSellTiers: [{ sigma: 2, alloc: 0.5 }, { sigma: 2.5, alloc: 0 }], dipRebuyAtCbRatio: 1.0, scaleCooldownDays: 3 };
   const bands = { p200: 200_000, p250: 250_000 };

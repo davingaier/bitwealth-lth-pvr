@@ -228,6 +228,16 @@ export const IDEAS: Record<string, IdeaSpec> = {
       trendExitRatio: [0.95, 0.97, 0.98],
     },
   },
+  v3: {
+    title: "v3 candidates from the 2026-11-03 audit (① exit block in LTH buy zone, ② V-bottom skip, ④ lighter first-rung gate)",
+    description: "Full grid is small (5×5×3×5 = 375) — enumerate it on top of the corrected v2.1 base with --walk-forward.",
+    grid: {
+      exitBlockBelowLthSigma: [null, -0.25, -0.5, -0.75, -1],
+      exitSkipAboveLowPct: [null, 0.08, 0.1, 0.12, 0.15],
+      exitLowWindow: [7, 10, 14],
+      lthFirstRungMomoThreshold: [null, -0.01, 0, 0.01, 1],
+    },
+  },
   v2knobs: {
     title: "v2 knobs — everything except the ladder",
     description: "Re-buy depth, gate, cooldown, momentum, trailing stop, min-hold, post-exit wait, trend exit — the ladder in --base is kept as-is (pair with ladder_optimize.ts).",

@@ -111,6 +111,27 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | L-08 | `robustness.ts` optimum vs v2 | ≥ v2 on every row | better on all 30 rows, same DD/WF | PASS |
 | L-09 | Promotion of 30/20/10/0 as **Hybrid v2.1**: UI preset default emits 15 keys incl. the new ladder; `tracker_config` row `hybrid_v2_1` built; fact sheet pages fit; deployed EF run `3eb68310` | = lab $4,304,977 / 49 trades | all as expected; EF identical to the cent | PASS |
 
+### Rules audit of run `bbef4aaf` (v0.6.175)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| A-01 | Local lab reproduces the DB run (same window, contributions) | identical 21-trade trail | identical dates / prices / rules | PASS |
+| A-02 | R1 / R14 / R2 / R3 / R5 / R15 / R16 conditions on every signal day (21 orders) | all satisfied | 20/21 clean; R14 ROC ≥ 0 gate explains the Nov-22 wait; Nov-24 tier-2 jump is by design | PASS |
+| A-03 | Deferral notes vs ROC: rows 2025-01-10 / 06-23 deferred with ROC ≤ −2 % | should have sliced | state trace shows a same-tick R15 → R16 cancellation (rebuys 2→3 with no trade) | **FAIL → fixed** |
+| A-04 | Fix: `slicedThisTick` guard; unit test "slice and re-buy never in the same tick" | slice stands, no re-buy consumed | 35 tests pass | PASS |
+| A-05 | Impact of the fix with old knobs (standard basis) | — | v2.1 $4,304,977/49 → $3,868,995/65; v2 $3,802,097/49 → $3,666,854/65; v1 unchanged | DONE |
+| A-06 | Re-optimisation on corrected engine (`v2knobs` 14 925 + ladder 16 449 + probes) | new knobs | `dipRebuyAtCbRatio 1.05, dipRebuyMax 1, scaleCooldownDays 2` → $4,026,777 · 48.3× · 52 trades · DD 41.9 % · WF 8/10 | PASS |
+| A-07 | `robustness.ts` on corrected v2.1 | survives | all rows positive; WF 8/10; DD 42 % | PASS |
+| A-08 | Deployed `ef_sth_cb_bt_execute` with corrected v2.1 (run `f688d62c`) | = lab | $4,026,776.53 / 52 trades — identical | PASS |
+| A-09 | Trackers rebuilt on fixed engine | 3 trackers to latest close | v1 $2.60 M / v2 $3.49 M / v2.1 $3.83 M to 2026-11-02 | PASS |
+| A-10 | Fact sheets v2 / v2.1 regenerated; pages fit A4 | spare ≥ 0 | v2.1 31/22/4 px, v2 46/27/48 px (compact 3-col trades when > 54) | PASS |
+| A-11 | Lab `configDiff` shows removed keys | `scaleCooldownDays=off` visible | implemented | PASS |
+| A-12 | Idea ① `exitBlockBelowLthSigma` (−0.25…−1) | ≥ baseline? | −39 % NAV, DD 58 % (2018 exit blocked) | REJECTED |
+| A-13 | Idea ② `exitSkipAboveLowPct` 8–15 % / window 7–14 d | ≥ baseline? | inert or −2 % (exit moves to a lower low) | REJECTED |
+| A-14 | Idea ④ `lthFirstRungMomoThreshold` 0 / −1 % / off | ≥ baseline? | −22 … −52 % | REJECTED |
+| A-15 | Full `v3` grid (375) + walk-forward | best = baseline | every top row has the flags inert; $4,026,777 / 8/10 | PASS |
+| A-16 | EFs redeployed with the v3 flags (inert by default); run `9f892b1f` | = $4,026,776.53 / 52 | identical | PASS |
+
 ---
 
 ## 2. Database / RPC

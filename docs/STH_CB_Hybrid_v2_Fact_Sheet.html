@@ -94,7 +94,9 @@
     .rung .d { font-size: 8px; color: var(--txt3); margin-top: 2px; }
     .rung.full .a { color: var(--red); }
     .rung.in .a { color: var(--green); }
-    .page:nth-child(3) .trades td { padding: 0.3px 4px; font-size: 7.5px; line-height: 1.22; }
+    .page:nth-child(3) .trades td { padding: 0.2px 4px; font-size: 7.3px; line-height: 1.2; }
+    .trades.compact td { padding: 0.2px 3px; font-size: 7px; line-height: 1.18; }
+    .trades.compact th { padding: 1px 3px; font-size: 7.5px; }
     .page:nth-child(3) .sh { margin: 5px 0 3px; }
     table { width: 100%; border-collapse: collapse; font-size: 9px; }
     th { text-align: left; font-size: 8.3px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt3); padding: 3px 5px; border-bottom: 1px solid var(--border); font-weight: 600; }
@@ -289,9 +291,10 @@
     </div>
 
     <div class="sh">Every trade — <span style="color:var(--rose);text-transform:none;letter-spacing:0">rose</span> = scale-out slice · <span style="color:#86EFAC;text-transform:none;letter-spacing:0">light green</span> = dip re-buy</div>
-    <div class="two">
+    <div class="two" id="tradeCols">
       <table class="trades" id="tradeTableA"></table>
       <table class="trades" id="tradeTableB"></table>
+      <table class="trades" id="tradeTableC" style="display:none"></table>
     </div>
 
     <div class="two" style="margin-top:4px">
@@ -320,7 +323,7 @@
       <strong>Important.</strong> This document describes a research strategy that has been back-tested, not traded. All rule parameters — including the
       ladder levels, re-buy thresholds and cooldown — were optimised on the 2017–2026 window shown; the walk-forward and stress tests are provided so the
       reader can judge how much of the result is likely to persist. v2 trades more often than v1 (<span id="trades-foot"></span>) and not every re-buy is
-      cheaper than the slice it reverses. The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
+      cheaper than the slice it reverses. Rules-engine note: a defect that let a slice and a re-buy cancel inside one daily decision was fixed on 2026-11-03; the figures here are from the corrected engine (v2's ≤ 110 % / three-re-buy rule oscillates on it — see Hybrid v2.1 for the tightened rule). The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
       (STH cost basis, LTH PVR bands) and would differ with another provider. Bitcoin is a volatile asset; the strategy's own maximum drawdown in the
       test was <span id="dd-foot"></span>. Nothing here is investment advice. BitWealth (Pty) Ltd · <span id="gen-date"></span>.
     </div>
@@ -461,9 +464,26 @@
     var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
     return '<tr><td>' + t.date + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
   };
-  var half = Math.ceil(D.trades.length / 2);
-  document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
-  document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(half).map(tr).join('');
+  var compact = D.trades.length > 54;
+  if (compact) {
+    th = '<tr><th>Date</th><th></th><th>Rule</th><th class="r">Price</th><th class="r">% CB</th><th class="r">BTC</th></tr>';
+    tr = function (t) {
+      var b = t.action === 'BUY';
+      var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
+      return '<tr><td>' + t.date.slice(2) + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule).replace('Capitulation', 'Cap.').replace('Trend re-entry', 'Re-entry').replace(' — all out', '') + '</td><td class="r"><b>' + usdK(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td></tr>';
+    };
+    var cols = document.getElementById('tradeCols'); cols.className = 'three'; cols.style.gap = '6px';
+    document.getElementById('tradeTableC').style.display = '';
+    document.querySelectorAll('.trades').forEach(function (t) { t.classList.add('compact'); });
+    var third = Math.ceil(D.trades.length / 3);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, third).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(third, 2 * third).map(tr).join('');
+    document.getElementById('tradeTableC').innerHTML = th + D.trades.slice(2 * third).map(tr).join('');
+  } else {
+    var half = Math.ceil(D.trades.length / 2);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(half).map(tr).join('');
+  }
 
   // ── Annual table ───────────────────────────────────────────────────────
   var wfBy = {}; D.wf.forEach(function (w) { wfBy[w.year] = w; });

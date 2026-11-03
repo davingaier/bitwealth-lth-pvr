@@ -253,6 +253,7 @@ export const EXTRA_CONFIG_KEYS = [
   "reentryRocThreshold", "minHoldDays", "blockEntryAboveSigma", "capBuyRocThreshold", "trailingStopPct",
   "distReentryClearRatio", "capBuyAtLthSigma",
   "lthSellTiers", "lthSellMomoGate", "dipRebuyPct", "dipRebuyAtCbRatio", "dipRebuyMax", "rebalanceDrift", "scaleCooldownDays",
+  "exitBlockBelowLthSigma", "exitSkipAboveLowPct", "exitLowWindow", "lthFirstRungMomoThreshold",
 ] as const;
 
 /** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
@@ -278,7 +279,7 @@ export function unknownExtraKeys(extras: Record<string, unknown>): string[] {
 
 /** Does this config need LTH PVR bands joined onto the series? */
 export function configNeedsBands(config: SthCbConfig): boolean {
-  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number" || !!config.lthSellTiers?.length;
+  return !!config.distributeAtSigma || !!config.blockEntryAboveSigma || typeof config.capBuyAtLthSigma === "number" || !!config.lthSellTiers?.length || typeof config.exitBlockBelowLthSigma === "number";
 }
 
 /**
@@ -347,11 +348,18 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
   const rocExitSeries = config.exitRocLength ? computeRocSeries(pxAll, Math.max(1, Math.trunc(config.exitRocLength))) : null;
   const cbSlopeSeries = config.cbSlopeDays ? computeRocSeries(cbAll, Math.max(1, Math.trunc(config.cbSlopeDays))) : null;
   const sigmaSeries = config.sigmaMode ? computeSigmaSeries(all, config.sigmaMode, config.sigmaWindow ?? 0) : null;
+  // Idea ②: rolling N-day low of the close (inclusive)
+  let lowSeries: number[] | null = null;
+  if (typeof config.exitSkipAboveLowPct === "number") {
+    const w = Math.max(2, Math.trunc(config.exitLowWindow ?? 10));
+    lowSeries = pxAll.map((_, i) => Math.min(...pxAll.slice(Math.max(0, i - w + 1), i + 1)));
+  }
   const extraAt = (i: number): SthCbExtraInputs => ({
     rocExit: rocExitSeries ? rocExitSeries[i] : undefined,
     cbSlope: cbSlopeSeries ? cbSlopeSeries[i] : undefined,
     bands: all[i].bands,
     sigma: sigmaSeries ? sigmaSeries[i] : undefined,
+    lowN: lowSeries ? lowSeries[i] : undefined,
   });
 
   // Warm-up pass seeds the latches (and the pending next-day signal when lag=1)

@@ -7830,11 +7830,12 @@
     const BT_STHCB_PRESETS = {
       // v2.1 = v2 with the slice sizes optimised by tools/sth_cb_lab/ladder_optimize.ts (every 1-dp ladder over the
       // LTH bands enumerated): 30/20/10/0 % BTC at +1/1.5/2/2.5σ. Same trigger dates as v2, larger slices.
+      // 2026-11-03: re-buy knobs corrected after the same-tick slice/re-buy bug fix (≤105 % CB, max 1, cooldown 2).
       hybrid_v2_1: {
         btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
-        btCbLadder: '1:30, 1.5:20, 2:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 110, btCbDipMax: 3, btCbScaleCool: 5,
+        btCbLadder: '1:30, 1.5:20, 2:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 105, btCbDipMax: 1, btCbScaleCool: 2,
         btCbExecLag: '1', btCbExtras: ''
       },
       // v2 = v1 with the single +2.5σ distribution replaced by a momentum-gated ladder
@@ -7878,7 +7879,7 @@
       if (!note || strategy !== 'STH_CB') return;
       const preset = document.getElementById('btCbPreset')?.value;
       note.textContent = preset === 'hybrid_v2_1'
-        ? 'STH CB Hybrid v2.1 — v2 with optimised slice sizes: 30/20/10/0 % BTC at LTH PVR +1/1.5/2/2.5σ (momentum-gated), dip re-buy −10 % or ≤110 % of CB (max 3, 5-day cooldown). 430,398 % ROI / 51.6× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html.'
+        ? 'STH CB Hybrid v2.1 — v2 with optimised slice sizes: 30/20/10/0 % BTC at LTH PVR +1/1.5/2/2.5σ (momentum-gated), dip re-buy −10 % or ≤105 % of CB (max 1, 2-day cooldown). 402,578 % ROI / 48.3× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10 (re-buy knobs corrected 2026-11-03 after the same-tick slice/re-buy fix). See docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html.'
         : preset === 'hybrid_v2'
         ? 'STH CB Hybrid v2 — v1 plus a momentum-gated scale-out ladder at the LTH PVR upper bands (75/50/25/0 % BTC at +1/1.5/2/2.5σ) and a dip re-buy (−10 % from the post-sell peak or ≤110 % of CB, max 3 per hold, 5-day cooldown). 380,110 % ROI / 45.6× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_Fact_Sheet.html.'
         : preset === 'hybrid_v1'

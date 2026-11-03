@@ -27,9 +27,12 @@ export const HYBRID_V2 = {
 };
 
 // v2.1 = v2 with the slice sizes optimised by ladder_optimize.ts (2026-10-27): 30/20/10/0 % instead of 75/50/25/0 %.
+// 2026-11-03: re-buy knobs corrected after the same-tick slice/re-buy bug fix — ≤105 % CB, max 1, cooldown 2
+// (the previous ≤110 % / max 3 / cooldown 5 had been fitted against the bug and oscillates on the corrected engine).
 export const HYBRID_V2_1 = {
   ...HYBRID_V2,
   lthSellTiers: [{ sigma: 1, alloc: 0.3 }, { sigma: 1.5, alloc: 0.2 }, { sigma: 2, alloc: 0.1 }, { sigma: 2.5, alloc: 0 }],
+  dipRebuyAtCbRatio: 1.05, dipRebuyMax: 1, scaleCooldownDays: 2,
 };
 
 const VARIANTS: Record<string, { config: Record<string, unknown>; file: string; compare?: { label: string; config: Record<string, unknown> } }> = {

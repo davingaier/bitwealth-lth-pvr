@@ -94,10 +94,12 @@
     .rung .d { font-size: 8px; color: var(--txt3); margin-top: 2px; }
     .rung.full .a { color: var(--red); }
     .rung.in .a { color: var(--green); }
-    .page:nth-child(2) .card li { font-size: 9.1px; line-height: 1.3; padding: 1px 0 1px 11px; }
+    .page:nth-child(2) .card li { font-size: 9px; line-height: 1.28; padding: 0.8px 0 0.8px 11px; }
     .page:nth-child(2) .sh { margin: 6px 0 3px; }
     .page:nth-child(2) .three { gap: 8px; }
-    .page:nth-child(3) .trades td { padding: 0.3px 4px; font-size: 7.5px; line-height: 1.22; }
+    .page:nth-child(3) .trades td { padding: 0.2px 4px; font-size: 7.3px; line-height: 1.2; }
+    .trades.compact td { padding: 0.2px 3px; font-size: 7px; line-height: 1.18; }
+    .trades.compact th { padding: 1px 3px; font-size: 7.5px; }
     .page:nth-child(3) .sh { margin: 5px 0 3px; }
     table { width: 100%; border-collapse: collapse; font-size: 9px; }
     th { text-align: left; font-size: 8.3px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt3); padding: 3px 5px; border-bottom: 1px solid var(--border); font-weight: 600; }
@@ -141,9 +143,9 @@
       happens 25–35 % beneath it. The strategy <strong>buys everything</strong> at <strong>75 % of the STH cost basis</strong> (or at the Long-Term-Holder PVR −0.5σ band), rides
       established up-trends from <strong>12 % above</strong> the line, and <strong>sells in four slices</strong> as price climbs through the LTH PVR +1σ,
       +1.5σ, +2σ and +2.5σ bands — each slice <strong>only once short-term momentum has turned negative</strong> — <strong>buying the slices back</strong> after a
-      10 % pull-back (or when price returns to within 10 % of the cost basis). <strong>Version 2.1 changes only the slice sizes:</strong> an exhaustive
+      10 % pull-back (or when price returns to within 5 % of the cost basis — once per hold). <strong>Version 2.1 changes the slice sizes and tightens the re-buy:</strong> an exhaustive
       search of every ladder showed that selling <em>most</em> of the position at the first gated rung (keeping <strong>30 → 20 → 10 → 0 %</strong> instead of
-      75 → 50 → 25 → 0 %) and re-buying the pull-back is worth <span id="p1-uplift"></span> more than v2 — on identical trade dates, with the same drawdown.
+      75 → 50 → 25 → 0 %) and re-buying the pull-back is worth <span id="p1-uplift"></span> more than v2 — on the same trigger dates, with a <em>lower</em> drawdown.
       Idle cash earns stable-coin yield.
     </p>
 
@@ -219,10 +221,10 @@
         <li>Without this gate a ladder <em>under</em>-performs the single all-out — tested, not assumed</li>
       </ul></div>
       <div class="card new"><h3><span class="pill buy">RE-BUY</span> R16 · Dip re-buy</h3><ul>
-        <li>After a slice, go back to <b>100 % BTC</b> when price is <b>10 % below</b> its post-slice peak <em>or</em> back at <b>≤ 110 %</b> of the STH cost basis</li>
-        <li>Re-arms the ladder for the next leg up; at most <b>3 re-buys</b> per hold</li>
-        <li><b>5-day cooldown</b> between any slice and re-buy (either direction) — no next-day flip-flops. Full exits ignore the cooldown</li>
-        <li><b>Why sell so much at +1σ?</b> The slice is sold on weakness and re-bought ~10 % lower — the more cash raised at the top of the swing, the more is re-bought on the dip; +2.5σ still catches the blow-off</li>
+        <li>After a slice, go back to <b>100 % BTC</b> when price is <b>10 % below</b> its post-slice peak <em>or</em> back at <b>≤ 105 %</b> of the STH cost basis</li>
+        <li>Re-arms the ladder for the next leg up; <b>one re-buy</b> per hold (v2's three at ≤ 110 % oscillate against the +1σ rung)</li>
+        <li><b>2-day cooldown</b> between any slice and re-buy (either direction) — no next-day flip-flops. Full exits ignore the cooldown</li>
+        <li><b>Why sell so much at +1σ?</b> Sold on weakness, re-bought ~10 % lower — more cash raised at the top means more re-bought on the dip; +2.5σ still catches the blow-off</li>
       </ul></div>
     </div>
     <div class="ladder">
@@ -294,9 +296,10 @@
     </div>
 
     <div class="sh">Every trade — <span style="color:var(--rose);text-transform:none;letter-spacing:0">rose</span> = scale-out slice · <span style="color:#86EFAC;text-transform:none;letter-spacing:0">light green</span> = dip re-buy</div>
-    <div class="two">
+    <div class="two" id="tradeCols">
       <table class="trades" id="tradeTableA"></table>
       <table class="trades" id="tradeTableB"></table>
+      <table class="trades" id="tradeTableC" style="display:none"></table>
     </div>
 
     <div class="two" style="margin-top:4px">
@@ -324,7 +327,7 @@
     <div class="foot">
       <strong>Important.</strong> This document describes a research strategy that has been back-tested, not traded. All rule parameters — including the
       ladder levels, re-buy thresholds and cooldown — were optimised on the 2017–2026 window shown; the walk-forward and stress tests are provided so the
-      reader can judge how much of the result is likely to persist. v2.1 sells 70–90 % of the position at the first gated rung, so the two historical re-buys that were <em>above</em> their slice price (Mar-21, Dec-24) cost more than they did in v2 (trades: <span id="trades-foot"></span>). The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
+      reader can judge how much of the result is likely to persist. v2.1 sells 70–90 % of the position at the first gated rung, so a re-buy that lands <em>above</em> its slice price costs more than it did in v2 (trades: <span id="trades-foot"></span>). Rules-engine note: a defect that let a slice and a re-buy cancel inside one daily decision was fixed on 2026-11-03; every figure here is from the corrected engine, and the re-buy parameters were re-optimised after the fix. The strategy underperformed simple holding in 2023 and 2024. Results depend on two third-party on-chain series
       (STH cost basis, LTH PVR bands) and would differ with another provider. Bitcoin is a volatile asset; the strategy's own maximum drawdown in the
       test was <span id="dd-foot"></span>. Nothing here is investment advice. BitWealth (Pty) Ltd · <span id="gen-date"></span>.
     </div>
@@ -465,9 +468,26 @@
     var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
     return '<tr><td>' + t.date + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule) + '</td><td class="r"><b>' + usd0(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td><td class="r">' + usdK(t.nav) + '</td></tr>';
   };
-  var half = Math.ceil(D.trades.length / 2);
-  document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
-  document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(half).map(tr).join('');
+  var compact = D.trades.length > 54;
+  if (compact) {
+    th = '<tr><th>Date</th><th></th><th>Rule</th><th class="r">Price</th><th class="r">% CB</th><th class="r">BTC</th></tr>';
+    tr = function (t) {
+      var b = t.action === 'BUY';
+      var cls = t.partial ? (b ? 'rebuy' : 'part') : (b ? 'g' : 'rd');
+      return '<tr><td>' + t.date.slice(2) + '</td><td class="' + cls + '"><b>' + (b ? '▲' : '▼') + '</b></td><td class="' + (t.partial ? cls : '') + '">' + ruleShort(t.rule).replace('Capitulation', 'Cap.').replace('Trend re-entry', 'Re-entry').replace(' — all out', '') + '</td><td class="r"><b>' + usdK(t.price) + '</b></td><td class="r">' + Math.round(t.ratio * 100) + '%</td><td class="r ' + (t.alloc > 0 && t.alloc < 1 ? 'rose' : 'dim') + '">' + Math.round(t.alloc * 100) + '%</td></tr>';
+    };
+    var cols = document.getElementById('tradeCols'); cols.className = 'three'; cols.style.gap = '6px';
+    document.getElementById('tradeTableC').style.display = '';
+    document.querySelectorAll('.trades').forEach(function (t) { t.classList.add('compact'); });
+    var third = Math.ceil(D.trades.length / 3);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, third).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(third, 2 * third).map(tr).join('');
+    document.getElementById('tradeTableC').innerHTML = th + D.trades.slice(2 * third).map(tr).join('');
+  } else {
+    var half = Math.ceil(D.trades.length / 2);
+    document.getElementById('tradeTableA').innerHTML = th + D.trades.slice(0, half).map(tr).join('');
+    document.getElementById('tradeTableB').innerHTML = th + D.trades.slice(half).map(tr).join('');
+  }
 
   // ── Annual table ───────────────────────────────────────────────────────
   var wfBy = {}; D.wf.forEach(function (w) { wfBy[w.year] = w; });

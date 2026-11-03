@@ -133,6 +133,16 @@ export interface SthCbConfig {
   scaleCooldownDays?: number;
   /** Simulator: when set, also rebalance back to the target whenever drift exceeds this fraction of NAV (constant-mix). Off by default. */
   rebalanceDrift?: number;
+
+  // ── v3 candidates (2026-11-03 audit of run bbef4aaf) ─────────────────────
+  /** Idea ①: do not fire R2 / R3 / R12 exits while price ≤ the LTH PVR band at this σ (e.g. −0.5) — "never sell into the zone you'd buy". */
+  exitBlockBelowLthSigma?: number;
+  /** Idea ②: skip the R3 trend exit when price is ≥ this fraction above the rolling low (V-bottom recovery), e.g. 0.10. Needs `extra.lowN`. */
+  exitSkipAboveLowPct?: number;
+  /** Idea ②: window (days) of the rolling low used by exitSkipAboveLowPct (default 10). */
+  exitLowWindow?: number;
+  /** Idea ④: ROC threshold for the momentum gate on the FIRST ladder rung only (e.g. −0.01 or 0); the other rungs keep momoThreshold. */
+  lthFirstRungMomoThreshold?: number;
 }
 
 export interface SthCbState {
@@ -176,6 +186,8 @@ export interface SthCbExtraInputs {
   bands?: Record<string, number | null | undefined>;
   /** idea 7: σ of ln(px/cb) (ratio_sigma) or $ per σ (sth_pvr) at this close */
   sigma?: number;
+  /** idea ②: lowest close over the last `exitLowWindow` days (inclusive of today) */
+  lowN?: number;
 }
 
 export interface SthCbSignal {
@@ -366,6 +378,14 @@ export function decideSthCb(
   const slopeActive = !!config.cbSlopeDays && fin(extra.cbSlope);
   const slopeOk = !slopeActive || Number(extra.cbSlope) <= 0;
 
+  // Idea ① (2026-11-03): no cash exits while price is already in the LTH capitulation-buy zone
+  const exitBlockKey = typeof config.exitBlockBelowLthSigma === "number" ? sigmaKey(config.exitBlockBelowLthSigma) : null;
+  const exitBlockLevel = exitBlockKey ? Number(extra.bands?.[exitBlockKey]) : NaN;
+  const inBuyZone = fin(exitBlockLevel) && exitBlockLevel > 0 && px <= exitBlockLevel;
+  // Idea ② (2026-11-03): a trend exit that only becomes eligible after a V-bottom bounce is skipped
+  const recovered = typeof config.exitSkipAboveLowPct === "number" && fin(extra.lowN) && Number(extra.lowN) > 0
+    && px >= Number(extra.lowN) * (1 + config.exitSkipAboveLowPct);
+
   let rule = "Hold";
   let note = `price ${pct(ratio)} of STH CB`;
   let sellDeferred = false;
@@ -411,7 +431,11 @@ export function decideSthCb(
       note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB but ROC ${(roc * 100).toFixed(1)}% < thr`;
     } else if (s.capLatch && !s.trendLatch && ratio >= capExitRatio && !holdLocked) {
       const gated = config.momoEnabled && config.momoOnCapExit;
-      if (!gated || momoWeak) {
+      if (inBuyZone) {
+        sellDeferred = true;
+        rule = "R2 deferred (LTH buy zone)";
+        note = `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB but ≤ LTH ${exitBlockKey} ${exitBlockLevel.toFixed(0)} — holding`;
+      } else if (!gated || momoWeak) {
         enterCash();
         rule = "R2 Capitulation exit";
         note = `price ${pct(ratio)} ≥ ${pct(capExitRatio)} of STH CB` + (gated ? ` and ${rocTxt} ≤ thr` : "");
@@ -450,7 +474,7 @@ export function decideSthCb(
     s.exitConfirmCount = (s.exitConfirmCount ?? 0) + 1;
     const confirmed = s.exitConfirmCount >= confirmDays;
     const gated = config.momoEnabled && config.momoOnTrendExit;
-    if (confirmed && (!gated || momoWeak) && slopeOk) {
+    if (confirmed && (!gated || momoWeak) && slopeOk && !inBuyZone && !recovered) {
       enterCash();
       s.reentryArmed = true;
       rule = "R3 Trend exit";
@@ -460,7 +484,7 @@ export function decideSthCb(
         (slopeActive ? " and CB slope ≤ 0" : "");
     } else {
       sellDeferred = true;
-      const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : "momentum");
+      const why = !confirmed ? `confirm ${s.exitConfirmCount}/${confirmDays}` : (!slopeOk ? "CB rising" : (gated && !momoWeak) ? "momentum" : inBuyZone ? "LTH buy zone" : "recovered from low");
       rule = `R3 deferred (${why})`;
       note = `price ${pct(ratio)} ≤ ${pct(trendExitRatio)} of STH CB but ${why} — holding`;
     }
@@ -469,7 +493,7 @@ export function decideSthCb(
   }
 
   // ── Idea 12: trailing stop on trend holds ────────────────────────────────
-  if (s.trendLatch && config.trailingStopPct && !holdLocked && (s.peakPx ?? 0) > 0) {
+  if (s.trendLatch && config.trailingStopPct && !holdLocked && !inBuyZone && (s.peakPx ?? 0) > 0) {
     const dd = px / (s.peakPx as number) - 1;
     if (dd <= -config.trailingStopPct) {
       enterCash();
@@ -515,6 +539,7 @@ export function decideSthCb(
 
   // ── v2 Idea 15: scale OUT at LTH PVR upper bands ─────────────────────────
   const lTiers = lthTiers(config);
+  let slicedThisTick = false;
   if ((s.capLatch || s.trendLatch) && lTiers.length) {
     let hit = 0;
     for (const t of lTiers) {
@@ -523,7 +548,9 @@ export function decideSthCb(
       if (fin(level) && level > 0 && px >= level) hit++;
     }
     if (hit > (s.lthTierLevel ?? 0)) {
-      const gateOk = !config.lthSellMomoGate || !config.momoEnabled || rocGate <= config.momoThreshold;
+      // Idea ④: the first rung may use its own (lighter) momentum threshold
+      const rungThr = hit === 1 && typeof config.lthFirstRungMomoThreshold === "number" ? config.lthFirstRungMomoThreshold : config.momoThreshold;
+      const gateOk = !config.lthSellMomoGate || !config.momoEnabled || rocGate <= rungThr;
       // A hold that was *entered* above a tier must not scale out on day 1: initialise the level at entry instead
       const freshEntry = (s.holdDays ?? 0) === 0;
       if (freshEntry) {
@@ -540,6 +567,7 @@ export function decideSthCb(
         } else {
           s.scaledAlloc = tier.alloc;
           s.postSellPeak = px;
+          slicedThisTick = true;
           rule = `R15 LTH scale-out tier ${hit} → ${Math.round(tier.alloc * 100)}% BTC (+${tier.sigma}σ)`;
         }
         note = `price ${px.toFixed(0)} ≥ LTH PVR +${tier.sigma}σ`;
@@ -553,7 +581,10 @@ export function decideSthCb(
   }
 
   // ── v2 Idea 16: re-accumulate on the pull-back after a partial scale-out ──
-  if ((s.capLatch || s.trendLatch) && typeof s.scaledAlloc === "number" && s.scaledAlloc < 1
+  // Never in the same tick as the slice it would reverse: `cooldownOk` was evaluated before R15 ran, and the
+  // ≤ dipRebuyAtCbRatio trigger can be true at the moment of a slice — without this guard the slice is silently
+  // cancelled while still consuming a re-buy and resetting the cooldown / tier level (bug found 2026-11-03).
+  if (!slicedThisTick && (s.capLatch || s.trendLatch) && typeof s.scaledAlloc === "number" && s.scaledAlloc < 1
     && (typeof config.dipRebuyPct === "number" || typeof config.dipRebuyAtCbRatio === "number")
     && (config.dipRebuyMax == null || (s.dipRebuys ?? 0) < config.dipRebuyMax) && cooldownOk) {
     const peak = s.postSellPeak ?? px;

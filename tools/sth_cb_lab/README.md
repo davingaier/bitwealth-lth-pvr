@@ -153,6 +153,7 @@ combination is also saved to `results/<timestamp>_<idea>_<objective>.csv`.
 | `v2` | Ideas 15/16: scale-out ladders at the LTH PVR upper bands, momentum gate, dip re-buy — use with `--base '{hybrid v1}'` | sampled |
 | `v2fine` | Tight steps around the v2 winner incl. `scaleCooldownDays` — use with `--base '{hybrid v2}'` | sampled |
 | `v2knobs` | Everything in `v2fine` **except** the ladder (the ladder in `--base` is kept) — pair with `ladder_optimize.ts` | sampled |
+| `v3` | The three exit/gate ideas from the 2026-11-03 trade audit (all rejected — kept for reference) | 375 |
 | `all` | Every parameter from every idea at once — random sampling only | sampled |
 
 Add `--climb K --passes N` to hill-climb from the top K after sampling (coordinate descent over each knob's
@@ -311,6 +312,9 @@ Ratios are **price ÷ STH cost basis** (so `0.70` = price at 70 % of the cost ba
 | 16 | `dipRebuyMax` | `3` | Maximum re-buys per hold (blank = unlimited) |
 | v2 | `scaleCooldownDays` | `5` | Minimum days between a partial sell and a re-buy (either direction). Full exits ignore it. Kills next-day flip-flops |
 | v2 | `rebalanceDrift` | `0.05` | Opt-in constant-mix: while at a partial allocation, rebalance when the held weight drifts this far from target. Default off — trades only when the target changes |
+| v3 | `exitBlockBelowLthSigma` | `-0.5` | Suppress R2 / R3 / R12 exits while price ≤ the LTH PVR band at this σ. **Tested 2026-11-03: −39 % NAV, DD 58 % — do not use** |
+| v3 | `exitSkipAboveLowPct`, `exitLowWindow` | `0.10`, `10` | Skip the trend exit when price is ≥ this fraction above the N-day low (V-bottom recovery). **Tested: inert or −2 %** |
+| v3 | `lthFirstRungMomoThreshold` | `0` | Separate (lighter) ROC threshold for the first ladder rung only. **Tested: −22 … −52 %** |
 
 ### The optimised "STH_CB hybrid v1" (2026-10-25)
 
@@ -427,7 +431,15 @@ historical re-buys were cheaper than their slice; the Mar-21 and Dec-24 re-buys 
 49 trades · DD 48 % · WF 8/10**. Default Admin UI preset, tracker row `hybrid_v2_1`, fact sheet
 `docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html` (`factsheet_data.ts --variant v2_1`, compares against v2).
 
----
+> **Engine fix 2026-11-03 — v2 / v2.1 numbers above this line were produced with a bug.** A slice (R15) and a dip re-buy
+> (R16) could cancel each other inside one daily decision (the re-buy saw the fresh slice; the ≤ `dipRebuyAtCbRatio`
+> trigger was true; the cooldown had been checked *before* the slice). No order resulted, but a re-buy was consumed and the
+> cooldown / tier level reset. On the corrected engine the v2/v2.1 knobs `≤110 % · max 3 · cooldown 5` oscillate against
+> the +1σ rung ($4.30 M → $3.87 M, 49 → 65 trades). **Corrected v2.1 = `dipRebuyAtCbRatio 1.05 · dipRebuyMax 1 ·
+> scaleCooldownDays 2` → $4 026 777 · 402 578 % · 48.3× HODL · 52 trades · DD 41.9 % · WF 8/10** — what the preset,
+> tracker and fact sheet now use. Full audit: `docs/STH_CB_Run_bbef4aaf_Trade_Breakdown.md`. Also: `configDiff()` now
+> prints keys a config *removes* relative to the base as `key=off` (an optimiser winner with no cooldown used to print
+> as "(defaults)").
 
 ## Typical workflow
 

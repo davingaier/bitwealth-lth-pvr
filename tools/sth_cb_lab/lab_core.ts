@@ -202,6 +202,13 @@ export function configDiff(c: SthCbConfig, base: SthCbConfig = DEFAULT_STH_CB_CO
     if (typeof b === "undefined" && JSON.stringify(v) === JSON.stringify(OFF_VALUES[k])) continue;
     parts.push(`${k}=${JSON.stringify(v)}`);
   }
+  // Keys present in the base but switched OFF in c (removed / null) — otherwise a config that only *drops* a rule
+  // (e.g. no scaleCooldownDays) prints as "(defaults)" and cannot be told apart from the base.
+  for (const k of Object.keys(base) as (keyof SthCbConfig)[]) {
+    const v = c[k], b = base[k];
+    if (b === null || typeof b === "undefined") continue;
+    if (v === null || typeof v === "undefined") parts.push(`${k}=off`);
+  }
   return parts.join(" ") || "(defaults)";
 }
 

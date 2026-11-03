@@ -3,11 +3,57 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-10-27 (v0.6.174)
+**Last updated:** 2026-11-03 (v0.6.175)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.175 – Rules audit of run `bbef4aaf`: same-tick slice/re-buy bug fixed, v2.1 re-buy knobs corrected
+**Date:** 2026-11-03 · **Status:** ✅ DEPLOYED (`ef_sth_cb_bt_execute`, `ef_sth_cb_tracker`; migration `20261103_sth_cb_tracker_hybrid_v2_1_knobs.sql`)
+
+**Trigger:** Davin asked for a rule-by-rule audit of back-test `bbef4aaf-36ea-4256-b3fb-54412c680d11` (Hybrid v2.1,
+2022-11-01 → 2026-11-02, $2 400 + $200/mo) and a buy/sell breakdown to compare against TradingView.
+Deliverable: `docs/STH_CB_Run_bbef4aaf_Trade_Breakdown.md` (+ two CSVs) — every order with signal close, fill, trigger
+values, BTC share before → after, order size as % of BTC held / % of cash, and an audit note per row.
+
+**Audit result:** 20 of 21 orders exactly per the rules. **One engine bug:** inside a single daily decision R15
+(slice) ran first and R16 (dip re-buy) ran second against the *already-sliced* state — `cooldownOk` had been evaluated
+before R15, `scaledAlloc < 1` was now true, and the ≤ `dipRebuyAtCbRatio` trigger can be true at the moment of a slice.
+Net effect: no order, but the slice was silently cancelled, a re-buy was consumed, and the cooldown + tier level reset.
+Occurred on 2025-01-08, 2025-06-12 and 2025-06-18 in the reviewed run (slices due those days never happened;
+`dipRebuyMax 3` exhausted by phantoms, so no re-buy was possible Aug–Oct 2025).
+
+**Fix:** `slicedThisTick` guard in `_shared/sth_cb_strategy_logic.ts` — R16 never acts in the tick that produced a
+slice. Unit test added (35 pass). Both EFs redeployed.
+
+**Consequence:** with the rules followed exactly, the v2/v2.1 knobs (`dipRebuyAtCbRatio 1.10, dipRebuyMax 3,
+scaleCooldownDays 5`) oscillate against the +1σ rung whenever price sits at 105–110 % of CB — the bug had been masking
+that. Standard basis: v2.1 $4 304 977 / 49 trades (buggy) → $3 868 995 / 65 trades (corrected engine, same knobs);
+v2 $3 802 097 / 49 → $3 666 854 / 65. v1 unaffected (no ladder).
+
+**Re-optimised on the corrected engine** (`--idea v2knobs` 14 925 configs + `ladder_optimize.ts` 16 449 configs +
+targeted probes): **`dipRebuyAtCbRatio 1.05 · dipRebuyMax 1 · scaleCooldownDays 2`**, ladder 30/20/10/0 % unchanged →
+**$4 026 777 · 402 578 % · 48.3× HODL · CAGR 133 % · DD 41.9 % (was 47.8 %) · 52 trades · WF 8/10**. Cooldown 1 ≡ none
+($4.12 M) but allows next-day reversals; 2 d costs 2.3 % and prevents them; ≥ 5 d degrades. `robustness.ts` clean.
+Reviewed window: $47 062 as executed → $47 577 corrected (22 orders). Deployed EF verification run `f688d62c` =
+$4 026 776.53 / 52 trades — identical to the lab.
+
+**Updated:** Admin UI preset *Hybrid v2.1* (fields 105 / 1 / 2 + note); `tracker_config.hybrid_v2_1` extras (all three
+trackers rebuilt to 2026-11-02: v1 $2.60 M, v2 $3.49 M, v2.1 $3.83 M); `HYBRID_V2_1` in `factsheet_data.ts`; all three
+fact-sheet data files regenerated; v2.1 sheet text (≤ 105 %, one re-buy, 2-day cooldown, engine note) and v2 sheet
+footer note; both sheets switch to a compact 3-column trade table when > 54 trades (v2 now has 65). Lab:
+`configDiff()` now lists keys *removed* relative to the base (`key=off`) — previously a config that only dropped a
+rule printed as "(defaults)" and hid the optimiser's real winner.
+
+**Design observations from the trail — tested the same day (lab, opt-in flags `exitBlockBelowLthSigma`,
+`exitSkipAboveLowPct`/`exitLowWindow`, `lthFirstRungMomoThreshold`; grid `v3`, 375 configs + walk-forward; 38 unit
+tests):** all three **rejected**. ① blocking R2/R3/R12 while price ≤ LTH −0.5σ: −39 % NAV, DD 58 % (in 2018 the Jul
+exit at $8.2k is blocked and the hold rides to $3.2k — the band sits far above price for months in a bear; the whipsaws
+it fixes cost ≈ 0.3 % each). ② skipping the trend exit when ≥ 8–15 % above the 7/10/14-day low: inert or −2 %
+(Aug-24: the $59.9k exit just moves to 6-Sep at $53.9k). ④ lighter first-rung gate (0 / −1 % / ungated):
+−22 … −52 % — the strict gate is what makes the ladder work. Flags remain in the engine (inert unless set) for UI
+experiments; both EFs redeployed (verification run `9f892b1f` = $4 026 776.53 / 52, unchanged).
 
 ### v0.6.174 – STH_CB Hybrid **v2.1** promoted: optimised slice sizes 30/20/10/0 % (new default)
 **Date:** 2026-10-27 · **Status:** ✅ DEPLOYED (DB row + UI + fact sheet; no EF code change needed)
