@@ -8,7 +8,9 @@
 //   1. Read the strategy state for signal_date = trade_date − 1 from sth_cb.tracker_daily (one row per config_key).
 //   2. For every live STH_CB customer (customer_strategies.live_enabled, status active, customer active) translate
 //      the org-level state into a per-customer BUY / SELL / HOLD via _shared/sth_cb_live.ts (pure, unit-tested).
-//   3. Upsert lth_pvr.decisions_daily (band_source = 'sth_cb', UNIQUE (org, customer, trade_date)).
+//   3. Upsert sth_cb.decisions_daily (UNIQUE (org, customer, trade_date); HOLD rows included).
+//      ef_create_order_intents reads this table alongside lth_pvr.decisions_daily and sizes orders into the shared
+//      lth_pvr.order_intents table.
 //   4. Unless dry_run, chain ef_create_order_intents { customer_ids } → ef_execute_orders → ef_poll_orders. Ledger
 //      posting is handled by the existing half-hourly cron (and ef_resume_pipeline { strategy:'sth_cb' }).
 //
@@ -117,17 +119,19 @@ Deno.serve(async (req) => {
       planned.push({ ...d, last_buy_px: lastBuyPx, balance_date: bal?.date ?? null, btc: cust.btcBalance, cash_usd: +(cust.usdtBalance + cust.usdpcValueUsd).toFixed(2) });
       if (d.action !== "HOLD") actionable.push(cid);
       decisions.push({
-        org_id, customer_id: cid, signal_date: signalDate, trade_date: tradeDate,
-        price_usd: sig.priceUsd, band_bucket: `alloc ${Math.round(d.currentAlloc * 100)}%→${Math.round(d.targetAlloc * 100)}%`,
+        org_id, customer_id: cid, config_key: key, signal_date: signalDate, trade_date: tradeDate,
+        price_usd: sig.priceUsd, signal_in_market: sig.inMarket, signal_target_alloc: sig.targetAlloc,
+        current_alloc: d.currentAlloc, target_alloc: d.targetAlloc,
         action: d.action, amount_pct: d.amountPct, rule: d.rule, note: d.note,
-        strategy_version_id: c.strategy_version_id ?? null, band_source: "sth_cb",
+        join_policy: cust.joinPolicy, last_buy_px: lastBuyPx, btc_balance: cust.btcBalance,
+        cash_usd: +(cust.usdtBalance + cust.usdpcValueUsd).toFixed(2),
       });
     }
 
     let written = 0;
     if (!dryRun && decisions.length) {
-      const { error: upErr } = await sb.schema("lth_pvr").from("decisions_daily").upsert(decisions, { onConflict: "org_id,customer_id,trade_date" });
-      if (upErr) throw new Error(`decisions_daily upsert failed: ${upErr.message}`);
+      const { error: upErr } = await sb.schema("sth_cb").from("decisions_daily").upsert(decisions, { onConflict: "org_id,customer_id,trade_date" });
+      if (upErr) throw new Error(`sth_cb.decisions_daily upsert failed: ${upErr.message}`);
       written = decisions.length;
     }
 

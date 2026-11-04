@@ -128,6 +128,32 @@ export async function getOrderSummaryByCustomerOrderId(
   return await valrPrivateRequest("GET", path, undefined, subaccountId, credentials);
 }
 
+// 2b) Order status by customerOrderId — works for OPEN orders too. The history/summary
+// route above only serves completed orders and returns 400 "Invalid Order" while an
+// order is still working; this route returns orderStatusType (Placed / Active /
+// Partially Filled / Filled / Cancelled / Failed), originalQuantity and remainingQuantity.
+export async function getOrderStatusByCustomerOrderId(
+  customerOrderId: string,
+  pair: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+) {
+  const p = normalisePair(pair);
+  return await valrPrivateRequest("GET", `/v1/orders/${p}/customerorderid/${customerOrderId}`, undefined, subaccountId, credentials);
+}
+
+// 2c) Order status by VALR orderId — unique per order (customerOrderId is reused across a LIMIT and its MARKET
+// replacement, so lookups by customerOrderId can return the wrong order). Works for open and completed orders.
+export async function getOrderStatusById(
+  orderId: string,
+  pair: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+) {
+  const p = normalisePair(pair);
+  return await valrPrivateRequest("GET", `/v1/orders/${p}/orderid/${orderId}`, undefined, subaccountId, credentials);
+}
+
 // Optional: keep a direct poll by orderId in case other EFs use it
 export async function getOrderSummaryById(
   orderId: string,
@@ -141,7 +167,9 @@ export async function getOrderSummaryById(
   return await valrPrivateRequest("GET", path, undefined, subaccountId, credentials);
 }
 
-// 3) Cancel order by VALR orderId
+// 3) Cancel order. VALR's cancel endpoint is DELETE /v1/orders/order with a JSON body ({ orderId | customerOrderId,
+// pair }). The path-style /v1/orders/orderid/{id} is the GET status route — DELETE on it returns 404 and silently
+// leaves the order resting on the book (this copy lagged behind _shared/valrClient.ts until 2026-11-04).
 export async function cancelOrderById(
   orderId: string,
   pair: string,
@@ -149,8 +177,16 @@ export async function cancelOrderById(
   credentials?: ValrRequestCredentials | null,
 ) {
   const p = normalisePair(pair);
-  const path = `/v1/orders/orderid/${orderId}?currencyPair=${p}`;
-  return await valrPrivateRequest("DELETE", path, undefined, subaccountId, credentials);
+  return await valrPrivateRequest("DELETE", "/v1/orders/order", { orderId, pair: p }, subaccountId, credentials);
+}
+export async function cancelOrderByCustomerOrderId(
+  customerOrderId: string,
+  pair: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+) {
+  const p = normalisePair(pair);
+  return await valrPrivateRequest("DELETE", "/v1/orders/order", { customerOrderId, pair: p }, subaccountId, credentials);
 }
 
 // 4) Place MARKET order for fallback logic in ef_poll_orders

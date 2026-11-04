@@ -45,9 +45,18 @@ Deno.serve(async (req: Request) => {
     const checkStatusOnly = body.check_status === true;
 
     // ── STH Cost Basis Strategy path ──────────────────────────────────────
+    // { strategy: 'sth_cb', check_status: true } → sth_cb.get_pipeline_status (org-level step status).
     // { strategy: 'sth_cb' } runs the STH_CB chain only: decisions (which itself chains intents → execute → poll
     // for the customers with a BUY/SELL) followed by ledger posting. The LTH_PVR steps are untouched.
     if (String(body.strategy ?? "").toLowerCase() === "sth_cb") {
+      const orgId = Deno.env.get("ORG_ID") ?? "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
+      if (checkStatusOnly) {
+        const { data: st, error: stErr } = await sb.schema("sth_cb").rpc("get_pipeline_status", { p_org_id: orgId, p_trade_date: tradeDateParam });
+        return new Response(JSON.stringify(stErr ? { success: false, error: stErr.message } : st), {
+          status: stErr ? 500 : 200,
+          headers: { ...corsHeaders, "content-type": "application/json" },
+        });
+      }
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       const results: unknown[] = [];

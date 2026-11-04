@@ -1640,6 +1640,10 @@
                     <option value="false">No</option><option value="true">Yes</option>
                   </select>
                 </label>
+                <label title="When on, idle USDT is swept into yield-bearing USDPC after each trading day and converted back automatically before BTC buys.">
+                  <span class="label-line">USDPC yield on idle cash</span>
+                  <span style="display:flex;align-items:center;gap:.5rem;height:2.4rem;"><input type="checkbox" name="usdpc_enabled" value="true" style="width:1.1rem;height:1.1rem;" /><span class="small-muted">Enable USDPC sweeps for this client</span></span>
+                </label>
                 <label data-sth-cb-only style="display:none"><span class="label-line">STH CB joining rule</span>
                   <select name="join_policy" title="Immediate: adopt the strategy's current state as soon as funds land. Next signal: hold cash until the strategy's next entry / re-buy (only matters before the first BTC purchase).">
                     <option value="immediate">Immediate (adopt current state)</option><option value="next_signal">Wait for next entry signal</option>
@@ -1690,7 +1694,26 @@
               </div>
               <div style="margin-top:.75rem;">
                 <button type="button" id="cmEditorOpenStrategySetup" class="btn btn-secondary-sm">Configure / Change Strategy →</button>
-                <span class="small-muted" style="margin-left:.5rem;">Opens the strategy selection wizard.</span>
+                <span class="small-muted" style="margin-left:.5rem;">Opens the strategy selection wizard (prospects only).</span>
+              </div>
+
+              <!-- Switch an existing client to another strategy (in place: same VALR account, fee plan and history) -->
+              <div id="cmSwitchStrategy" style="margin-top:1rem;padding:.85rem;border:1px dashed var(--border);border-radius:8px;display:none;">
+                <div style="font-weight:600;margin-bottom:.2rem;">Switch strategy</div>
+                <p class="small-muted" style="margin:0 0 .6rem;">Keeps the client's exchange account / subaccount, fee plan and transaction history. The new strategy adopts the current holdings on its next run — if it is in the market all cash is bought into BTC; if it is in cash any BTC is sold.</p>
+                <div class="cm-grid">
+                  <label><span class="label-line">New strategy</span><select id="cmSwitchTarget"></select></label>
+                  <label data-switch-for="STH_CB"><span class="label-line">Joining rule</span>
+                    <select id="cmSwitchJoin"><option value="immediate">Immediate (adopt current state)</option><option value="next_signal">Wait for next entry signal</option></select>
+                  </label>
+                  <label data-switch-for="STH_CB"><span class="label-line">Configuration</span><select id="cmSwitchConfig"></select></label>
+                  <label data-switch-for="LTH_PVR"><span class="label-line">Variation</span><select id="cmSwitchVariation"></select></label>
+                  <label><span class="label-line">Reason (audit trail)</span><input id="cmSwitchReason" placeholder="e.g. client requested STH CB" /></label>
+                </div>
+                <div style="margin-top:.6rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+                  <button type="button" id="cmSwitchBtn" class="btn btn-secondary-sm">Switch strategy now →</button>
+                  <span id="cmSwitchResult" class="small-muted"></span>
+                </div>
               </div>
             </section>
 
@@ -2215,6 +2238,55 @@
         </div>
       </div>
 
+      <!-- STH Cost Basis Strategy Panel -->
+      <div id="sthCbStrategyPanel" class="strategy-panel" data-strategy="STH_CB">
+        <h3>STH Cost Basis Strategy — tracked configurations</h3>
+        <p style="color:var(--muted);margin-bottom:1rem;">
+          Live clients follow one of these <code>sth_cb.tracker_config</code> rows (their <em>config_key</em>). Rules and parameters live in
+          <code>extras</code>; the daily state is rebuilt by <code>ef_sth_cb_tracker</code> and charted under On-Chain Charts → Strategy Tracker.
+          Back-test and optimise configurations in Strategy Back-Testing / <code>tools/sth_cb_lab</code>; promote a winner by inserting a new row.
+        </p>
+        <div style="overflow-x:auto">
+          <table class="lp-table" id="sthCbConfigTable">
+            <thead><tr><th>Config key</th><th>Label</th><th>Start</th><th>Fee plan</th><th>USDPC</th><th>Live clients</th><th>Latest state</th></tr></thead>
+            <tbody><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <script>
+      (() => {
+        async function loadSthCbConfigs(){
+          const tb = document.querySelector('#sthCbConfigTable tbody');
+          if (!tb || !window.supabaseClient) return;
+          try {
+            const [{ data: cfgs, error }, { data: live }] = await Promise.all([
+              window.supabaseClient.rpc('sth_cb_tracker_list'),
+              window.supabaseClient.schema('public').from('customer_strategies').select('config_key').eq('strategy_code', 'STH_CB').eq('status', 'active').eq('live_enabled', true),
+            ]);
+            if (error) throw error;
+            const liveBy = {}; (live || []).forEach(r => { const k = r.config_key || 'hybrid_v2_2'; liveBy[k] = (liveBy[k] || 0) + 1; });
+            const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            const rows = await Promise.all((cfgs || []).map(async c => {
+              let state = '—';
+              try {
+                const { data: s } = await window.supabaseClient.rpc('sth_cb_tracker_series', { p_tracker_key: c.tracker_key }).order('date', { ascending: false }).limit(1);
+                const r = s && s[0];
+                if (r) state = `${r.date}: ${r.signal_in_market ? 'in market' : 'in cash'} · ${esc(r.signal_rule || r.position_state || '')}`;
+              } catch (_) {}
+              return `<tr><td><code>${esc(c.tracker_key)}</code></td><td>${esc(c.label || '')}</td><td>${esc(c.start_date || '')}</td><td>${esc(c.fee_plan || '')}</td><td>${c.usdpc_enabled ? 'on' : 'off'}</td><td>${liveBy[c.tracker_key] || 0}</td><td>${state}</td></tr>`;
+            }));
+            tb.innerHTML = rows.join('') || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem">No active configurations</td></tr>';
+          } catch (e) {
+            tb.innerHTML = `<tr><td colspan="7" style="color:var(--danger);padding:1rem">${String(e.message || e)}</td></tr>`;
+          }
+        }
+        const maybeLoad = () => { if (location.hash === '#strategy-maintenance-module' && window.currentStrategyCode === 'STH_CB') loadSthCbConfigs(); };
+        document.getElementById('portfolioSelect')?.addEventListener('change', () => setTimeout(maybeLoad, 80));
+        window.addEventListener('hashchange', () => setTimeout(maybeLoad, 80));
+        setTimeout(maybeLoad, 800);
+      })();
+      </script>
+
       <!-- ADV_DCA Strategy Panel (Future) -->
       <div id="advDcaStrategyPanel" class="strategy-panel" data-strategy="ADV_DCA">
         <h3>Advanced DCA Strategy</h3>
@@ -2686,25 +2758,6 @@
               <button id="pipelineResumeBtn" type="button" class="btn" disabled>Resume Pipeline</button>
               <span id="pipelineResumeMessage" class="lp-ps-resume-msg"></span>
             </div>
-            <!-- STH Cost Basis Strategy (runs after the 02:00 UTC on-chain fetch; chained from ef_sth_cb_tracker) -->
-            <div id="sthCbPipeline" style="margin-top:.9rem;padding-top:.75rem;border-top:1px dashed var(--border);">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;">
-                <div>
-                  <div class="lp-ps-title" style="font-size:.9rem;">STH Cost Basis Strategy</div>
-                  <div class="lp-ps-subtitle" id="sthCbPipelineText">Loading…</div>
-                </div>
-                <div style="display:flex;gap:.5rem;align-items:center;">
-                  <button id="sthCbDryRunBtn" type="button" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem" title="Compute today's per-customer decisions without writing or trading">Dry run</button>
-                  <button id="sthCbRunBtn" type="button" class="btn" disabled title="Generate STH CB decisions, create intents, execute, poll and post ledger">Run STH CB</button>
-                </div>
-              </div>
-              <div class="lp-ps-steps" style="margin-top:.5rem;">
-                <div class="lp-ps-step"><span class="stepicon" id="stepScbTracker">⏸️</span><span>Tracker (signal)</span></div>
-                <div class="lp-ps-step"><span class="stepicon" id="stepScbDecisions">⏸️</span><span>Decisions</span></div>
-                <div class="lp-ps-step"><span class="stepicon" id="stepScbIntents">⏸️</span><span>Order Intents</span></div>
-                <div class="lp-ps-step"><span id="stepScbLive" style="font-size:.8rem;color:var(--muted)">—</span></div>
-              </div>
-            </div>
             <div id="pipelineExecutionLog" class="lp-ps-log">
               <strong>Execution Log</strong>
               <div id="pipelineLogContent" class="logbody"></div>
@@ -2743,6 +2796,106 @@
             </table>
           </div>
         </div>
+
+      </div> <!-- /LTH PVR live block -->
+
+      <!-- =============== STH Cost Basis Strategy live block =============== -->
+      <!-- Mirrors the LTH PVR card. Decisions live in sth_cb.decisions_daily; orders / fills / ledger are the shared
+           execution layer in lth_pvr, so the History card below serves both strategies. -->
+      <div data-strategy="STH_CB">
+        <div class="card" id="scbPipelineCard">
+          <div class="lp-header">
+            <div>
+              <h3 class="lp-title">Live Customer Transactions — STH Cost Basis Strategy</h3>
+              <div class="lp-meta" id="scbMeta">
+                <span class="lp-dot" id="scbLiveDot" style="display:none"></span>
+                <span id="scbMetaText">Loading…</span>
+              </div>
+            </div>
+            <div class="lp-controls">
+              <label style="font-size:.75rem;color:var(--muted)">Trade date
+                <input type="date" id="scbDate" />
+              </label>
+              <button type="button" id="scbToday">Today</button>
+              <button type="button" id="scbRefresh">Refresh</button>
+              <label style="font-size:.75rem;color:var(--muted);display:flex;align-items:center;gap:.3rem">
+                <input type="checkbox" id="scbAuto" checked />Auto-refresh
+              </label>
+            </div>
+          </div>
+
+          <!-- Pipeline control (STH CB chain: on-chain fetch 02:00 UTC → tracker → decisions → intents → execute → poll → ledger) -->
+          <div class="lp-pipestatus" id="scbPipelineStatus">
+            <div class="lp-ps-head">
+              <div>
+                <div class="lp-ps-title">Pipeline Status</div>
+                <div class="lp-ps-subtitle" id="scbStatusText">Loading…</div>
+              </div>
+              <div style="display:flex;gap:.5rem;align-items:center;">
+                <button id="scbDryRunBtn" type="button" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem" title="Compute today's per-client decisions without writing or trading">Dry run</button>
+                <button id="scbStatusRefreshBtn" type="button" style="padding:.35rem .65rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-elev);color:var(--ink);cursor:pointer;font-size:.8rem">Refresh status</button>
+              </div>
+            </div>
+            <div class="lp-ps-grid">
+              <div class="lp-ps-cell"><div class="lbl">Trade Date</div><div class="val" id="scbTradeDate">—</div></div>
+              <div class="lp-ps-cell"><div class="lbl">Signal Date (tracker close)</div><div class="val" id="scbSignalDate">—</div></div>
+              <div class="lp-ps-cell"><div class="lbl">Strategy signal</div><div class="val" id="scbSignalVal" style="font-size:.85rem">—</div></div>
+              <div class="lp-ps-cell"><div class="lbl">Live clients</div><div class="val" id="scbLiveClients">—</div></div>
+            </div>
+            <div class="lp-ps-steps">
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepOnchain">⏸️</span><span>On-chain data</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepTracker">⏸️</span><span>Tracker</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepDecisions">⏸️</span><span>Decisions</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepIntents">⏸️</span><span>Order Intents</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepOrders">⏸️</span><span>Execute Orders</span></div>
+              <div class="lp-ps-step"><span class="stepicon" id="scbStepLedger">⏸️</span><span>Ledger Posted</span></div>
+            </div>
+            <div class="lp-ps-actions">
+              <button id="scbRunBtn" type="button" class="btn" disabled>Run STH CB Pipeline</button>
+              <span id="scbRunMessage" class="lp-ps-resume-msg"></span>
+            </div>
+            <div id="scbExecutionLog" class="lp-ps-log">
+              <strong>Execution Log</strong>
+              <div id="scbLogContent" class="logbody"></div>
+            </div>
+          </div>
+
+          <!-- Org-wide steps -->
+          <div class="lp-orgsteps">
+            <div class="lp-orgstep">
+              <span class="lp-light" id="scbOrgTrk"></span>
+              <div class="lp-orgstep-text"><strong>1. Tracker signal</strong><span id="scbOrgTrkLbl">—</span></div>
+            </div>
+            <div style="color:#cbd5e1">→</div>
+            <div class="lp-orgstep">
+              <span class="lp-light" id="scbOrgDec"></span>
+              <div class="lp-orgstep-text"><strong>2. Decisions</strong><span id="scbOrgDecLbl">—</span></div>
+            </div>
+            <div style="color:#cbd5e1">→</div>
+            <div class="lp-orgstep-text" style="font-size:.72rem;color:var(--muted)">
+              Per-client steps: <strong style="color:var(--ink)">Decision · Intent · Execute · Settle · Convert</strong>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto">
+            <table class="lp-table">
+              <thead>
+                <tr>
+                  <th style="width:36%">Client</th>
+                  <th style="width:30%">Pipeline</th>
+                  <th>Live status</th>
+                </tr>
+              </thead>
+              <tbody id="scbRows">
+                <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:2rem">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div> <!-- /STH CB live block -->
+
+      <!-- =============== History (shared: ledger / orders are common to both strategies) =============== -->
+      <div data-strategy="LTH_PVR,STH_CB">
 
         <!-- =============== History Selector =============== -->
         <div class="card" id="historyCard">
@@ -2808,8 +2961,184 @@
           </div>
         </div>
 
-      </div> <!-- /LTH PVR live block -->
+      </div> <!-- /shared history block -->
     </div>
+
+    <!-- ============ STH Cost Basis Strategy — live transactions controller ============ -->
+    <script>
+    (() => {
+      const REFRESH_MS = 10_000;
+      const root = document.querySelector('#transactions-module');
+      const card = root?.querySelector('#scbPipelineCard');
+      if (!root || !card) return;
+      const $ = (s) => card.querySelector(s);
+
+      const dateEl = $('#scbDate'), todayBtn = $('#scbToday'), refreshBtn = $('#scbRefresh'), autoEl = $('#scbAuto');
+      const rowsEl = $('#scbRows'), metaText = $('#scbMetaText'), liveDot = $('#scbLiveDot');
+      const orgTrk = $('#scbOrgTrk'), orgTrkLbl = $('#scbOrgTrkLbl'), orgDec = $('#scbOrgDec'), orgDecLbl = $('#scbOrgDecLbl');
+      const statusText = $('#scbStatusText'), statusRefreshBtn = $('#scbStatusRefreshBtn'), runBtn = $('#scbRunBtn'), dryBtn = $('#scbDryRunBtn');
+      const runMsg = $('#scbRunMessage'), logBox = $('#scbExecutionLog'), logContent = $('#scbLogContent');
+      const stepIcons = { onchain: $('#scbStepOnchain'), tracker: $('#scbStepTracker'), decisions: $('#scbStepDecisions'), intents: $('#scbStepIntents'), orders: $('#scbStepOrders'), ledger: $('#scbStepLedger') };
+
+      const todayUtc = () => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString().slice(0, 10); };
+      const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const setLight = (el, status) => { el.className = 'lp-light lp-light--' + (status || 'not_started'); };
+      const regBadge = (s) => `<span class="lp-reg-badge lp-reg-badge--${s === 'active' ? 'active' : s === 'inactive' ? 'inactive' : 'pending'}">${escapeHtml(s || '—')}</span>`;
+      const fmtDate = (d) => { if (!d) return '—'; const x = new Date(d + 'T00:00:00Z'); return isNaN(x) ? '—' : x.toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' }); };
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const orgId = () => {
+        for (const v of [window.currentOrgId, window.appState && window.appState.org_id, document.querySelector('#orgSelect')?.value]) {
+          if (typeof v === 'string' && UUID_RE.test(v.trim())) return v.trim();
+        }
+        return null;
+      };
+      const isVisible = () => location.hash === '#transactions-module' && window.currentStrategyCode === 'STH_CB';
+
+      function logMessage(msg, type = 'info') {
+        const ts = new Date().toLocaleTimeString('en-ZA');
+        logContent.textContent += `[${ts}] ${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'} ${msg}\n`;
+        logBox.style.display = 'block';
+      }
+      function clearLog() { logContent.textContent = ''; logBox.style.display = 'none'; }
+
+      // ── Org-level pipeline status (sth_cb.get_pipeline_status via ef_resume_pipeline) ──
+      let canRun = false;
+      async function loadStatus() {
+        if (!window.supabaseClient) return;
+        const date = dateEl.value || todayUtc();
+        try {
+          statusRefreshBtn.disabled = true;
+          const { data, error } = await window.supabaseClient.functions.invoke('ef_resume_pipeline', { body: { strategy: 'sth_cb', check_status: true, trade_date: date } });
+          if (error) throw error;
+          if (!data || data.error) throw new Error(data?.error || 'No data');
+          renderStatus(data);
+        } catch (e) {
+          statusText.textContent = '⚠️ Error loading status'; statusText.style.color = '#dc3545';
+          runMsg.textContent = e.message || String(e);
+        } finally { statusRefreshBtn.disabled = false; }
+      }
+      function renderStatus(d) {
+        $('#scbTradeDate').textContent = fmtDate(d.trade_date);
+        $('#scbSignalDate').textContent = fmtDate(d.signal_date);
+        const sig = d.signal || {};
+        const alloc = sig.signal_target_alloc == null ? (sig.signal_in_market ? 100 : 0) : Math.round(Number(sig.signal_target_alloc) * 100);
+        const sigTxt = sig.date ? `${sig.signal_in_market ? `In market · target ${alloc}% BTC` : 'In cash'} — ${sig.signal_rule || 'Hold'}` : 'No tracker data';
+        const sv = $('#scbSignalVal');
+        sv.textContent = sigTxt; sv.title = sig.date ? `${sig.date}: price ${Number(sig.price_usd || 0).toLocaleString()} vs STH CB ${Number(sig.sth_cost_basis_usd || 0).toLocaleString()} (${(Number(sig.price_to_cb_ratio || 0) * 100).toFixed(1)}%) · ${sig.signal_note || ''}` : '';
+        sv.style.color = sig.date ? (sig.signal_in_market ? '#28a745' : '#ffc107') : 'var(--muted)';
+        $('#scbLiveClients').textContent = String(d.live_customers ?? 0);
+        const s = d.steps || {};
+        for (const k of Object.keys(stepIcons)) stepIcons[k].textContent = s[k] ? '✅' : '⏸️';
+        const isToday = (dateEl.value || todayUtc()) === todayUtc();
+        canRun = !!d.can_run && isToday;
+        runBtn.disabled = !canRun; runBtn.classList.toggle('btn-primary', canRun);
+        runBtn.style.display = isToday ? '' : 'none';
+        runMsg.textContent = isToday ? (d.reason || '') : 'Run disabled — viewing a historical trade date.';
+        if (d.can_run) { statusText.textContent = '⚠️ Ready to run'; statusText.style.color = '#ffc107'; }
+        else if (s.ledger || (s.decisions && d.actionable_count === 0)) { statusText.textContent = '✅ Pipeline complete'; statusText.style.color = '#28a745'; }
+        else if (s.decisions) { statusText.textContent = '🔄 Orders in progress'; statusText.style.color = '#007bff'; }
+        else if (!d.live_customers) { statusText.textContent = 'No live STH CB clients'; statusText.style.color = '#6c757d'; }
+        else if (!s.tracker) { statusText.textContent = '⏳ Waiting for on-chain data / tracker (02:00 UTC)'; statusText.style.color = '#6c757d'; }
+        else if (!d.window_valid) { statusText.textContent = '❌ Trade window expired'; statusText.style.color = '#dc3545'; }
+        else { statusText.textContent = '✅ System ready'; statusText.style.color = '#28a745'; }
+      }
+
+      function logPlanned(data) {
+        const inner = (data?.results || []).find(r => r.step === 'ef_sth_cb_generate_decisions');
+        let body = null;
+        try { body = inner?.response ? JSON.parse(inner.response) : null; } catch (_) { body = null; }
+        if (!body) { logMessage(inner?.response || JSON.stringify(data).slice(0, 400)); return; }
+        if (body.reason) logMessage(body.reason);
+        else logMessage(`${body.dry_run ? 'DRY RUN · ' : ''}${body.customers} client(s): ${body.buys} BUY · ${body.sells} SELL · ${body.holds} HOLD`, 'success');
+        (body.planned || []).forEach(p => logMessage(`  #${p.customerId ?? p.customer_id}: ${p.action}${p.amountPct ? ` ${(p.amountPct * 100).toFixed(1)}%` : ''} — ${p.rule || p.skipped || ''}${p.note ? ` (${p.note})` : ''}${p.cash_usd != null ? ` · cash $${p.cash_usd} · BTC ${p.btc}` : ''}`));
+        (body.chained || []).forEach(c => logMessage(`${c.step}: ${c.ok ? 'OK' : 'FAILED'} ${c.status || ''} ${(c.response || c.error || '').slice(0, 160)}`, c.ok ? 'success' : 'error'));
+        (data.results || []).filter(r => r.step !== 'ef_sth_cb_generate_decisions').forEach(r => logMessage(`${r.step}: ${r.success ? 'SUCCESS' : 'FAILED'} - ${(r.response || '').slice(0, 200)}`, r.success ? 'success' : 'error'));
+      }
+      async function run(dryRun) {
+        if (!window.supabaseClient) return;
+        if (!dryRun && !confirm('Run the STH Cost Basis pipeline now? Decisions will be written and any BUY/SELL will be sent to VALR.')) return;
+        const btn = dryRun ? dryBtn : runBtn; const label = btn.textContent;
+        try {
+          btn.disabled = true; btn.textContent = dryRun ? 'Running…' : 'Trading…';
+          clearLog(); logMessage(dryRun ? 'STH CB dry run…' : 'STH CB pipeline starting…');
+          const { data, error } = await window.supabaseClient.functions.invoke('ef_resume_pipeline', { body: { strategy: 'sth_cb', dry_run: !!dryRun } });
+          if (error) throw error;
+          logPlanned(data);
+          if (!data?.success) throw new Error('STH CB pipeline reported failure — see log');
+          if (!dryRun && typeof window.loadAlerts === 'function') window.loadAlerts();
+        } catch (e) {
+          logMessage(`Error: ${e.message || e}`, 'error');
+        } finally {
+          btn.textContent = label; btn.disabled = dryRun ? false : !canRun;
+          if (!dryRun) setTimeout(() => { loadStatus(); load(); }, 2000);
+        }
+      }
+
+      // ── Per-client rows (public.sth_cb_customer_pipeline_status) ──
+      let inflight = false, timer = null;
+      async function load() {
+        if (inflight) return;
+        const oid = orgId();
+        if (!window.supabaseClient || !oid) { metaText.textContent = 'Waiting for org context…'; return; }
+        inflight = true;
+        try {
+          const date = dateEl.value || todayUtc();
+          const { data, error } = await window.supabaseClient.rpc('sth_cb_customer_pipeline_status', { p_org_id: oid, p_date: date });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          render(data);
+        } catch (e) {
+          console.error('[STH CB LivePipeline] load failed:', e);
+          metaText.textContent = 'Error: ' + (e.message || e);
+        } finally { inflight = false; }
+      }
+      function render(data) {
+        if (!data) return;
+        const isToday = !!data.is_today;
+        const nowStr = data.now_utc ? new Date(data.now_utc).toUTCString().slice(17, 25) : '';
+        liveDot.style.display = isToday && autoEl.checked ? 'inline-block' : 'none';
+        metaText.textContent = isToday ? `Live · ${data.customers.length} clients · last refresh ${nowStr} UTC` : `Historical view · ${data.customers.length} clients · ${data.date}`;
+        setLight(orgTrk, data.org_steps?.tracker?.status); orgTrkLbl.textContent = data.org_steps?.tracker?.label || '—';
+        setLight(orgDec, data.org_steps?.decisions?.status); orgDecLbl.textContent = data.org_steps?.decisions?.label || '—';
+        const rows = data.customers || [];
+        if (!rows.length) { rowsEl.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:2rem">No active STH Cost Basis clients.</td></tr>`; return; }
+        rowsEl.innerHTML = rows.map(r => {
+          const steps = [['Decision', r.decision], ['Intent', r.intent], ['Execute', r.execute], ['Settle', r.settle], ['Convert', r.convert]];
+          const lights = steps.map(([name, st]) => `<div class="lp-step-grp" title="${escapeHtml(name + ': ' + (st?.label || ''))}"><span class="lp-step-name">${name}</span><span class="lp-light lp-light--${st?.status || 'not_started'}"></span></div>`).join('');
+          const sub = r.subtitle || {};
+          return `<tr>
+            <td><div class="lp-cust-name">#${r.customer_id} · ${escapeHtml(r.customer_name)}${regBadge(r.registration_status)}</div><div class="lp-cust-meta">${escapeHtml(r.account_label || '')}</div></td>
+            <td><div class="lp-lights">${lights}</div></td>
+            <td><div class="lp-subtitle"><span class="lp-step">${escapeHtml(sub.step || '—')}</span></div><div class="lp-subtitle">${escapeHtml(sub.detail || '')}</div></td>
+          </tr>`;
+        }).join('');
+      }
+
+      function startTimer() {
+        if (timer) clearInterval(timer);
+        if (!autoEl.checked || dateEl.value !== todayUtc()) return;
+        timer = setInterval(() => { if (isVisible()) { load(); loadStatus(); } }, REFRESH_MS);
+      }
+      const refreshAll = () => { load(); loadStatus(); };
+      dateEl.addEventListener('change', () => { refreshAll(); startTimer(); });
+      todayBtn.addEventListener('click', () => { dateEl.value = todayUtc(); refreshAll(); startTimer(); });
+      refreshBtn.addEventListener('click', refreshAll);
+      statusRefreshBtn.addEventListener('click', loadStatus);
+      autoEl.addEventListener('change', () => { startTimer(); load(); });
+      runBtn.addEventListener('click', () => run(false));
+      dryBtn.addEventListener('click', () => run(true));
+
+      (async function init() {
+        dateEl.value = todayUtc();
+        for (let i = 0; i < 80 && !window.supabaseClient; i++) await new Promise(r => setTimeout(r, 150));
+        const kick = () => { if (isVisible() && orgId()) { refreshAll(); startTimer(); } };
+        document.getElementById('orgSelect')?.addEventListener('change', kick);
+        document.getElementById('portfolioSelect')?.addEventListener('change', () => setTimeout(kick, 80));
+        window.addEventListener('hashchange', () => setTimeout(kick, 80));
+        setTimeout(kick, 600);
+      })();
+    })();
+    </script>
 
     <!-- ============ Bands Chart controller (CI / RB) ============ -->
     <script>
@@ -9104,19 +9433,25 @@
       }
 
       function buildStrategyOptionsForTransactions(){
-        // Build the strategy list dynamically from the portfolios view (preferred),
-        // falling back to a small hard-coded map if the view doesn’t provide names.
+        // Strategy list = every strategy with a live admin surface (public.strategies), loaded once in loadOrgContext.
+        // Falls back to the codes present on customer rows only if that catalogue query failed.
         const fallbackName = (code) => {
           const map = {
             'ADV_DCA': 'Advanced BTC DCA',
-            'LTH_PVR': 'LTH PVR BTC DCA'
+            'LTH_PVR': 'LTH PVR BTC DCA',
+            'STH_CB': 'STH Cost Basis Strategy'
           };
           return map[code] || code;
         };
 
         const byCode = new Map();
 
-        (allPortfoliosCache || []).forEach(p => {
+        (window._strategyCatalogue || []).forEach(s => {
+          const code = String(s.strategy_code || '').toUpperCase();
+          if (code) byCode.set(code, s.name || fallbackName(code));
+        });
+
+        if (!byCode.size) (allPortfoliosCache || []).forEach(p => {
           const code = String(p.strategy_code || '').toUpperCase();
           if (!code) return;
 
@@ -9280,6 +9615,14 @@
 
         // portfolios (use consolidated customer_strategies table)
         const orgId = activeOrgId || null;
+
+        // Strategy catalogue for the multi-customer modules' ACTIVE STRATEGY selector. Only strategies with an
+        // admin surface in this UI are listed (TA_BOT has its own tooling).
+        try {
+          const { data: cat } = await supabaseClient.schema('public').from('strategies').select('strategy_code, name')
+            .in('strategy_code', ['LTH_PVR', 'STH_CB', 'ADV_DCA']).order('name');
+          window._strategyCatalogue = Array.isArray(cat) ? cat : [];
+        } catch (_) { window._strategyCatalogue = []; }
 
         let portfolios = [];
         let portErr = null;
@@ -10874,6 +11217,8 @@
       // Strategy (from customer_strategies)
       cmSetField('strategy_label', strat.label);
       cmSetField('live_enabled', strat.live_enabled);
+      { const cb = form.querySelector('[name="usdpc_enabled"]'); if (cb) cb.checked = !!strat.usdpc_enabled; }
+      cmFillSwitchStrategy(strat);
       // STH_CB-only controls (joining rule + tracked configuration)
       {
         const isSthCb = strat.strategy_code === 'STH_CB';
@@ -10955,6 +11300,8 @@
       ['live_enabled','is_pep','compliance_frozen','is_test'].forEach(k => {
         if(k in obj) obj[k] = obj[k] === 'true';
       });
+      // Checkboxes are absent from FormData when unchecked
+      obj.usdpc_enabled = form.querySelector('[name="usdpc_enabled"]')?.checked === true;
       // Numbers (keep '' as null)
       ['recurring_contribution_zar','upfront_contribution_zar','upfront_contribution_btc','platform_fee_rate','performance_fee_rate','management_fee_rate']
         .forEach(k => {
@@ -10962,6 +11309,84 @@
           obj[k] = (v === '' ? null : Number(v));
         });
       return obj;
+    }
+
+    /* ---------- Switch strategy (in place) ---------- */
+    const CM_SWITCHABLE = ['LTH_PVR', 'STH_CB'];
+    function cmFillSwitchStrategy(strat){
+      const box = document.getElementById('cmSwitchStrategy');
+      if (!box) return;
+      const current = String(strat?.strategy_code || '').toUpperCase();
+      const canSwitch = !!strat?.customer_strategy_id && ['active','pending','suspended'].includes(String(strat.status || ''));
+      box.style.display = canSwitch ? '' : 'none';
+      document.getElementById('cmSwitchResult').textContent = '';
+      document.getElementById('cmSwitchReason').value = '';
+      if (!canSwitch) return;
+      const target = document.getElementById('cmSwitchTarget');
+      const names = {};
+      (window._strategyCatalogue || []).forEach(s => { names[String(s.strategy_code).toUpperCase()] = s.name; });
+      const options = CM_SWITCHABLE.filter(c => c !== current);
+      target.innerHTML = options.map(c => `<option value="${c}">${names[c] || c}</option>`).join('');
+      const applyPanels = () => {
+        const to = target.value;
+        box.querySelectorAll('[data-switch-for]').forEach(el => { el.style.display = el.getAttribute('data-switch-for') === to ? '' : 'none'; });
+      };
+      target.onchange = applyPanels;
+      applyPanels();
+      // STH CB configurations + LTH variations (best effort; defaults are applied server-side if empty)
+      const cfgSel = document.getElementById('cmSwitchConfig');
+      cfgSel.innerHTML = '<option value="hybrid_v2_2">hybrid_v2_2</option>';
+      supabaseClient.rpc('sth_cb_tracker_list').then(({ data }) => {
+        if (!data?.length) return;
+        cfgSel.innerHTML = data.map(c => `<option value="${c.tracker_key}"${c.tracker_key === 'hybrid_v2_2' ? ' selected' : ''}>${c.label || c.tracker_key}</option>`).join('');
+      }).catch(() => {});
+      const varSel = document.getElementById('cmSwitchVariation');
+      varSel.innerHTML = '<option value="">Production variation (default)</option>';
+      supabaseClient.schema('lth_pvr').from('strategy_variation_templates').select('id, display_name, is_production').eq('is_active', true).order('sort_order').then(({ data }) => {
+        (data || []).forEach(v => varSel.add(new Option(`${v.display_name}${v.is_production ? ' (production)' : ''}`, v.id)));
+      }).catch(() => {});
+      if (!['LTH_PVR','STH_CB'].includes(current)) {
+        document.getElementById('cmSwitchResult').textContent = `Current strategy ${current || '—'} — switching is supported into LTH PVR or STH Cost Basis.`;
+      }
+    }
+    async function cmSwitchStrategyNow(){
+      const id = cmEditorState.customerId;
+      const strat = cmEditorState.profile?.strat;
+      if (!id || !strat?.customer_strategy_id) { cmEditorAlert('error', 'No strategy row to switch.'); return; }
+      const to = document.getElementById('cmSwitchTarget').value;
+      const reason = document.getElementById('cmSwitchReason').value.trim() || null;
+      const opts = {};
+      if (to === 'STH_CB') {
+        opts.join_policy = document.getElementById('cmSwitchJoin').value;
+        opts.config_key = document.getElementById('cmSwitchConfig').value;
+        opts.usdpc_enabled = true;
+      } else if (to === 'LTH_PVR') {
+        const v = document.getElementById('cmSwitchVariation').value;
+        if (v) opts.strategy_variation_id = v;
+      }
+      const msg = `Switch client #${id} from ${strat.strategy_code} to ${to}?\n\n` +
+        (to === 'STH_CB'
+          ? `• Joining rule: ${opts.join_policy === 'next_signal' ? 'wait for next entry signal' : 'immediate — adopt the strategy\'s current state'}\n• Configuration: ${opts.config_key}\n• USDPC yield: on\n`
+          : `• Variation: ${opts.strategy_variation_id ? 'selected' : 'production default'}\n`) +
+        `\nThe client keeps the same VALR account/subaccount, fee plan and history. Holdings are adopted on the new strategy's next run.`;
+      if (!confirm(msg)) return;
+      const btn = document.getElementById('cmSwitchBtn'); const out = document.getElementById('cmSwitchResult');
+      btn.disabled = true; out.textContent = 'Switching…';
+      try {
+        const { data, error } = await supabaseClient.rpc('switch_customer_strategy', { p_customer_id: id, p_to_strategy_code: to, p_options: opts, p_reason: reason });
+        if (error) throw error;
+        if (!data?.ok) throw new Error(data?.error || 'Switch failed');
+        out.textContent = `✅ Switched ${data.from} → ${data.to}. ${data.next || ''}`;
+        cmEditorAlert('success', `Strategy switched to ${data.to}. ${data.next || ''}`);
+        const profile = await cmFetchFullProfile(id);
+        cmEditorState = { customerId: id, profile };
+        cmFillEditor(profile);
+        cmSetActiveTab('strategy');
+        if (typeof loadCustomers === 'function') { try { await loadCustomers(); } catch (_) {} }
+      } catch (e) {
+        out.textContent = '';
+        cmEditorAlert('error', `Strategy switch failed: ${e.message || e}`);
+      } finally { btn.disabled = false; }
     }
 
     /* ---------- Editor: open/close + tabs ---------- */
@@ -11304,6 +11729,7 @@
           performance_fee_schedule: payload.performance_fee_schedule || strat.performance_fee_schedule,
           management_fee_rate: payload.management_fee_rate ?? strat.management_fee_rate ?? 0.01,
           management_fee_schedule: payload.management_fee_schedule || strat.management_fee_schedule || 'monthly',
+          usdpc_enabled: !!payload.usdpc_enabled,
         };
         if (strat.strategy_code === 'STH_CB') {
           stratPatch.join_policy = payload.join_policy || strat.join_policy || 'immediate';
@@ -11473,6 +11899,8 @@
       const advanceBtn = document.getElementById('cmEditorAdvanceStage');
       if(advanceBtn && !advanceBtn._bound){ advanceBtn.addEventListener('click', cmAdvanceStage); advanceBtn._bound = true; }
       const stratBtn = document.getElementById('cmEditorOpenStrategySetup');
+      const switchBtn = document.getElementById('cmSwitchBtn');
+      if(switchBtn && !switchBtn._bound){ switchBtn.addEventListener('click', cmSwitchStrategyNow); switchBtn._bound = true; }
       if(stratBtn && !stratBtn._bound){
         stratBtn.addEventListener('click', () => {
           const id = cmEditorState.customerId;
@@ -16325,7 +16753,6 @@
         updateStepIcon('orders', data.steps?.orders);
         updateStepIcon('poll_orders', data.steps?.poll_orders);
         updateStepIcon('ledger', data.steps?.ledger);
-        renderSthCbStatus(data);
 
         // Update resume button and message
         const lpDateEl = document.getElementById('lpDate');
@@ -16370,72 +16797,6 @@
       }
     }
 
-    // ── STH Cost Basis Strategy block ─────────────────────────────────────
-    const scbText = document.getElementById('sthCbPipelineText');
-    const scbRunBtn = document.getElementById('sthCbRunBtn');
-    const scbDryBtn = document.getElementById('sthCbDryRunBtn');
-    const scbIcons = {
-      tracker: document.getElementById('stepScbTracker'),
-      decisions: document.getElementById('stepScbDecisions'),
-      intents: document.getElementById('stepScbIntents'),
-    };
-    let scbCanRun = false;
-
-    function renderSthCbStatus(data) {
-      const s = data?.sth_cb;
-      if (!s || !scbText) return;
-      const sig = s.signal || {};
-      scbIcons.tracker.textContent = s.tracker_ready ? '✅' : '⏸️';
-      scbIcons.decisions.textContent = s.decisions ? '✅' : '⏸️';
-      scbIcons.intents.textContent = s.intents ? '✅' : (s.decisions ? '➖' : '⏸️');
-      const live = Number(s.live_customers || 0);
-      document.getElementById('stepScbLive').textContent = `${live} live client${live === 1 ? '' : 's'}`;
-      const alloc = sig.signal_target_alloc == null ? (sig.signal_in_market ? 100 : 0) : Math.round(Number(sig.signal_target_alloc) * 100);
-      const sigTxt = sig.date ? `Signal ${sig.date}: ${sig.signal_in_market ? `in market, target ${alloc}% BTC` : 'in cash'} — ${sig.signal_rule || 'Hold'}` : 'No tracker data';
-      scbCanRun = !!s.can_run && !s.decisions;
-      scbRunBtn.disabled = !scbCanRun;
-      scbRunBtn.classList.toggle('btn-primary', scbCanRun);
-      if (live === 0) { scbText.textContent = `No live STH CB clients · ${sigTxt}`; scbText.style.color = '#6c757d'; }
-      else if (s.decisions) { scbText.textContent = `✅ Decisions written for ${data.trade_date} · ${sigTxt}`; scbText.style.color = '#28a745'; }
-      else if (!s.tracker_ready) { scbText.textContent = `⏳ Waiting for tracker (needs ${data.signal_date}) · ${sigTxt}`; scbText.style.color = '#6c757d'; }
-      else if (!data.window_valid) { scbText.textContent = '❌ Trade window expired'; scbText.style.color = '#dc3545'; }
-      else { scbText.textContent = `⚠️ Ready to run · ${sigTxt}`; scbText.style.color = '#ffc107'; }
-    }
-
-    function logPlanned(data) {
-      const inner = data?.results?.find(r => r.step === 'ef_sth_cb_generate_decisions');
-      let body = null;
-      try { body = inner?.response ? JSON.parse(inner.response) : null; } catch (_) { body = null; }
-      if (!body) { logMessage(inner?.response || JSON.stringify(data).slice(0, 400)); return; }
-      logMessage(`${body.dry_run ? 'DRY RUN · ' : ''}${body.customers} client(s): ${body.buys} BUY · ${body.sells} SELL · ${body.holds} HOLD`, 'success');
-      (body.planned || []).forEach(p => logMessage(`  #${p.customerId ?? p.customer_id}: ${p.action}${p.amountPct ? ` ${(p.amountPct * 100).toFixed(1)}%` : ''} — ${p.rule || p.skipped || ''}${p.note ? ` (${p.note})` : ''}`));
-      (data.results || []).filter(r => r.step !== 'ef_sth_cb_generate_decisions').forEach(r => logMessage(`${r.step}: ${r.success ? 'SUCCESS' : 'FAILED'} - ${(r.response || '').slice(0, 200)}`, r.success ? 'success' : 'error'));
-    }
-
-    async function runSthCb(dryRun) {
-      if (!supabaseClient) return;
-      if (!dryRun && !confirm('Run the STH Cost Basis pipeline now? Decisions will be written and any BUY/SELL will be sent to VALR.')) return;
-      const btn = dryRun ? scbDryBtn : scbRunBtn;
-      const label = btn.textContent;
-      try {
-        btn.disabled = true; btn.textContent = dryRun ? 'Running…' : 'Trading…';
-        clearLog();
-        logMessage(dryRun ? 'STH CB dry run…' : 'STH CB pipeline starting…');
-        const { data, error } = await supabaseClient.functions.invoke('ef_resume_pipeline', { body: { strategy: 'sth_cb', dry_run: !!dryRun } });
-        if (error) throw error;
-        logPlanned(data);
-        if (!data?.success) throw new Error('STH CB pipeline reported failure — see log');
-        if (!dryRun && typeof window.loadAlerts === 'function') window.loadAlerts();
-      } catch (err) {
-        console.error('STH CB pipeline error:', err);
-        logMessage(`Error: ${err.message}`, 'error');
-      } finally {
-        btn.textContent = label; btn.disabled = dryRun ? false : !scbCanRun;
-        if (!dryRun) setTimeout(loadPipelineStatus, 2000);
-      }
-    }
-    if (scbRunBtn) scbRunBtn.addEventListener('click', () => runSthCb(false));
-    if (scbDryBtn) scbDryBtn.addEventListener('click', () => runSthCb(true));
 
     async function resumePipeline() {
       if (!supabaseClient) return;

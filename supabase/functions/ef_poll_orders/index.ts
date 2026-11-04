@@ -4,7 +4,7 @@
 // 2) If a LIMIT order is older than 5 minutes OR price moved > 0.25%
 //    then cancel it and place a fallback MARKET order for the remaining qty.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getOrderSummaryByCustomerOrderId, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
+import { getOrderSummaryByCustomerOrderId, getOrderStatusByCustomerOrderId, getOrderStatusById, getOrderSummaryById, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
 import type { ValrRequestCredentials } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
@@ -131,12 +131,35 @@ Deno.serve(async (_req: Request)=>{
 
     const pair = o.pair;
     const side = o.side.toUpperCase();
-    let summary;
+    // deno-lint-ignore no-explicit-any
+    const normaliseStatus = (st: any) => {
+      const orig = Number(st?.originalQuantity ?? o.qty ?? 0);
+      const remaining = Number(st?.remainingQuantity ?? orig);
+      return {
+        ...st,
+        orderStatusType: st?.orderStatusType ?? st?.orderStatus ?? "Placed",
+        originalQuantity: orig,
+        totalExecutedQuantity: Math.max(0, orig - remaining),
+        _fromStatusRoute: true,
+      };
+    };
+    // deno-lint-ignore no-explicit-any
+    let summary: any;
     try {
-      summary = await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId, credentials);
-
+      if (o.ext_order_id) {
+        // Preferred: VALR orderId is unique. customerOrderId (= intent_id) is reused by a LIMIT and its MARKET
+        // replacement, so lookups by customerOrderId can return the wrong (earlier, cancelled) order.
+        summary = normaliseStatus(await getOrderStatusById(o.ext_order_id, pair, subaccountId, credentials));
+      } else {
+        try {
+          summary = await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId, credentials);
+        } catch (_openErr) {
+          // history/summary only serves COMPLETED orders (400 "Invalid Order" while open)
+          summary = normaliseStatus(await getOrderStatusByCustomerOrderId(o.intent_id, pair, subaccountId, credentials));
+        }
+      }
     } catch (err) {
-      console.error(`ef_poll_orders: VALR poll failed for customerOrderId (intent_id)=${o.intent_id}`, err);
+      console.error(`ef_poll_orders: VALR poll failed for order ${o.ext_order_id ?? o.intent_id}`, err);
       await logAlert(
         supabase,
         "ef_poll_orders",
@@ -146,17 +169,27 @@ Deno.serve(async (_req: Request)=>{
           intent_id: o.intent_id,
           exchange_order_id: o.exchange_order_id,
           ext_order_id: o.ext_order_id,
-          error: err instanceof Error ? err.message : String(err)
+          error: err instanceof Error ? err.message : String(err),
         },
         org_id
       );
       continue;
     }
 
-    const last = Array.isArray(summary) ? summary[0] : summary;
+    let last = Array.isArray(summary) ? summary[0] : summary;
     if (!last) {
       console.warn(`ef_poll_orders: no VALR summary returned for intent_id=${o.intent_id}`);
       continue;
+    }
+    // Status route says the order is finished → the summary route (fees, executed qty) now works; prefer it.
+    if (last._fromStatusRoute && ["Filled", "Cancelled", "Failed"].includes(String(last.orderStatusType))) {
+      try {
+        const s2 = o.ext_order_id
+          ? await getOrderSummaryById(o.ext_order_id, pair, subaccountId, credentials)
+          : await getOrderSummaryByCustomerOrderId(o.intent_id, pair, subaccountId, credentials);
+        const l2 = Array.isArray(s2) ? s2[0] : s2;
+        if (l2 && (!o.ext_order_id || String(l2.orderId ?? l2.id ?? o.ext_order_id) === String(o.ext_order_id))) last = l2;
+      } catch (_) { /* keep the status-route view */ }
     }
 
     const valrStatus = last.orderStatusType || last.orderStatus || last.status || "";
@@ -171,7 +204,7 @@ Deno.serve(async (_req: Request)=>{
       ...o.raw ?? {},
       valr: {
         ...o.raw?.valr ?? {},
-        id: last.id,
+        id: last.orderId ?? last.id,
         customerOrderId: last.customerOrderId,
         orderStatusType: valrStatus,
         ...last
@@ -331,11 +364,14 @@ Deno.serve(async (_req: Request)=>{
             }
           }
 
-          // 2.a Cancel the stale LIMIT order on VALR
+          // 2.a Cancel the stale LIMIT order on VALR. If the cancel fails the order is still on the book, so placing
+          //     the MARKET replacement would be rejected ("Duplicate customer order id") or double-buy — revert the
+          //     claim and retry on the next pass instead.
+          const valrOrderId = last.orderId ?? last.id ?? o.ext_order_id;
           try {
-            await cancelOrderById(last.id, pair, subaccountId, credentials);
+            await cancelOrderById(valrOrderId, pair, subaccountId, credentials);
           } catch (err) {
-            console.error(`ef_poll_orders: failed to cancel stale limit order ${last.id}`, err);
+            console.error(`ef_poll_orders: failed to cancel stale limit order ${valrOrderId}`, err);
             await logAlert(
               supabase,
               "ef_poll_orders",
@@ -344,19 +380,25 @@ Deno.serve(async (_req: Request)=>{
               {
                 intent_id: o.intent_id,
                 exchange_order_id: o.exchange_order_id,
-                ext_order_id: last.id,
+                ext_order_id: valrOrderId,
                 error: err instanceof Error ? err.message : String(err)
               },
               org_id
             );
+            await supabase.from("exchange_orders").update({ status: "submitted" }).eq("exchange_order_id", o.exchange_order_id).eq("status", "cancelled_for_market");
+            continue;
           }
 
           // 2.b Place a MARKET order for the remaining quantity
           const usePrice = marketPrice ?? Number(last.price ?? o.price ?? 0);
           let amount;
           if (side === "BUY") {
-            // BUY: amount is quote (USDT)
-            amount = (remainingQty * usePrice).toFixed(2);
+            // BUY: amount is quote (USDT). Cap at the remaining budget (qty × the price the LIMIT rested at, which
+            // ef_execute_orders already bounded to the available USDT) so a price rise since placement never asks
+            // VALR for more USDT than the account holds.
+            const placedPx = Number(o.price ?? 0);
+            const budgetPx = placedPx > 0 ? Math.min(usePrice, placedPx) : usePrice;
+            amount = (remainingQty * budgetPx).toFixed(2);
           } else {
             // SELL: amount is base (BTC)
             amount = remainingQty.toString();

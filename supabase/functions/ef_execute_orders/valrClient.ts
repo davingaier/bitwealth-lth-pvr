@@ -97,18 +97,20 @@ async function valrPrivateRequest(
 
 // ---------------- Public helpers ----------------
 
-// 0) Get order book (market data - no auth required)
+// 0) Get order book (public market data, no auth). NOTE: /v1/marketdata/... is the AUTHENTICATED route and
+//    returns 403 without API headers — that path was used here until 2026-11-04, so every LIMIT fell back to the
+//    intent price instead of the best bid/ask.
 export async function getOrderBook(pair: string): Promise<{
   Asks: Array<{ price: string; quantity: string }>;
   Bids: Array<{ price: string; quantity: string }>;
 }> {
   const normalised = normalisePair(pair);
-  const res = await fetch(`${VALR_API_URL}/v1/marketdata/${normalised}/orderbook`);
+  const res = await fetch(`${VALR_API_URL}/v1/public/${normalised}/orderbook`);
   
   if (!res.ok) {
     const text = await res.text();
     throw new Error(
-      `VALR GET /v1/marketdata/${normalised}/orderbook failed: ${res.status} ${res.statusText} – ${text}`,
+      `VALR GET /v1/public/${normalised}/orderbook failed: ${res.status} ${res.statusText} – ${text}`,
     );
   }
   

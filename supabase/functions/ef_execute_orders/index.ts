@@ -319,11 +319,23 @@ Deno.serve(async ()=>{
         }
         
         try {
+          // Never let a BUY exceed its budget: the intent was sized as qty × decision price (= the USDT actually
+          // available). If the best bid is above that price, resting qty × bid would be rejected for insufficient
+          // balance (all-in buys have no slack), so shrink the quantity to budget / bid instead.
+          let limitQtyStr = qtyStr;
+          if (side === "BUY" && Number(i.limit_price) > 0 && Number(orderBookPrice) > Number(i.limit_price)) {
+            const budgetUsdt = Number(i.amount) * Number(i.limit_price);
+            const capped = Math.floor((budgetUsdt / Number(orderBookPrice)) * 1e8) / 1e8;
+            if (capped > 0 && capped < Number(i.amount)) {
+              console.log(`BUY qty capped to budget: ${qtyStr} → ${capped} BTC (bid ${orderBookPrice} > intent ${i.limit_price})`);
+              limitQtyStr = capped.toFixed(8);
+            }
+          }
           valrResp = await placeLimitOrder({
             side,
             pair,
             price: orderBookPrice,
-            quantity: qtyStr,
+            quantity: limitQtyStr,
             customerOrderId: i.intent_id,
             timeInForce: "GTC",
             postOnly: true,

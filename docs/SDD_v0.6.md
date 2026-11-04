@@ -3,11 +3,77 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-04 (v0.6.182)
+**Last updated:** 2026-11-04 (v0.6.183)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.183 – STH CB schema separation, in-place strategy switching, first live STH CB trade (and the LTH execution bugs it exposed)
+**Date:** 2026-11-04 · **Status:** ✅ DONE — customer 31 switched LTH_PVR → STH_CB and bought in live
+
+**Schema separation (option A).** The strategy layer now lives in `sth_cb`; the exchange/accounting layer
+(`order_intents`, `exchange_orders`, `order_fills`, `ledger_lines`, `balances_daily`, fees, USDPC) stays in `lth_pvr` as
+the common execution engine. New **`sth_cb.decisions_daily`** (one row per client per trade_date incl. HOLD; columns:
+config_key, signal_date, price_usd, signal_in_market, signal_target_alloc, current_alloc, target_alloc, action,
+amount_pct, rule, note, join_policy, last_buy_px, btc_balance, cash_usd; RLS on, service-role only; trigger
+`enforce_sth_cb_customer`). `ef_sth_cb_generate_decisions` writes there; **`ef_create_order_intents` reads both
+`lth_pvr.decisions_daily` and `sth_cb.decisions_daily`** (same sizing contract). `sth_cb.get_pipeline_status(org, date)`
+(org steps: onchain · tracker · decisions · intents · orders · ledger, `can_run`, `reason`, latest signal) and
+`sth_cb.get_customer_pipeline_status(org, date)` (per-client rows: decision · intent · execute · settle · convert — a
+mirror of the LTH RPC) with browser wrappers `public.sth_cb_pipeline_status` / `public.sth_cb_customer_pipeline_status`
+guarded by `my_orgs()`. `lth_pvr.get_pipeline_status` is LTH-only again and `public.get_customer_pipeline_status` lists
+only LTH_PVR clients. `ef_resume_pipeline {strategy:'sth_cb', check_status:true}` → `sth_cb.get_pipeline_status`.
+New guard cron **`sth_cb_pipeline_guard`** (`*/30 3-16 UTC` → `sth_cb.ensure_pipeline_today()`: re-runs
+`ef_fetch_onchain_pvr` if the tracker lacks yesterday's close, else `ef_sth_cb_generate_decisions`; logged in
+`sth_cb.pipeline_guard_log`). Migrations `20261104_sth_cb_schema_separation.sql`, `20261104_sth_cb_pipeline_guard.sql`.
+
+**Strategy switching (in place).** `public.switch_customer_strategy(p_customer_id, p_to_strategy_code, p_options,
+p_reason)` (org owner/admin/editor or service role) updates the client's existing `customer_strategies` row —
+`strategy_code`, label, `config_key`/`join_policy` (STH_CB; USDPC defaults on) or `strategy_variation_id` (LTH_PVR;
+production template default) — so the exchange account/subaccount, fee plan and every FK are preserved, writes an
+audit row to **`public.customer_strategy_history`** (from/to config + holdings snapshot + who/why), stamps
+`customer_fee_plan_history`, and returns what happens next. **VALR segregation decision:** segregation is per client,
+not per strategy, in all three account models (`subaccount`, `api`, `finova_omnibus`) — a switch keeps the same
+account and the new strategy adopts the current holdings on its next run (Policy A: buys all cash if in the market,
+sells BTC if in cash). Admin UI: Edit Client → Strategy & Contributions gains a **Switch strategy** panel (target,
+joining rule / configuration or variation, reason) and a **USDPC yield on idle cash** checkbox (`usdpc_enabled`, saved
+with the strategy patch).
+
+**Admin UI.** ACTIVE STRATEGY (Customer Transactions / Strategy Maintenance) is now built from `public.strategies`
+(LTH_PVR, STH_CB, ADV_DCA) instead of the strategies present on client rows, so STH CB is selectable before the first
+client exists. New **STH Cost Basis Strategy live block** in Customer Transactions mirroring the LTH card: pipeline
+status (6 steps, signal cell, live-client count, Dry run / Run STH CB Pipeline with planned-action log), org step
+strip (tracker → decisions), per-client rows with Decision · Intent · Execute · Settle · Convert lights
+(`public.sth_cb_customer_pipeline_status`, 10 s auto-refresh). The History card/modal is shared by both strategies
+(`data-strategy="LTH_PVR,STH_CB"`). Strategy Maintenance shows the STH CB tracked-configuration table.
+
+**USDPC question (customer 31's 4.98 USDT).** Not a bug: `lth_pvr.settings.usdpc_min_order_usdt = 5` is the sweep dust
+threshold; the 2026-11-01 management-fee pre-conversion had to sell ≥ 5 USDT of USDPC to pay a $0.01 fee, leaving
+4.98 USDT just under the threshold (tiny-account artefact). Pre-buy conversions now use VALR's real minimum (1 USDPC):
+all-in buys convert the whole USDPC balance and the BTC notional is capped to idle USDT + expected proceeds (net of
+fee, 0.3 % buffer); if USDPC < 1 unit the buy is capped to idle USDT instead of failing.
+
+**First live trade exposed five latent LTH execution bugs (nothing had traded since February):**
+1. `ef_execute_orders/valrClient.ts` fetched `/v1/marketdata/{pair}/orderbook` **without auth** (that is the
+   authenticated route) → 403 every time → every LIMIT rested at the intent price (yesterday's close) instead of the
+   best bid/ask. Fixed to `/v1/public/{pair}/orderbook`; BUY quantity is additionally capped to budget / bid.
+2. `ef_poll_orders` looked orders up via `/v1/orders/history/summary/customerorderid/…`, which returns
+   `400 Invalid Order` for **open** orders → the 5-minute fallback could never fire through REST. Now looks up by
+   VALR **orderId** (`/v1/orders/{pair}/orderid/{id}`; unique — the customerOrderId is reused by a LIMIT and its
+   MARKET replacement, which also made a new order be marked "cancelled" from its predecessor's summary) and fetches
+   the summary by orderId once finished.
+3. The poller's local VALR client cancelled via `DELETE /v1/orders/orderid/{id}` (VALR's GET route → 404) with
+   `last.id` (undefined) → the LIMIT stayed on the book and the MARKET replacement was rejected as a duplicate id.
+   Fixed to `DELETE /v1/orders/order {orderId, pair}`; on cancel failure the fallback claim is reverted and retried.
+4. `ef_create_order_intents` tagged intents with an arbitrary org `exchange_accounts` row → the WebSocket monitor
+   attached to the wrong subaccount. Intents now carry the client's own `customer_strategies.exchange_account_id`.
+5. MARKET fallback BUY quote is capped at `remainingQty × placed price` so a price rise never exceeds available USDT.
+Ops tool `tools/valr_probe.ps1` (open / status / cancel by id, uses `.env` keys) was added for such interventions.
+
+**Live result (customer 31, 2026-11-04):** 1.12 USDPC → 1.34 USDT (market), BTC buy 0.00008054 @ 78,343 via the
+5-min fallback after the maker order at the best bid 78,246 did not fill; VALR = ledger (BTC 0.00010209, USDT/USDPC
+cents, NAV $7.89). Tests SEP-01…12.
 
 ### v0.6.182 – STH Cost Basis Strategy wired into the live trading pipeline and onboarding
 **Date:** 2026-11-04 · **Status:** ✅ DONE (no live STH_CB clients yet; first real run happens when one is confirmed and funded)

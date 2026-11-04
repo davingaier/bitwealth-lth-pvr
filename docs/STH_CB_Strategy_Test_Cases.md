@@ -215,7 +215,24 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | LIVE-09 | Fee/USDPC EF filters widened (`ef_calculate_management_fees`, `ef_calculate_performance_fees`, `ef_collect_annual_fees`, `ef_transfer_accumulated_fees`, `ef_revalue_usdpc_nav`, `ef_sweep_usdt_to_usdpc`, `_shared/valrTransfer.ts`) and 16 EFs redeployed with their previous `verify_jwt` settings | all deploy OK | 16/16 OK | PASS |
 | LIVE-10 | `ef_confirm_strategy`: STH_CB defaults `usdpc_enabled=true`, `join_policy='immediate'`, `config_key='hybrid_v2_2'` (validated against active `tracker_config`); Admin UI Prospects modal shows the STH CB fieldset and preselects `preferred_strategy_code` | — | deployed; UI script blocks parse (20/20) | PASS (static) |
 | LIVE-11 | Client portal `get_customer_strategy_state` (caller = customer email or org member) + portfolio card state text; website form "Strategy of interest" → `preferred_strategy_code` (+ admin email line, `?strategy=` preselect) | — | RPC applied; portal/index scripts parse | PASS (static) |
-| LIVE-12 | First real STH_CB client: confirm → fund → 02:05 UTC chain places the day-1 BUY | — | pending first client | SKIP |
+| LIVE-12 | First real STH_CB client: confirm → fund → 02:05 UTC chain places the day-1 BUY | — | superseded by SEP-08…12 (customer 31 switched and bought in live on 2026-11-04) | PASS |
+
+### 1.7 Schema separation, strategy switch, first live trade (2026-11-04, SDD v0.6.183)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| SEP-01 | Migration `20261104_sth_cb_schema_separation`: `sth_cb.decisions_daily` (+trigger), `sth_cb.get_pipeline_status`, `sth_cb.get_customer_pipeline_status`, public wrappers, LTH RPCs restricted to LTH_PVR, `customer_strategy_history`, `switch_customer_strategy`, `get_customer_strategy_state`/`list_customer_portfolios` read sth_cb | applied; audit clean | applied; LTH RPC filter ✓, portfolios ✓; status RPCs return expected JSON | PASS |
+| SEP-02 | Guard cron `sth_cb_pipeline_guard` (`*/30 3-16`) → `ensure_pipeline_today()` | scheduled, idempotent | scheduled (paused briefly during the manual run, re-enabled) | PASS |
+| SEP-03 | ACTIVE STRATEGY dropdown lists STH Cost Basis Strategy before any client is on it | 3 strategies | built from `public.strategies` (LTH_PVR, STH_CB, ADV_DCA) | PASS (static) |
+| SEP-04 | STH CB Transactions block + Strategy Maintenance config table; shared History card; 22/22 inline scripts parse, 898/898 divs balanced | — | ✓ | PASS (static) |
+| SEP-05 | Edit Client: USDPC checkbox round-trips via `stratPatch.usdpc_enabled`; Switch strategy panel calls `switch_customer_strategy` | — | code paths in place; panel hidden unless an open strategy row exists | PASS (static) |
+| SEP-06 | `switch_customer_strategy(31,'STH_CB',{immediate,hybrid_v2_2,usdpc:true})` | in-place update + history row + "next" text | ok: label "Jemaica Gaier - STH Cost Basis Strategy", holdings snapshot, next = "all USDT/USDPC will be bought into BTC" | PASS |
+| SEP-07 | Dry run after switch | BUY 100 % of $6.32 | BUY 1.0 "Deploy contribution", cash 6.32, alloc 21 % → 100 % | PASS |
+| SEP-08 | Live run: USDPC pre-buy conversion with 1.12 USDPC (< 5 USDT policy, ≥ 1 VALR min) | whole balance converted, buy capped to fundable | SELL 1.12 USDPC → 1.34 USDT filled + booked; BTC intent 0.0000818 @ 77,141 (6.31 USDT) | PASS |
+| SEP-09 | Order-book query before LIMIT placement | rest at best bid | **FAIL then FIXED**: 403 on `/v1/marketdata/…` (authenticated route) → intent price; after fix rested at best bid 78,246 with qty capped to budget (0.00008064) | FIXED |
+| SEP-10 | Open LIMIT visible to the poller; 5-min fallback cancels and places MARKET | — | **FAIL then FIXED**: summary route 400 on open orders; cancel route 404; customerOrderId collision marked a live order cancelled. After fixes: fallback cancelled the LIMIT and MARKET filled 0.00008054 @ 78,343 | FIXED |
+| SEP-11 | Ledger + balances after fills | VALR = DB | BTC 0.00010209 both sides; USDT/USDPC cents; NAV $7.89 | PASS |
+| SEP-12 | Intents carry the client's own exchange account | subaccount 1456357666877767680 | code fixed (earlier intents of the day were tagged "Integration TestUser") | PASS (static) |
 
 ---
 

@@ -224,6 +224,28 @@ export async function getOrderSummaryByCustomerOrderId(
   );
 }
 
+// ── Order status by customerOrderId (works for OPEN orders too) ─────────────
+// The history/summary endpoints above only serve completed orders and return
+// 400 "Invalid Order" while an order is still working. This status route
+// (GET /v1/orders/:currencyPair/customerorderid/:customerOrderId) returns
+// orderStatusType (Placed / Active / Partially Filled / Filled / Cancelled /
+// Failed), originalQuantity and remainingQuantity for any order.
+export async function getOrderStatusByCustomerOrderId(
+  customerOrderId: string,
+  pair: string,
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<unknown> {
+  const p = normalisePair(pair);
+  return await valrPrivateRequest(
+    "GET",
+    `/v1/orders/${p}/customerorderid/${customerOrderId}`,
+    undefined,
+    subaccountId,
+    credentials,
+  );
+}
+
 // ── Open (working) orders ────────────────────────────────────────────────────
 export async function getOpenOrders(
   subaccountId?: string | null,

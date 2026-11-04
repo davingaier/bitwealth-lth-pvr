@@ -16,6 +16,8 @@ Deno.serve(async (req)=>{
   const onlyCustomers: Set<number> | null = Array.isArray(body?.customer_ids) ? new Set(body.customer_ids.map(Number)) : null;
   const todayStr = typeof body?.trade_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.trade_date) ? body.trade_date : new Date().toISOString().slice(0, 10);
   const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "1.00"); // VALR minimum order size
+  const USDPC_MIN_BASE_UNITS = 1;      // VALR USDPC/USDT minBaseAmount
+  const USDPC_CONV_SLIPPAGE = 0.003;   // haircut on expected conversion proceeds when sizing the dependent BTC buy
 
   // --- USDPC support: config, latest price, and per-customer enabled flag ---
   const usdpcCfg = await loadUsdpcConfig(sb);
@@ -43,20 +45,24 @@ Deno.serve(async (req)=>{
     for (const r of csRows ?? []) usdpcEnabled.add(Number(r.customer_id));
   } catch (_e) { /* feature simply stays off if lookup fails */ }
   
-  // Wait for decisions to exist (retry up to 4 times with 1-second delays = 4 seconds max)
-  let decs = null;
-  let decErr = null;
+  // Wait for decisions to exist (retry up to 4 times with 1-second delays = 4 seconds max).
+  // Decisions come from two strategy tables (lth_pvr.decisions_daily for LTH_PVR, sth_cb.decisions_daily for STH_CB);
+  // both expose the same sizing contract: action, amount_pct (0..1), price_usd, rule, note.
+  // deno-lint-ignore no-explicit-any
+  let decs: any[] | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const result = await sb.schema("lth_pvr").from("decisions_daily").select("*").eq("org_id", org_id).eq("trade_date", todayStr).in("action", [
-      "BUY",
-      "SELL"
+    const [lth, scb] = await Promise.all([
+      sb.schema("lth_pvr").from("decisions_daily").select("customer_id, trade_date, action, amount_pct, price_usd, rule, note").eq("org_id", org_id).eq("trade_date", todayStr).in("action", ["BUY", "SELL"]),
+      sb.schema("sth_cb").from("decisions_daily").select("customer_id, trade_date, action, amount_pct, price_usd, rule, note").eq("org_id", org_id).eq("trade_date", todayStr).in("action", ["BUY", "SELL"]),
     ]);
-    decs = result.data;
-    decErr = result.error;
-    
-    if (decErr) return new Response(decErr.message, { status: 500 });
-    if (onlyCustomers && decs) decs = decs.filter((d: { customer_id: number }) => onlyCustomers.has(Number(d.customer_id)));
-    if (decs && decs.length > 0) break;
+    if (lth.error) return new Response(lth.error.message, { status: 500 });
+    if (scb.error) return new Response(scb.error.message, { status: 500 });
+    decs = [
+      ...(lth.data ?? []).map((d) => ({ ...d, strategy_code: "LTH_PVR" })),
+      ...(scb.data ?? []).map((d) => ({ ...d, strategy_code: "STH_CB" })),
+    ];
+    if (onlyCustomers) decs = decs.filter((d) => onlyCustomers.has(Number(d.customer_id)));
+    if (decs.length > 0) break;
     
     // No decisions yet, wait and retry (stay under 5 second pg_net timeout)
     if (attempt < 3) {
@@ -120,6 +126,7 @@ Deno.serve(async (req)=>{
       let side = d.action;
       let notional = 0;
       let qtyBase = 0;
+      let usdpcPlan: { usdpcToSell: number; shortfall: number; idleUsdt: number } | null = null;
       if (side === "BUY") {
         // reserve-aware available USDT + carry bucket
         const av = await sb.rpc("fn_usdt_available_for_trading", {
@@ -151,6 +158,41 @@ Deno.serve(async (req)=>{
         
         const avail = Number(av.data ?? 0) + Number(ck.data ?? 0);
         notional = +(avail * Number(d.amount_pct)).toFixed(2);
+
+        // --- USDPC funding plan (decided BEFORE the BTC intent so the buy is never under-funded) ---
+        // Buying power includes the USDPC value; any shortfall vs idle USDT must be raised by selling USDPC first.
+        // VALR's USDPC/USDT minimum is 1 unit (not the 5-USDT sweep dust threshold), so small balances convert too.
+        // All-in buys (amount_pct ≈ 1) convert the WHOLE USDPC balance; the BTC notional is then capped to what will
+        // actually be available (idle USDT + expected conversion proceeds net of fee + a slippage buffer). If no
+        // conversion is possible (USDPC < 1 unit) the buy is capped to idle USDT instead of failing on VALR.
+        if (usdpcEnabled.has(Number(d.customer_id))) {
+          const idleUsdt = Number(bal.usdt_balance ?? 0);
+          const usdpcUnits = Number(bal.usdpc_balance ?? 0);
+          const shortfall = +(notional - idleUsdt).toFixed(2);
+          if (shortfall > 0.01) {
+            if (usdpcUnits >= USDPC_MIN_BASE_UNITS) {
+              const allIn = Number(d.amount_pct) >= 0.999;
+              let toSell: number;
+              if (allIn) {
+                toSell = usdpcUnits;
+              } else {
+                const sizing = sizeUsdpcToUsdt(+(shortfall * 1.005).toFixed(2), usdpcUnits, usdpcPrice, usdpcCfg.takerFeeRate);
+                toSell = Math.min(usdpcUnits, Math.max(USDPC_MIN_BASE_UNITS, Number(sizing.usdpcToSell)));
+              }
+              toSell = Math.floor(toSell * 100) / 100; // USDPC/USDT base has 2 decimals on VALR
+              const expectUsdt = toSell * usdpcPrice * (1 - usdpcCfg.takerFeeRate);
+              const fundable = Math.floor((idleUsdt + expectUsdt * (1 - USDPC_CONV_SLIPPAGE)) * 100) / 100;
+              if (fundable < notional) notional = fundable;
+              usdpcPlan = { usdpcToSell: toSell, shortfall, idleUsdt };
+            } else {
+              notional = Math.floor(idleUsdt * 100) / 100;
+              await logAlert(sb, "ef_create_order_intents", "info",
+                `USDPC ${usdpcUnits.toFixed(4)} below VALR minimum (1 unit); BUY capped to idle USDT ${notional.toFixed(2)}`,
+                { customer_id: d.customer_id, trade_date: d.trade_date, usdpc_units: usdpcUnits, notional }, org_id, d.customer_id);
+            }
+          }
+        }
+
         if (notional < minQuote) {
           // accumulate carry and skip
           await sb.rpc("fn_carry_add", {
@@ -222,13 +264,28 @@ Deno.serve(async (req)=>{
           continue;
         }
       }
-      // 4) Get exchange account for this customer
-      const { data: exchAcct, error: exchErr } = await sb
-        .from("exchange_accounts")
-        .select("exchange_account_id")
-        .eq("org_id", org_id)
-        .limit(1)
-        .single();
+      // 4) Exchange account for this customer: their own strategy row's account (so the WebSocket monitor and
+      //    pipeline views resolve the right subaccount); fall back to the org-level account only if unset.
+      let exchAcct: { exchange_account_id: string } | null = null;
+      {
+        const { data: csAcct } = await sb.schema("public").from("customer_strategies")
+          .select("exchange_account_id").eq("org_id", org_id).eq("customer_id", d.customer_id)
+          .in("strategy_code", ["LTH_PVR", "STH_CB"]).eq("status", "active").not("exchange_account_id", "is", null)
+          .order("created_at", { ascending: false }).limit(1);
+        if (csAcct?.[0]?.exchange_account_id) exchAcct = { exchange_account_id: String(csAcct[0].exchange_account_id) };
+      }
+      let exchErr: { message: string } | null = null;
+      if (!exchAcct) {
+        const r = await sb
+          .from("exchange_accounts")
+          .select("exchange_account_id")
+          .eq("org_id", org_id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single();
+        exchAcct = r.data as { exchange_account_id: string } | null;
+        exchErr = r.error;
+      }
       
       if (exchErr || !exchAcct) {
         await logAlert(
@@ -290,26 +347,13 @@ Deno.serve(async (req)=>{
         intentCount++;
 
         // --- USDPC pre-buy conversion intent ---
-        // For USDPC-enabled customers a BUY is sized against total buying power
-        // (idle USDT + USDPC value). Any USDT shortfall must be raised by
-        // converting USDPC -> USDT (market SELL on USDPC/USDT) BEFORE the BTC
-        // buy executes. We size the conversion deterministically from the known
-        // DB balance and over-convert by a small buffer so fee/slippage never
-        // leaves the BTC buy under-funded (leftover USDT is swept back later).
-        if (side === "BUY" && usdpcEnabled.has(Number(d.customer_id))) {
+        // The plan was decided in the sizing step above (whole balance for all-in buys, otherwise the shortfall
+        // + 0.5 % buffer, never below VALR's 1-unit minimum). Create one SELL USDPC/USDT market intent per chunk so
+        // the USDT is available before the dependent BTC buy executes.
+        if (side === "BUY" && usdpcPlan) {
           try {
-            const idleUsdt = Number(bal.usdt_balance ?? 0);
-            const shortfall = +(notional - idleUsdt).toFixed(2);
-            if (shortfall >= usdpcCfg.minOrderUsdt) {
-              // Over-convert by 0.5% to absorb fee + price drift on the BTC buy.
-              const usdtTarget = +(shortfall * 1.005).toFixed(2);
-              const sizing = sizeUsdpcToUsdt(
-                usdtTarget,
-                Number.MAX_SAFE_INTEGER, // executor re-caps against live balance
-                usdpcPrice,
-                usdpcCfg.takerFeeRate,
-              );
-              const usdpcToSell = +sizing.usdpcToSell.toFixed(8);
+            const { usdpcToSell, shortfall, idleUsdt } = usdpcPlan;
+            {
               if (usdpcToSell > 0) {
                 // VALR caps a single USDPC SELL at ~46 000 USDPC (base). Split a
                 // larger conversion into multiple intents, each its own market
