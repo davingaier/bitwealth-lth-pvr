@@ -44,6 +44,33 @@ Deno.serve(async (req: Request) => {
     const tradeDateParam = body.trade_date || null;
     const checkStatusOnly = body.check_status === true;
 
+    // ── STH Cost Basis Strategy path ──────────────────────────────────────
+    // { strategy: 'sth_cb' } runs the STH_CB chain only: decisions (which itself chains intents → execute → poll
+    // for the customers with a BUY/SELL) followed by ledger posting. The LTH_PVR steps are untouched.
+    if (String(body.strategy ?? "").toLowerCase() === "sth_cb") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const results: unknown[] = [];
+      const call = async (name: string, payload: Record<string, unknown>) => {
+        const r = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const text = await r.text();
+        results.push({ step: name, status: r.status, success: r.ok, response: text.substring(0, name === "ef_sth_cb_generate_decisions" ? 8000 : 600) });
+        return r.ok;
+      };
+      const decisionsPayload: Record<string, unknown> = { dry_run: body.dry_run === true };
+      if (tradeDateParam) decisionsPayload.trade_date = tradeDateParam;
+      const ok = await call("ef_sth_cb_generate_decisions", decisionsPayload);
+      if (ok && body.dry_run !== true) await call("ef_post_ledger_and_balances", {});
+      return new Response(JSON.stringify({ success: ok, strategy: "sth_cb", results }), {
+        status: ok ? 200 : 500,
+        headers: { ...corsHeaders, "content-type": "application/json" },
+      });
+    }
+
     // If check_status requested, return status without executing
     if (checkStatusOnly) {
       const { data: statusData, error: statusErr } = await sb

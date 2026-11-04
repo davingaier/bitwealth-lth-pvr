@@ -39,10 +39,15 @@ interface ConfirmStrategyRequest {
   management_fee_rate?: number;
   management_fee_schedule?: string;
   usdpc_enabled?: boolean;
+  /** STH_CB only: 'immediate' (default) or 'next_signal'. */
+  join_policy?: string;
+  /** STH_CB only: sth_cb.tracker_config key to follow (default hybrid_v2_2). */
+  config_key?: string;
   admin_email?: string;
 }
 
 const ALLOWED_ACCOUNT_MODELS = ["subaccount", "api", "finova_omnibus"];
+const STH_CB_DEFAULT_CONFIG_KEY = "hybrid_v2_2";
 
 Deno.serve(async (req) => {
   // CORS headers
@@ -66,7 +71,8 @@ Deno.serve(async (req) => {
     const { customer_id, strategy_code, strategy_variation_id, admin_email, account_model,
             platform_fee_rate, platform_fee_schedule,
             performance_fee_rate, performance_fee_schedule, usdpc_enabled,
-            fee_plan, management_fee_rate, management_fee_schedule } = body;
+            fee_plan, management_fee_rate, management_fee_schedule,
+            join_policy, config_key } = body;
 
     // Validate inputs
     if (!customer_id || !strategy_code) {
@@ -74,6 +80,25 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Missing required fields: customer_id, strategy_code" }),
         { status: 400, headers: corsHeaders }
       );
+    }
+
+    const isSthCb = strategy_code === "STH_CB";
+    if (join_policy != null && !["immediate", "next_signal"].includes(join_policy)) {
+      return new Response(
+        JSON.stringify({ error: `Invalid join_policy '${join_policy}'. Allowed: immediate, next_signal.` }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    if (isSthCb) {
+      const key = config_key || STH_CB_DEFAULT_CONFIG_KEY;
+      const { data: cfg } = await supabase.schema("sth_cb").from("tracker_config")
+        .select("tracker_key, is_active").eq("tracker_key", key).maybeSingle();
+      if (!cfg || cfg.is_active === false) {
+        return new Response(
+          JSON.stringify({ error: `STH_CB config_key '${key}' is not an active sth_cb.tracker_config row` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
     }
 
     if (account_model && !ALLOWED_ACCOUNT_MODELS.includes(account_model)) {
@@ -182,14 +207,17 @@ Deno.serve(async (req) => {
       // Strategy exists, just use it
       customer_strategy_id = existingStrategy.customer_strategy_id;
       console.log(`Using existing customer_strategy ${customer_strategy_id} for customer ${customer_id}`);
-      // Apply the USDPC yield toggle on re-confirm (other fee fields are managed
-      // via the Customer Maintenance editor, but the onboarding wizard is the
-      // canonical place to set USDPC at strategy setup time).
-      if (usdpc_enabled != null) {
+      // Apply the USDPC yield toggle (and STH_CB joining options) on re-confirm; other fee fields are managed
+      // via the Customer Maintenance editor, but the onboarding wizard is the canonical place to set these.
+      const reconfirmPatch: Record<string, unknown> = {};
+      if (usdpc_enabled != null) reconfirmPatch.usdpc_enabled = usdpc_enabled;
+      if (isSthCb && join_policy) reconfirmPatch.join_policy = join_policy;
+      if (isSthCb && config_key) reconfirmPatch.config_key = config_key;
+      if (Object.keys(reconfirmPatch).length) {
         await supabase
           .schema("public")
           .from("customer_strategies")
-          .update({ usdpc_enabled })
+          .update(reconfirmPatch)
           .eq("customer_strategy_id", customer_strategy_id);
       }
     } else {
@@ -230,6 +258,12 @@ Deno.serve(async (req) => {
       if (management_fee_rate != null) insertPayload.management_fee_rate = management_fee_rate;
       if (management_fee_schedule) insertPayload.management_fee_schedule = management_fee_schedule;
       if (usdpc_enabled != null) insertPayload.usdpc_enabled = usdpc_enabled;
+      if (isSthCb) {
+        // STH_CB sits in cash for long stretches, so USDPC yield is on unless explicitly declined.
+        if (usdpc_enabled == null) insertPayload.usdpc_enabled = true;
+        insertPayload.join_policy = join_policy || "immediate";
+        insertPayload.config_key = config_key || STH_CB_DEFAULT_CONFIG_KEY;
+      }
 
       const { data: newStrategy, error: strategyError } = await supabase
         .schema("public")

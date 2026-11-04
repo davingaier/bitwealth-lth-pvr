@@ -38,7 +38,12 @@ serve(async (req) => {
       upfront_investment_amount_range,
       monthly_investment_amount_range,
       prospect_message,
+      preferred_strategy_code: rawStrategy,
     } = body;
+    // Strategy of interest from the website form (informational; admin confirms the real strategy).
+    const preferred_strategy_code = ["STH_CB", "LTH_PVR", "UNDECIDED"].includes(String(rawStrategy ?? "").toUpperCase())
+      ? String(rawStrategy).toUpperCase() : null;
+    const STRATEGY_LABELS: Record<string, string> = { STH_CB: "STH Cost Basis Strategy", LTH_PVR: "LTH PVR Strategy", UNDECIDED: "Undecided / needs advice" };
 
     const isEntity = client_type === "entity";
 
@@ -137,6 +142,7 @@ serve(async (req) => {
         upfront_investment_amount_range,
         monthly_investment_amount_range,
         prospect_message,
+        preferred_strategy_code,
         registration_status: "prospect",
         customer_status: "Inactive",
       })
@@ -178,6 +184,7 @@ serve(async (req) => {
     const entityNote = isEntity
       ? `ENTITY APPLICATION — ${entity_name} (${entity_type}${entity_registration_number ? ", reg " + entity_registration_number : ""}). Contact person: ${customer.first_names} ${customer.last_name}.\n\n`
       : "";
+    const strategyNote = preferred_strategy_code ? `Strategy of interest: ${STRATEGY_LABELS[preferred_strategy_code]}.\n\n` : "";
     const adminEmailData = {
       first_name: customer.first_names,
       surname: customer.last_name,
@@ -187,7 +194,7 @@ serve(async (req) => {
       country: country || "",
       upfront_investment_amount_range: upfront_investment_amount_range || "Not specified",
       monthly_investment_amount_range: monthly_investment_amount_range || "Not specified",
-      message: entityNote + (prospect_message || "No message provided"),
+      message: entityNote + strategyNote + (prospect_message || "No message provided"),
       created_at: new Date().toISOString(),
       admin_portal_url: ADMIN_PORTAL_URL,
     };

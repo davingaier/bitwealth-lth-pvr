@@ -90,20 +90,15 @@ Deno.serve(async (req) => {
           price_usd: d.price_usd, sth_cost_basis_usd: d.sth_cost_basis_usd, price_to_cb_ratio: d.price_to_cb_ratio,
           lth_m050: b && Number.isFinite(b.m050) ? b.m050 : null, lth_p250: b && Number.isFinite(b.p250) ? b.p250 : null,
           position_state: d.position_state, signal_in_market: d.signal_in_market,
-          signal_rule: d.rule, signal_note: d.note, target_alloc: d.target_alloc,
+          // signal_* = the decision taken at this close (executed tomorrow); action/rule = what was executed today.
+          signal_rule: d.signal_rule, signal_note: d.signal_note, target_alloc: d.target_alloc,
+          signal_target_alloc: d.signal_target_alloc,
           action: d.action, rule: d.rule,
           nav_usd: d.nav_usd, hodl_nav_usd: hodl.get(d.trade_date) ?? null,
           btc_balance: d.btc_balance, cash_usd: d.usdt_balance + d.usdpc_balance * (d.usdpc_price_usd ?? 1),
           roc: d.roc, computed_at: now,
         };
       });
-      // The signal columns describe the decision taken at this close (filled next day) — recover it from the
-      // *next* row's executed rule so the latest row carries a human-readable "tomorrow" instruction.
-      for (let i = 0; i < rows.length; i++) {
-        const next = sim.results[i + 1];
-        if (next && next.action !== "HOLD") { rows[i].signal_rule = next.rule; rows[i].signal_note = next.note; }
-        else { rows[i].signal_rule = rows[i].signal_in_market === (rows[i].position_state !== "cash") ? "Hold" : (rows[i].signal_in_market ? "BUY tomorrow" : "SELL tomorrow"); }
-      }
       for (let i = 0; i < rows.length; i += 500) {
         const { error } = await sb.schema("sth_cb").from("tracker_daily").upsert(rows.slice(i, i + 500), { onConflict: "org_id,tracker_key,date" });
         if (error) throw new Error(`tracker_daily upsert failed: ${error.message}`);
@@ -112,7 +107,25 @@ Deno.serve(async (req) => {
       results.push({ tracker_key: cfg.tracker_key, rows: rows.length, last_date: last.date, position: last.position_state, signal_in_market: last.signal_in_market, nav_usd: last.nav_usd, hodl_nav_usd: last.hodl_nav_usd, trades: sim.summary.sth_cb.trades });
     }
     console.info("ef_sth_cb_tracker:", JSON.stringify(results));
-    return json({ ok: true, trackers: results.length, results });
+
+    // ── Chain: live STH_CB decisions ──────────────────────────────────────
+    // Only when the tracker covers yesterday's UTC close (the decision EF guards this too) and not for manual
+    // single-key rebuilds. The decision EF is a no-op when there are no live STH_CB customers.
+    let liveChain: unknown = null;
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    if (!onlyKey && body?.chain !== false && lastDate && lastDate >= yesterday) {
+      try {
+        const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+        const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const resp = await fetch(`${baseUrl}/functions/v1/ef_sth_cb_generate_decisions`, {
+          method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` }, body: JSON.stringify({ org_id }),
+        });
+        liveChain = { status: resp.status, body: (await resp.text()).slice(0, 300) };
+      } catch (e) {
+        liveChain = { error: String((e as Error)?.message ?? e) };
+      }
+    }
+    return json({ ok: true, trackers: results.length, results, live_chain: liveChain });
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
     console.error("ef_sth_cb_tracker error:", msg);

@@ -3,11 +3,56 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-03 (v0.6.181)
+**Last updated:** 2026-11-04 (v0.6.182)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.182 – STH Cost Basis Strategy wired into the live trading pipeline and onboarding
+**Date:** 2026-11-04 · **Status:** ✅ DONE (no live STH_CB clients yet; first real run happens when one is confirmed and funded)
+
+**Joining rule (Policy A, agreed).** A new client adopts the strategy's *current* state as soon as funds land: if the
+strategy is in the market they buy on the next trading day, if it is in cash they wait (USDPC yield on). Optional
+per-client `join_policy = 'next_signal'` holds cash until the strategy's target allocation next *increases* (an entry
+or dip re-buy). Both are set in the Prospects "Confirm Strategy" modal and editable in Customer Maintenance.
+
+**Architecture.** The strategy state machine still runs once per org in `ef_sth_cb_tracker` (02:0x UTC, chained from
+`ef_fetch_onchain_pvr`). Each `sth_cb.tracker_daily` row now also stores **`signal_target_alloc`** (+ real
+`signal_rule/signal_note` from the engine, replacing the old "next row" hack): *the decision taken at this close, to be
+executed tomorrow*; `target_alloc` remains the allocation after today's fill. New pure module
+**`_shared/sth_cb_live.ts` → `planCustomerDecision(signal, customer)`** translates the org-level target into one
+`lth_pvr.decisions_daily` row per live client (`band_source='sth_cb'`): target > current → BUY `amount_pct` of cash
+(1.0 when target = 100 %; also covers joining and monthly deposits); target < current → SELL `(current−target)/current`
+of BTC (1.0 on full exit); partial slices are gated by the **client's own last buy price** (no-loss ladder per client;
+full exits never gated); dust below `min_order_usdt` → HOLD with a note. 15 unit tests. New EF
+**`ef_sth_cb_generate_decisions`** (service-role, `{trade_date?, dry_run?, customer_ids?, chain?}`): reads live
+`customer_strategies` (`STH_CB`, `live_enabled`, active customer), the tracker row for `signal_date = trade_date−1`
+(stale-tracker guard → alert, nothing written), balances and last buy fill, upserts decisions (HOLD rows too), then
+chains `ef_create_order_intents {customer_ids}` → `ef_execute_orders` → `ef_poll_orders`; ledger posting is the
+existing half-hourly cron. `ef_sth_cb_tracker` calls it when the tracker covers yesterday's UTC close;
+`ef_resume_pipeline {strategy:'sth_cb', dry_run?}` runs decisions + ledger on demand; `get_pipeline_status()` gains an
+`sth_cb` block (`live_customers, tracker_ready, decisions, intents, can_run, signal`).
+
+**Hardening.** `ef_create_order_intents` accepts `{customer_ids, trade_date}` and skips decisions whose idempotency
+key already exists for the day, so the 02:05 STH CB run can never re-size the 00:10 LTH PVR intents or re-consume carry.
+Every "LTH_PVR customers only" gate now admits STH_CB: SQL trigger `lth_pvr.enforce_lth_pvr_customer` (21 tables),
+`ensure_hwm_initialised[_all]`, `fn_usdt_available_for_trading`, the six fee-plan RPCs (rewritten in place by
+`20261104_sth_cb_widen_strategy_gates.sql`; `fn_write_fee_history` now records the real strategy code), and seven EFs
+(management/performance/annual fees, fee transfer, USDPC revalue/sweep, `valrTransfer.ts`). Bear-pause admin functions
+and `ef_generate_decisions` stay LTH-only by design.
+
+**Onboarding & client surfaces.** `customer_strategies.join_policy` / `config_key` (FK → `sth_cb.tracker_config`),
+`customer_details.preferred_strategy_code` (website form "Strategy of interest", default STH_CB, `?strategy=` preselect,
+shown in the admin notification email and preselected in the confirm modal). `ef_confirm_strategy` STH_CB defaults:
+USDPC on, `immediate`, `hybrid_v2_2` (validated against an active tracker config). Admin UI: Prospects modal STH CB
+fieldset; Customer Maintenance joining-rule/config selects; Transactions → Pipeline panel "STH Cost Basis Strategy"
+block with tracker/decisions/intents lights, live-client count, signal text, **Dry run** and **Run STH CB** buttons
+(planned per-client actions are logged). Client portal: `public.get_customer_strategy_state(p_customer_id)` (caller must
+be the customer by `auth.email()` or an org member) drives a card note — strategy in BTC / in cash / scaling out, the
+client's own split, joining-rule explanation and last trade decision; `list_customer_portfolios` returns
+`public.strategies.name`. Migrations: `20261104_sth_cb_live_pipeline.sql`, `20261104_sth_cb_widen_strategy_gates.sql`,
+`20261104_sth_cb_portal_state.sql`. 16 EFs redeployed (previous `verify_jwt` preserved). Tests LIVE-01…12.
 
 ### v0.6.181 – Option (b): in-sample and out-of-sample shown side by side on every public STH CB surface
 **Date:** 2026-11-03 · **Status:** ✅ DONE (website not yet deployed — Davin publishes)

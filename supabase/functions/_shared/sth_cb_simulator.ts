@@ -83,6 +83,10 @@ export interface SthCbDailyRow {
   cap_latch: boolean;
   trend_latch: boolean;
   signal_in_market: boolean;
+  /** Target allocation decided at this close (executed next day). `target_alloc` is the allocation AFTER today's fill. */
+  signal_target_alloc: number;
+  signal_rule: string;
+  signal_note: string;
   target_alloc: number;
   roc: number;
   btc_balance: number;
@@ -724,6 +728,9 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
         position_state: position,
         cap_latch: state.capLatch, trend_latch: state.trendLatch,
         signal_in_market: todaySignal.inMarket,
+        signal_target_alloc: todaySignal.inMarket ? todaySignal.targetAlloc : 0,
+        signal_rule: todaySignal.rule,
+        signal_note: todaySignal.note,
         target_alloc: currentAlloc,
         roc,
         btc_balance: btcBal, usdt_balance: usdtBal, nav_usd: nav,

@@ -2,13 +2,19 @@ import { getServiceClient } from "./client.ts";
 import { logAlert } from "./alerting.ts";
 import { loadUsdpcConfig, sizeUsdpcToUsdt, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
 
-Deno.serve(async ()=>{
+Deno.serve(async (req)=>{
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
   if (!org_id) return new Response("ORG_ID missing", {
     status: 500
   });
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Optional body: { customer_ids?: number[], trade_date?: 'YYYY-MM-DD' }. The STH_CB chain passes customer_ids so a
+  // second run of the day (≈02:05 UTC) does not re-size the LTH_PVR intents created at 00:10.
+  // deno-lint-ignore no-explicit-any
+  let body: any = {};
+  try { body = await req.json(); } catch { /* empty body = full run */ }
+  const onlyCustomers: Set<number> | null = Array.isArray(body?.customer_ids) ? new Set(body.customer_ids.map(Number)) : null;
+  const todayStr = typeof body?.trade_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.trade_date) ? body.trade_date : new Date().toISOString().slice(0, 10);
   const minQuote = Number(Deno.env.get("MIN_QUOTE_USDT") ?? "1.00"); // VALR minimum order size
 
   // --- USDPC support: config, latest price, and per-customer enabled flag ---
@@ -24,7 +30,7 @@ Deno.serve(async ()=>{
   } catch (_e) {
     usdpcPrice = 1;
   }
-  // Set of customer_ids with USDPC sweeping enabled on their LTH_PVR strategy.
+  // Set of customer_ids with USDPC sweeping enabled on their live strategy (LTH_PVR or STH_CB).
   const usdpcEnabled = new Set<number>();
   try {
     const { data: csRows } = await sb
@@ -32,7 +38,7 @@ Deno.serve(async ()=>{
       .from("customer_strategies")
       .select("customer_id, usdpc_enabled")
       .eq("org_id", org_id)
-      .eq("strategy_code", "LTH_PVR")
+      .in("strategy_code", ["LTH_PVR", "STH_CB"])
       .eq("usdpc_enabled", true);
     for (const r of csRows ?? []) usdpcEnabled.add(Number(r.customer_id));
   } catch (_e) { /* feature simply stays off if lookup fails */ }
@@ -49,6 +55,7 @@ Deno.serve(async ()=>{
     decErr = result.error;
     
     if (decErr) return new Response(decErr.message, { status: 500 });
+    if (onlyCustomers && decs) decs = decs.filter((d: { customer_id: number }) => onlyCustomers.has(Number(d.customer_id)));
     if (decs && decs.length > 0) break;
     
     // No decisions yet, wait and retry (stay under 5 second pg_net timeout)
@@ -64,11 +71,26 @@ Deno.serve(async ()=>{
     return new Response("ok - no decisions to process");
   }
   
+  // Intents already created today (any status). A decision whose intent exists is skipped so re-runs never
+  // re-size a live/filled order or re-consume the carry bucket.
+  const existingKeys = new Set<string>();
+  {
+    const { data: ex } = await sb.from("order_intents").select("idempotency_key").eq("org_id", org_id).eq("trade_date", todayStr);
+    for (const r of ex ?? []) if (r.idempotency_key) existingKeys.add(String(r.idempotency_key));
+  }
+  const intentKey = async (customerId: number | string, side: string) => {
+    const parts = [org_id, String(customerId), todayStr, side].join('|');
+    const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(parts));
+    return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   let intentCount = 0;
   let skipCount = 0;
+  let existingCount = 0;
   
   for (const d of decs ?? []){
     try {
+      if (existingKeys.has(await intentKey(d.customer_id, d.action))) { existingCount++; continue; }
       // 2) latest balance as of trade date
       const { data: lastBal, error: balErr } = await sb.from("balances_daily").select("*").eq("org_id", org_id).eq("customer_id", d.customer_id).lte("date", d.trade_date).order("date", {
         ascending: false
@@ -362,6 +384,6 @@ Deno.serve(async ()=>{
     }
   }
   
-  console.info(`ef_create_order_intents: created=${intentCount}, skipped=${skipCount}`);
+  console.info(`ef_create_order_intents: created=${intentCount}, skipped=${skipCount}, already_existing=${existingCount}${onlyCustomers ? `, customer_filter=${[...onlyCustomers].join(",")}` : ""}`);
   return new Response("ok");
 });

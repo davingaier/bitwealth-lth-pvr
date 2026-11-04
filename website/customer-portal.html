@@ -1210,12 +1210,41 @@
 
                 container.innerHTML = portfolios.map(p => `
                     <div class="stat-box" style="margin-bottom: 10px;">
-                        <div class="stat-label">${p.strategy_code} - ${p.status.toUpperCase()}</div>
+                        <div class="stat-label">${p.strategy_name || p.strategy_code} - ${p.status.toUpperCase()}</div>
                         <div style="font-size: 14px; color: #64748b; margin-top: 5px;">
                             Created: ${new Date(p.created_at).toLocaleDateString()}
                         </div>
+                        <div id="strategyStateBox" style="display:none;font-size:14px;margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(247,147,26,0.08);border-left:3px solid var(--gold);line-height:1.5;"></div>
                     </div>
                 `).join('');
+
+                // STH Cost Basis Strategy: tell the client whether the strategy is in BTC or in cash right now,
+                // and what that means for their own money (joining rule).
+                try {
+                    const { data: st } = await sb.rpc('get_customer_strategy_state', { p_customer_id: customerId });
+                    const box = document.getElementById('strategyStateBox');
+                    if (box && st && st.strategy_code === 'STH_CB' && st.signal) {
+                        const pct = Math.round(Number(st.signal.target_alloc || 0) * 100);
+                        const mine = st.customer_alloc == null ? null : Math.round(Number(st.customer_alloc) * 100);
+                        const stateTxt = st.signal.state === 'cash'
+                            ? 'The strategy is currently <strong>in cash</strong> (USDT/USDPC), waiting for its next entry signal.'
+                            : st.signal.state === 'fully_invested'
+                                ? 'The strategy is currently <strong>fully invested in Bitcoin</strong>.'
+                                : `The strategy is currently <strong>scaling out</strong> — target ${pct}% Bitcoin / ${100 - pct}% cash.`;
+                        let joinTxt = '';
+                        if (mine != null && mine < 5 && st.signal.state !== 'cash') {
+                            joinTxt = st.join_policy === 'next_signal'
+                                ? ' Your funds are held in cash until the strategy\'s next buy signal (your chosen joining rule).'
+                                : ' New deposits are moved into Bitcoin on the next trading day to match the strategy.';
+                        } else if (mine != null && mine < 5 && st.signal.state === 'cash') {
+                            joinTxt = ' Your deposits earn USDPC yield while we wait.';
+                        }
+                        const last = st.last_decision && st.last_decision.action !== 'HOLD'
+                            ? `<div style="margin-top:4px;color:#64748b;">Last trade decision: ${st.last_decision.action} ${Math.round(Number(st.last_decision.amount_pct || 0) * 100)}% on ${st.last_decision.trade_date}</div>` : '';
+                        box.innerHTML = `${stateTxt}${joinTxt}${mine != null ? `<div style="margin-top:4px;color:#64748b;">Your portfolio: ${mine}% Bitcoin / ${100 - mine}% cash (as of ${st.balance_date || '—'})</div>` : ''}${last}`;
+                        box.style.display = 'block';
+                    }
+                } catch (e) { console.warn('strategy state unavailable', e); }
 
             } catch (error) {
                 console.error('Error loading portfolios:', error);

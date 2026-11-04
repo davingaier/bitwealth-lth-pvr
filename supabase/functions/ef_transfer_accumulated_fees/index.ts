@@ -121,7 +121,7 @@ Deno.serve(async () => {
       .schema("public")
       .from("customer_strategies")
       .select("customer_id, platform_fee_schedule")
-      .eq("strategy_code", "LTH_PVR")
+      .in("strategy_code", ["LTH_PVR", "STH_CB"])
       .in("customer_id", drainCustomerIds);
 
     if (scheduleErr) {

@@ -1,0 +1,168 @@
+// ef_sth_cb_generate_decisions/index.ts
+// ===========================================================================
+// STH Cost Basis Strategy — LIVE decision generator.
+//
+// Chained from ef_sth_cb_tracker (≈02:05 UTC, after the on-chain data and the tracker have been refreshed) and
+// callable from ef_resume_pipeline { strategy: 'sth_cb' } or the Admin UI pipeline panel.
+//
+//   1. Read the strategy state for signal_date = trade_date − 1 from sth_cb.tracker_daily (one row per config_key).
+//   2. For every live STH_CB customer (customer_strategies.live_enabled, status active, customer active) translate
+//      the org-level state into a per-customer BUY / SELL / HOLD via _shared/sth_cb_live.ts (pure, unit-tested).
+//   3. Upsert lth_pvr.decisions_daily (band_source = 'sth_cb', UNIQUE (org, customer, trade_date)).
+//   4. Unless dry_run, chain ef_create_order_intents { customer_ids } → ef_execute_orders → ef_poll_orders. Ledger
+//      posting is handled by the existing half-hourly cron (and ef_resume_pipeline { strategy:'sth_cb' }).
+//
+// Body: { trade_date?: 'YYYY-MM-DD', dry_run?: boolean, customer_ids?: number[], chain?: boolean (default true) }
+// Deployed with --no-verify-jwt; service-role callers only (requireOrgAdmin internal check).
+// ===========================================================================
+
+import { getServiceClient } from "./client.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+import { logAlert } from "../_shared/alerting.ts";
+import { LiveCustomer, LiveSignal, planCustomerDecision } from "../_shared/sth_cb_live.ts";
+
+const ORG_FALLBACK = "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
+const DEFAULT_CONFIG_KEY = "hybrid_v2_2";
+const COMPONENT = "ef_sth_cb_generate_decisions";
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
+function addDays(iso: string, n: number): string { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return isoDate(d); }
+const num = (v: unknown, dflt = 0): number => { const n = Number(v); return Number.isFinite(n) ? n : dflt; };
+
+Deno.serve(async (req) => {
+  const sb = getServiceClient();
+  // deno-lint-ignore no-explicit-any
+  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  if (!caller.ok || !caller.internal) return json({ error: "service role required" }, 401);
+
+  const body = await req.json().catch(() => ({}));
+  const org_id: string = body?.org_id ?? Deno.env.get("ORG_ID") ?? ORG_FALLBACK;
+  const tradeDate: string = typeof body?.trade_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.trade_date) ? body.trade_date : isoDate(new Date());
+  const signalDate = addDays(tradeDate, -1);
+  const dryRun = body?.dry_run === true;
+  const chain = body?.chain !== false && !dryRun;
+  const onlyCustomers: Set<number> | null = Array.isArray(body?.customer_ids) ? new Set(body.customer_ids.map(Number)) : null;
+
+  try {
+    // ── Live STH_CB customers ─────────────────────────────────────────────
+    const { data: csRows, error: csErr } = await sb.schema("public").from("customer_strategies")
+      .select("customer_id, config_key, join_policy, min_order_usdt, usdpc_enabled, strategy_version_id, customer_details!inner(registration_status)")
+      .eq("org_id", org_id).eq("strategy_code", "STH_CB").eq("live_enabled", true).eq("status", "active")
+      .eq("customer_details.registration_status", "active");
+    if (csErr) throw new Error(`customer_strategies read failed: ${csErr.message}`);
+    const customers = (csRows ?? []).filter((r) => !onlyCustomers || onlyCustomers.has(Number(r.customer_id)));
+    if (!customers.length) return json({ ok: true, trade_date: tradeDate, customers: 0, reason: "no live STH_CB customers" });
+
+    // ── Strategy state per config_key for signal_date (+ previous day for allocation-increase detection) ───
+    const keys = [...new Set(customers.map((c) => String(c.config_key ?? DEFAULT_CONFIG_KEY)))];
+    const { data: trk, error: trkErr } = await sb.schema("sth_cb").from("tracker_daily")
+      .select("tracker_key, date, price_usd, signal_in_market, signal_target_alloc, target_alloc, signal_rule, signal_note, position_state")
+      .eq("org_id", org_id).in("tracker_key", keys).in("date", [signalDate, addDays(signalDate, -1)]);
+    if (trkErr) throw new Error(`tracker_daily read failed: ${trkErr.message}`);
+    const signals = new Map<string, LiveSignal>();
+    for (const key of keys) {
+      const today = (trk ?? []).find((r) => r.tracker_key === key && String(r.date) === signalDate);
+      const prev = (trk ?? []).find((r) => r.tracker_key === key && String(r.date) === addDays(signalDate, -1));
+      if (!today) {
+        // Stale tracker: the on-chain fetch / tracker rebuild has not produced yesterday's close yet. Do not guess.
+        await logAlert(sb, COMPONENT, "error", `STH_CB tracker '${key}' has no row for ${signalDate} — decisions skipped`, { trade_date: tradeDate, signal_date: signalDate, config_key: key }, org_id);
+        continue;
+      }
+      const tAlloc = today.signal_target_alloc == null ? (today.signal_in_market ? 1 : 0) : num(today.signal_target_alloc);
+      const pAlloc = prev ? (prev.signal_target_alloc == null ? (prev.signal_in_market ? 1 : 0) : num(prev.signal_target_alloc)) : tAlloc;
+      signals.set(key, { inMarket: !!today.signal_in_market, targetAlloc: tAlloc, prevTargetAlloc: pAlloc, rule: String(today.signal_rule ?? "Hold"), note: String(today.signal_note ?? ""), priceUsd: num(today.price_usd) });
+    }
+
+    // ── USDPC price (for cash valuation) ─────────────────────────────────
+    let usdpcPrice = 1;
+    try {
+      const { data: px } = await sb.schema("lth_pvr").from("usdpc_prices_daily").select("price_usd").order("date", { ascending: false }).limit(1);
+      usdpcPrice = num(px?.[0]?.price_usd, 1) || 1;
+    } catch { /* default 1 */ }
+
+    const decisions: Record<string, unknown>[] = [];
+    const planned: Record<string, unknown>[] = [];
+    const actionable: number[] = [];
+    for (const c of customers) {
+      const cid = Number(c.customer_id);
+      const key = String(c.config_key ?? DEFAULT_CONFIG_KEY);
+      const sig = signals.get(key);
+      if (!sig) { planned.push({ customer_id: cid, skipped: `no tracker state for ${key}` }); continue; }
+
+      const { data: balRows, error: balErr } = await sb.schema("lth_pvr").from("balances_daily")
+        .select("date, btc_balance, usdt_balance, usdpc_balance, usdpc_price_usd")
+        .eq("org_id", org_id).eq("customer_id", cid).lte("date", tradeDate).order("date", { ascending: false }).limit(1);
+      if (balErr) { await logAlert(sb, COMPONENT, "error", `balances_daily read failed for customer ${cid}`, { error: balErr.message }, org_id, cid); continue; }
+      const bal = balRows?.[0];
+
+      const { data: lastBuy } = await sb.schema("lth_pvr").from("ledger_lines")
+        .select("amount_btc, amount_usdt, trade_date").eq("org_id", org_id).eq("customer_id", cid).eq("kind", "buy").gt("amount_btc", 0)
+        .order("trade_date", { ascending: false }).order("created_at", { ascending: false }).limit(1);
+      const lb = lastBuy?.[0];
+      const lastBuyPx = lb && num(lb.amount_btc) > 0 ? Math.abs(num(lb.amount_usdt)) / num(lb.amount_btc) : null;
+
+      const cust: LiveCustomer = {
+        customerId: cid,
+        btcBalance: num(bal?.btc_balance),
+        usdtBalance: num(bal?.usdt_balance),
+        usdpcValueUsd: c.usdpc_enabled ? num(bal?.usdpc_balance) * (num(bal?.usdpc_price_usd, 0) || usdpcPrice) : 0,
+        lastBuyPx,
+        joinPolicy: c.join_policy === "next_signal" ? "next_signal" : "immediate",
+        minOrderUsdt: Math.max(1, num(c.min_order_usdt, 10)),
+      };
+      const d = planCustomerDecision(sig, cust);
+      planned.push({ ...d, last_buy_px: lastBuyPx, balance_date: bal?.date ?? null, btc: cust.btcBalance, cash_usd: +(cust.usdtBalance + cust.usdpcValueUsd).toFixed(2) });
+      if (d.action !== "HOLD") actionable.push(cid);
+      decisions.push({
+        org_id, customer_id: cid, signal_date: signalDate, trade_date: tradeDate,
+        price_usd: sig.priceUsd, band_bucket: `alloc ${Math.round(d.currentAlloc * 100)}%→${Math.round(d.targetAlloc * 100)}%`,
+        action: d.action, amount_pct: d.amountPct, rule: d.rule, note: d.note,
+        strategy_version_id: c.strategy_version_id ?? null, band_source: "sth_cb",
+      });
+    }
+
+    let written = 0;
+    if (!dryRun && decisions.length) {
+      const { error: upErr } = await sb.schema("lth_pvr").from("decisions_daily").upsert(decisions, { onConflict: "org_id,customer_id,trade_date" });
+      if (upErr) throw new Error(`decisions_daily upsert failed: ${upErr.message}`);
+      written = decisions.length;
+    }
+
+    // ── Chain order intents → execute → poll for the customers with a BUY/SELL ───
+    const chained: Record<string, unknown>[] = [];
+    if (chain && actionable.length) {
+      const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const steps: [string, Record<string, unknown>][] = [
+        ["ef_create_order_intents", { customer_ids: actionable, trade_date: tradeDate }],
+        ["ef_execute_orders", {}],
+        ["ef_poll_orders", {}],
+      ];
+      for (const [name, payload] of steps) {
+        try {
+          const r = await fetch(`${baseUrl}/functions/v1/${name}`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` }, body: JSON.stringify(payload) });
+          const text = (await r.text()).slice(0, 200);
+          chained.push({ step: name, status: r.status, ok: r.ok, response: text });
+          if (!r.ok) { await logAlert(sb, COMPONENT, "error", `Chained ${name} failed (HTTP ${r.status})`, { trade_date: tradeDate, response: text }, org_id); break; }
+        } catch (e) {
+          const msg = String((e as Error)?.message ?? e);
+          chained.push({ step: name, ok: false, error: msg });
+          await logAlert(sb, COMPONENT, "error", `Chained ${name} threw: ${msg}`, { trade_date: tradeDate }, org_id);
+          break;
+        }
+      }
+    }
+
+    const summary = { ok: true, trade_date: tradeDate, signal_date: signalDate, dry_run: dryRun, customers: customers.length, decisions_written: written, buys: planned.filter((p) => p.action === "BUY").length, sells: planned.filter((p) => p.action === "SELL").length, holds: planned.filter((p) => p.action === "HOLD").length, signals: Object.fromEntries(signals), planned, chained };
+    console.info(`${COMPONENT}:`, JSON.stringify({ ...summary, planned: undefined }));
+    return json(summary);
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e);
+    console.error(`${COMPONENT} error:`, msg);
+    await logAlert(sb, COMPONENT, "critical", `STH_CB decision generation failed: ${msg}`, { trade_date: tradeDate }, org_id).catch(() => {});
+    return json({ ok: false, error: msg }, 500);
+  }
+});

@@ -200,6 +200,23 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | OOS-07 | Scorer bug: partial config without engine defaults ran with momentum gate off | v2.2 row = $13.43 M | first run showed $5.05 M; fixed by merging over `DEFAULT_STH_CB_CONFIG` | FIXED |
 | OOS-08 | `oos_data.ts` publishes `STHCB_OOS`; website/one-pager/fact-sheet/fee-model read it | panels populated, pages fit | sth-cb.html 52.7× / 1.9× panel + 5-row plan table; index tiles 52.7× · 1.9× · 30 % · 20/20; one-pager 4 pp (print-emulated bottoms 1199/1136/1173/1157 ≤ 1209), PDF 4 pages; fact sheet pages 1123/1124/1123/1123; fee model banner + anchors still ✓ | PASS |
 
+### 1.6 Live pipeline wiring (2026-11-04, SDD v0.6.182) — `deno test supabase/functions/_shared/sth_cb_live.test.ts`
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| LIVE-01 | `planCustomerDecision`: 15 unit cases — Policy A join buys 100 % on day 1; `next_signal` waits until target increases then buys; full exit never gated; partial slice gated by **own** last buy; slice 100→50 % sells 50 %, 50→20 % sells 60 %; dip re-buy 50→100 % spends all cash; partial top-up spends only the shortfall; dust/unfunded → HOLD; contribution while fully invested is deployed | 15 pass | 15 pass (64/64 across the three STH CB suites) | PASS |
+| LIVE-02 | Migration `20261104_sth_cb_live_pipeline`: `customer_strategies.join_policy/config_key` (+FK to `sth_cb.tracker_config`), `tracker_daily.signal_target_alloc`, `customer_details.preferred_strategy_code`, `fn_usdt_available_for_trading` widened, `get_pipeline_status().sth_cb` | applied | applied via MCP | PASS |
+| LIVE-03 | Migration `20261104_sth_cb_widen_strategy_gates`: trigger `enforce_lth_pvr_customer` (21 tables), `ensure_hwm_initialised[_all]`, 6 fee RPCs rewritten in place to `IN ('LTH_PVR','STH_CB')`; audit query shows no remaining `= 'LTH_PVR'` gate outside the bear-pause functions | 0 gated | 0 gated | PASS |
+| LIVE-04 | Simulator daily row carries `signal_target_alloc / signal_rule / signal_note` from `todaySignal`; tracker persists them (next-row hack removed); `ef_sth_cb_bt_execute` strips them before `bt_results_daily` insert | semantics: signal on D executed on D+1 | 2026-05-08 signal "R2 Capitulation exit, target 0" → SELL executed 05-09; 06-28 "R14 Capitulation buy, target 1" → BUY 06-29; latest row 2026-11-03 Hold/target 1 | PASS |
+| LIVE-05 | `ef_sth_cb_tracker` chains `ef_sth_cb_generate_decisions` when the tracker covers yesterday's UTC close | chain fires, no-op without live clients | `live_chain: {status:200, customers:0, reason:"no live STH_CB customers"}` | PASS |
+| LIVE-06 | `ef_sth_cb_generate_decisions {dry_run:true, customer_ids:[31]}` with a temporary STH_CB row on test customer 31 (NAV $8: 21 % BTC via top-ups, $6.32 cash) | BUY 100 % of cash, "Deploy contribution", `last_buy_px` null (no buy fills) | exactly that; `decisions_written: 0` | PASS |
+| LIVE-07 | `ef_resume_pipeline {strategy:'sth_cb', dry_run:true}` and `{check_status:true}.sth_cb` | decisions step HTTP 200; status block `{live_customers, tracker_ready, decisions, intents, can_run, signal}` | HTTP 200; `can_run:true, tracker_ready:true, live_customers:1, signal.date 2026-11-03` (temporary row removed afterwards) | PASS |
+| LIVE-08 | `ef_create_order_intents` accepts `{customer_ids, trade_date}` and skips decisions whose intent already exists today | re-runs never re-size/re-consume carry | code path type-checks; exercised indirectly (no BUY/SELL written in dry run) | PASS (static) |
+| LIVE-09 | Fee/USDPC EF filters widened (`ef_calculate_management_fees`, `ef_calculate_performance_fees`, `ef_collect_annual_fees`, `ef_transfer_accumulated_fees`, `ef_revalue_usdpc_nav`, `ef_sweep_usdt_to_usdpc`, `_shared/valrTransfer.ts`) and 16 EFs redeployed with their previous `verify_jwt` settings | all deploy OK | 16/16 OK | PASS |
+| LIVE-10 | `ef_confirm_strategy`: STH_CB defaults `usdpc_enabled=true`, `join_policy='immediate'`, `config_key='hybrid_v2_2'` (validated against active `tracker_config`); Admin UI Prospects modal shows the STH CB fieldset and preselects `preferred_strategy_code` | — | deployed; UI script blocks parse (20/20) | PASS (static) |
+| LIVE-11 | Client portal `get_customer_strategy_state` (caller = customer email or org member) + portfolio card state text; website form "Strategy of interest" → `preferred_strategy_code` (+ admin email line, `?strategy=` preselect) | — | RPC applied; portal/index scripts parse | PASS (static) |
+| LIVE-12 | First real STH_CB client: confirm → fund → 02:05 UTC chain places the day-1 BUY | — | pending first client | SKIP |
+
 ---
 
 ## 2. Database / RPC

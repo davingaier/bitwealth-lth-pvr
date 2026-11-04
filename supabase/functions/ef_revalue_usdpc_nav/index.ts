@@ -34,7 +34,7 @@ Deno.serve(async () => {
     .from("customer_strategies")
     .select("customer_id")
     .eq("org_id", org_id)
-    .eq("strategy_code", "LTH_PVR")
+    .in("strategy_code", ["LTH_PVR", "STH_CB"])
     .eq("usdpc_enabled", true);
   if (csErr) {
     console.error("customer_strategies query failed", csErr);

@@ -466,7 +466,7 @@ export async function ensureIdleUsdt(
     .from("customer_strategies")
     .select("usdpc_enabled")
     .eq("customer_id", customerId)
-    .eq("strategy_code", "LTH_PVR")
+    .in("strategy_code", ["LTH_PVR", "STH_CB"])
     .eq("status", "active")
     .maybeSingle();
   if (!stratRow?.usdpc_enabled) return { ok: true, converted: false };

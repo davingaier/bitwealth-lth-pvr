@@ -79,7 +79,7 @@ retained only for historical back-test reproducibility.
 - **`lth_pvr_bt`** - Back-testing (isolated from live data)
   - `bt_runs`, `bt_results_daily`, `bt_std_dca_balances`
 
-- **`sth_cb` / `sth_cb_bt`** - STH Cost Basis strategy (`STH_CB`, added 2026-10-24; back-tester only, no live pipeline yet)
+- **`sth_cb` / `sth_cb_bt`** - STH Cost Basis strategy (`STH_CB`, added 2026-10-24; **live pipeline wired 2026-11-04** — see the Live pipeline bullet below)
   - `sth_cb.cost_basis_daily` is a **view** over `lth_pvr.onchain_pvr_daily` (STH cost basis = RB `realized_price_sth`) — do not add a second fetcher
   - `sth_cb_bt.bt_runs / bt_params / bt_results_daily / bt_ledger / bt_std_dca_* / bt_hodl_* / v_bt_results_annual` mirror `lth_pvr_bt` column names so UI chart code is shared
   - Security posture like `ta_bot`: RLS on, no policies, service-role only; browser reads via `public.sth_cb_bt_*` SECURITY DEFINER RPCs guarded by `my_orgs()`
@@ -94,6 +94,7 @@ retained only for historical back-test reproducibility.
   - **Strategy tracker** (2026-10-26): `sth_cb.tracker_config` / `tracker_daily` rebuilt daily by `ef_sth_cb_tracker` (chained from `ef_fetch_onchain_pvr`; service-role auth via `_shared/adminAuth.ts`); shown as the top card of Admin UI → On-Chain Charts with a selector over all active configs (`hybrid_v1`, `hybrid_v2`, `hybrid_v2_1`, `hybrid_v2_2`). To track another config, insert a `tracker_config` row — no code change
   - **⚠️ In-sample vs out-of-sample** (2026-11-03): every published STH_CB multiple (52.7×, 439 825 %, fact sheets, website, one-pager, fee model) is **in-sample**. True OOS (fit 2015–19 → test 2020–26, `optimize.ts --idea oos` + `oos_score.ts`) ≈ **1.9× HODL** (reverse split 1.7×) ≈ ChartInspect's un-optimised rules. All public surfaces show both via `tools/sth_cb_lab/oos_data.ts` → `docs/sth_cb_oos_data.js` + `website/js/sth_cb_oos_data.js` (`window.STHCB_OOS`); regenerate rather than hand-edit. Never quote the in-sample multiple without the OOS one. Lab `--walk-forward` = same params re-run per year (path independence), not an over-fit test
   - **Public website** (2026-11-03): `website/sth-cb.html` (product page, concepts only — never publish thresholds/σ levels) + `website/sth-cb-backtest.html`. Public runs go `ef_submit_public_backtest {p_strategy:'sth_cb'}` → `public.create_public_sth_cb_backtest_run` (copies `extras` from `sth_cb.tracker_config` `hybrid_v2_2` — the single source of truth) → `ef_sth_cb_bt_execute` → anon poller `get_sth_cb_backtest_results`. `public.backtest_requests.strategy_code` routes recovery (`ef_execute_public_backtests`) and the marketing refresher (`ef_refresh_marketing_charts` → `marketing_chart_data` keys `lth_pvr_5yr` + `sth_cb_5yr`, read via `get_marketing_chart(key)`)
+  - **Live pipeline** (2026-11-04): the state machine runs once per org in `ef_sth_cb_tracker` (~02:05 UTC, chained from `ef_fetch_onchain_pvr`); `sth_cb.tracker_daily.signal_target_alloc` = decision at this close, executed next day (`target_alloc` = after today's fill). Per-client translation is the pure `_shared/sth_cb_live.ts` `planCustomerDecision` (BUY pct of cash / SELL pct of BTC; partial slices gated by the client's **own** last buy; `join_policy` `immediate` (Policy A, default) | `next_signal`) → `ef_sth_cb_generate_decisions` (service-role; `{dry_run, customer_ids, trade_date}`) upserts `lth_pvr.decisions_daily` with `band_source='sth_cb'` and chains `ef_create_order_intents {customer_ids}` → execute → poll. `ef_resume_pipeline {strategy:'sth_cb'}`; `get_pipeline_status().sth_cb`. **Every** "LTH_PVR only" gate (trigger `enforce_lth_pvr_customer`, HWM, fee RPCs, fee/USDPC EFs) must admit STH_CB — use `IN ('LTH_PVR','STH_CB')`; only bear-pause admin functions and `ef_generate_decisions` stay LTH-only. `customer_strategies.config_key` FK → `sth_cb.tracker_config` (default `hybrid_v2_2`); `ef_confirm_strategy` defaults USDPC on for STH_CB. Portal state via `public.get_customer_strategy_state`. `ef_create_order_intents` skips decisions whose intent already exists today — never rely on re-running it to re-size
 
 ### 3. VALR Exchange Integration
 
@@ -352,5 +353,5 @@ const { data } = await supabase.schema('lth_pvr').from('decisions_daily').select
 
 ---
 
-**Last Updated:** 2026-11-03 (STH_CB Hybrid v2.2 is the public product: website pages + public back-tester backend; previously 2026-10-24 STH_CB MVP)  
+**Last Updated:** 2026-11-04 (STH_CB wired into the live pipeline + onboarding; previously 2026-11-03 website/public back-tester)  
 **For detailed architecture, see:** [docs/SDD_v0.6.md](docs/SDD_v0.6.md)

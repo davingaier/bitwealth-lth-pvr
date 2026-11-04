@@ -80,13 +80,13 @@ Deno.serve(async (req: Request) => {
   const todayStr = yyyymmdd(new Date());
   const cfg = await loadUsdpcConfig(sb);
 
-  // Enabled customers for the LTH_PVR strategy.
+  // Enabled customers (LTH_PVR or STH_CB).
   let csQuery = sb
     .schema("public")
     .from("customer_strategies")
     .select("customer_id")
     .eq("org_id", org_id)
-    .eq("strategy_code", "LTH_PVR")
+    .in("strategy_code", ["LTH_PVR", "STH_CB"])
     .eq("usdpc_enabled", true);
   if (targetCustomerId != null) csQuery = csQuery.eq("customer_id", targetCustomerId);
   const { data: csRows, error: csErr } = await csQuery;

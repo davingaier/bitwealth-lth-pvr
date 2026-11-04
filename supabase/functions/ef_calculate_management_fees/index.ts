@@ -48,13 +48,13 @@ Deno.serve(async () => {
 
     console.log(`Management fees for ${lastMonthStr} (period end ${lastDayStr}); quarterEnd=${isQuarterEnd} yearEnd=${isYearEnd}`);
 
-    // All active, live LTH_PVR customers (plan resolved per-customer as-of the month).
+    // All active, live customers on a supported strategy (plan resolved per-customer as-of the month).
     const { data: activeStrategies, error: strategyError } = await supabase
       .schema("public")
       .from("customer_strategies")
       .select("customer_id")
       .eq("org_id", orgId)
-      .eq("strategy_code", "LTH_PVR")
+      .in("strategy_code", ["LTH_PVR", "STH_CB"])
       .eq("status", "active")
       .eq("live_enabled", true);
 

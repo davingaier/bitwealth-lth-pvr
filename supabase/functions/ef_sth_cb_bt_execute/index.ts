@@ -181,7 +181,8 @@ Deno.serve(async (req) => {
     }
     const tag = <T extends object>(rows: T[]) => rows.map((r) => ({ bt_run_id, org_id, ...r }));
     await bulkInsert(sbBt, "bt_ledger", tag(sim.ledger));
-    await bulkInsert(sbBt, "bt_results_daily", tag(sim.results));
+    // signal_* fields are live-pipeline metadata (consumed by ef_sth_cb_tracker); bt_results_daily has no columns for them.
+    await bulkInsert(sbBt, "bt_results_daily", tag(sim.results.map(({ signal_target_alloc: _a, signal_rule: _r, signal_note: _n, ...row }) => row)));
     await bulkInsert(sbBt, "bt_std_dca_ledger", tag(sim.stdLedger));
     await bulkInsert(sbBt, "bt_std_dca_balances", tag(sim.stdBalances));
     await bulkInsert(sbBt, "bt_hodl_ledger", tag(sim.hodlLedger));
