@@ -8,11 +8,13 @@
 --   dark   https://wqnmxpooabmedvtackji.supabase.co/storage/v1/object/public/branding/bitwealth_logo_ondark_cropped.png
 --
 -- Swap mechanics (belt and braces):
---   • two plain <img>s (light / dark), each in its own <div>; the dark one hidden inline (display:none, max-height:0,
---     overflow:hidden, mso-hide:all) — a CSS swap flips them under @media (prefers-color-scheme: dark) and Outlook.com /
---     new Outlook's [data-ogsc] / [data-ogsb]. No <picture>: new Outlook unwraps it and drops the inner img's class.
+--   • two plain <img>s (light / dark) carrying .logo-light / .logo-dark; the dark one hidden inline (display:none,
+--     mso-hide:all) — a CSS swap on PLAIN class selectors flips them under @media (prefers-color-scheme: dark) and
+--     Outlook.com / new Outlook's [data-ogsc] / [data-ogsb]. No <picture> and no wrapper <div>s (see note below).
 --   • Clients that support neither (Gmail web, Yahoo) render emails in light mode and get the light logo.
--- Applied to every row in public.email_templates that carries the inline logo; the CSS is injected before </style>.
+-- IMPORTANT (lesson from 2026-11-04): never use a greedy/non-greedy mix such as '<div[^>]*>.*?</div>' in Postgres
+-- regexp_replace — ARE makes the whole pattern greedy when the first quantifier is greedy, and it swallowed every
+-- template body up to the LAST </div>. Content had to be restored from _email_previews (tools/restore_email_templates.py).
 -- ===========================================================================
 
 DO $do$
@@ -23,25 +25,24 @@ DECLARE
   css    text;
   n      int;
 BEGIN
-  -- Two plain <img>s, each in its own wrapper, swapped purely by CSS. (A first version used <picture>; new Outlook
-  -- unwraps <picture> and drops the inner img's class, so the light logo was never hidden in dark mode.)
+  -- Two plain <img>s with the classes ON THE IMAGES (no <picture>, no wrapper <div>s): new Outlook unwraps <picture>
+  -- and drops the inner img's class, and its dark-mode CSS rewriter only honours plain class selectors (.logo-dark),
+  -- not element-qualified ones (div.logo-dark) nor max-height/overflow tricks. This is the only form that toggled
+  -- correctly in new Outlook, Apple Mail and Gmail (which has no dark hook and shows the light logo).
   block :=
-       '<div class="logo-light" style="display: block;">'
-    || '<img class="logo-light" src="' || light || '" alt="BitWealth" width="250" style="width: 250px; height: auto; display: block; margin: 0 auto; border: 0;" />'
-    || '</div>'
-    || '<div class="logo-dark" style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">'
-    || '<img class="logo-dark" src="' || dark || '" alt="BitWealth" width="250" style="width: 250px; height: auto; display: block; margin: 0 auto; border: 0;" />'
-    || '</div>';
-
+       '<img class="logo-light" src="' || light || '" alt="BitWealth" width="250" style="width: 250px; height: auto; display: block; margin: 0 auto; border: 0;" />'
+    || '<img class="logo-dark" src="' || dark || '" alt="BitWealth" width="250" style="width: 250px; height: auto; display: none; margin: 0 auto; border: 0; mso-hide: all;" />';
   css :=
-       chr(10) || '    /* Hosted logo: light by default, dark variant in dark mode (media query + Outlook.com data-ogsc/data-ogsb). */'
-    || chr(10) || '    div.logo-dark, img.logo-dark { display: none !important; max-height: 0 !important; overflow: hidden !important; }'
+       chr(10) || '    /* Hosted logo: light by default, dark variant in dark mode. Plain class selectors only — Outlook.com drops element-qualified rules. */'
+    || chr(10) || '    .logo-dark { display: none !important; }'
     || chr(10) || '    @media (prefers-color-scheme: dark) {'
-    || chr(10) || '      div.logo-light, img.logo-light { display: none !important; max-height: 0 !important; overflow: hidden !important; }'
-    || chr(10) || '      div.logo-dark, img.logo-dark { display: block !important; max-height: none !important; overflow: visible !important; }'
+    || chr(10) || '      .logo-light { display: none !important; }'
+    || chr(10) || '      .logo-dark { display: block !important; }'
     || chr(10) || '    }'
-    || chr(10) || '    [data-ogsc] div.logo-light, [data-ogsc] img.logo-light, [data-ogsb] div.logo-light, [data-ogsb] img.logo-light { display: none !important; max-height: 0 !important; overflow: hidden !important; }'
-    || chr(10) || '    [data-ogsc] div.logo-dark, [data-ogsc] img.logo-dark, [data-ogsb] div.logo-dark, [data-ogsb] img.logo-dark { display: block !important; max-height: none !important; overflow: visible !important; }'
+    || chr(10) || '    [data-ogsc] .logo-light { display: none !important; }'
+    || chr(10) || '    [data-ogsc] .logo-dark { display: block !important; }'
+    || chr(10) || '    [data-ogsb] .logo-light { display: none !important; }'
+    || chr(10) || '    [data-ogsb] .logo-dark { display: block !important; }'
     || chr(10) || '  ';
   -- 1) Replace every inline-logo <img ...data:image...> with the hosted block.
   UPDATE public.email_templates
@@ -55,7 +56,7 @@ BEGIN
   UPDATE public.email_templates
      SET body_html = regexp_replace(body_html, '</style>', css || '</style>'),
          updated_at = now()
-   WHERE body_html LIKE '%div class="logo-light"%' AND body_html LIKE '%</style>%' AND body_html NOT LIKE '%div.logo-dark, img.logo-dark { display: none%';
+   WHERE body_html LIKE '%<img class="logo-light"%' AND body_html LIKE '%</style>%' AND body_html NOT LIKE '%/* Hosted logo:%';
   GET DIAGNOSTICS n = ROW_COUNT;
   RAISE NOTICE 'swap css added to % templates', n;
 
@@ -63,7 +64,7 @@ BEGIN
   UPDATE public.email_templates
      SET body_html = regexp_replace(body_html, '<head>', '<head><style>' || css || '</style>'),
          updated_at = now()
-   WHERE body_html LIKE '%div class="logo-light"%' AND body_html NOT LIKE '%</style>%' AND body_html LIKE '%<head>%';
+   WHERE body_html LIKE '%<img class="logo-light"%' AND body_html NOT LIKE '%</style>%' AND body_html LIKE '%<head>%';
 END $do$;
 
 -- kyc_finova_invite has a permanent blue-gradient header (no light variant), so the on-dark logo replaces its text wordmark.

@@ -20,11 +20,19 @@ subaccounts **"{name} {surname}"** (display_name for entities; sanitised to VALR
 **Email logo.** Gmail does not render `data:` URIs, so the inline base64 logo showed as a broken image in every
 template. `20261104_email_logo_hosted.sql` uploads nothing itself — the two cropped logos were pushed to the public
 `branding` bucket (`bitwealth_logo_transparent_cropped.png` light, `bitwealth_logo_ondark_cropped.png` dark) — and
-rewrites all 24 logo-bearing templates to a hosted pair: `<picture><source media="(prefers-color-scheme: dark)">` +
-light `<img class="logo-light">` fallback, plus a hidden `<img class="logo-dark">` toggled by
-`@media (prefers-color-scheme: dark)` and Outlook.com's `[data-ogsc]`. Templates shrank from ~95 KB to ~7.5 KB.
-`kyc_finova_invite` (permanent blue header) gets the on-dark logo in place of its text wordmark. The STH CB template
-migration now derives the shell logo from either form so it stays re-runnable. Verification emails
+rewrites all 24 logo-bearing templates to a hosted pair of plain `<img class="logo-light">` / `<img class="logo-dark"
+style="display:none">` toggled by `.logo-*` rules under `@media (prefers-color-scheme: dark)` and Outlook.com's
+`[data-ogsc]`/`[data-ogsb]`. Three rounds were needed: (1) `<picture>` — new Outlook unwraps it and drops the inner
+img's class, so both logos showed; (2) wrapper `<div>`s with element-qualified selectors and `max-height` — Outlook's
+dark-mode CSS rewriter drops those rules, so only the light logo showed; (3) the plain img pair above — correct.
+**Incident:** round 3's `regexp_replace('<div[^>]*>.*?</div>…')` went greedy (Postgres ARE takes the greediness of
+the first quantifier) and deleted every template body up to the last `</div>`. Restored with
+`tools/restore_email_templates.py` from `_email_previews/` (25 Apr DB dump; sample values reversed per template using
+the real placeholder contract from `email_logs.template_data`), with per-template splicing for the four templates
+redesigned after April (`prospect_confirmation`, `kyc_portal_registration`, `kyc_documents_uploaded_notification`,
+`prospect_notification`) validated against the untouched DB head/footer; `deposit_instructions_zar_only` re-derived via
+its original migration; the 7 STH CB templates regenerated. Templates shrank from ~95 KB to ~7.5 KB.
+`kyc_finova_invite` (permanent blue header) gets the on-dark logo in place of its text wordmark. Verification emails
 (`strategy_switch_confirmation`, `registration_complete_welcome`) sent to admin@bitwealth.co.za.
 
 ### v0.6.184 – Back-tester aligned with Policy A (joining rule + contribution top-ups); STH CB email templates

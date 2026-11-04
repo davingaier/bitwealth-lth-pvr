@@ -55,7 +55,7 @@ BEGIN
   IF src IS NULL THEN RAISE EXCEPTION 'registration_complete_welcome template missing — cannot derive shell'; END IF;
   pre    := substring(src from '^(.*?)<!-- Header -->');
   -- Logo: hosted light/dark block (20261104_email_logo_hosted.sql) or, on a fresh DB, the legacy inline image.
-  logo   := COALESCE(substring(src from '(<div class="logo-light".*?</div><div class="logo-dark".*?</div>)'),
+  logo   := COALESCE(substring(src from '(<img class="logo-light"[^>]*><img class="logo-dark"[^>]*>)'),
                      substring(src from '(<img src="data:image[^>]*>)'));
   suffix := substring(src from '(<!-- Footer -->.*)$');
   IF pre IS NULL OR logo IS NULL OR suffix IS NULL THEN RAISE EXCEPTION 'could not parse the template shell'; END IF;
