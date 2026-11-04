@@ -7,6 +7,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
+import { customerStrategy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -328,8 +329,9 @@ serve(async (_req) => {
           download_url: statementData.downloadUrl ?? "",
         };
 
-        // 7. Send via shared email pipeline
+        // 7. Send via shared email pipeline (strategy-specific template variant for STH CB clients)
         try {
+          const stmtStrat = await customerStrategy(supabase, customer.customer_id).catch(() => null);
           const emailResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
             method: "POST",
             headers: {
@@ -337,7 +339,7 @@ serve(async (_req) => {
               Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
             },
             body: JSON.stringify({
-              template_key: "monthly_statement",
+              template_key: templateKeyFor("monthly_statement", stmtStrat?.code),
               to_email: customer.email,
               data: templateData,
             }),

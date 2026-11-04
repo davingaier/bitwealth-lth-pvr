@@ -5148,6 +5148,12 @@
             <label for="btCbSliceGain"><strong>Slice only above last buy by (%):</strong></label>
             <input id="btCbSliceGain" type="number" min="0" max="50" step="0.5" value="" placeholder="blank = off · 0 = simply above" title="v2.2 no-loss ladder: a partial scale-out slice is only taken when price is at least this % above the last buy / re-buy price. Full exits are unaffected.">
 
+            <label for="btCbJoinPolicy"><strong>Joining rule (start of run):</strong></label>
+            <select id="btCbJoinPolicy" title="Policy A (default): the run adopts the strategy's state on day 0 — buys immediately if the strategy is in the market, waits in cash if not; later deposits are deployed the same way. Next signal: cash is held until the strategy's target allocation next increases (fresh entry / dip re-buy). Mirrors the live client join_policy.">
+              <option value="immediate" selected>Immediate — adopt current state (Policy A)</option>
+              <option value="next_signal">Wait for next entry signal</option>
+            </select>
+
             <label for="btCbMomoEnabled"><strong>Momentum-gated sells:</strong></label>
             <label style="display:flex;align-items:center;gap:.4rem;font-weight:400;">
               <input id="btCbMomoEnabled" type="checkbox" checked title="Defer a sell until ROC(n) ≤ threshold (momentum has turned)">
@@ -8171,6 +8177,7 @@
       set('dipRebuyMax', opt('btCbDipMax') == null ? null : Math.trunc(opt('btCbDipMax')));
       const cool = opt('btCbScaleCool'); if (cool != null && cool > 0) extras.scaleCooldownDays = Math.trunc(cool);
       const sliceGain = opt('btCbSliceGain'); if (sliceGain != null) extras.sliceAboveLastBuyPct = sliceGain / 100;
+      if ((document.getElementById('btCbJoinPolicy')?.value || 'immediate') === 'next_signal') extras.joinPolicy = 'next_signal';
 
       // Advanced JSON is merged LAST so it can override anything above
       const extrasTxt = (document.getElementById('btCbExtras')?.value || '').trim();
@@ -11373,11 +11380,11 @@
       const btn = document.getElementById('cmSwitchBtn'); const out = document.getElementById('cmSwitchResult');
       btn.disabled = true; out.textContent = 'Switching…';
       try {
-        const { data, error } = await supabaseClient.rpc('switch_customer_strategy', { p_customer_id: id, p_to_strategy_code: to, p_options: opts, p_reason: reason });
+        const { data, error } = await supabaseClient.functions.invoke('ef_switch_strategy', { body: { customer_id: id, to_strategy_code: to, options: opts, reason } });
         if (error) throw error;
         if (!data?.ok) throw new Error(data?.error || 'Switch failed');
-        out.textContent = `✅ Switched ${data.from} → ${data.to}. ${data.next || ''}`;
-        cmEditorAlert('success', `Strategy switched to ${data.to}. ${data.next || ''}`);
+        out.textContent = `✅ Switched ${data.from} → ${data.to}. ${data.next || ''} Client email: ${data.client_email || '—'}.`;
+        cmEditorAlert('success', `Strategy switched to ${data.to}. ${data.next || ''} (Client email: ${data.client_email || '—'})`);
         const profile = await cmFetchFullProfile(id);
         cmEditorState = { customerId: id, profile };
         cmFillEditor(profile);

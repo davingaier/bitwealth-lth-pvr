@@ -12,6 +12,7 @@ import { signVALR } from "../_shared/valr.ts";
 import { sendEmail } from "../_shared/smtp.ts";
 import { getWithdrawalOutcomeEmail } from "../_shared/email-templates.ts";
 import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
+import { customerStrategy, sthCbSignalState, sthCbStateCopy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -1226,8 +1227,18 @@ Deno.serve(async (req) => {
                     day: "numeric" 
                   });
 
+                  // Strategy-specific template + current STH CB state ("your deposit will be invested / waits in cash")
+                  const strat = await customerStrategy(supabase, customer.customer_id).catch(() => null);
+                  const stateData: Record<string, string> = {};
+                  if (strat?.code === "STH_CB") {
+                    const sig = await sthCbSignalState(supabase, orgId!, strat.configKey).catch(() => ({ date: null, inMarket: false, targetAlloc: 0, rule: "Hold" }));
+                    const copy = sthCbStateCopy(sig, strat.joinPolicy, "deposit");
+                    stateData.strategy_state_headline = copy.headline;
+                    stateData.strategy_state_detail = copy.detail;
+                  }
+
                   const sent = await sendTemplateEmail({
-                    template_key: "subsequent_deposit_notification",
+                    template_key: templateKeyFor("subsequent_deposit_notification", strat?.code),
                     to_email: customer.email,
                     data: {
                       first_name: customer.first_names,
@@ -1237,6 +1248,7 @@ Deno.serve(async (req) => {
                       portal_url: "https://bitwealth.co.za/customer-portal.html",
                       website_url: "https://bitwealth.co.za",
                       to_email: customer.email,
+                      ...stateData,
                     },
                   });
 

@@ -535,6 +535,10 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
   let pending: SthCbSignal | null = p.executionLag === 1 ? lastSignal : null;
   let position = "cash";
   let currentAlloc = 0;
+  // Joining rule (Policy A by default). For 'next_signal' we need the previous target to detect an INCREASE.
+  const joinNextSignal = config.joinPolicy === "next_signal";
+  let everBought = false;
+  let lastExecTarget = lastSignal ? (lastSignal.inMarket ? lastSignal.targetAlloc : 0) : 0;
 
   for (let i = 0; i < prices.length; i++) {
     const row = prices[i];
@@ -598,7 +602,14 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
 
     if (exec && px > 0) {
       const target = exec.inMarket ? exec.targetAlloc : 0;
-      if (target >= 1) {
+      const targetIncreased = target > lastExecTarget + 1e-9;
+      lastExecTarget = target;
+      // join_policy = next_signal: before the first BTC purchase, only a fresh entry / re-buy (target increase) counts.
+      const joinWait = joinNextSignal && !everBought && target > 0 && !targetIncreased;
+      if (joinWait) {
+        rule = "Join: waiting for next entry signal";
+        note = `join_policy=next_signal — strategy in market (${Math.round(target * 100)}% BTC) but no new entry today; cash held`;
+      } else if (target >= 1) {
         // All-in: deploy every unit of cash (identical to the MVP behaviour)
         const buyingPower = usdtBal + (p.usdpcEnabled ? usdpcBal * usdpcPriceToday : 0);
         if (buyingPower >= USDT_DUST) {
@@ -613,6 +624,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
               if (exec.rule === "Hold") { rule = `Initial deploy (${exec.position} from warm-up)`; note = exec.note; }
             }
             buyBtc(tradeUsdt, px, tradeDate, rule);
+            everBought = true;
           }
         } else if (!wasInMarket) {
           note = `${exec.note} — no cash to deploy`;
@@ -638,15 +650,21 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
         const delta = desiredBtcUsd - btcBal * px;
         const driftBand = typeof config.rebalanceDrift === "number" ? Math.max(USDT_DUST, config.rebalanceDrift * nav) : Infinity;
         const allocChanged = Math.abs(target - currentAlloc) > 1e-9;
-        if (delta > driftBand || (allocChanged && delta > USDT_DUST)) {
+        // Policy A: new money (upfront on day 0, monthly deposits) is deployed up to the target even when the target
+        // itself has not changed — matches the live engine, which tops a client up whenever their allocation is
+        // materially below target. (A constant-mix drift rebalance remains opt-in via config.rebalanceDrift.)
+        const contribTopUp = contribNetToday > 0 && delta > USDT_DUST;
+        if (delta > driftBand || ((allocChanged || contribTopUp) && delta > USDT_DUST)) {
           ensureUsdt(delta, tradeDate);
           const tradeUsdt = Math.min(delta, Math.max(0, usdtBal));
           if (tradeUsdt > USDT_DUST) {
             action = "BUY";
             amountPct = (usdtBal + usdpcBal * usdpcPriceToday + tradeUsdt) > 0 ? tradeUsdt / (usdtBal + usdpcBal * usdpcPriceToday + tradeUsdt) : 1;
-            if (!allocChanged) { rule = `Rebalance to ${Math.round(target * 100)}% BTC`; note = `drift ${(delta / nav * 100).toFixed(1)}% of NAV`; }
+            if (!allocChanged && contribTopUp) { rule = "Deploy contribution"; note = `At ${Math.round(target * 100)}% BTC target — new cash deployed to target`; }
+            else if (!allocChanged) { rule = `Rebalance to ${Math.round(target * 100)}% BTC`; note = `drift ${(delta / nav * 100).toFixed(1)}% of NAV`; }
             else tradesCount++;
             buyBtc(tradeUsdt, px, tradeDate, rule);
+            everBought = true;
           }
         } else if (delta < -driftBand || (allocChanged && delta < -USDT_DUST)) {
           const btcToSell = Math.min(btcBal, -delta / px);

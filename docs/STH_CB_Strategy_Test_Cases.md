@@ -234,6 +234,18 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | SEP-11 | Ledger + balances after fills | VALR = DB | BTC 0.00010209 both sides; USDT/USDPC cents; NAV $7.89 | PASS |
 | SEP-12 | Intents carry the client's own exchange account | subaccount 1456357666877767680 | code fixed (earlier intents of the day were tagged "Integration TestUser") | PASS (static) |
 
+### 1.8 Policy A in the back-tester + STH CB emails (2026-11-04, SDD v0.6.184)
+
+| ID | Description | Expected | Actual | Status |
+|----|-------------|----------|--------|--------|
+| EML-01 | Simulator regression after Policy A changes: lump $1k 2017→ (v2.2) | identical to before (no contributions) | 0 partial top-ups; unchanged | PASS |
+| EML-02 | $2.4k + $200/mo 2019-11→2026-11 | contributions at partial allocation deployed | 7 top-ups, NAV $604,009 (was $603,733) | PASS |
+| EML-03 | Join 2026-07-15 $10k: `joinPolicy` immediate vs next_signal | buy day 1 vs wait in cash | $11,626 (BUY "Initial deploy from warm-up") vs $10,203 (0 trades) | PASS |
+| EML-04 | Engine + live unit tests after the simulator change | all pass | 57/57 | PASS |
+| EML-05 | Migration `20261104_sth_cb_email_templates`: 7 templates built from the live shell | logo + footer present, placeholders intact | 7 rows, 94–96 KB each, logo ✓ | PASS |
+| EML-06 | Test renders `strategy_switch_confirmation` + `sth_cb_position_change` via `ef_send_email` to the admin mailbox (customer 31 data) | delivered | message ids d0a89cf9… and 61f498f8… | PASS |
+| EML-07 | `ef_switch_strategy` end-to-end from the Admin UI (switch + client email + admin email) | — | next real switch | SKIP |
+
 ---
 
 ## 2. Database / RPC

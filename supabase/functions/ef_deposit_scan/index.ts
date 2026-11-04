@@ -10,6 +10,7 @@ import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
+import { customerStrategy, sthCbSignalState, sthCbStateCopy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -349,8 +350,18 @@ Deno.serve(async (req) => {
               day: "numeric" 
             });
             
+            // Strategy-specific template (STH CB clients get the all-in/all-out wording + current strategy state).
+            const strat = await customerStrategy(supabase, customer.customer_id).catch(() => null);
+            const stateData: Record<string, string> = {};
+            if (strat?.code === "STH_CB") {
+              const sig = await sthCbSignalState(supabase, customer.org_id ?? orgId, strat.configKey).catch(() => ({ date: null, inMarket: false, targetAlloc: 0, rule: "Hold" }));
+              const copy = sthCbStateCopy(sig, strat.joinPolicy, "welcome");
+              stateData.strategy_state_headline = copy.headline;
+              stateData.strategy_state_detail = copy.detail;
+            }
+
             const custSent = await sendTemplateEmail({
-              template_key: "registration_complete_welcome",
+              template_key: templateKeyFor("registration_complete_welcome", strat?.code),
               to_email: customer.email,
               data: {
                 first_name: customer.first_names,
@@ -359,6 +370,7 @@ Deno.serve(async (req) => {
                 deposit_date: depositDate,
                 portal_url: `${websiteUrl}/customer-portal.html`,
                 website_url: websiteUrl,
+                ...stateData,
               },
             });
 

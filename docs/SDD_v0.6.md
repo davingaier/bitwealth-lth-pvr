@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-04 (v0.6.183)
+**Last updated:** 2026-11-04 (v0.6.184)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.184 – Back-tester aligned with Policy A (joining rule + contribution top-ups); STH CB email templates
+**Date:** 2026-11-04 · **Status:** ✅ DONE
+
+**Simulator (`_shared/sth_cb_simulator.ts`).** Day-0 behaviour was already Policy A (adopt the warm-up state:
+"Initial deploy from warm-up" when in the market, buy to a partial ladder target, wait in cash otherwise). Two gaps
+versus the live engine closed: (1) contributions arriving while the strategy sits at a **partial** ladder allocation
+are now deployed up to the target ("Deploy contribution — new cash deployed to target"; previously left in cash
+until the target changed); (2) new config flag **`joinPolicy: 'immediate' | 'next_signal'`** (in `extras`, inert in
+`decideSthCb`) — `next_signal` holds cash until the executed target allocation next *increases*, exactly like
+`customer_strategies.join_policy`. Admin back-tester form gains a **Joining rule** select. Regression: lump-sum runs
+unchanged (0 top-ups); $2.4k + $200/mo 2019-11→2026-11 gains 7 top-ups, NAV $603,733 → $604,009 (+$276); joining
+2026-07-15 with $10k: immediate → buys day 1 ($11,626), next_signal → still in cash ($10,203). Lab/one-pager figures
+were not regenerated (sub-0.1 % effect).
+
+**Email templates (`20261104_sth_cb_email_templates.sql`).** Seven `public.email_templates` rows built from the live
+`registration_complete_welcome` shell (styles + inline logo copied at migration time): `strategy_switch_confirmation`
+(client: from/to, holdings at switch, joining rule, state-dependent "what happens next", how the strategy works,
+what stays the same), `strategy_switch_admin_notification`, `registration_complete_welcome_sth_cb`,
+`subsequent_deposit_notification_sth_cb` (both with a state-dependent blue box: invested on next run / waits in cash /
+waiting for next entry / brought to N %), `sth_cb_position_change` (entry / exit / scale-out / re-buy with a
+plain-language reason — no thresholds), and brand-only clones `kyc_verified_notification_sth_cb`,
+`monthly_statement_sth_cb`. New `_shared/strategyEmail.ts` (`templateKeyFor`, `customerStrategy`,
+`sthCbSignalState`, `sthCbStateCopy`, `sthCbReason`, `sthCbActionCopy`, strategy summaries) routes
+`ef_deposit_scan`, `ef_sync_valr_transactions`, `ef_approve_kyc` and `ef_monthly_statement_generator` to the
+`_sth_cb` variant for STH_CB clients. New **`ef_switch_strategy`** (admin auth → `switch_customer_strategy` as
+service role → client + admin emails; the Admin UI switch button now calls it). `ef_sth_cb_generate_decisions`
+sends `sth_cb_position_change` after the order chain for every BUY/SELL (reads the order outcome: filled @ price /
+being executed; `notify:false` suppresses). Test renders of the switch confirmation and position change were sent
+to the admin mailbox. Tests EML-01…06.
 
 ### v0.6.183 – STH CB schema separation, in-place strategy switching, first live STH CB trade (and the LTH execution bugs it exposed)
 **Date:** 2026-11-04 · **Status:** ✅ DONE — customer 31 switched LTH_PVR → STH_CB and bought in live

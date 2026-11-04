@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+import { customerStrategy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -105,9 +106,10 @@ Deno.serve(async (req) => {
       website_url: "https://bitwealth.co.za",
     };
 
-    // Send email via ef_send_email
+    // Send email via ef_send_email (strategy-specific variant for STH CB clients)
     let emailSent = false;
     let emailError = null;
+    const kycStrat = await customerStrategy(supabase, customer.customer_id).catch(() => null);
 
     try {
       const emailResponse = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
@@ -117,7 +119,7 @@ Deno.serve(async (req) => {
           "Authorization": `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
-          template_key: "kyc_verified_notification",
+          template_key: templateKeyFor("kyc_verified_notification", kycStrat?.code),
           to_email: customer.email,
           data: emailData,
         }),

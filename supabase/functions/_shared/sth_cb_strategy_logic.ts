@@ -154,6 +154,15 @@ export interface SthCbConfig {
   reentryBelowLastExitPct?: number;
   /** No-loss exit: R2 / R3 exits only when price ≥ last buy price × (1 + pct). Trailing stop, ladder full exit and R4 are unaffected. */
   exitMinGainPct?: number;
+
+  // ── Live-client joining rule (2026-11-04, Policy A) — simulator only, inert in decideSthCb ───
+  /**
+   * 'immediate' (default, Policy A): the run adopts the strategy's warm-up state on day 0 — buys to the current target
+   * allocation if the strategy is in the market, waits in cash otherwise — and deploys later contributions the same way.
+   * 'next_signal': cash is held until the strategy's target allocation next INCREASES (a fresh entry or dip re-buy);
+   * once the first BTC has been bought the run follows the strategy normally. Mirrors customer_strategies.join_policy.
+   */
+  joinPolicy?: "immediate" | "next_signal";
 }
 
 export interface SthCbState {

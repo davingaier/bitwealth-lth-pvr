@@ -22,6 +22,8 @@ import { getServiceClient } from "./client.ts";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { LiveCustomer, LiveSignal, planCustomerDecision } from "../_shared/sth_cb_live.ts";
+import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
+import { sthCbActionCopy, sthCbReason } from "../_shared/strategyEmail.ts";
 
 const ORG_FALLBACK = "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
 const DEFAULT_CONFIG_KEY = "hybrid_v2_2";
@@ -160,7 +162,45 @@ Deno.serve(async (req) => {
       }
     }
 
-    const summary = { ok: true, trade_date: tradeDate, signal_date: signalDate, dry_run: dryRun, customers: customers.length, decisions_written: written, buys: planned.filter((p) => p.action === "BUY").length, sells: planned.filter((p) => p.action === "SELL").length, holds: planned.filter((p) => p.action === "HOLD").length, signals: Object.fromEntries(signals), planned, chained };
+    const summary = { ok: true, trade_date: tradeDate, signal_date: signalDate, dry_run: dryRun, customers: customers.length, decisions_written: written, buys: planned.filter((p) => p.action === "BUY").length, sells: planned.filter((p) => p.action === "SELL").length, holds: planned.filter((p) => p.action === "HOLD").length, signals: Object.fromEntries(signals), planned, chained, emails: [] as string[] };
+
+    // ── Client notifications: one "position change" email per BUY/SELL (not on dry runs, not when the intent
+    //    step failed). The order outcome is read back so the email can say "filled" vs "being executed".
+    if (!dryRun && actionable.length && body?.notify !== false) {
+      const WEBSITE_URL = Deno.env.get("WEBSITE_URL") ?? "https://bitwealth.co.za";
+      const intentsOk = chained.length === 0 || chained[0]?.ok === true;
+      for (const cid of actionable) {
+        try {
+          const p = planned.find((x) => x.customerId === cid) as Record<string, unknown> | undefined;
+          if (!p || !intentsOk) continue;
+          const { data: cust } = await sb.schema("public").from("customer_details").select("first_names, email").eq("customer_id", cid).maybeSingle();
+          if (!cust?.email) continue;
+          const { data: ord } = await sb.schema("lth_pvr").from("exchange_orders")
+            .select("status, price, qty, pair, order_intents!inner(customer_id, trade_date, pair)")
+            .eq("order_intents.customer_id", cid).eq("order_intents.trade_date", tradeDate).neq("pair", "USDPC/USDT")
+            .order("submitted_at", { ascending: false }).limit(1);
+          const o = ord?.[0];
+          const st = String(o?.status ?? "").toLowerCase();
+          const orderStatusText = st === "filled" ? `Filled on VALR at about $${Number(o?.price ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} per BTC`
+            : st === "submitted" ? "Your order is being executed on VALR and normally fills within minutes"
+            : st ? `Order status: ${st} — our team is monitoring it` : "Your order is being placed on VALR";
+          const copy = sthCbActionCopy(p.action as "BUY" | "SELL", Number(p.amountPct), Number(p.currentAlloc), Number(p.targetAlloc));
+          const r = await sendTemplateEmail({
+            template_key: "sth_cb_position_change",
+            to_email: cust.email,
+            data: {
+              first_name: cust.first_names ?? "", trade_date: tradeDate, action_headline: copy.headline, action_detail: copy.detail,
+              order_status_text: orderStatusText, reason_text: sthCbReason(String(p.rule ?? "")), implication_text: copy.implication,
+              portal_url: `${WEBSITE_URL}/customer-portal.html`, website_url: WEBSITE_URL,
+            },
+          });
+          summary.emails.push(`#${cid}: ${r.ok ? "sent" : `failed ${r.status}`}`);
+          if (!r.ok) await logAlert(sb, COMPONENT, "warn", `Position-change email failed for customer ${cid}`, { status: r.status, error: r.error }, org_id, cid);
+        } catch (e) {
+          summary.emails.push(`#${cid}: error ${String((e as Error)?.message ?? e)}`);
+        }
+      }
+    }
     console.info(`${COMPONENT}:`, JSON.stringify({ ...summary, planned: undefined }));
     return json(summary);
   } catch (e) {
