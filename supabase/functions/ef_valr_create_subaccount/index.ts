@@ -144,15 +144,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Create VALR subaccount label
+    // Create VALR subaccount label — strategy-agnostic (2026-11-04). VALR has no rename API, and a client can later be
+    // switched to another strategy (public.switch_customer_strategy), so the label is the client's name only.
     // Note: VALR only allows alphanumeric and spaces (no hyphens, underscores, or special chars),
     // so sanitise the WHOLE label — names can contain hyphens/apostrophes and entities have no personal name.
-    const strategyName = strategy.strategy_code.replace(/_/g, ' '); // Replace underscores with spaces
     const clientLabel = customer.display_name || [customer.first_names, customer.last_name].filter(Boolean).join(' ');
-    const label = `${clientLabel} ${strategyName}`
+    const label = `${clientLabel}`
       .replace(/[^A-Za-z0-9 ]+/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim();
+      .trim() || `BitWealth client ${customer_id}`;
 
     let subaccountId: string;
 

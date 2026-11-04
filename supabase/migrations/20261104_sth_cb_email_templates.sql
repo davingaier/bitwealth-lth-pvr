@@ -54,7 +54,9 @@ BEGIN
   SELECT t.body_html INTO src FROM public.email_templates t WHERE t.template_key = 'registration_complete_welcome';
   IF src IS NULL THEN RAISE EXCEPTION 'registration_complete_welcome template missing — cannot derive shell'; END IF;
   pre    := substring(src from '^(.*?)<!-- Header -->');
-  logo   := substring(src from '(<img src="data:image[^>]*>)');
+  -- Logo: hosted light/dark block (20261104_email_logo_hosted.sql) or, on a fresh DB, the legacy inline image.
+  logo   := COALESCE(substring(src from '(<div class="logo-light".*?</div><div class="logo-dark".*?</div>)'),
+                     substring(src from '(<img src="data:image[^>]*>)'));
   suffix := substring(src from '(<!-- Footer -->.*)$');
   IF pre IS NULL OR logo IS NULL OR suffix IS NULL THEN RAISE EXCEPTION 'could not parse the template shell'; END IF;
 

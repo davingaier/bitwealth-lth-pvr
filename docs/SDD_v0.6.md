@@ -3,11 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-04 (v0.6.184)
+**Last updated:** 2026-11-04 (v0.6.185)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.185 – Strategy-agnostic VALR subaccount labels; hosted light/dark email logo on every template
+**Date:** 2026-11-04 · **Status:** ✅ DONE
+
+**Subaccount labels.** VALR's API has no rename call (only register / list / transfer), so a subaccount named
+"{name} {surname} LTH PVR" would be wrong after a strategy switch. `ef_valr_create_subaccount` now labels new
+subaccounts **"{name} {surname}"** (display_name for entities; sanitised to VALR's alphanumeric rule; falls back to
+"BitWealth client {id}"). Existing subaccounts keep their VALR label; `exchange_accounts.label` is informational only.
+
+**Email logo.** Gmail does not render `data:` URIs, so the inline base64 logo showed as a broken image in every
+template. `20261104_email_logo_hosted.sql` uploads nothing itself — the two cropped logos were pushed to the public
+`branding` bucket (`bitwealth_logo_transparent_cropped.png` light, `bitwealth_logo_ondark_cropped.png` dark) — and
+rewrites all 24 logo-bearing templates to a hosted pair: `<picture><source media="(prefers-color-scheme: dark)">` +
+light `<img class="logo-light">` fallback, plus a hidden `<img class="logo-dark">` toggled by
+`@media (prefers-color-scheme: dark)` and Outlook.com's `[data-ogsc]`. Templates shrank from ~95 KB to ~7.5 KB.
+`kyc_finova_invite` (permanent blue header) gets the on-dark logo in place of its text wordmark. The STH CB template
+migration now derives the shell logo from either form so it stays re-runnable. Verification emails
+(`strategy_switch_confirmation`, `registration_complete_welcome`) sent to admin@bitwealth.co.za.
 
 ### v0.6.184 – Back-tester aligned with Policy A (joining rule + contribution top-ups); STH CB email templates
 **Date:** 2026-11-04 · **Status:** ✅ DONE
