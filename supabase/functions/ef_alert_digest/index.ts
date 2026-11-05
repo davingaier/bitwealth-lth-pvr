@@ -51,6 +51,38 @@ Deno.serve(async (req: Request) => {
       return new Response("ORG_ID missing", { status: 500 });
     }
 
+  // 2026-11-05: real-time path. The alert_events_notify_security trigger calls us with
+  // { immediate: true, alert_id } for critical security alerts so they do not wait for the morning digest.
+  if (body.immediate === true && body.alert_id) {
+    const { data: one, error: oneErr } = await sb
+      .schema("public")
+      .from("alert_events")
+      .select("alert_id, created_at, severity, component, message, context, customer_id")
+      .eq("alert_id", body.alert_id)
+      .maybeSingle();
+    if (oneErr || !one) {
+      return new Response(JSON.stringify({ error: oneErr?.message ?? "alert not found" }), { status: 404 });
+    }
+    const subject = `🚨 BitWealth SECURITY ALERT — ${one.component}: ${String(one.message).slice(0, 80)}`;
+    const text = [
+      `Severity:  ${one.severity}`,
+      `Component: ${one.component}`,
+      `Customer:  ${one.customer_id ?? "-"}`,
+      `When:      ${one.created_at}`,
+      ``,
+      one.message,
+      ``,
+      `Context: ${JSON.stringify(one.context ?? {}, null, 2)}`,
+      ``,
+      `Open the Admin UI → Administration → Alerts to review or resolve.`,
+    ].join("\n");
+    await sendEmail(subject, text);
+    await sb.schema("public").from("alert_events").update({ notified_at: new Date().toISOString() }).eq("alert_id", one.alert_id);
+    return new Response(JSON.stringify({ ok: true, immediate: true, alert_id: one.alert_id }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // 1) Load ALL currently-open error/critical alerts (daily summary model — 2026-05-02)
   // Previously we filtered by `notified_at IS NULL`, but combined with the dedup trigger
   // (which preserves notified_at on UPDATE) that meant chronic open errors only ever

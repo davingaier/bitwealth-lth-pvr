@@ -357,3 +357,10 @@ Observations for refinement discussion:
 | SEC-09 | Credential-read anomaly: ≥8 distinct customers / 10 min | critical alert | logic verified via valr_credential_access_log + alert insert | PASS |
 | SEC-10 | Legacy service_role JWT at gateway | 401 | 401 Invalid API key | PASS |
 | SEC-11 | Advisor: new SECURITY DEFINER fns not anon/authenticated-executable | revoked | locked down in 20261105_harden_new_functions | PASS |
+| SEC-12 | `lth_pvr.valr_hmac_hex('hello','abc')` vs WebCrypto HMAC-SHA512 | identical | identical (7b458e1a…7a3e) | PASS |
+| SEC-13 | `valr_sign` for api-model customer 9 | 128-hex signature, 13-digit ts, no subaccount | as expected | PASS |
+| SEC-14 | `valr_sign` with empty master slot / subaccount customer | raises VALR_SECRET_NOT_CONFIGURED (client falls back) | raised | PASS |
+| SEC-15 | Converted signing clients type-check (8 consumers) | no errors in valrSign/valrClient/valrTransfer/valrCredentials | clean | PASS |
+| SEC-16 | `ef_sweep_usdt_to_usdpc` live via cron path after redeploy | 200, credentials resolved + logged | 200, 4 credential reads logged | PASS |
+| SEC-17 | Critical security alert → immediate email | notified_at set within seconds | 8 s | PASS |
+| SEC-18 | Trigger functions no longer anon/authenticated-executable | 33 revoked | 33 | PASS |

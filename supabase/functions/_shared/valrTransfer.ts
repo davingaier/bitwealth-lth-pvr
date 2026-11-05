@@ -5,7 +5,7 @@
 // Required Permission: "Transfer" scope on API Key
 
 import { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { signVALR } from "./valr.ts";
+import { signValrRequest } from "./valrSign.ts";
 
 export interface TransferRequest {
   fromSubaccountId: string;
@@ -47,12 +47,7 @@ export async function transferToMainAccount(
   const valrApiSecret = Deno.env.get("VALR_API_SECRET");
   const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
-  if (!testMode && (!valrApiKey || !valrApiSecret)) {
-    return {
-      success: false,
-      errorMessage: "VALR API credentials not configured"
-    };
-  }
+  // 2026-11-05: master secret lives in Vault (lth_pvr.valr_sign); env values are only a rollout fallback.
 
   // Create initial transfer log entry (status: pending)
   const { data: transferLog, error: logError } = await sb
@@ -112,25 +107,12 @@ export async function transferToMainAccount(
     const toId = request.toAccount === "main" ? 0 : request.toAccount;
     const bodyString = `{"fromId":${request.fromSubaccountId},"toId":${toId},"currencyCode":"${request.currency}","amount":"${request.amount.toString()}","allowBorrow":false}`;
 
-    const timestamp = Date.now().toString();
-    const signature = await signVALR(
-      timestamp,
-      "POST",
-      path,
-      bodyString,
-      valrApiSecret
-    );
-
-    const valrResponse = await fetch(`https://api.valr.com${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-VALR-API-KEY": valrApiKey,
-        "X-VALR-SIGNATURE": signature,
-        "X-VALR-TIMESTAMP": timestamp
-      },
-      body: bodyString
+    const { headers } = await signValrRequest({
+      customerId: null, verb: "POST", path, body: bodyString,
+      localApiKey: valrApiKey ?? null, localApiSecret: valrApiSecret ?? null,
     });
+
+    const valrResponse = await fetch(`https://api.valr.com${path}`, { method: "POST", headers, body: bodyString });
 
     // Handle empty responses (204 No Content or empty body)
     let responseData: any = {};
@@ -393,19 +375,12 @@ async function sweepFeeToPartnerMain(
     // JSON.stringify, which would corrupt the digits.
     const bodyString = `{"fromId":${ea.subaccount_id},"toId":0,"currencyCode":"${currency}","amount":"${amount.toString()}","allowBorrow":false}`;
 
-    const timestamp = Date.now().toString();
-    const signature = await signVALR(timestamp, "POST", path, bodyString, creds.apiSecret);
-
-    const res = await fetch(`${VALR_API_URL_TRANSFER}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-VALR-API-KEY": creds.apiKey,
-        "X-VALR-SIGNATURE": signature,
-        "X-VALR-TIMESTAMP": timestamp,
-      },
-      body: bodyString,
+    const { headers } = await signValrRequest({
+      customerId: (creds as { customerId?: number }).customerId ?? null, verb: "POST", path, body: bodyString,
+      localApiKey: creds.apiKey, localApiSecret: creds.apiSecret,
     });
+
+    const res = await fetch(`${VALR_API_URL_TRANSFER}${path}`, { method: "POST", headers, body: bodyString });
 
     const text = await res.text();
     let parsed: unknown = {};
@@ -689,27 +664,19 @@ export async function withdrawFeeFromCustomerAccount(
   }
 
   try {
-    const { signVALR } = await import("./valr.ts");
     const path = `/v1/wallet/crypto/${currency}/withdraw`;
     const body = {
       amount: amount.toString(),
       address: destinationAddress,
     };
     const bodyString = JSON.stringify(body);
-    const timestamp = Date.now().toString();
-    const signature = await signVALR(timestamp, "POST", path, bodyString, creds.apiSecret);
-
-    const valrResp = await fetch(`${VALR_API_URL_TRANSFER}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-VALR-API-KEY": creds.apiKey,
-        "X-VALR-SIGNATURE": signature,
-        "X-VALR-TIMESTAMP": timestamp,
-        // No X-VALR-SUB-ACCOUNT-ID for API model customers
-      },
-      body: bodyString,
+    // No X-VALR-SUB-ACCOUNT-ID for API model customers (their key is account-scoped)
+    const { headers } = await signValrRequest({
+      customerId: (creds as { customerId?: number }).customerId ?? null, verb: "POST", path, body: bodyString,
+      localApiKey: creds.apiKey, localApiSecret: creds.apiSecret,
     });
+
+    const valrResp = await fetch(`${VALR_API_URL_TRANSFER}${path}`, { method: "POST", headers, body: bodyString });
 
     const responseText = await valrResp.text();
     let responseData: Record<string, unknown> = {};

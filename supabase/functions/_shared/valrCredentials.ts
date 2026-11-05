@@ -20,7 +20,10 @@ const VAULT_KEY_MODELS: ReadonlySet<string> = new Set(["api", "finova_omnibus"])
 
 export interface ValrCredentials {
   apiKey: string;
+  /** Empty once server-side signing is active (secrets stay in Vault). Kept for legacy local signing. */
   apiSecret: string;
+  /** Lets valrSign.ts resolve the customer's own Vault key server-side. */
+  customerId?: number;
   subaccountId: string | null; // null unless the master key needs X-VALR-SUB-ACCOUNT-ID
   accountModel: ValrAccountModel;
 }
@@ -72,6 +75,7 @@ export async function resolveCustomerCredentials(
       apiSecret: row.api_secret,
       subaccountId: null,
       accountModel: row.account_model as ValrAccountModel,
+      customerId,
     };
   }
 
@@ -96,6 +100,7 @@ export async function resolveCustomerCredentials(
     apiSecret,
     subaccountId: row.subaccount_id,
     accountModel: "subaccount",
+    customerId,
   };
 }
 
@@ -108,9 +113,9 @@ export async function resolveCustomerCredentials(
  */
 export function toRequestCredentials(
   creds: ValrCredentials,
-): { apiKey: string; apiSecret: string } | null {
+): { apiKey: string; apiSecret: string; customerId?: number } | null {
   return VAULT_KEY_MODELS.has(creds.accountModel)
-    ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret }
+    ? { apiKey: creds.apiKey, apiSecret: creds.apiSecret, customerId: creds.customerId }
     : null;
 }
 

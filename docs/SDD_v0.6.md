@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-05 (v0.6.190)
+**Last updated:** 2026-11-05 (v0.6.191)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.191 – Hardening phase 2: server-side VALR signing, real-time security alerts, rotation reminders, runbook
+**Date:** 2026-11-05 · **Status:** ✅ DONE (code) · operator steps in `docs/SECURITY_RUNBOOK.md`
+
+**Server-side VALR signing (stage 1)** — `20261105_valr_server_side_signing.sql`: `lth_pvr.valr_sign(customer_id,
+verb, path, body, scope, subaccount_id)` resolves the right key (customer Vault key for api/finova; master or
+dedicated **withdraw** key for subaccount/null) and returns `{api_key, subaccount_id, ts, signature}` — the secret
+never leaves Postgres. HMAC-SHA-512 via pgcrypto proven byte-identical to WebCrypto (self-test in the migration).
+Empty Vault slots `valr_master_api_key/secret`, `valr_withdraw_api_key/secret` created for the operator to fill.
+`_shared/valrSign.ts` (`signValrRequest`) calls the RPC, infers scope from `/withdraw` paths, falls back to local HMAC
+only while the RPC reports `VALR_SECRET_NOT_CONFIGURED` **and** a local secret still exists, and runs a one-off
+local-vs-server signature self-check that raises a critical alert on mismatch. Converted: `_shared/valrClient.ts`,
+`ef_execute_orders/valrClient.ts`, `ef_poll_orders/valrClient.ts`, `_shared/valrTransfer.ts` (3 sites) — i.e. the
+live trading, polling, sweep, fee-transfer and withdrawal paths. `ValrCredentials` now carries `customerId`.
+Every signing call is audited in `valr_credential_access_log` (`purpose='sign'`) and withdraw-scope signatures raise a
+`warn` alert. **Stage 2** (19 legacy functions with their own HMAC code) listed in the runbook §7; until then
+`VALR_API_KEY/SECRET` stay in Edge Function secrets as fallback.
+
+**Real-time security alerts** — `20261105_security_ops.sql`: trigger `alert_events_notify_security` calls
+`ef_alert_digest {immediate:true, alert_id}` for critical `withdrawal_request` / `valr_credential_access` /
+`valr_sign` / `security_rotation` alerts; the digest gained an immediate branch that emails one alert at once
+(`ALERT_EMAIL_TO`) and stamps `notified_at`. Verified: test alert → email within 8 s.
+
+**Rotation reminder** — cron `security_rotation_reminder` (06:00 UTC on 1 Feb/May/Aug/Nov) inserts an `error` alert
+pointing at the runbook. **Advisor cleanup (safe subset)** — revoked anon/authenticated EXECUTE on all 33 trigger
+functions. **Runbook** — `docs/SECURITY_RUNBOOK.md`: layman steps for VALR key split + Vault load, Supabase MFA,
+leaked-password protection, JWT signing-key migration, per-component secret keys, withdrawal-hold operations,
+quarterly rotation, secrets-manager options (Infisical / Doppler / Bitwarden SM), 10-minute containment checklist.
 
 ### v0.6.190 – Post-incident hardening (caller auth on every function; credential audit; withdrawal controls)
 **Date:** 2026-11-05 · **Status:** ✅ DONE

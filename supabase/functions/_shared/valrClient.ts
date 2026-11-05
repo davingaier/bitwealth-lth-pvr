@@ -1,3 +1,4 @@
+import { signValrRequest } from "./valrSign.ts";
 // _shared/valrClient.ts — Shared VALR API client for all edge functions.
 //
 // Supports both credential models:
@@ -10,6 +11,7 @@
 export interface ValrRequestCredentials {
   apiKey: string;
   apiSecret: string;
+  customerId?: number;
 }
 
 const VALR_API_URL =
@@ -17,22 +19,6 @@ const VALR_API_URL =
   Deno.env.get("VALR_API_BASE") ??
   "https://api.valr.com";
 
-const encoder = new TextEncoder();
-
-// ── HMAC-SHA-512 signing ──────────────────────────────────────────────────────
-async function signRequest(apiSecret: string, payload: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(apiSecret),
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 // Normalise "BTC/USDT" → "BTCUSDT", "USDTZAR" → "USDTZAR"
 export function normalisePair(pair: string): string {
@@ -47,26 +33,19 @@ async function valrPrivateRequest(
   subaccountId?: string | null,
   credentials?: ValrRequestCredentials | null,
 ): Promise<unknown> {
-  const apiKey = credentials?.apiKey ?? Deno.env.get("VALR_API_KEY");
-  const apiSecret = credentials?.apiSecret ?? Deno.env.get("VALR_API_SECRET");
-  if (!apiKey || !apiSecret) {
-    throw new Error("VALR_API_KEY / VALR_API_SECRET missing — not in credentials or environment");
-  }
-
-  const timestamp = Date.now().toString();
   const bodyString = body ? JSON.stringify(body) : "";
   const verb = method.toUpperCase();
 
-  const payloadToSign = timestamp + verb + path + bodyString + (subaccountId ?? "");
-  const signature = await signRequest(apiSecret, payloadToSign);
-
-  const headers: Record<string, string> = {
-    "X-VALR-API-KEY": apiKey,
-    "X-VALR-SIGNATURE": signature,
-    "X-VALR-TIMESTAMP": timestamp,
-  };
-  if (bodyString) headers["Content-Type"] = "application/json";
-  if (subaccountId) headers["X-VALR-SUB-ACCOUNT-ID"] = subaccountId;
+  // 2026-11-05: secrets stay in Vault — lth_pvr.valr_sign() signs server-side; local HMAC only as rollout fallback.
+  const { headers } = await signValrRequest({
+    customerId: credentials?.customerId ?? null,
+    subaccountId: subaccountId ?? null,
+    verb,
+    path,
+    body: bodyString,
+    localApiKey: credentials?.apiKey ?? null,
+    localApiSecret: credentials?.apiSecret ?? null,
+  });
 
   const res = await fetch(VALR_API_URL + path, {
     method: verb,
