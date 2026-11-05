@@ -1,5 +1,8 @@
 """Restore email templates from _email_previews (2026-04-25 DB dump with sample values substituted).
 
+One-off incident tool (2026-11-04). It rebuilds the light/dark logo-pair form; if it is ever re-run, follow it with
+`python tools/email_header_navy.py --apply` to convert the headers to the current navy band + single on-dark logo.
+
 For each preview: decode the srcdoc iframe, reverse the sample substitutions (only for keys the template really
 uses, per email_logs.template_data), replace the inline base64 logo with the hosted light/dark pair, inject the swap
 CSS, then validate the untouched DB head/footer still match before writing back via PostgREST.

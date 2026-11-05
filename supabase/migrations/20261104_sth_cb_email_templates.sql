@@ -21,12 +21,13 @@
 
 CREATE OR REPLACE FUNCTION pg_temp.tpl_wrap(p_pre text, p_logo text, p_suffix text, p_title text, p_subtitle text, p_content text)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  -- Header band is solid navy with the single on-dark logo in every client/mode (20261105_email_header_navy.sql).
   SELECT p_pre
       || '<!-- Header -->' || chr(10)
-      || '<tr><td style="background-color: #ffffff; border: 3px solid #032C48; padding: 40px; text-align: center;">' || chr(10)
+      || '<tr><td class="bw-hdr" bgcolor="#032C48" style="background-color: #032C48; border: 3px solid #032C48; padding: 40px; text-align: center;">' || chr(10)
       || p_logo || chr(10)
-      || '<h1 style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 600;">' || p_title || '</h1>' || chr(10)
-      || CASE WHEN p_subtitle IS NULL OR p_subtitle = '' THEN '' ELSE '<p style="margin: 8px 0 0 0; font-size: 14px; color: #ffffff;">' || p_subtitle || '</p>' || chr(10) END
+      || '<h1 class="bw-hdr-text" style="margin: 0; font-size: 24px; color: #ffffff; font-weight: 600;">' || p_title || '</h1>' || chr(10)
+      || CASE WHEN p_subtitle IS NULL OR p_subtitle = '' THEN '' ELSE '<p class="bw-hdr-text" style="margin: 8px 0 0 0; font-size: 14px; color: #ffffff;">' || p_subtitle || '</p>' || chr(10) END
       || '</td></tr>' || chr(10)
       || '<!-- Content -->' || chr(10)
       || '<tr><td style="padding: 15px; color: #111827; font-size: 15px; line-height: 1.5;">' || chr(10)
@@ -54,8 +55,10 @@ BEGIN
   SELECT t.body_html INTO src FROM public.email_templates t WHERE t.template_key = 'registration_complete_welcome';
   IF src IS NULL THEN RAISE EXCEPTION 'registration_complete_welcome template missing — cannot derive shell'; END IF;
   pre    := substring(src from '^(.*?)<!-- Header -->');
-  -- Logo: hosted light/dark block (20261104_email_logo_hosted.sql) or, on a fresh DB, the legacy inline image.
-  logo   := COALESCE(substring(src from '(<img class="logo-light"[^>]*><img class="logo-dark"[^>]*>)'),
+  -- Logo: single hosted on-dark image (20261105_email_header_navy.sql); older shells fall back to the light/dark pair
+  -- or, on a fresh DB, the legacy inline image.
+  logo   := COALESCE(substring(src from '(<img class="bw-logo"[^>]*>)'),
+                     substring(src from '(<img class="logo-light"[^>]*><img class="logo-dark"[^>]*>)'),
                      substring(src from '(<img src="data:image[^>]*>)'));
   suffix := substring(src from '(<!-- Footer -->.*)$');
   IF pre IS NULL OR logo IS NULL OR suffix IS NULL THEN RAISE EXCEPTION 'could not parse the template shell'; END IF;

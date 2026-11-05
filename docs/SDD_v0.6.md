@@ -3,11 +3,55 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-04 (v0.6.185)
+**Last updated:** 2026-11-05 (v0.6.187)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.187 – Lab: MSTR overlay (STH_CB signals executed on MicroStrategy)
+**Date:** 2026-11-05 · **Status:** ✅ DONE (research only — no DB / pipeline changes)
+
+Davin's hypothesis: MSTR (VALR `MSTRXUSDT`) is a leveraged BTC proxy, so the STH_CB daily allocation path decided on
+BTC should also work on MSTR. New lab scripts `tools/sth_cb_lab/fetch_mstr.ts` (Yahoo Finance chart API, free,
+split-adjusted; works for any ticker via `--symbol`) and `tools/sth_cb_lab/mstr_overlay.ts` (runs the simulator on
+BTC, replays `signal_target_alloc` on MSTR trading days — latest BTC signal dated before the day, rebalance to
+`target × NAV` on change / new cash, all-in / all-out like the engine — and reports NAV by start date, daily
+correlation/beta/up-down capture, and per-segment BTC vs MSTR returns). Nothing is refitted on MSTR, so the MSTR leg
+is a genuine out-of-sample test of the signal.
+
+Headline (hybrid_v2_2, $10k lump, to 2026-11-02): from 2020-08-11 (MicroStrategy's first BTC purchase) MSTR HODL
+$96.8k, **MSTR-on-STH_CB $3.44M (35.5× MSTR HODL, 4.4× the BTC strategy's $775k)**, max DD −52 % vs −25 % (BTC
+strategy) and −89 % (MSTR HODL); from 2024-01-01 $119k vs $44k; still 21.5× MSTR HODL at 60 bps per MSTR trade with
+monthly contributions. But MSTR is not a clean leveraged BTC: daily corr ≈ 0.5, beta 1.1–1.4 (zero before Aug-2020),
+only 12 in-market segments of evidence; MSTR beat BTC in 7/12 in-market segments and fell in 6/11 out-of-market gaps;
+the edge comes from the large regime exits (2021-10, 2022-04, 2025-10, 2026-05: MSTR −52…−64 %) rather than
+day-to-day tracking; one in-market segment went the wrong way (2025-05→10: BTC +14 %, MSTR −32 %, mNAV compression).
+VALR `MSTRXUSDT` is thin (≈ 130 shares/day, ≈ 1 % spread, max 56 shares / 7,500 USDT per order) — any live sleeve
+would be small and must budget 50–100 bps per side. Write-up, caveats and next-step ideas (relative-strength switch,
+mNAV gate, split sleeve, `MSTU`/`MSTX` comparison) in `tools/sth_cb_lab/README.md` Part 3.
+
+### v0.6.186 – Email header: solid navy band + single on-dark logo (light/dark swap abandoned)
+**Date:** 2026-11-05 · **Status:** ✅ DONE
+
+Round 4 (plain img pair, v0.6.185) still showed **both** logos in new Outlook's dark mode. Conclusion after four
+variants: Outlook's dark-mode CSS rewriter honours rules that *reveal* a hidden image (`[data-ogsc] .logo-dark
+{display:block}`) but drops every rule that *hides* a visible one, and Gmail ignores dark-mode CSS entirely — so no
+two-image swap can work across clients. Fix (Davin's pick, option A): the header is now a **solid `#032C48` band in
+every client/mode** carrying only `bitwealth_logo_ondark_cropped.png`. Dark backgrounds and images are left alone by
+every dark-mode implementation, so one image renders identically everywhere; side benefit: the header `<h1>` that was
+white-on-white in light mode is legible.
+
+Applied by **`tools/email_header_navy.py --apply`** (24 templates; `kyc_finova_invite` already navy). Deliberately
+string-sliced per template — no regex over whole bodies (v0.6.185 incident). Per template: swap CSS block →
+`.bw-hdr {background:#032C48!important}` / `.bw-hdr-text {color:#fff!important}` (+ `[data-ogsc]`/`[data-ogsb]`
+variants so full-invert clients keep the band navy); header `<td>`/`<div>` gets `class="bw-hdr" bgcolor="#032C48"`
+and the legacy `header` class is **dropped** (its `<style>` rules `.header p {color:#032C48!important}` would have
+painted navy text on navy); header text `#032C48`/greys → white, tagged `bw-hdr-text`; the img pair → one
+`<img class="bw-logo">`. `20261104_sth_cb_email_templates.sql` (`pg_temp.tpl_wrap`) emits the same header and accepts
+the `bw-logo` shell; `20261105_email_header_navy.sql` records the change and warns if any template still carries the
+pair. Verified in Chromium (light + emulated dark, both header families) and re-sent `registration_complete_welcome` +
+`strategy_switch_confirmation` to admin@bitwealth.co.za.
 
 ### v0.6.185 – Strategy-agnostic VALR subaccount labels; hosted light/dark email logo on every template
 **Date:** 2026-11-04 · **Status:** ✅ DONE

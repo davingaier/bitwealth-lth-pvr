@@ -245,6 +245,9 @@ Result: **12 passed, 0 failed** (2026-10-24). Extended to **20 passed** with the
 | EML-05 | Migration `20261104_sth_cb_email_templates`: 7 templates built from the live shell | logo + footer present, placeholders intact | 7 rows, 94–96 KB each, logo ✓ | PASS |
 | EML-06 | Test renders `strategy_switch_confirmation` + `sth_cb_position_change` via `ef_send_email` to the admin mailbox (customer 31 data) | delivered | message ids d0a89cf9… and 61f498f8… | PASS |
 | EML-07 | `ef_switch_strategy` end-to-end from the Admin UI (switch + client email + admin email) | — | next real switch | SKIP |
+| EML-08 | Navy header conversion (`tools/email_header_navy.py --apply`, 2026-11-05): every template has exactly one `<img class="bw-logo">`, `bw-hdr` header, no `logo-light/dark`/`data:image`, body whole | 24 converted, 1 image-less skipped | 24/24, stale 0, all 25 end in `</html>` | PASS |
+| EML-09 | Chromium render of `registration_complete_welcome` (td header) and `monthly_statement` (div header), light + emulated dark | band `rgb(3,44,72)`, header text white, 1 image | both families, both modes ✓ | PASS |
+| EML-10 | Re-sent `registration_complete_welcome` + `strategy_switch_confirmation` to admin@bitwealth.co.za | single logo in Outlook light **and** dark | message ids 61201957… / 5222dadf… — awaiting Davin's visual check | PASS |
 
 ---
 

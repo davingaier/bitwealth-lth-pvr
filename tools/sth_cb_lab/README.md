@@ -655,3 +655,78 @@ which is the signature of a structural ceiling rather than an under-searched spa
 The best configuration is saved as the variation template **"STH-CB Bands v1 (lump-sum optimised,
 experimental)"** and `band_source = 'sth_cb'` is selectable in the Admin back-tester, simulator and
 optimizer. Treat it as a research artefact: it beats HODL in only 4 of 10 calendar years.
+
+---
+
+# Part 3 — MSTR overlay (`fetch_mstr.ts`, `mstr_overlay.ts`)
+
+**Hypothesis (Davin, 2026-11-05):** MicroStrategy (MSTR; VALR tokenised stock `MSTRX/USDT`) behaves like a leveraged
+version of BTC, so the *same* daily STH_CB allocation decisions — still decided on BTC — should work, amplified, when
+executed on MSTR. Nothing is refitted on MSTR; it is a pure overlay, which makes MSTR a genuine out-of-sample test of
+the signal (the config was fitted on BTC prices only).
+
+## Commands
+
+```powershell
+deno run -A tools/sth_cb_lab/fetch_mstr.ts                 # Yahoo Finance chart API (free, no key) → data/mstr_daily.json
+deno run -A tools/sth_cb_lab/mstr_overlay.ts --csv         # hybrid_v2_2, $10k lump, 8 bps BTC / 10 bps MSTR
+deno run -A tools/sth_cb_lab/mstr_overlay.ts --upfront 2400 --monthly 200 --eq-bps 60 --periods 2020-08-11,2022-01-01,2024-01-01
+deno run -A tools/sth_cb_lab/fetch_mstr.ts --symbol MSTU   # any Yahoo ticker; then --symbol MSTU on the overlay
+```
+
+Method: run the simulator on BTC (`daily: true`) → take `signal_target_alloc` → on each MSTR trading day use the latest
+BTC signal dated *before* that day (weekend signals execute Monday) and rebalance to `target × NAV` at the close when
+the target changes or new cash arrives (Policy A); all-in / all-out like the BTC engine; idle cash earns 0 on both
+legs; BTC leg uses exchange-only fees so the comparison is like for like.
+
+## Result (2026-11-05, hybrid_v2_2, $10 000 lump sum, to 2026-11-02)
+
+| start | BTC HODL | BTC strat (× HODL) | MSTR HODL | MSTR strat (× MSTR HODL) | MSTR strat ÷ BTC strat | max DD BTC strat / MSTR strat / MSTR HODL | trades |
+|---|---:|---:|---:|---:|---:|---|---|
+| 2020-08-11 (first MSTR BTC buy) | $66,954 | $775,369 (11.6×) | $96,841 | $3,435,146 (35.5×) | 4.4× | −25 % / −52 % / −89 % | 42 / 38 |
+| 2022-01-01 | $16,459 | $120,084 (7.3×) | $23,399 | $714,060 (30.5×) | 6.0× | −25 % / −52 % / −83 % | 29 / 25 |
+| 2023-01-01 | $46,883 | $113,952 (2.4×) | $90,077 | $557,839 (6.2×) | 4.9× | −19 % / −36 % / −83 % | 22 / 20 |
+| 2024-01-01 | $18,049 | $44,435 (2.5×) | $19,066 | $119,114 (6.3×) | 2.7× | −16 % / −35 % / −83 % | 18 / 18 |
+| 2025-01-01 | $8,261 | $20,413 (2.5×) | $4,354 | $26,298 (6.0×) | 1.3× | −11 % / −23 % / −82 % | 11 / 11 |
+
+With $2 400 + $200/month and a punitive 60 bps per MSTR trade (VALR's MSTRX spread is ≈ 1 %): from 2020-08-11 the MSTR
+leg ends at $1.32 M vs $359 k for the BTC strategy (3.7×) and 21.5× MSTR HODL; from 2024-01-01 $49.7 k vs $25.1 k.
+
+**Daily log-return relationship** (common trading days; note BTC "closes" 00:00 UTC, MSTR 21:00 UTC, which depresses the
+measured correlation):
+
+| window | n | corr | beta | up-capture | down-capture |
+|---|---:|---:|---:|---:|---:|
+| 2017-01 → 2020-08-10 (software company) | 906 | 0.03 | 0.01 | — | — |
+| 2020-08-11 → end (BTC treasury era) | 1564 | 0.56 | 1.07 | 1.18 | 1.18 |
+| 2025-01 → end | 459 | 0.49 | 1.10 | 1.21 | 1.36 |
+| last 250 trading days | 248 | 0.54 | 1.24 | 1.28 | 1.43 |
+
+**Segments** (2020-08-11 →, BTC decides): 12 in-market segments — median BTC +27 %, median MSTR +44 %, MSTR beat BTC in
+7/12 and was positive in 10/12; 11 out-of-market gaps — median BTC −19 %, median MSTR −9 %, MSTR fell in 6/11. The
+exits that mattered most for MSTR: 2021-10→2022-01 (−53 %), 2022-04→06 (−64 %), 2025-10→2026-02 (−52 %),
+2026-05→06 (−53 %). The one bad in-market call: 2025-05→10 (BTC +14 %, MSTR −32 % — mNAV premium compression).
+
+## Reading it honestly
+
+- **The theory holds in direction but MSTR is not a clean 1.5–2× BTC.** Correlation is only ≈ 0.5 and realised beta
+  1.1–1.4: roughly half of MSTR's daily variance is idiosyncratic (mNAV premium, equity issuance, index flows). The
+  overlay works because the *big* BTC regime calls (2021, 2022, late-2025) coincide with MSTR's largest drawdowns and
+  MSTR's upside capture is 1.2–1.4× inside the in-market segments, not because MSTR tracks BTC day to day.
+- **Only 6 years / 12 segments of evidence**, all in-sample for the BTC side. Before Aug-2020 MSTR had no BTC
+  exposure at all, so nothing older can be used. Treat the 35× as "the hypothesis is worth a small sleeve", not as a
+  forecast.
+- **Drawdown doubles.** −52 % vs −25 % for the same signal path; a client who tolerates the BTC version may not
+  tolerate this one.
+- **VALR MSTRX execution is thin**: `MSTRXUSDT` minBase 0.001, maxBase 56 / maxQuote 7 500 USDT *per order*, tick 0.01,
+  24 h volume ≈ 130 shares (≈ $18 k) and a bid/ask of ≈ 1 % (143.74 / 145.16 on 2026-11-04). A 10 bps assumption is
+  optimistic — budget 50–100 bps per side, and orders above $7.5 k must be split. Tokenised stocks also carry issuer
+  (xStocks/Backed) and corporate-action risk that BTC does not.
+- **Ideas if this goes further** (lab-first, no DB work yet): (1) a *relative-strength switch* — hold MSTR instead of
+  BTC only while MSTR's 50-day return ≥ BTC's (would have dodged the 2025-05→10 segment); (2) an *mNAV gate* using
+  MSTR market cap ÷ BTC holdings (needs a holdings series); (3) a *split sleeve* (e.g. 80 % BTC / 20 % MSTR on the same
+  signals) to keep the BTC-level drawdown while adding convexity; (4) test the 2× ETFs (`MSTU`, `MSTX`) with
+  `--symbol` to see whether plain leverage does the same job without the mNAV risk.
+
+Outputs: `results/mstr_overlay_summary_*.csv`, `results/mstr_overlay_daily_<start>_*.csv` (MSTR + BTC NAV paths and the
+target allocation per day), `results/mstr_overlay_segments_*.csv`.

@@ -1,5 +1,10 @@
 -- 20261104_email_logo_hosted.sql
 -- ===========================================================================
+-- ⚠️ SUPERSEDED 2026-11-05 by 20261105_email_header_navy.sql + tools/email_header_navy.py: the light/dark swap below
+--    never hid the light logo in new Outlook's dark mode (it can only *reveal* images, not hide them) and Gmail ignores
+--    dark-mode CSS, so both logos showed. Templates now have a solid navy header with the single on-dark logo.
+--    Kept for history / fresh-DB bootstrap (it is still what converts the inline base64 image to hosted files).
+--
 -- Email logo: hosted light/dark pair instead of an inline base64 image.
 --
 -- Gmail (web + apps) does not render `data:` URIs in <img>, so every template showed a broken image. The two cropped
