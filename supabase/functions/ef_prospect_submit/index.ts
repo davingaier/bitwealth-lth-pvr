@@ -62,6 +62,14 @@ serve(async (req) => {
       );
     }
 
+    // Cellphone is mandatory (2026-11-05) — needed for KYC and the Finova invite.
+    if (!String(phone_country_code ?? "").trim() || !String(phone_number ?? "").replace(/\D/g, "")) {
+      return new Response(
+        JSON.stringify({ error: "A cellphone number (with country code) is required" }),
+        { status: 400, headers: CORS }
+      );
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {

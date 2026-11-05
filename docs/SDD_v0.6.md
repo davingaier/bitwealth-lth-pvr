@@ -3,11 +3,27 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-05 (v0.6.187)
+**Last updated:** 2026-11-05 (v0.6.188)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.188 – Fix: Strategy Setup 401 (anon key sent to an admin-guarded EF); cellphone mandatory on the website form
+**Date:** 2026-11-05 · **Status:** ✅ DONE
+
+**Bug.** Confirming a strategy for prospect 64 failed with `ef_confirm_strategy → 401 Unauthorized`. The Admin UI sent
+`Bearer <anon/publishable key>` (`supabaseClient.supabaseKey`), but the EF authorises callers with
+`_shared/adminAuth.ts` `requireOrgAdmin`, which deliberately rejects the public anon key. The handler already fetched
+the admin's session two lines earlier; it now sends `session.access_token` (and refuses with a clear message when the
+session has expired). The same latent bug existed in the Strategy Optimizer's `ef_run_lth_pvr_simulator` call (also
+`requireOrgAdmin`-guarded) and was fixed the same way. Audit of every other `functions/v1/*` call in the UI: the
+remaining anon-key calls target EFs without the admin guard; both `ef_valr_create_subaccount` calls already use the
+session token. No data was written by the failed attempt (customer 64 still `prospect`, 0 strategy rows).
+
+**Website form.** "Phone Country Code" and "Cellphone Number" on `website/index.html` are now `required` (with light
+`pattern`s and a JS guard), and `ef_prospect_submit` returns 400 `A cellphone number (with country code) is required`
+when either is missing — prospect 64 had arrived with an empty country code and a local-format number.
 
 ### v0.6.187 – Lab: MSTR overlay (STH_CB signals executed on MicroStrategy)
 **Date:** 2026-11-05 · **Status:** ✅ DONE (research only — no DB / pipeline changes)

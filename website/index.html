@@ -471,12 +471,12 @@
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="phoneCountryCode">Phone Country Code</label>
-                            <input type="text" id="phoneCountryCode" name="phoneCountryCode" placeholder="+27">
+                            <label for="phoneCountryCode">Phone Country Code *</label>
+                            <input type="text" id="phoneCountryCode" name="phoneCountryCode" placeholder="+27" required pattern="\+?[0-9]{1,4}" title="Dialling code, e.g. +27" autocomplete="tel-country-code">
                         </div>
                         <div class="form-group">
-                            <label for="phoneNumber">Phone Number</label>
-                            <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="82 123 4567">
+                            <label for="phoneNumber">Cellphone Number *</label>
+                            <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="82 123 4567" required pattern="[0-9 ()\-]{6,20}" title="Cellphone number, digits only (spaces allowed)" autocomplete="tel-national">
                         </div>
                     </div>
                     
@@ -673,6 +673,14 @@
             if (!formData.upfront_investment_amount_range && !formData.monthly_investment_amount_range) {
                 formMessage.className = 'form-message error';
                 formMessage.textContent = 'Please select at least one investment amount range.';
+                return;
+            }
+
+            // Cellphone is mandatory (KYC + Finova invite). Native `required` covers the normal path; this guards
+            // browsers/extensions that bypass constraint validation.
+            if (!formData.phone_country_code || !formData.phone_number.replace(/\D/g, '')) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = 'Please enter your cellphone number, including the country code.';
                 return;
             }
             
