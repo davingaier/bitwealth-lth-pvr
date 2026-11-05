@@ -14,8 +14,12 @@ import { getServiceClient, yyyymmdd } from "./client.ts";
 import { getMarketPrice } from "../_shared/valrClient.ts";
 import { loadUsdpcConfig } from "../_shared/usdpc.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
   const today = yyyymmdd(new Date());
 

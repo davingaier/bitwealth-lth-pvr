@@ -1,8 +1,12 @@
 import { getServiceClient } from "./client.ts";
 import { logAlert } from "./alerting.ts";
 import { loadUsdpcConfig, sizeUsdpcToUsdt, splitConversionAmount, USDPC_PAIR } from "../_shared/usdpc.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 Deno.serve(async (req)=>{
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
   if (!org_id) return new Response("ORG_ID missing", {

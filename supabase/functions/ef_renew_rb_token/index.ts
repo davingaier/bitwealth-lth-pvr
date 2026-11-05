@@ -34,6 +34,7 @@
 // ===========================================================
 
 import { getServiceClient } from "./client.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const RB_RENEW_URL = "https://api.researchbitcoin.net/v2/auth/renew";
 const RB_USER_INFO_URL = "https://api.researchbitcoin.net/v2/info/user_info";
@@ -71,6 +72,9 @@ async function logAlert(
 // ---------------------------------------------------------------------------
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
 
   let body: Record<string, unknown> = {};

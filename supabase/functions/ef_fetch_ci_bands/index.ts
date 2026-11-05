@@ -24,11 +24,15 @@
 //   price_at_p150 = 1.5*p100 - 0.5*mean
 
 import { getServiceClient } from "./client.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const CI_BASE = "https://chartinspect.com/api/v1/onchain/lth-pvr";
 const ALLOWED_FIELD_DRIFT_PCT = 0.10; // 10% day-over-day drift => alert
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
 
   const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));

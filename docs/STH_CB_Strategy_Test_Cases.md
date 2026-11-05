@@ -341,3 +341,19 @@ Observations for refinement discussion:
 | UI-04 | Price vs STH Cost Basis chart | log axis, CB + 70/105/95 lines, green/orange shading, ▲/✕ markers on fills | pending |
 | UI-05 | Switch back to LTH PVR | parameter block hides; chart type list resets; LTH PVR run behaves as before | pending |
 | UI-06 | Companion run fails | STH_CB results still render; warning shown in `btReportsError` | pending |
+
+## Security hardening verification (2026-11-05, v0.6.190)
+
+| ID | Test | Expected | Actual | Status |
+|----|------|----------|--------|--------|
+| SEC-01 | Guarded EF (`ef_fetch_usdpc_price`) called with new sb_secret in apikey | 200 | 200 `{ok:true,price_usd:1.20118}` | PASS |
+| SEC-02 | Same EF with no credentials | 401 | 401 `bearer token required` | PASS |
+| SEC-03 | `ef_collect_annual_fees` with publishable key | 401 | 401 | PASS |
+| SEC-04 | Live cron fleet after guarding 36 EFs + redeploy (7 min window) | all 200 | all real jobs 200; only test calls 401 | PASS |
+| SEC-05 | Attacker insert sim: non-allowlisted USDT 5000 into withdrawal_requests | held, not dispatched | status=`needs_approval`, note "destination address not allow-listed" | PASS |
+| SEC-06 | Allow-listed destination | dispatchable | status=`pending` | PASS |
+| SEC-07 | Kill-switch `withdrawals_enabled=false` | insert blocked | RAISE EXCEPTION | PASS |
+| SEC-08 | AFTER INSERT alert on every withdrawal | alert_events row | critical row for held withdrawal | PASS |
+| SEC-09 | Credential-read anomaly: ≥8 distinct customers / 10 min | critical alert | logic verified via valr_credential_access_log + alert insert | PASS |
+| SEC-10 | Legacy service_role JWT at gateway | 401 | 401 Invalid API key | PASS |
+| SEC-11 | Advisor: new SECURITY DEFINER fns not anon/authenticated-executable | revoked | locked down in 20261105_harden_new_functions | PASS |

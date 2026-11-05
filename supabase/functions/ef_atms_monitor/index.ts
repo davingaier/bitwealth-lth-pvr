@@ -20,6 +20,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Alert deduplication: skips rule+customer combos already alerted within 7 days
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // ─── Environment ─────────────────────────────────────────────────────────────
 
@@ -56,6 +57,9 @@ interface RunResult {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const startTime = Date.now();
 
   // Parse request body for trigger options

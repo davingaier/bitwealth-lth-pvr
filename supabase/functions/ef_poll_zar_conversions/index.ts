@@ -27,6 +27,7 @@ import {
   cancelOrderById,
 } from "../_shared/valrClient.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = getServiceKey();
@@ -317,7 +318,10 @@ async function confirmMarketFill(
   // Still processing — leave 'market_placed' for the next run.
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const { data: rows, error } = await sb
     .from("pending_zar_conversions")
     .select("id, customer_id, zar_amount, remaining_amount, status, order_id, pair, limit_price, limit_placed_at")

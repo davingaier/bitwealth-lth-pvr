@@ -9,6 +9,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { zarWithdraw } from "../_shared/valrClient.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
 const SUPABASE_KEY = getServiceKey()!;
@@ -19,7 +20,10 @@ const AMOUNT_ZAR = "100";
 
 const sbLthPvr = createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: "lth_pvr" } });
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const creds = await resolveCustomerCredentials(sbLthPvr, CUSTOMER_ID);
 

@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 import { customerStrategy, templateKeyFor } from "../_shared/strategyEmail.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SERVICE_ROLE_KEY = getServiceKey();
@@ -58,7 +59,10 @@ function buildPlatformFeeNote(rate: number, schedule: string): string {
   return `The platform fee of ${ratePct}% is calculated on your net USDT contributions and has been automatically deducted.`;
 }
 
-serve(async (_req) => {
+serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     console.log("[ef_monthly_statement_generator] Starting monthly statement generation");
 
@@ -67,8 +71,8 @@ serve(async (_req) => {
     // still pass { band_source: 'ci' } to regenerate historical CI statements.
     let bandSource: BandSource = "rb";
     try {
-      if (_req.headers.get("content-type")?.includes("application/json")) {
-        const reqBody = await _req.clone().json().catch(() => null);
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const reqBody = await req.clone().json().catch(() => null);
         bandSource = normaliseBandSource(reqBody?.band_source);
       }
     } catch (_e) { /* ignore */ }

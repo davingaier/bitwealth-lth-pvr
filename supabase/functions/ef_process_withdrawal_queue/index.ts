@@ -36,6 +36,7 @@ import { sendEmail } from "../_shared/smtp.ts";
 import { getWithdrawalOutcomeEmail } from "../_shared/email-templates.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { ensureIdleUsdt } from "../_shared/valrTransfer.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = getServiceKey();
@@ -640,7 +641,9 @@ async function processZarConverting(row: Row, ctx: CustomerCtx) {
 // ────────────────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   // Pull rows that need processing
   const { data: rows, error } = await sbLthPvr
     .from("withdrawal_requests")

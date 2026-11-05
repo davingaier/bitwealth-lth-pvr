@@ -3,6 +3,7 @@
 
 import { getServiceClient } from "./client.ts";
 import { sendTextEmail } from "../_shared/smtp.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 type AlertRow = {
   alert_id: string;
@@ -31,6 +32,9 @@ async function sendEmail(subject: string, text: string) {
 }
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const sb = getServiceClient();
 

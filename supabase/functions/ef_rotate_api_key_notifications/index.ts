@@ -12,6 +12,7 @@ import {
   getApiKeyExpiryCriticalEmail,
 } from "../_shared/email-templates.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // ── Environment ───────────────────────────────────────────────────────────────
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
@@ -39,7 +40,9 @@ function json(body: unknown, status = 200) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const now = new Date();
   const results = { checked: 0, warned: 0, paused: 0, errors: 0 };
 

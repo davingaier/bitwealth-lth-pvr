@@ -6,6 +6,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource, normaliseBandSource, readBandSourceFromBody, BandSource } from "../_shared/band_source.ts";
 import { computeAnchoredBalance } from "../_shared/balance_anchor.ts";
 import Decimal from "npm:decimal.js@10.4.3";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // Minimal shapes we care about from v_fills_with_customer and exchange_funding_events
 type FillRow = {
@@ -35,6 +36,9 @@ type FundingRow = {
 };
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const sb = getServiceClient();
     const org_id = Deno.env.get("ORG_ID");

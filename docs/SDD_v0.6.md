@@ -3,14 +3,65 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-05 (v0.6.189)
+**Last updated:** 2026-11-05 (v0.6.190)
 
 ---
 
 ## 0. Change Log
 
+### v0.6.190 – Post-incident hardening (caller auth on every function; credential audit; withdrawal controls)
+**Date:** 2026-11-05 · **Status:** ✅ DONE
+
+Follow-up to the v0.6.189 key rotation. Three items + broader recommendations.
+
+**Item 1 — close the unauthenticated `--no-verify-jwt` functions.** A strict audit found **36** service-role
+functions that answered with no caller check at all (fee calculators, `ef_create_order_intents`,
+`ef_generate_decisions`, `ef_poll_orders`, `ef_post_ledger_and_balances`, `ef_transfer_accumulated_fees`,
+`ef_collect_annual_fees`, the `ef_fetch_*` band fetchers, `ef_process_withdrawal_queue`, `ef_sync_valr_transactions`,
+`adv/std-build-transactions`, …). Added `requireOrgAdminAuto(req)` + `unauthorizedResponse()` to `_shared/adminAuth.ts`
+(builds its own client, resolves the key via `supabaseKeys.ts`, accepts the `sb_secret` key in `apikey` **or** bearer,
+rejects publishable keys) and inserted the two-line guard into all 36 via `tools/add_admin_guard.py` (CORS-preflight
+blocks preserved; `_req` params renamed). Admin UI: the raw-fetch calls to `ef_collect_annual_fees`,
+`ef_transfer_accumulated_fees`, `ef_sync_valr_transactions`, `ef_optimize_lth_pvr_strategy` now send
+`session.access_token` instead of the publishable/anon key. Cron and EF-to-EF chains already send the secret key, so
+they keep working; only anonymous callers are now rejected.
+
+**Item 2 — `get_customer_valr_credentials` audit + anomaly alarm** (`20261105_security_hardening.sql`). Full
+server-side signing (so plaintext keys never cross PostgREST) is a larger refactor across 15+ VALR functions and is
+listed as a follow-up; for now the RPC logs every call to `lth_pvr.valr_credential_access_log` and raises a **critical
+`alert_events`** when credentials for ≥ `valr_cred_alert_threshold` (8) distinct customers are read within
+`valr_cred_alert_window_min` (10) minutes — the exact breach signature (18 customers in ~22 min) would have paged
+immediately. EXECUTE re-restricted to `service_role`.
+
+**Item 3 — withdrawal controls** (same migration). `BEFORE INSERT` trigger on `lth_pvr.withdrawal_requests`:
+(a) global **kill-switch** `settings.withdrawals_enabled=false` → `RAISE EXCEPTION` on any new crypto withdrawal;
+(b) **destination allow-list** (`lth_pvr.withdrawal_allowlist`, seeded from completed history, admin-managed) — a crypto
+request to a non-listed address is forced to a new **`needs_approval`** status that the queue (`IN ('pending','converting')`)
+never dispatches; (c) **velocity cap** (`withdrawal_velocity_max`/`_window_min`). `AFTER INSERT` trigger writes an
+`alert_events` row for **every** withdrawal (critical when held). Triggers fire no matter who inserts — a stolen
+service-role key writing straight to the table is now held, not paid out. Verified: the exact attack insert
+(5 000 USDT → the attacker's Arbitrum/TRON address) lands as `needs_approval`; an allow-listed address passes as
+`pending`; the kill-switch blocks outright. The `status` CHECK was consolidated (two overlapping constraints) to add
+`needs_approval`. **Operational note:** a customer's *first* crypto withdrawal to a new address now waits for admin
+approval (set status → `pending` after verifying, or add the address to the allow-list) — intended, safer default.
+
+**Further recommendations (not yet implemented).**
+- **Full server-side VALR signing** — the real fix for item 2: move HMAC signing into an Edge Function / RPC that
+  returns only a signature, so decrypted keys never leave the DB boundary. Biggest single risk reduction.
+- **Secrets out of Dropbox for good** + a secrets manager (1Password/Doppler/Vault); per-component `sb_secret` keys so
+  one leak revokes one component; scheduled rotation.
+- **VALR**: trading key with *no* withdraw permission for the pipeline; a separate, rarely-used withdraw key; VALR
+  withdrawal-address whitelist; IP allow-listing on the keys.
+- **Supabase**: migrate to JWT signing keys (asymmetric) so user sessions survive future rotations; enable MFA on the
+  Supabase and VALR dashboards; review `get_advisors` security findings; least-privilege review of every SECURITY
+  DEFINER RPC; pg_cron/pg_net request logging retention.
+- **Monitoring**: wire the new `valr_credential_access` and `withdrawal_request` alerts into the existing
+  `ef_alert_digest` / triage path and a real-time channel (email/SMS/Slack), not just the daily digest.
+- **Process**: rotate `RESEND_API_KEY` + `SMTP_PASS` (shared the leaked `.env`); notify API-model customers 9/49/56 to
+  reissue VALR keys; keep an incident runbook from this event.
+
 ### v0.6.189 – 🔴 SECURITY INCIDENT: stolen service_role key → key rotation to `sb_secret` (Phase 1 code changes)
-**Date:** 2026-11-05 · **Status:** 🟠 IN PROGRESS (Phase 1 done; Phases 2–4 are operator steps)
+**Date:** 2026-11-05 · **Status:** ✅ ROTATION COMPLETE 16:50 SAST (legacy keys disabled; all surfaces on `sb_secret` / `sb_publishable`). Hardening phase 1 done (v0.6.190).
 
 **What happened (13:26–13:50 UTC).** An unknown Linux/Chrome host used the project's **legacy JWT `service_role`
 key** against PostgREST: probed `/rest/v1/`, enumerated `customer_details` / `exchange_accounts`, called the
@@ -52,9 +103,16 @@ as JSON maps `SUPABASE_SECRET_KEYS` / `SUPABASE_PUBLISHABLE_KEYS`.
 read vault `service_jwt`; `ALTER DATABASE … SET` is not permitted on Supabase and the SQL Editor runs a script as one
 transaction, so the first attempt rolled back entirely). Edge Function secrets: remove
 `SECRET_KEY`/`Secret Key`, set new VALR / Resend / SMTP credentials. `.env` moved out of Dropbox.
-**Phase 3** — Settings → API Keys → disable legacy keys; delete the pre-existing `sb_secret` key.
-**Phase 4** — verify cron runs / `invoker_logs` / `net._http_response`, confirm the old key returns 401, re-schedule
-`lthpvr_withdrawal_queue`.
+**Phase 3 (done 16:40)** — legacy `anon`/`service_role` disabled; old `sb_secret` deleted; `SUPABASE_SECRET_KEYS` confirmed
+in Edge Function secrets. Side effect: the old **publishable** key was revoked too and a new one created
+(`new_publishable_key_20261105`), which broke every front end (`Unregistered API key`) — the new key was swapped into
+15 files (Admin UI, ta-bot, website, portals, back-testers, KYC upload, forecast illustration); Netlify redeploys on push.
+**Phase 4 (done 16:50)** — every cron call since the switch 200; `ef_sth_cb_tracker` (requireOrgAdmin) 200 with the new
+key via `apikey`, 401 with the publishable key; PostgREST read with the new `sb_secret` 200; a legacy-format
+`service_role` JWT → **401 Invalid API key** at the gateway; no legacy JWT left in vault / `lth_pvr.settings` /
+`private.app_secrets` / `app.config` / cron commands. Found and fixed a latent bug: `sync-valr-transactions-every-30-min`
+read a non-existent vault entry `service_role_key` (sent an empty bearer) → now `service_jwt`. `lthpvr_withdrawal_queue`
+re-scheduled (`*/5 * * * *`). VALR calls return 401 until Davin's VALR account/API keys are re-issued (expected).
 
 **Hardening backlog (next, in order).** (1) **22 `--no-verify-jwt` functions have no caller check at all**
 (`ef_transfer_accumulated_fees`, `ef_collect_annual_fees`, `ef_create_order_intents`, `ef_generate_decisions`,

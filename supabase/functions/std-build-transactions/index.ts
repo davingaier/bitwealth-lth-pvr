@@ -3,6 +3,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 /* CORS */
 const CORS = {
@@ -34,6 +35,9 @@ const R = (n:number,dp:number)=>{ const m=10**dp; return Math.round(n*m)/m; };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const { for_date, force_from_date, dry_run } = await req.json().catch(()=>({}));
     const dateTo = (for_date || ydayUTC()) as string;

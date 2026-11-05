@@ -12873,11 +12873,12 @@
       collectBtn.disabled = true;
       collectBtn.textContent = 'Collecting…';
       try {
+        const { data: { session: feeSession } } = await supabaseClient.auth.getSession();
         const resp = await fetch(`${SUPABASE_URL}/functions/v1/ef_collect_annual_fees`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'Authorization': `Bearer ${feeSession?.access_token || ''}`,
           },
           body: JSON.stringify({}),
         });
@@ -14262,14 +14263,15 @@
       }
 
       // Call ef_transfer_accumulated_fees edge function
-      // Note: Uses anon key because function deployed with --no-verify-jwt (internal admin function)
+      // Requires the admin's session token (function authorises via requireOrgAdmin).
+      const { data: { session: xferSession } } = await supabaseClient.auth.getSession();
       const response = await fetch(
         `${supabaseClient.supabaseUrl}/functions/v1/ef_transfer_accumulated_fees`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            'Authorization': `Bearer ${xferSession?.access_token || ''}`
           },
           body: JSON.stringify({})
         }
@@ -17173,10 +17175,11 @@
 
         // Trigger transaction sync to capture conversions
         const SUPABASE_URL = 'https://wqnmxpooabmedvtackji.supabase.co';
+        const { data: { session: syncSession } } = await supabaseClient.auth.getSession();
         const syncResponse = await fetch(`${SUPABASE_URL}/functions/v1/ef_sync_valr_transactions`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${window.SUPABASE_ANON_KEY}`,
+            'Authorization': `Bearer ${syncSession?.access_token || ''}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({})
@@ -18432,10 +18435,11 @@ Momentum:
         }
 
         // Call optimizer edge function
+        const { data: { session: optSession } } = await supabaseClient.auth.getSession();
         const response = await fetch(`${SUPABASE_URL}/functions/v1/ef_optimize_lth_pvr_strategy`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+            'Authorization': `Bearer ${optSession?.access_token || ''}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(requestBody)

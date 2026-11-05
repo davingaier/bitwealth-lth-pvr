@@ -9,6 +9,7 @@ import { getOrderSummaryByCustomerOrderId, getOrderStatusByCustomerOrderId, getO
 import type { ValrRequestCredentials } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -28,12 +29,15 @@ const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
 // Cache resolved credentials per exchange_account_id to avoid repeated vault lookups.
 const credentialCache = new Map<string, { subaccountId: string | null; credentials: ValrRequestCredentials | null }>();
 
-Deno.serve(async (_req: Request)=>{
+Deno.serve(async (req: Request)=>{
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   console.log("ef_poll_orders: Starting single-pass polling");
   
   // --- Support for targeted polling ---
   // Query parameters can specify specific order_ids for targeted polling
-  const url = new URL(_req.url);
+  const url = new URL(req.url);
   const targetOrderIdsParam = url.searchParams.get("order_ids");
   const targetOrderIds = targetOrderIdsParam ? targetOrderIdsParam.split(",") : null;
 

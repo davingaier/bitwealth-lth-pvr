@@ -34,6 +34,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 
 import { getServiceClient, sleep } from "./client.ts";
 import { refreshSthCbBands } from "../_shared/sth_cb_bands_db.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const RB_BASE = "https://api.researchbitcoin.net";
 const ORG_FALLBACK = "b0a77009-03b9-44a1-ae1d-34f157d44a8b";
@@ -254,6 +255,9 @@ function computeRows(
 // Main handler
 // ---------------------------------------------------------------------------
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
 
   let body: Record<string, unknown> = {};

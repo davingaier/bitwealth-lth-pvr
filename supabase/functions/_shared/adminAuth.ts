@@ -5,8 +5,8 @@
 // is calling. Any function that acts with the service role must authorise the
 // caller itself — this module is that check.
 
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { allPublishableKeys, allServiceKeys } from "./supabaseKeys.ts";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { allPublishableKeys, allServiceKeys, getServiceKey } from "./supabaseKeys.ts";
 
 export interface AdminCaller {
   ok: boolean;
@@ -70,4 +70,27 @@ export async function requireOrgAdmin(
   }
 
   return { ok: true, status: 200, userId: data.user.id, email: data.user.email ?? undefined };
+}
+let _autoClient: SupabaseClient | null = null;
+
+/**
+ * Drop-in guard for functions that build their Supabase client later (or not at all): resolves the
+ * privileged key and URL from the environment and delegates to requireOrgAdmin. Internal callers
+ * (cron / pg_net / other Edge Functions) present the secret key; humans present an org admin session.
+ */
+export async function requireOrgAdminAuto(req: Request): Promise<AdminCaller> {
+  const key = getServiceKey() ?? "";
+  if (!_autoClient) {
+    const url = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "";
+    _autoClient = createClient(url, key, { auth: { persistSession: false } });
+  }
+  return requireOrgAdmin(_autoClient, req, key);
+}
+
+/** Standard JSON 401/403 response for a failed requireOrgAdmin* check. */
+export function unauthorizedResponse(caller: AdminCaller, extraHeaders: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify({ error: caller.error }), {
+    status: caller.status,
+    headers: { "Content-Type": "application/json", ...extraHeaders },
+  });
 }

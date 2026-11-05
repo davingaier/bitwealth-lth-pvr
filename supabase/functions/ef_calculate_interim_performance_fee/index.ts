@@ -7,6 +7,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = getServiceKey();
@@ -36,6 +37,9 @@ interface Balance {
 }
 
 Deno.serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const body = await req.json();
     const customerId = body.customer_id;

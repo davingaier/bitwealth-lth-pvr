@@ -12,6 +12,7 @@ import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
 import { customerStrategy, sthCbSignalState, sthCbStateCopy, templateKeyFor } from "../_shared/strategyEmail.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -130,9 +131,13 @@ Deno.serve(async (req) => {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+      }
     });
   }
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
+
 
   const results = {
     scanned: 0,

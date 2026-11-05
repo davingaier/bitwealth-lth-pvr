@@ -1,6 +1,7 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // VALR signature helper (inline to avoid import issues)
 // IMPORTANT: Must include subaccountId in signature payload per VALR spec
@@ -75,7 +76,10 @@ async function getOrderBookPrice(pair: string): Promise<{ bestBid: string; bestA
   }
 }
 
-Deno.serve(async (_req: Request) => {
+Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   console.log("ef_market_fallback: Checking for stale LIMIT orders");
 
   // 1) Find stale LIMIT orders that need conversion to MARKET

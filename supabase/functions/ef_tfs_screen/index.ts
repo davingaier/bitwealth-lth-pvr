@@ -15,6 +15,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Deployed with: --no-verify-jwt (called by pg_cron and by onboarding edge function)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // ─── Environment ─────────────────────────────────────────────────────────────
 
@@ -537,7 +538,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
   }
-
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const startedAt = Date.now();
 
   let body: {

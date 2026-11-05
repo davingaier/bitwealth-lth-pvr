@@ -1,5 +1,6 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
@@ -13,7 +14,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
  * Execute Public Back-Test
  * Polls for pending public back-test requests and executes them
  */
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     console.log("🔍 Checking for pending public back-test requests...");
 

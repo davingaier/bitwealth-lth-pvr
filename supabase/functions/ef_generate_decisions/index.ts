@@ -2,6 +2,7 @@ import { getServiceClient } from "./client.ts";
 import { bucketLabel, decideTrade, computeBearPauseAt, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource, normaliseBandSource, readBandSourceFromBody, BandSource } from "../_shared/band_source.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // --- Helpers -------------------------------------------------
 async function getBands(sb: any, bandsTable: string, dateStr: string) {
@@ -13,6 +14,9 @@ async function getBands(sb: any, bandsTable: string, dateStr: string) {
 }
 // --- Handler -------------------------------------------------
 Deno.serve(async (req: Request)=>{
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const started = Date.now();
   try {
     const sb = getServiceClient(); // lth_pvr schema

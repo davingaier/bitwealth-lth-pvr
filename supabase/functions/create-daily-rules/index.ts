@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 // deno-lint-ignore-file no-explicit-any
 // Supabase Edge Function — create-daily-rules (v8)
 // Fully aligned to advanced_btc_dca.py (rules + ladders + latches)
@@ -81,6 +82,9 @@ async function lastRuleDate(sb, cid) {
     status: 204,
     headers: CORS
   });
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   if (req.method !== "POST") return json({
     ok: false,
     error: "Method not allowed"

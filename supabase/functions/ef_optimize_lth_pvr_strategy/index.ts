@@ -4,6 +4,7 @@ import { runSimulation } from "../_shared/lth_pvr_simulator.ts";
 import type { CIBandData } from "../_shared/lth_pvr_simulator.ts";
 import type { StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 Deno.serve(async (req) => {
   // CORS for browser/Admin UI access
@@ -14,9 +15,13 @@ Deno.serve(async (req) => {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+      }
     });
   }
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
+
 
   try {
     const sb = getServiceClient();

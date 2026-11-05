@@ -9,6 +9,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // targeted monitoring of active orders with automatic reconnection.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 
 // Inline alerting module (to avoid deployment bundling issues)
 interface SupabaseClient {
@@ -103,6 +104,9 @@ async function signRequest(apiSecret: string, payload: string): Promise<string> 
 }
 
 Deno.serve(async (req: Request) => {
+  // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
