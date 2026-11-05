@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_fetch_onchain_pvr/index.ts
 // ===========================================================================
 // On-Chain Charts data engine — STH/LTH PVR, LTH MVRV Z-Score, CVDD.
@@ -452,7 +453,7 @@ Deno.serve(async (req: Request) => {
   // Fire-and-forget; the tracker rebuilds its full history from scratch each run.
   try {
     const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const key = getServiceKey();
     if (baseUrl && key) {
       const resp = await fetch(`${baseUrl}/functions/v1/ef_sth_cb_tracker`, {
         method: "POST",

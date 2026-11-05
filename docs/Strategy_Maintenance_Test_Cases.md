@@ -684,7 +684,7 @@ export function calculateMetrics(daily: DailyResult[]): {
 **Status:** ✅ PASS (executed 2026-02-26)  
 **How to Execute:** Call the simulator via PowerShell with a short date range (Q1 2020) to keep output readable:
 ```powershell
-$anon = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxbm14cG9vYWJtZWR2dGFja2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTY3OTksImV4cCI6MjA2OTYzMjc5OX0.kiNGXtYrUoeud-rKav-o2Vs5x7BZdgG_GVF6MLWE-zs"
+$anon = "<publishable-key>"
 $h = @{"Authorization"="Bearer $anon"; "Content-Type"="application/json"}
 $body = '{"start_date":"2020-01-01","end_date":"2020-03-31","upfront_usd":10000,"monthly_usd":500,"variation_ids":["f7ec6155-5b31-4ba2-9d44-f3516f76c1a7"]}'
 $r = (Invoke-RestMethod -Uri "https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_run_lth_pvr_simulator" -Method POST -Headers $h -Body $body)

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_sweep_usdt_to_usdpc/index.ts
 //
 // Post-settlement step in the daily LTH PVR pipeline. After BTC sells have
@@ -276,7 +277,7 @@ Deno.serve(async (req: Request) => {
   let pipeline: Array<{ step: string; ok: boolean; status: number }> | undefined;
   if (force && created > 0) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const serviceKey = getServiceKey();
     const callEf = async (name: string) => {
       const r = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
         method: "POST",

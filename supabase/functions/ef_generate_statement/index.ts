@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_generate_statement/index.ts
 // ─────────────────────────────────────────────────────────────────────────────
 // Purpose:  Generate the monthly statement for ONE customer for ONE (year, month).
@@ -35,7 +36,7 @@ import {
 import { BRAND } from "../_shared/branding.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SERVICE_ROLE_KEY = getServiceKey();
 const ORG_ID = Deno.env.get("ORG_ID");
 const BROWSERLESS_TOKEN = Deno.env.get("BROWSERLESS_TOKEN");
 const BROWSERLESS_BASE = Deno.env.get("BROWSERLESS_BASE") ?? "https://chrome.browserless.io";

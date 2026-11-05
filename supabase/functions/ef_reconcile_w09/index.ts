@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // One-off reconciliation function for request f32dfe4d-45fd-4453-9341-b24be8f65083.
 // Dispatches a R100 ZAR fiat withdrawal to the customer's linked bank, then marks
 // the withdrawal_request row 'completed' with the resulting valr_withdrawal_id.
@@ -10,7 +11,7 @@ import { resolveCustomerCredentials } from "../_shared/valrCredentials.ts";
 import { zarWithdraw } from "../_shared/valrClient.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_KEY = getServiceKey()!;
 const REQUEST_ID = "f32dfe4d-45fd-4453-9341-b24be8f65083";
 const CUSTOMER_ID = 31;
 const BANK_VALR_ID = "01420f62-397e-43d6-bce4-73e47738458a";

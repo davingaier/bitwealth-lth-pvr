@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
@@ -216,7 +217,7 @@ Deno.serve(async () => {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                    Authorization: `Bearer ${getServiceKey()}`,
                   },
                   body: JSON.stringify({
                     btc_amount: accumBtc,

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_poll_orders/index.ts
 // Poll open VALR orders for each exchange_account and:
 // 1) Update status (submitted / filled / cancelled)
@@ -11,7 +12,7 @@ import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/val
 
 // --- Supabase client (lth_pvr schema) ---
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SECRET_KEY");
+const supabaseKey = getServiceKey();
 const supabase = createClient(supabaseUrl, supabaseKey, {
   db: {
     schema: "lth_pvr"

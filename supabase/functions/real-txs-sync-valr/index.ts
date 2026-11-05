@@ -1,9 +1,11 @@
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // deno-lint-ignore-file no-explicit-any
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { crypto } from 'https://deno.land/std@0.224.0/crypto/mod.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SERVICE_ROLE = Deno.env.get('Secret Key');
+const SERVICE_ROLE = getServiceKey();
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
 // ---- CORS (use on absolutely every response) ----
 const corsHeaders = {
@@ -104,7 +106,10 @@ Deno.serve(async (req)=>{
       }
     });
   }
-  // Non-POST guard (also CORS’ed)
+  // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
+// Non-POST guard (also CORS’ed)
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({
       ok: false,

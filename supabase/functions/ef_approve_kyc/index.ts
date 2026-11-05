@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_approve_kyc
 // Purpose: Approve customer KYC and trigger registration email
 // Authentication: Requires authenticated admin user
@@ -9,7 +10,7 @@ import { customerStrategy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Missing required environment variables");

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
 
@@ -29,7 +30,7 @@ async function signVALR(
 }
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "";
-const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const supabaseServiceRoleKey = getServiceKey() ?? "";
 const org_id = Deno.env.get("ORG_ID");
 
 const VALR_API_KEY = Deno.env.get("VALR_API_KEY") ?? "";

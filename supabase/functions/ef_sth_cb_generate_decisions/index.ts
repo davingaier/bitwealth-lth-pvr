@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_sth_cb_generate_decisions/index.ts
 // ===========================================================================
 // STH Cost Basis Strategy — LIVE decision generator.
@@ -39,7 +40,7 @@ const num = (v: unknown, dflt = 0): number => { const n = Number(v); return Numb
 Deno.serve(async (req) => {
   const sb = getServiceClient();
   // deno-lint-ignore no-explicit-any
-  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
   if (!caller.ok || !caller.internal) return json({ error: "service role required" }, 401);
 
   const body = await req.json().catch(() => ({}));
@@ -141,7 +142,7 @@ Deno.serve(async (req) => {
     const chained: Record<string, unknown>[] = [];
     if (chain && actionable.length) {
       const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const key = getServiceKey();
       const steps: [string, Record<string, unknown>][] = [
         ["ef_create_order_intents", { customer_ids: actionable, trade_date: tradeDate }],
         ["ef_execute_orders", {}],

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_request_withdrawal (EF10)
 // Purpose: Customer-triggered withdrawal INTAKE — validates, sizes, snapshots HWM,
 //          inserts a `pending` withdrawal_requests row, and returns immediately.
@@ -16,7 +17,7 @@ import { logAlert } from "../_shared/alerting.ts";
 
 // ── Environment ───────────────────────────────────────────────────────────────
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID       = Deno.env.get("ORG_ID");
 const TEST_MODE    = Deno.env.get("VALR_TEST_MODE") === "true";
 const FROM_EMAIL   = Deno.env.get("FROM_EMAIL") ?? "noreply@bitwealth.co.za";

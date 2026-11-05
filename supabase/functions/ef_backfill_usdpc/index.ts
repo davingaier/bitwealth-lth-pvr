@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_backfill_usdpc/index.ts
 //
 // Phase 7 — USDPC rollout. On-demand backfill for a portfolio that has just
@@ -41,7 +42,7 @@ Deno.serve(async (req: Request) => {
 
   const org_id = Deno.env.get("ORG_ID");
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey = getServiceKey();
   if (!org_id || !supabaseUrl || !serviceKey) {
     return new Response(
       JSON.stringify({ success: false, error: "Missing ORG_ID / SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" }),

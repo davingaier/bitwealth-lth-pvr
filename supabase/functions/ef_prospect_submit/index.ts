@@ -1,10 +1,11 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_prospect_submit/index.ts
 // Purpose: Handle public prospect interest form submission
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SECRET_KEY = Deno.env.get("Secret Key");
+const SECRET_KEY = getServiceKey();
 const ORG_ID = Deno.env.get("ORG_ID");
 const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 const ADMIN_PORTAL_URL = Deno.env.get("ADMIN_PORTAL_URL") || "https://bitwealth.co.za/admin";

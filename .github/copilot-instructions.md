@@ -176,7 +176,7 @@ supabase functions deploy ef_execute_orders --project-ref wqnmxpooabmedvtackji
 
 **Environment Variables Required:**
 - `SUPABASE_URL` / `SB_URL` - Project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key (NOT "Secret Key" - old legacy name)
+- **Supabase keys (since the 2026-11-05 incident):** legacy `anon`/`service_role` JWT keys are DISABLED. Always read keys via `_shared/supabaseKeys.ts` (`getServiceKey()` / `getPublishableKey()`), never `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Server-to-server calls send the `sb_secret` key in the `apikey` header (bearer only if identical); such target functions must be `--no-verify-jwt` and call `requireOrgAdmin`. Deploy with `.\tools\redeploy_all_functions.ps1` (flags in `tools/edge_function_jwt_flags.json`). `.env` lives OUTSIDE the Dropbox-synced repo.
 - `ORG_ID` - Organization UUID for multi-tenancy
 - `VALR_API_KEY`, `VALR_API_SECRET` - Exchange credentials
 - `RESEND_API_KEY` - Email provider for alerts

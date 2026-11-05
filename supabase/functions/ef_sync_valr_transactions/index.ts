@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_sync_valr_transactions
 // Purpose: Sync VALR transaction history to detect deposits/withdrawals with ACTUAL amounts
 // Replaces: ef_balance_reconciliation (which used cumulative balance differences - inaccurate)
@@ -15,7 +16,7 @@ import { sendTemplateEmail } from "../_shared/sendTemplateEmail.ts";
 import { customerStrategy, sthCbSignalState, sthCbStateCopy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 
 if (!supabaseUrl || !supabaseKey || !orgId) {

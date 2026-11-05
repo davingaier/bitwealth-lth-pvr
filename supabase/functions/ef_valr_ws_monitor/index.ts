@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_valr_ws_monitor/index.ts
 // Real-time WebSocket monitor for VALR order updates
 // This Edge Function establishes a WebSocket connection to VALR for real-time order updates
@@ -55,7 +56,7 @@ async function logAlert(
 }
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("SECRET_KEY");
+const supabaseKey = getServiceKey();
 const org_id = Deno.env.get("ORG_ID");
 
 const VALR_WS_URL = Deno.env.get("VALR_WS_URL") ?? "wss://api.valr.com/ws/trade";

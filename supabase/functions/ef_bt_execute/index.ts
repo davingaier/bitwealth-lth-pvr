@@ -1,3 +1,5 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import { getServiceClient } from "./client.ts";
 import { bucketLabel, decideTrade, StrategyConfig } from "../_shared/lth_pvr_strategy_logic.ts";
 import { syntheticUsdpcPrice, sizeUsdpcToUsdt, sizeUsdtToUsdpc } from "../_shared/usdpc.ts";
@@ -86,7 +88,10 @@ Deno.serve(async (req)=>{
     });
   }
   const sb = getServiceClient();
-  // use lth_pvr_bt schema explicitly for all BT tables/views
+  // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
+// use lth_pvr_bt schema explicitly for all BT tables/views
   const sbBt = sb.schema ? sb.schema("lth_pvr_bt") : sb;
   let bt_run_id;
   try {

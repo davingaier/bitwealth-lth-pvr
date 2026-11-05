@@ -1,8 +1,13 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 import { getServiceClient } from "./client.ts";
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   const sb = getServiceClient();
-  const org_id = Deno.env.get("ORG_ID");
+  // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
+const org_id = Deno.env.get("ORG_ID");
   if (!org_id) return new Response("ORG_ID missing", { status: 500 });
 
   const emailServiceUrl = Deno.env.get("INVOICE_EMAIL_URL");

@@ -6,6 +6,7 @@
 // caller itself — this module is that check.
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { allPublishableKeys, allServiceKeys } from "./supabaseKeys.ts";
 
 export interface AdminCaller {
   ok: boolean;
@@ -31,25 +32,24 @@ export async function requireOrgAdmin(
   serviceKey: string,
 ): Promise<AdminCaller> {
   const header = req.headers.get("Authorization") ?? req.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) {
-    return { ok: false, status: 401, error: "Unauthenticated — a bearer token is required" };
+  const apikey = req.headers.get("apikey") ?? undefined;
+
+  // Service-to-service callers (cron / pg_net / other Edge Functions). The new sb_secret keys travel in the
+  // `apikey` header (the platform rejects them as a bearer on verify_jwt functions), legacy callers used a
+  // bearer — accept either, matched against every configured privileged key.
+  const serviceKeys = new Set<string>([serviceKey, ...allServiceKeys()].filter(Boolean) as string[]);
+  const bearer = header?.startsWith("Bearer ") ? header.slice(7).trim() : undefined;
+  if ((apikey && serviceKeys.has(apikey)) || (bearer && serviceKeys.has(bearer))) {
+    return { ok: true, status: 200, internal: true };
   }
 
-  const token = header.slice(7).trim();
+  if (!bearer) {
+    return { ok: false, status: 401, error: "Unauthenticated — a bearer token is required" };
+  }
+  const token = bearer;
 
-  // Service-to-service callers. The codebase reads the service role key under
-  // several env names, so accept any of them rather than only the one passed in.
-  const serviceKeys = [
-    serviceKey,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-    Deno.env.get("SECRET_KEY"),
-    Deno.env.get("Secret Key"),
-  ].filter(Boolean) as string[];
-  if (serviceKeys.includes(token)) return { ok: true, status: 200, internal: true };
-
-  // The anon/publishable key is public, so it must never authorise anything.
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-  if (anonKey && token === anonKey) {
+  // The anon/publishable keys are public, so they must never authorise anything.
+  if (allPublishableKeys().includes(token)) {
     return { ok: false, status: 401, error: "Unauthenticated — a user access token is required" };
   }
 

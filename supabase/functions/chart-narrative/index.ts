@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Supabase Edge Function (Deno) — chart-narrative
 // Generates a professional narrative per chart for a selected customer
 // Inputs (POST JSON):
@@ -24,7 +25,7 @@ function json(payload, status = 200) {
 }
 // ---------- ENV ----------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SECRET_KEY");
+const SERVICE_ROLE_KEY = getServiceKey();
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini"; // pick your preferred model
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {

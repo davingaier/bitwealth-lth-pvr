@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 /**
  * LTH PVR Simulator Edge Function
  * 
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
 
-  const _svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const _svcKey = getServiceKey() ?? "";
   const _caller = await requireOrgAdmin(sb, req, _svcKey);
   if (!_caller.ok) {
     return new Response(JSON.stringify({ error: _caller.error }), {

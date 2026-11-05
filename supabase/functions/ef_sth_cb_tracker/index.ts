@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_sth_cb_tracker/index.ts
 // ===========================================================================
 // Daily STH_CB strategy tracker ("paper trading record").
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
   const sb = getServiceClient();
   // Internal (service-role) callers only — same key recognition as the other admin EFs.
   // deno-lint-ignore no-explicit-any
-  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
   if (!caller.ok || !caller.internal) return json({ error: "service role required" }, 401);
 
   const body = await req.json().catch(() => ({}));
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
     if (!onlyKey && body?.chain !== false && lastDate && lastDate >= yesterday) {
       try {
         const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-        const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const key = getServiceKey();
         const resp = await fetch(`${baseUrl}/functions/v1/ef_sth_cb_generate_decisions`, {
           method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` }, body: JSON.stringify({ org_id }),
         });

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_collect_annual_fees
 // Purpose: Collect accrued annual platform + performance fees for customers
 //          on anniversary-based billing schedule.
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
   const sb = getServiceClient();
   const orgId = Deno.env.get("ORG_ID");
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseKey = getServiceKey();
 
   if (!orgId) {
     return new Response(JSON.stringify({ error: "Missing ORG_ID" }), { status: 500 });

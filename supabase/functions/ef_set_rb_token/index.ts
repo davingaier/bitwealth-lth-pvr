@@ -1,3 +1,4 @@
+import { getPublishableKey } from "../_shared/supabaseKeys.ts";
 // ef_set_rb_token/index.ts
 // ===========================================================
 // Admin-only endpoint to manually replace the Research Bitcoin
@@ -71,7 +72,7 @@ Deno.serve(async (req: Request) => {
   try {
     const userClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "",
+      getPublishableKey() ?? "",
       { global: { headers: { Authorization: `Bearer ${token}` } } },
     );
     const { data, error } = await userClient.auth.getUser();

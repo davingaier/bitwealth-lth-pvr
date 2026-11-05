@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 /**
  * ef_submit_public_backtest
  *
@@ -25,7 +26,7 @@ const CORS_HEADERS = {
 };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseServiceKey = getServiceKey()!;
 const recaptchaSecret = Deno.env.get("RECAPTCHA_SECRET_KEY")!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);

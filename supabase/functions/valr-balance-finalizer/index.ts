@@ -1,3 +1,5 @@
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // supabase/functions/valr-balance-finalizer/index.ts
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -52,12 +54,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
     usdt_available: num(usdt?.available)
   };
 }
-Deno.serve(async (_req)=>{
+Deno.serve(async (req)=>{
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SERVICE_ROLE_KEY = Deno.env.get('Secret Key');
+    const SERVICE_ROLE_KEY = getServiceKey();
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    // Write ONLY for Active customers
+  // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
+  const caller = await requireOrgAdmin(supabase as any, req, getServiceKey() ?? "");
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
+// Write ONLY for Active customers
     const { data: customers, error: cErr } = await supabase.from('customer_details').select('customer_id').eq('customer_status', 'Active');
     if (cErr) throw cErr;
     // UTC day the job runs

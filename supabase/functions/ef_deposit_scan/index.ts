@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_deposit_scan
 // Purpose: Milestone 5 - Hourly scan for customer deposits on VALR
 // Supports both subaccount and API model customers.
@@ -14,7 +15,7 @@ import { customerStrategy, sthCbSignalState, sthCbStateCopy, templateKeyFor } fr
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 
 if (!supabaseUrl || !supabaseKey || !orgId) {

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_valr_create_subaccount
 // Purpose: Milestone 4 - Auto-create VALR subaccount when customer reaches 'setup' status
 // Flow: Creates VALR subaccount → Stores subaccount_id in exchange_accounts
@@ -9,7 +10,7 @@ import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 const valrApiKey = Deno.env.get("VALR_API_KEY");
 const valrApiSecret = Deno.env.get("VALR_API_SECRET");

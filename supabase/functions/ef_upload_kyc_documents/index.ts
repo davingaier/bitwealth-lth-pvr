@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_upload_kyc_documents
 // Purpose: Milestone 3 — Handle upload of ALL 4 KYC documents in a single call
 //   1. Identity document (ID / passport)
@@ -11,7 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Missing required environment variables: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY");
@@ -178,7 +179,7 @@ Deno.serve(async (req) => {
         headers: {
           "Content-Type": "application/json",
           // Customer token would be rejected by ef_send_email (admin/service only).
-          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Authorization": `Bearer ${getServiceKey()}`,
         },
         body: JSON.stringify({
           template_key: "kyc_documents_uploaded_notification",

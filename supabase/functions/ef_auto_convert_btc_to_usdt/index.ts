@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_auto_convert_btc_to_usdt
 // Purpose: Auto-convert BTC to USDT when insufficient USDT for fees
 // Trigger: Called by ef_calculate_performance_fees or manually by Admin UI
@@ -10,7 +11,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { resolveCustomerCredentials, type ValrCredentials } from "../_shared/valrCredentials.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 const websiteUrl = Deno.env.get("WEBSITE_URL") || supabaseUrl;
 
@@ -209,7 +210,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "Authorization": `Bearer ${getServiceKey()}`,
           },
           body: JSON.stringify({
             template_key: "btc_conversion_approval",

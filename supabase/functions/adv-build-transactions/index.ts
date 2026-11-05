@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -10,7 +11,7 @@ const CORS = {
 };
 
 const URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("SECRET_KEY");
+const KEY = getServiceKey();
 if (!URL || !KEY) throw new Error("Missing SB_URL/Secret Key");
 const sb = createClient(URL, KEY);
 

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_customer_valr_balances/index.ts
 //
 // Admin-only helper: returns a customer's LIVE VALR account balances for
@@ -35,7 +36,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
   const url = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = getServiceKey();
   if (!url || !key) return json({ ok: false, error: "Server not configured" }, 500);
 
   const sbAuth = createClient(url, key);

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_switch_strategy/index.ts
 // ===========================================================================
 // Admin action: switch an existing client to another strategy (in place) and notify client + admin.
@@ -36,7 +37,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const sb = getServiceClient();
   // deno-lint-ignore no-explicit-any
-  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
   if (!caller.ok) return json({ error: caller.error }, caller.status);
 
   const body = await req.json().catch(() => ({}));

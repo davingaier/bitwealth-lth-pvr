@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_rotate_api_key_notifications (EF14)
 // Purpose: Daily check for API model customers whose VALR API key is expiring or has expired.
 //   - Sends warning emails at 30, 10, 5, and 1 day(s) before expiry (deduped via DB array).
@@ -14,7 +15,7 @@ import { logAlert } from "../_shared/alerting.ts";
 
 // ── Environment ───────────────────────────────────────────────────────────────
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID       = Deno.env.get("ORG_ID");
 const FROM_EMAIL   = Deno.env.get("FROM_EMAIL") ?? "noreply@bitwealth.co.za";
 const PORTAL_URL   = Deno.env.get("PORTAL_URL") ?? "https://bitwealth.co.za/customer-portal.html";

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_link_bank_account
 // Purpose: Phase 3 (EF8) — Link a customer's ZAR bank account via VALR API and
 //          store the bank details in exchange_accounts for future ZAR withdrawals.
@@ -21,7 +22,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID       = Deno.env.get("ORG_ID");
 const VALR_BASE    = Deno.env.get("VALR_API_URL") ?? Deno.env.get("VALR_API_BASE") ?? "https://api.valr.com";
 

@@ -1,3 +1,4 @@
+import { getServiceKey } from "./supabaseKeys.ts";
 // _shared/sendTemplateEmail.ts — call ef_send_email from another edge function.
 //
 // Always authenticates with the service role key: ef_send_email rejects the anon key
@@ -6,7 +7,7 @@
 // network) — a lone 502 at the busy 00:00 UTC cron burst otherwise loses the email.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SERVICE_KEY = getServiceKey();
 
 export interface TemplateEmailResult {
   ok: boolean;

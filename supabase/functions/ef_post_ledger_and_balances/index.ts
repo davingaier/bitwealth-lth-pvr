@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { getServiceClient, yyyymmdd } from "./client.ts";
 import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { withdrawFeeFromCustomerAccount } from "../_shared/valrTransfer.ts";
@@ -684,7 +685,7 @@ Deno.serve(async (req: Request) => {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
-                        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                        Authorization: `Bearer ${getServiceKey()}`,
                       },
                       body: JSON.stringify({
                         btc_amount: feeBtc,
@@ -837,7 +838,7 @@ Deno.serve(async (req: Request) => {
                             method: "POST",
                             headers: {
                               "Content-Type": "application/json",
-                              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                              Authorization: `Bearer ${getServiceKey()}`,
                             },
                             body: JSON.stringify({
                               btc_amount: newBtc,

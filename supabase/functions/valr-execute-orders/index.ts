@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // supabase/functions/valr-execute-orders/index.ts
 // Place limit orders OR cancel a single intent when { cancel_intent_id } is provided
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
@@ -15,7 +16,7 @@ const cors = (req)=>{
   };
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_KEY = Deno.env.get("SECRET_KEY");
+const SB_KEY = getServiceKey();
 const PAIR = "BTCUSDT";
 async function signVALR(ts, method, path, body, secret) {
   const enc = new TextEncoder();

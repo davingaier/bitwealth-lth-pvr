@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_sth_cb_bt_execute/index.ts
 // ===========================================================================
 // STH Cost Basis (STH_CB) strategy back-tester — thin DB wrapper around the pure
@@ -86,7 +87,7 @@ Deno.serve(async (req) => {
   const sbCb = sb.schema("sth_cb");
 
   // deno-lint-ignore no-explicit-any
-  const caller = await requireOrgAdmin(sb as any, req, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
   if (!caller.ok) return json({ error: caller.error }, caller.status);
 
   let bt_run_id: string | undefined;

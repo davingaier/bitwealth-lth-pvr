@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_valr_subaccounts / index.ts
 // Lists your VALR sub-accounts so you can see subaccountId / label / etc.
 
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
   }
 
   const SB_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-  const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const SB_KEY = getServiceKey();
   if (SB_URL && SB_KEY) {
     const caller = await requireOrgAdmin(createClient(SB_URL, SB_KEY), req, SB_KEY);
     if (!caller.ok) {

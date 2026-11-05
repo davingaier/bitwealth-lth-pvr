@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_resume_pipeline/index.ts
 // Edge function to resume the LTH_PVR daily pipeline
 // Provides REST API endpoint for UI and manual triggering
@@ -58,7 +59,7 @@ Deno.serve(async (req: Request) => {
         });
       }
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const serviceKey = getServiceKey();
       const results: unknown[] = [];
       const call = async (name: string, payload: Record<string, unknown>) => {
         const r = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
@@ -141,7 +142,7 @@ Deno.serve(async (req: Request) => {
 
     // Execute steps sequentially
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const serviceKey = getServiceKey();
     const steps = statusData.steps;
     const results = [];
     

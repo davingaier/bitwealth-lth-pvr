@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Place a USDTZAR order to convert ZAR -> USDT.
 // Body: { customer_id: number, mode?: 'limit'|'market', post_only?: boolean, amount_zar?: number, as_of_date?: string }
 // - 'limit' default, post-only true by default.
@@ -11,7 +12,7 @@ const CORS = {
   "Content-Type": "application/json"
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_KEY = Deno.env.get("SECRET_KEY");
+const SB_KEY = getServiceKey();
 async function signVALR(ts, method, path, body, secret) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", enc.encode(secret), {

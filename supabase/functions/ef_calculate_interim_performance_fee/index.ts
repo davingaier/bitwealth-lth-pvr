@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_calculate_interim_performance_fee
 // Purpose: Calculate performance fee before withdrawal (with reversion capability)
 // Called by: Admin UI when processing withdrawal requests
@@ -8,7 +9,7 @@ import { transferToMainAccount } from "../_shared/valrTransfer.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 
 if (!supabaseUrl || !supabaseKey || !orgId) {

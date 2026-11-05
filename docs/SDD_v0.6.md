@@ -3,11 +3,66 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-05 (v0.6.188)
+**Last updated:** 2026-11-05 (v0.6.189)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.189 – 🔴 SECURITY INCIDENT: stolen service_role key → key rotation to `sb_secret` (Phase 1 code changes)
+**Date:** 2026-11-05 · **Status:** 🟠 IN PROGRESS (Phase 1 done; Phases 2–4 are operator steps)
+
+**What happened (13:26–13:50 UTC).** An unknown Linux/Chrome host used the project's **legacy JWT `service_role`
+key** against PostgREST: probed `/rest/v1/`, enumerated `customer_details` / `exchange_accounts`, called the
+SECURITY DEFINER RPC `get_customer_valr_credentials` **18× successfully** (returns decrypted VALR API key + secret
+from the vault for `api`-model customers 9, 49, 56), inserted a 5,000 USDT `withdrawal_requests` row for customer
+999 (rejected by VALR — address not whitelisted — which produced the "Withdrawal Failed" email), and — using the
+**master VALR key** — withdrew 2 USDPC from customer 999's subaccount to an Arbitrum address and queued
+28,038.56 USDPC (cancelled when Davin blocked the VALR account). Both keys live together in `.env`, which sat in
+Dropbox; GitHub was ruled out (full tracked-file + history scan: only `anon` JWTs were ever committed). No attacker
+persistence found (no new auth users, `org_members` unchanged, no new cron jobs). `lthpvr_withdrawal_queue` was
+unscheduled as a stop-gap (attacker could still insert withdrawal rows).
+
+**Why a migration, not a rotation.** Legacy `anon`/`service_role` keys are signed by the project JWT secret and
+cannot be regenerated; the only kill switch is **disabling legacy API keys** (both at once) and moving to the new
+opaque `sb_secret_` / `sb_publishable_` keys. Constraints (Supabase docs): the platform cannot `verify_jwt` an
+`sb_secret` key, so any function called server-to-server must be `--no-verify-jwt` and authorise in code; the new
+key travels in `apikey` (a bearer is only accepted when identical to `apikey`); Edge Functions receive the new keys
+as JSON maps `SUPABASE_SECRET_KEYS` / `SUPABASE_PUBLISHABLE_KEYS`.
+
+**Phase 1 (code, deployed).**
+- `_shared/supabaseKeys.ts` — `getServiceKey()` (SB_SECRET_KEY override → `SUPABASE_SECRET_KEYS` → legacy
+  fallbacks), `getPublishableKey()`, `allServiceKeys()`, `allPublishableKeys()`, `serviceHeaders()`.
+  `tools/migrate_service_key_reads.py` rewrote **129 service-key and 5 anon-key env reads in 113 files** to the
+  helpers (no `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")` remains).
+- `_shared/adminAuth.ts` — `requireOrgAdmin` accepts a privileged key in **`apikey` or `Authorization`**, matched
+  against every configured secret key; rejects every publishable key.
+- The 6 server-called functions that relied solely on platform JWT verification (`ef_std_dca_roll`,
+  `ef_fee_invoice_email`, `real-txs-sync-valr`, `valr-balance-finalizer`, `valr-fees-harvester`, `ef_bt_execute`)
+  now call `requireOrgAdmin` and are deployed `--no-verify-jwt`.
+- Admin UI: the 4 embedded legacy anon JWTs now reuse the single `sb_publishable` constant;
+  `backup-login-20260114-152700.html` deleted; JWT in `Strategy_Maintenance_Test_Cases.md` redacted.
+- `tools/edge_function_jwt_flags.json` (per-function `verify_jwt`, generated from the live deployment) +
+  `tools/redeploy_all_functions.ps1` (replaces the stale 30-function script). All 90 functions redeployed.
+- Canary: `ef_resume_pipeline {check_status}` → 200 via bearer and via `apikey` through the new helper.
+
+**Phase 2 (operator, SQL Editor)** — `supabase/sql/incident_20261105_rotate_keys.sql`: vault `service_jwt`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ef_auth_header`, `Secret Key`; `lth_pvr.settings.ef_auth_header`;
+`private.app_secrets.service_jwt/anon_key`; `app.config.service_role` (`annual-fee-collection` / `deposit-scan-hourly` already
+read vault `service_jwt`; `ALTER DATABASE … SET` is not permitted on Supabase and the SQL Editor runs a script as one
+transaction, so the first attempt rolled back entirely). Edge Function secrets: remove
+`SECRET_KEY`/`Secret Key`, set new VALR / Resend / SMTP credentials. `.env` moved out of Dropbox.
+**Phase 3** — Settings → API Keys → disable legacy keys; delete the pre-existing `sb_secret` key.
+**Phase 4** — verify cron runs / `invoker_logs` / `net._http_response`, confirm the old key returns 401, re-schedule
+`lthpvr_withdrawal_queue`.
+
+**Hardening backlog (next, in order).** (1) **22 `--no-verify-jwt` functions have no caller check at all**
+(`ef_transfer_accumulated_fees`, `ef_collect_annual_fees`, `ef_create_order_intents`, `ef_generate_decisions`,
+`ef_poll_orders`, `ef_post_ledger_and_balances`, `ef_fetch_*`, fee calculators, …) — add `requireOrgAdmin` and make
+the Admin UI send the session token where it currently sends the publishable key. (2) `get_customer_valr_credentials`
+must stop returning plaintext exchange secrets over PostgREST (sign inside an Edge Function instead). (3) Alert +
+kill-switch on `withdrawal_requests` inserts; VALR withdrawal whitelist; trading key without withdraw permission.
+(4) Customers 9/49/56: revoke + reissue VALR keys. (5) Per-component secret keys; scheduled rotation.
 
 ### v0.6.188 – Fix: Strategy Setup 401 (anon key sent to an admin-guarded EF); cellphone mandatory on the website form
 **Date:** 2026-11-05 · **Status:** ✅ DONE

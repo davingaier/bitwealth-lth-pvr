@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // client.ts
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -6,7 +7,7 @@ export function getServiceClient() {
     Deno.env.get("SUPABASE_URL") ??
     Deno.env.get("SB_URL"); // optional legacy
 
-  const key = Deno.env.get("Secret Key");
+  const key = getServiceKey();
 
   if (!url || !key) {
     throw new Error("Missing SUPABASE_URL or a service role key env var");

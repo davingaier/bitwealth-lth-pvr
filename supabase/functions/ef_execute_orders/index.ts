@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { getServiceClient } from "./client.ts";
 import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
@@ -577,7 +578,7 @@ Deno.serve(async ()=>{
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SECRET_KEY")}`,
+                "Authorization": `Bearer ${getServiceKey()}`,
               },
               body: JSON.stringify({
                 order_ids: orderIds,

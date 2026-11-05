@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_convert_platform_fee_btc
 // Purpose: Auto-convert BitWealth's collected BTC platform fees to USDT
 // Trigger: Called after successful BTC platform fee transfer to main account
@@ -10,7 +11,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 const valrApiKey = Deno.env.get("VALR_API_KEY");
 const valrApiSecret = Deno.env.get("VALR_API_SECRET");

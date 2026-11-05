@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_fee_monthly_close
 // Purpose: Internal monthly fee aggregation. Rolls up fee ledger lines into
 //          rows in `lth_pvr.fee_invoices` for BitWealth's own bookkeeping and
@@ -12,7 +13,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared/band_source.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 const adminEmail = Deno.env.get("ADMIN_EMAIL") || "admin@bitwealth.co.za";
 
@@ -269,7 +270,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Authorization": `Bearer ${getServiceKey()}`,
         },
         body: JSON.stringify({
           template_key: "monthly_fee_invoice_admin",

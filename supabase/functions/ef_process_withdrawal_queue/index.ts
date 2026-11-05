@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_process_withdrawal_queue
 // Purpose: 5-minute pg_cron processor that drives the withdrawal state machine.
 //
@@ -37,7 +38,7 @@ import { logAlert } from "../_shared/alerting.ts";
 import { ensureIdleUsdt } from "../_shared/valrTransfer.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID       = Deno.env.get("ORG_ID");
 const TEST_MODE    = Deno.env.get("VALR_TEST_MODE") === "true";
 const FROM_EMAIL   = Deno.env.get("FROM_EMAIL") ?? "noreply@bitwealth.co.za";

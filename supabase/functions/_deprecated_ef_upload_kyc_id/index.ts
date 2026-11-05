@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_upload_kyc_id
 // Purpose: Milestone 3 - Handle KYC ID document upload confirmation
 // Flow: Updates customer record → Sends admin notification email
@@ -7,7 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error("Missing required environment variables");

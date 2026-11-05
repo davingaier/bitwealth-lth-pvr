@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // supabase/functions/ef_admin_email_templates/index.ts
 // Purpose: Admin-only CRUD + preview + test-send for public.email_templates.
 // Auth: JWT-required. Caller must be an owner/admin in at least one org_members row.
@@ -18,7 +19,7 @@ const json = (body: unknown, status = 200) =>
   });
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SECRET_KEY") ?? Deno.env.get("Secret Key");
+const SERVICE_ROLE_KEY = getServiceKey();
 
 // Sample placeholder values for the Preview action. Mirror the local
 // _render_email_templates.py keys so the preview matches what is shown

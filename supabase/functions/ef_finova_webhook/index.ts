@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_finova_webhook/index.ts
 //
 // Receives the Finova/KYCDD completion webhook, verifies its signature, maps the
@@ -320,7 +321,7 @@ Deno.serve(async (req: Request) => {
         const registrationUrl =
           `${websiteUrl}/register.html?customer_id=${customerId}&email=${encodeURIComponent(customer.email ?? "")}`;
         const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const serviceKey = getServiceKey();
         try {
           const r = await fetch(`${supabaseUrl}/functions/v1/ef_send_email`, {
             method: "POST",

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_fetch_rb_bands/index.ts
 // ===========================================================
 // Fetches daily LTH metrics from Research Bitcoin API and
@@ -35,7 +36,7 @@ const RB_BASE = "https://api.researchbitcoin.net";
 // the resume_pipeline guard cron and the alert_events table.
 async function triggerResumePipeline(signalDate: string, orgId: string): Promise<void> {
   const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = getServiceKey();
   if (!baseUrl || !key) {
     console.warn("ef_fetch_rb_bands: skipping resume_pipeline chain — missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
     return;
@@ -73,7 +74,7 @@ async function triggerResumePipeline(signalDate: string, orgId: string): Promise
 // extended RB API lag (e.g., 34.5 h). Fire-and-forget.
 async function triggerOnchainPvr(orgId: string): Promise<void> {
   const baseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const key = getServiceKey();
   if (!baseUrl || !key) return;
   try {
     const resp = await fetch(`${baseUrl}/functions/v1/ef_fetch_onchain_pvr`, {

@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_resume_pipeline/client.ts
 // Supabase client for resume_pipeline edge function
 
@@ -6,8 +7,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 export function getServiceClient() {
   const url = Deno.env.get("SUPABASE_URL");
   // Try multiple environment variables for service role key
-  const key = Deno.env.get("SECRET_KEY") || 
-              Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  const key = getServiceKey() ||
               Deno.env.get("SERVICE_ROLE_KEY");
 
   if (!url) throw new Error("SUPABASE_URL not set");

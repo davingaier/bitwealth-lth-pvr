@@ -1,8 +1,9 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // deno-lint-ignore-file no-explicit-any
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SERVICE_ROLE = Deno.env.get('Secret Key');
+const SERVICE_ROLE = getServiceKey();
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE);
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

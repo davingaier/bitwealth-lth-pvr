@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_send_email/index.ts
 // Purpose: Centralized email sending using SMTP
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
@@ -6,7 +7,7 @@ import { sendHTMLEmail } from "../_shared/smtp.ts";
 import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SECRET_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("Secret Key");
+const SECRET_KEY = getServiceKey();
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",

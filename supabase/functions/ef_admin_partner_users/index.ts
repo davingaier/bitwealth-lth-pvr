@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_admin_partner_users
 // Purpose: Admin-only management of partner (Finova) portal logins.
 // Actions: create | disable | enable | reset_password | reset_mfa
@@ -8,7 +9,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const PARTNER_PORTAL_URL = Deno.env.get("PARTNER_PORTAL_URL") ?? "https://bitwealth.co.za/partner-login.html";
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {

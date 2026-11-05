@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_monthly_statement_generator/index.ts
 // Purpose: Generate monthly statements for all active customers on 1st of month
 // Triggered by pg_cron at 00:01 UTC on 1st of every month
@@ -10,7 +11,7 @@ import { bandsTableForSource, normaliseBandSource, BandSource } from "../_shared
 import { customerStrategy, templateKeyFor } from "../_shared/strategyEmail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SERVICE_ROLE_KEY = getServiceKey();
 const ORG_ID = Deno.env.get("ORG_ID");
 const WEBSITE_URL = Deno.env.get("WEBSITE_URL") ?? "https://bitwealth.co.za";
 const PORTAL_URL = Deno.env.get("PORTAL_URL") ?? "https://bitwealth.co.za/customer-portal.html";

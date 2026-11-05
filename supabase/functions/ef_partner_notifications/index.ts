@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_partner_notifications
 // Purpose: Emails the partner (Finova) about work waiting in the partner portal and
 //          chases anything that has breached the agreed turnaround.
@@ -22,7 +23,7 @@ import {
 } from "../_shared/partnerEmail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID = Deno.env.get("ORG_ID");
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {

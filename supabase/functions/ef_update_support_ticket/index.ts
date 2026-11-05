@@ -1,3 +1,4 @@
+import { getServiceKey, getPublishableKey } from "../_shared/supabaseKeys.ts";
 // ef_update_support_ticket/index.ts
 // Purpose: Admin-only update of ticket status / priority / assignment / category.
 // Supports bulk updates (Phase 3).
@@ -7,8 +8,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendHTMLEmail } from "../_shared/smtp.ts";
 
 const SB_URL  = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
-const SB_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-const SB_SR   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SB_ANON = getPublishableKey()!;
+const SB_SR   = getServiceKey()!;
 const FROM_EMAIL  = Deno.env.get("SUPPORT_FROM_EMAIL") ?? "support@bitwealth.co.za";
 const PORTAL_URL  = Deno.env.get("PORTAL_URL")         ?? "https://www.bitwealth.co.za/customer-portal.html";
 

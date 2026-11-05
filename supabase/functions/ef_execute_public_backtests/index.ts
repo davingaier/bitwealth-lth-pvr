@@ -1,8 +1,9 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseServiceKey = getServiceKey()!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   db: { schema: "lth_pvr_bt" },

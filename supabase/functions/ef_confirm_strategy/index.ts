@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_confirm_strategy
 // Purpose: Milestone 2 - Confirm prospect strategy selection and start Finova KYC
 // Flow: Creates strategy → Updates status prospect→kyc → creates kyc_finova 'invited'
@@ -11,7 +12,7 @@ import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
 
 if (!supabaseUrl || !supabaseKey || !orgId) {

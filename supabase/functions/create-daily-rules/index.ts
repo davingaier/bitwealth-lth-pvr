@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // deno-lint-ignore-file no-explicit-any
 // Supabase Edge Function — create-daily-rules (v8)
 // Fully aligned to advanced_btc_dca.py (rules + ladders + latches)
@@ -15,7 +16,7 @@ const json = (p, s = 200)=>new Response(JSON.stringify(p), {
     headers: CORS
   });
 /* ---------- ENV ---------- */ const URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const KEY = getServiceKey();
 if (!URL || !KEY) throw new Error("Missing SB_URL/SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
 /* ---------- date utils ---------- */ const toISO = (d)=>d.toISOString().slice(0, 10);
 const addDays = (iso, n)=>{

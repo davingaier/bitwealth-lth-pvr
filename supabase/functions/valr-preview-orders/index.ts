@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // supabase/functions/valr-preview-orders/index.ts
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
@@ -11,7 +12,7 @@ const CORS_HEADERS = {
   "Content-Type": "application/json"
 };
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SB_SERVICE_ROLE_KEY = getServiceKey();
 const SYMBOL = "BTCUSDT";
 const json = (p, s = 200)=>new Response(JSON.stringify(p), {
     status: s,

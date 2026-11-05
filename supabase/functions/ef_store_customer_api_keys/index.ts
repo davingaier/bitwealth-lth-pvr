@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_store_customer_api_keys
 // Purpose: Phase 3 (EF7) — Securely validate and store a customer's VALR API key/secret
 //          in Supabase Vault, then update exchange_accounts with key metadata.
@@ -16,7 +17,7 @@ import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID       = Deno.env.get("ORG_ID");
 const VALR_BASE    = Deno.env.get("VALR_API_URL") ?? Deno.env.get("VALR_API_BASE") ?? "https://api.valr.com";
 

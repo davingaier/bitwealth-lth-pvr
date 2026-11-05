@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_contact_form_submit/index.ts
 // Purpose: Handle contact form submissions from website with reCAPTCHA verification
 // Sends admin notification to info@bitwealth.co.za and auto-reply to submitter
@@ -7,7 +8,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendHTMLEmail } from "../_shared/smtp.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SERVICE_ROLE_KEY = getServiceKey();
 const RECAPTCHA_SECRET_KEY = Deno.env.get("RECAPTCHA_SECRET_KEY");
 const ADMIN_EMAIL = "info@bitwealth.co.za";
 

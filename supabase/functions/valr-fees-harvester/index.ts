@@ -1,9 +1,11 @@
+import { requireOrgAdmin } from "../_shared/adminAuth.ts";
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // supabase/functions/valr-fees-harvester/index.ts
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SB_URL = Deno.env.get("SB_URL") || Deno.env.get("SUPABASE_URL");
-const SB_KEY = Deno.env.get("SECRET_KEY");
+const SB_KEY = getServiceKey();
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -66,7 +68,9 @@ serve(async (req) => {
     const onlyCustomer = body?.customer_id ? Number(body.customer_id) : null;
 
     const sb = createClient(SB_URL!, SB_KEY!, { auth: { persistSession: false } });
-
+  // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
+  const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
     // 1) Active VALR customers (optionally one, if provided)
     let cq = sb
       .from("customer_details")

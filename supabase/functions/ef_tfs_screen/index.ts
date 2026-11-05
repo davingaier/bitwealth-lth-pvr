@@ -1,3 +1,4 @@
+import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_tfs_screen
 // Purpose: FIC Phase 3 — Targeted Financial Sanctions (TFS) screening
 //
@@ -18,7 +19,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 // ─── Environment ─────────────────────────────────────────────────────────────
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SUPABASE_KEY = getServiceKey();
 const ORG_ID = Deno.env.get("ORG_ID");
 
 if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
