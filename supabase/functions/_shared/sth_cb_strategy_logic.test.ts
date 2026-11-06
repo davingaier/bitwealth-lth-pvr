@@ -295,6 +295,53 @@ Deno.test("Idea 11: capBuyRocThreshold waits for ROC before a capitulation buy",
   assertEquals(buy.position, "cap_hold");
 });
 
+Deno.test("Idea 17: an armed capitulation buy fires once ROC turns, even after the bounce above the level", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyRocThreshold: 0, capBuyArmDays: 5, capBuyArmCeilingRatio: 0.8 };
+  const touch = decideSthCb(65_000, CB, -0.1, CASH, cfg);            // 65 % ≤ 70 %, falling → arms
+  assertEquals(touch.inMarket, false);
+  assertEquals(touch.state.capArmDaysLeft, 5);
+  const bounce = decideSthCb(75_000, CB, 0.05, touch.state, cfg);    // 75 % ≤ ceiling 80 %, ROC up → fires
+  assertEquals(bounce.position, "cap_hold");
+  assertEquals(bounce.rule, "R17 Capitulation buy (armed)");
+  assertEquals(bounce.state.capArmDaysLeft, 0);
+  // above the ceiling the arm does not chase
+  const touch2 = decideSthCb(65_000, CB, -0.1, CASH, cfg);
+  const chase = decideSthCb(85_000, CB, 0.05, touch2.state, cfg);
+  assertEquals(chase.inMarket, false);
+  // the arm expires
+  let s = touch2.state;
+  for (let i = 0; i < 5; i++) s = decideSthCb(72_000, CB, -0.01, s, cfg).state;
+  assertEquals(decideSthCb(72_000, CB, 0.05, s, cfg).inMarket, false);
+});
+
+Deno.test("Idea 18: split entry — partial on the touch, full on confirmation; R16 must not restore it", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyRocThreshold: 0, capBuyTouchAlloc: 0.5, dipRebuyAtCbRatio: 1.05 };
+  const touch = decideSthCb(65_000, CB, -0.1, CASH, cfg);
+  assertEquals(touch.position, "cap_hold");
+  assertEquals(touch.targetAlloc, 0.5);
+  assertEquals(touch.rule, "R18 Capitulation touch → 50% BTC");
+  const still = decideSthCb(64_000, CB, -0.05, touch.state, cfg);  // still falling: no dip re-buy to 100 %
+  assertEquals(still.targetAlloc, 0.5);
+  const confirm = decideSthCb(66_000, CB, 0.02, still.state, cfg);
+  assertEquals(confirm.targetAlloc, 1);
+  assertEquals(confirm.rule, "R18 Capitulation confirm → 100% BTC");
+  // exit to cash clears the partial
+  const exit = decideSthCb(101_000, CB, 0, { ...confirm.state, holdDays: 30 }, cfg);
+  assertEquals(exit.inMarket, false);
+  assertEquals(exit.state.capTouchAlloc, undefined);
+});
+
+Deno.test("Idea 19: capBuyRocLength gates R1 on extra.rocCap instead of the fast ROC", () => {
+  const cfg: SthCbConfig = { ...NO_MOMO, capBuyRocThreshold: 0, capBuyRocLength: 4 };
+  const wait = decideSthCb(65_000, CB, +0.05, CASH, cfg, { rocCap: -0.02 }); // fast ROC up, slow ROC still down → wait
+  assertEquals(wait.inMarket, false);
+  assertEquals(wait.rule, "R1 waiting (ROC)");
+  const buy = decideSthCb(65_000, CB, -0.05, wait.state, cfg, { rocCap: 0.01 }); // slow ROC turned → buy
+  assertEquals(buy.position, "cap_hold");
+  // without extra.rocCap the gate falls back to the fast ROC
+  assertEquals(decideSthCb(65_000, CB, 0.01, CASH, cfg).position, "cap_hold");
+});
+
 Deno.test("Idea 12: trailing stop exits a trend hold X% below its peak and arms re-entry", () => {
   const cfg: SthCbConfig = { ...NO_MOMO, trailingStopPct: 0.2, disableTrendExit: true };
   let d = decideSthCb(106_000, CB, 0, CASH, cfg);     // entry, peak 106k

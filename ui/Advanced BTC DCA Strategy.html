@@ -5061,6 +5061,7 @@
           <div id="btSthCbParams" style="display:none;">
             <label for="btCbPreset"><strong>Rule preset:</strong></label>
             <select id="btCbPreset" title="Loads a complete parameter set into the fields below. Edit any field afterwards — the preset switches to 'Custom'.">
+              <option value="hybrid_v2_3">STH CB Hybrid v2.3 candidate — v2.2 + 4-day capitulation gate (2026-11-06)</option>
               <option value="hybrid_v2_2" selected>STH CB Hybrid v2.2 — no-loss ladder 50/20/10/0 % at +0.5/1/1.5/2.5σ (2026-11-03)</option>
               <option value="hybrid_v2_1">STH CB Hybrid v2.1 — optimised slice sizes 30/20/10/0 % (2026-10-27)</option>
               <option value="hybrid_v2">STH CB Hybrid v2 — scale-out ladder 75/50/25/0 % (2026-10-26)</option>
@@ -5074,6 +5075,9 @@
 
             <label for="btCbCapBuyRoc"><strong>…only once ROC ≥ (%):</strong></label>
             <input id="btCbCapBuyRoc" type="number" min="-50" max="50" step="0.5" value="0" placeholder="blank = off" title="R1 confirmation: wait until the momentum ROC is at or above this (0 = price has stopped falling). Leave blank to buy the moment the level is hit.">
+
+            <label for="btCbCapBuyRocLen"><strong>…ROC measured over (days):</strong></label>
+            <input id="btCbCapBuyRocLen" type="number" min="1" max="60" step="1" value="" placeholder="blank = momentum length" title="Idea 19: a separate (slower) ROC look-back for the capitulation-buy confirmation only. The 2-day momentum ROC is too noisy in a V-shaped flush (Feb-2026: 11 closes ≤ 75 % of CB, no buy). 3–5 days tested best (2026-11-06).">
 
             <label for="btCbLthBuy"><strong>Also buy at LTH PVR band (σ):</strong></label>
             <select id="btCbLthBuy" title="R14: an additional capitulation trigger — price at or below this LTH PVR band">
@@ -8159,6 +8163,7 @@
       const extras = {};
       const set = (k, v) => { if (v !== null && v !== undefined) extras[k] = v; };
       set('capBuyRocThreshold', opt('btCbCapBuyRoc') == null ? null : opt('btCbCapBuyRoc') / 100);
+      const capRocLen = opt('btCbCapBuyRocLen'); if (capRocLen != null && capRocLen >= 1) extras.capBuyRocLength = Math.trunc(capRocLen);
       set('capBuyAtLthSigma', opt('btCbLthBuy'));
       set('trendReentryRatio', opt('btCbReentry') == null ? null : opt('btCbReentry') / 100);
       set('reentryRocThreshold', opt('btCbReentryRoc') == null ? null : opt('btCbReentryRoc') / 100);
@@ -8225,10 +8230,20 @@
     // ── STH_CB rule presets ──────────────────────────────────────────────────
     // Field values are in the units shown on the form (percentages, days, σ); '' = off.
     const BT_STHCB_PRESETS = {
+      // v2.3 CANDIDATE (2026-11-06): v2.2 with the capitulation-buy confirmation measured on a 4-day ROC instead of the
+      // 2-day momentum ROC. Fixes the Feb-2026 miss (11 closes ≤ 75 % of CB, no buy); beats v2.2 from every start year
+      // 2017–2024 (+6…19 %), DD 40 → 36 %, fewer trades. Not yet promoted — validate before making it the default.
+      hybrid_v2_3: {
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbCapBuyRocLen: 4, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
+        btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
+        btCbLadder: '0.5:50, 1:20, 1.5:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 105, btCbDipMax: 1, btCbScaleCool: '', btCbSliceGain: 0,
+        btCbExecLag: '1', btCbExtras: ''
+      },
       // v2.2 (2026-11-03): v2.1 + "no-loss ladder" (a slice only above the last buy / re-buy price), which makes an
       // earlier +0.5σ rung profitable: 50/20/10/0 % at +0.5/1/1.5/2.5σ, no cooldown needed. Table basis +9–12 % vs v2.1.
       hybrid_v2_2: {
-        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbCapBuyRocLen: '', btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
         btCbLadder: '0.5:50, 1:20, 1.5:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 105, btCbDipMax: 1, btCbScaleCool: '', btCbSliceGain: 0,
@@ -8238,7 +8253,7 @@
       // LTH bands enumerated): 30/20/10/0 % BTC at +1/1.5/2/2.5σ. Same trigger dates as v2, larger slices.
       // 2026-11-03: re-buy knobs corrected after the same-tick slice/re-buy bug fix (≤105 % CB, max 1, cooldown 2).
       hybrid_v2_1: {
-        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbCapBuyRocLen: '', btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
         btCbLadder: '1:30, 1.5:20, 2:10, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 105, btCbDipMax: 1, btCbScaleCool: 2, btCbSliceGain: '',
@@ -8247,21 +8262,21 @@
       // v2 = v1 with the single +2.5σ distribution replaced by a momentum-gated ladder
       // (75/50/25/0 % BTC at LTH +1/1.5/2/2.5σ), a dip re-buy (−10 % from post-sell peak or ≤110 % CB, max 3) and a 5-day cooldown.
       hybrid_v2: {
-        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbCapBuyRocLen: '', btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: 85, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
         btCbLadder: '1:75, 1.5:50, 2:25, 2.5:0', btCbLadderGate: true, btCbDipPct: 10, btCbDipCb: 110, btCbDipMax: 3, btCbScaleCool: 5, btCbSliceGain: '',
         btCbExecLag: '1', btCbExtras: ''
       },
       hybrid_v1: {
-        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
+        btCbCapBuy: 75, btCbCapBuyRoc: 0, btCbCapBuyRocLen: '', btCbLthBuy: '-0.5', btCbCapExit: 95, btCbTrendEnter: 112, btCbReentry: 102, btCbReentryRoc: 10,
         btCbTrendExit: 97, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: 21, btCbTrail: 35, btCbDistSigma: '2.5', btCbDistRatio: 2,
         btCbDistClear: 90, btCbBlockSigma: '2.5', btCbMinHold: 15, btCbMomoEnabled: true, btCbMomoLen: 2, btCbMomoThr: -2, btCbMomoCap: true, btCbMomoTrend: true,
         btCbLadder: '', btCbLadderGate: false, btCbDipPct: '', btCbDipCb: '', btCbDipMax: '', btCbScaleCool: '', btCbSliceGain: '',
         btCbExecLag: '1', btCbExtras: ''
       },
       chartinspect: {
-        btCbCapBuy: 70, btCbCapBuyRoc: '', btCbLthBuy: '', btCbCapExit: 100, btCbTrendEnter: 105, btCbReentry: '', btCbReentryRoc: '',
+        btCbCapBuy: 70, btCbCapBuyRoc: '', btCbCapBuyRocLen: '', btCbLthBuy: '', btCbCapExit: 100, btCbTrendEnter: 105, btCbReentry: '', btCbReentryRoc: '',
         btCbTrendExit: 95, btCbTrendExitOff: false, btCbConfirm: 1, btCbSlope: '', btCbTrail: '', btCbDistSigma: '', btCbDistRatio: '',
         btCbDistClear: '', btCbBlockSigma: '', btCbMinHold: 0, btCbMomoEnabled: false, btCbMomoLen: 5, btCbMomoThr: 0, btCbMomoCap: true, btCbMomoTrend: true,
         btCbLadder: '', btCbLadderGate: false, btCbDipPct: '', btCbDipCb: '', btCbDipMax: '', btCbScaleCool: '', btCbSliceGain: '',
@@ -8284,8 +8299,10 @@
       const strategy = document.getElementById('btStrategySelect')?.value;
       if (!note || strategy !== 'STH_CB') return;
       const preset = document.getElementById('btCbPreset')?.value;
-      note.textContent = preset === 'hybrid_v2_2'
-        ? 'STH CB Hybrid v2.2 — v2.1 plus the no-loss ladder rule (a slice is only sold above the last buy / re-buy price) and an earlier first rung: 50/20/10/0 % BTC at LTH PVR +0.5/1/1.5/2.5σ, momentum-gated; dip re-buy −10 % or ≤105 % of CB (max 1). 439,825 % ROI / 52.7× HODL on $1,000 from 2017-01-01; walk-forward 8/10. See docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html.'
+      note.textContent = preset === 'hybrid_v2_3'
+        ? 'STH CB Hybrid v2.3 CANDIDATE — v2.2 with the capitulation-buy confirmation measured on a 4-day ROC (the 2-day momentum ROC cannot confirm inside a V-shaped flush: Feb-2026 had 11 closes ≤ 75 % of CB and no buy). On UTC closes: $2.47M / 32.6× HODL on $1,000 from 2017-01-01 (v2.2: $2.31M / 30.5×), max DD 36 % (40 %), wins from every start year 2017–2024; walk-forward 7/10. Not yet the live default.'
+        : preset === 'hybrid_v2_2'
+        ? 'STH CB Hybrid v2.2 — v2.1 plus the no-loss ladder rule (a slice is only sold above the last buy / re-buy price) and an earlier first rung: 50/20/10/0 % BTC at LTH PVR +0.5/1/1.5/2.5σ, momentum-gated; dip re-buy −10 % or ≤105 % of CB (max 1). On UTC closes (since 2026-11-06): $2.31M / 30.5× HODL on $1,000 from 2017-01-01, max DD 40 %; walk-forward 7/10. See docs/STH_CB_Hybrid_v2_2_Fact_Sheet.html.'
         : preset === 'hybrid_v2_1'
         ? 'STH CB Hybrid v2.1 — v2 with optimised slice sizes: 30/20/10/0 % BTC at LTH PVR +1/1.5/2/2.5σ (momentum-gated), dip re-buy −10 % or ≤105 % of CB (max 1, 2-day cooldown). 402,578 % ROI / 48.3× HODL on $1,000 from 2017-01-01, next-day fills, full fees; walk-forward 8/10 (re-buy knobs corrected 2026-11-03 after the same-tick slice/re-buy fix). See docs/STH_CB_Hybrid_v2_1_Fact_Sheet.html.'
         : preset === 'hybrid_v2'

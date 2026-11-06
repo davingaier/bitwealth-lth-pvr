@@ -324,6 +324,9 @@ Ratios are **price ÷ STH cost basis** (so `0.70` = price at 70 % of the cost ba
 | v3 | `exitBlockBelowLthSigma` | `-0.5` | Suppress R2 / R3 / R12 exits while price ≤ the LTH PVR band at this σ. **Tested 2026-11-03: −39 % NAV, DD 58 % — do not use** |
 | v3 | `exitSkipAboveLowPct`, `exitLowWindow` | `0.10`, `10` | Skip the trend exit when price is ≥ this fraction above the N-day low (V-bottom recovery). **Tested: inert or −2 %** |
 | v3 | `lthFirstRungMomoThreshold` | `0` | Separate (lighter) ROC threshold for the first ladder rung only. **Tested: −22 … −52 %** |
+| 17 | `capBuyArmDays`, `capBuyArmCeilingRatio` | `5`, `0.77` | Armed capitulation buy: a touch of the level arms R1 for N days; it fires on the first close with ROC ≥ `capBuyRocThreshold` while price ≤ ceiling × CB (default `capExitRatio`). **Tested 2026-11-06: loses at every ceiling (buys the May-2022 bounce)** |
+| 18 | `capBuyTouchAlloc` | `0.5` | Split entry: this fraction on the (unconfirmed) touch, the rest once ROC turns. **Tested: halves NAV — path effect via `minHoldDays`** |
+| **19** | **`capBuyRocLength`** | **`4`** | The R1 confirmation reads its own ROC length instead of the 2-day `momoLength` (needs `extra.rocCap`, supplied by the simulator). **3–5 beat v2.2 everywhere; 7+ too laggy.** Basis of the v2.3 candidate |
 
 ### The optimised "STH_CB hybrid v1" (2026-10-25)
 
@@ -504,6 +507,38 @@ the raw-NAV drawdown per period, and walk-forward on both the standard basis and
 JSON file when there are several — PowerShell mangles long inline JSON. `optimize.ts --idea v22` holds the grid for the
 four no-loss flags; `--idea v3` the three rejected ideas from the `bbef4aaf` audit (block exits ≤ LTH −0.5σ, V-bottom exit
 skip, lighter first-rung gate).
+
+### v2.3 candidate — why Feb-2026 was missed, and the 4-day capitulation gate (2026-11-06)
+
+**The miss.** Between 2026-02-05 and 03-08 the UTC close was ≤ 75 % of the STH cost basis on **11 days** (low $62,910 =
+68 %), yet v2.2 never bought; its first 2026 entry was the R5 ladder at **$81,447** on 05-06 (then a losing R3 exit at
+$76,752). Cause: the capitulation confirmation `capBuyRocThreshold 0` is measured on the **2-day momentum ROC**
+(`momoLength 2`). R1 therefore needs one close that is simultaneously below the line *and* higher than two days
+earlier — in a V-shaped flush with ±10 % days every touch is a down-day and every up-day is already back above 75 %.
+Tracker rows say it plainly: `R1 waiting (ROC) — price 73% ≤ 75% of STH CB but ROC -4.4% < thr`.
+
+**Three fixes were built into `decideSthCb` (all opt-in, baseline byte-identical) and tested on UTC closes,
+$1 000 lump 2017-01-01 → 2026-11-05, full fees:**
+
+| Idea | Keys | Mechanism | Result vs v2.2 ($2.31M / 30.5× / DD 40 %) |
+|---|---|---|---|
+| 17 armed buy | `capBuyArmDays`, `capBuyArmCeilingRatio` | a touch arms R1 for N days; fires on the first close with ROC ≥ thr while ratio ≤ ceiling | fixes 2026 but **loses** every ceiling tested: ≤ 77 % → $1.79M; ≤ 80 % → $1.31M. One episode swaps: May-2022 it buys the LUNA bounce at $30,087 instead of the 3AC low at $20,401 |
+| 18 split entry | `capBuyTouchAlloc` (own state `capTouchAlloc`, immune to R16) | buy X % ungated on the touch, complete to 100 % once ROC turns | 25–75 % all **halve** NAV ($0.9–1.0M): entering `cap_hold` 2 days earlier shifts the `minHoldDays` window, R2 fires on a different day and the ladder path diverges (chaotic, not an allocation effect) |
+| 11 re-tuned | `capBuyRocThreshold` −0.01 / −0.02 / off | | 39.9× / 25.6× / 11.7× — a ±1 % tweak of a 2-day ROC swings the result ±30 %: **knife-edge, rejected** |
+| **19 slower gate** | **`capBuyRocLength: 4`** (also 3, 5) | the R1 gate reads its own ROC length (`extra.rocCap`), everything else unchanged | **$2.47M / 32.6× / DD 36 % / 66 trades / WF 7/10**; len 3 = 32.0×, len 5 = 31.6× (plateau); len 7+ collapses (too laggy: late on COVID, misses Jan-2022) |
+
+Per-episode (`episodes.ts`), len 4 skips the false first entry of Feb-2018 ($7,784) and buys $6,796 instead of $7,405,
+buys Nov-2018 at $4,296 instead of $4,910, Feb-2026 at $66,973; it pays in fast V-bottoms (COVID $5,313 vs $4,800).
+Start-year table, all better: 2017 +7 %, 2019 +10 %, 2020 +9 %, 2021 +19 %, 2022 +18 %, 2023 +17 %, 2024 +19 %, equal or
+lower DD and fewer trades throughout. Fact-sheet basis ($2.4k + $200/mo): 1y +16 %, 3y +17 %, 5y +17 %, 7y +11 %, 10y +6 %,
+10-y DD 35 % vs 39 %; table-basis walk-forward 6/11 (v2.2 7/11) — the one soft spot. **Caveat:** the knob was chosen with
+the full history visible (in-sample like everything else here); the consistency across sub-windows and the plain
+mechanism (de-noising, not a new threshold) are the evidence, not the headline.
+
+Status: Admin UI preset **"Hybrid v2.3 candidate"** and form field *…ROC measured over (days)*; tracker row `hybrid_v2_3`
+(selector on the On-Chain Charts card); **`hybrid_v2_2` remains the live default and the website source of truth**
+until Davin validates. New helpers: `compare.ts --file cands.json` (NAV / ×HODL / DD / trades / WF / first 2026 entry per
+config) and `episodes.ts --file cands.json --pick 0,2` (every capitulation entry side by side, grouped into episodes).
 
 ### Client one-pager & commercial fee model data: `one_pager_data.ts` (2026-11-03)
 

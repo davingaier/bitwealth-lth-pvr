@@ -125,8 +125,10 @@ export function sthCbReason(rule: string): string {
   const r = rule || "";
   if (/^Join/i.test(r)) return "You joined the strategy while it was already invested, so your cash was brought in line with its current position.";
   if (/Deploy contribution|Rebalance to target/i.test(r)) return "New cash in your account was invested so your portfolio matches the strategy's current position.";
-  if (/R1|R14|Capitulation buy/i.test(r)) return "Bitcoin fell into a deep-value zone relative to what recent buyers paid — historically one of the best times to accumulate — and the strategy went all in.";
-  if (/R2|Capitulation exit/i.test(r)) return "After a deep-value entry, price recovered to the level recent buyers paid and momentum faded, so the strategy banked the recovery and moved to cash.";
+  if (/Capitulation touch/i.test(r)) return "Bitcoin fell into a deep-value zone relative to what recent buyers paid, so the strategy started accumulating with part of the cash and kept the rest in reserve for a possible deeper dip.";
+  if (/Capitulation confirm/i.test(r)) return "Momentum turned up from the deep-value zone, so the strategy completed its position and is now fully invested.";
+  if (/\bR1\b|\bR14\b|\bR17\b|Capitulation buy/i.test(r)) return "Bitcoin fell into a deep-value zone relative to what recent buyers paid — historically one of the best times to accumulate — and the strategy went all in.";
+  if (/\bR2\b|Capitulation exit/i.test(r)) return "After a deep-value entry, price recovered to the level recent buyers paid and momentum faded, so the strategy banked the recovery and moved to cash.";
   if (/R3 Trend entry|R5|R8|Trend re-entry/i.test(r)) return "Bitcoin reclaimed strength above what recent buyers paid, with momentum confirming, so the strategy moved into Bitcoin to ride the trend.";
   if (/R3 Trend exit/i.test(r)) return "Bitcoin lost the level recent buyers paid for their coins and momentum turned negative, so the strategy stepped aside to protect capital.";
   if (/R12|Trailing stop/i.test(r)) return "Price pulled back sharply from its recent peak and the strategy's trailing protection moved the portfolio to cash.";

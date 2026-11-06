@@ -103,6 +103,26 @@ export interface SthCbConfig {
   // ── Idea 11: capitulation confirmation ────────────────────────────────────
   /** Capitulation buy requires ROC >= this (e.g. 0 = price has stopped falling). */
   capBuyRocThreshold?: number;
+  /** Idea 19 (2026-11-06): ROC look-back used ONLY by the capitulation-buy gate (default momoLength); needs `extra.rocCap`. */
+  capBuyRocLength?: number;
+
+  // ── Idea 17 (2026-11-06): armed capitulation buy ──────────────────────────
+  /**
+   * A close ≤ the capitulation level ARMS R1 for this many days. While armed, the buy fires on the first close whose
+   * ROC ≥ capBuyRocThreshold even if price has already bounced back above the level. Without it, a V-shaped flush can
+   * never satisfy "below the line AND rising" on the same close (Feb-2026: 11 touches of 75 %, no buy, entry at 112 %).
+   */
+  capBuyArmDays?: number;
+  /** While armed, fire only if price ≤ this × STH cost basis (default = capExitRatio: never chase above the exit line). */
+  capBuyArmCeilingRatio?: number;
+
+  // ── Idea 18 (2026-11-06): split capitulation entry ─────────────────────────
+  /**
+   * On the first close ≤ the capitulation level buy this fraction immediately (ungated), then complete to the tier's
+   * full allocation once ROC ≥ capBuyRocThreshold while price ≤ capBuyArmCeilingRatio (default capExitRatio).
+   * Guarantees participation in a V-bottom while keeping dry powder for a deeper flush. 1 = behave as if ungated.
+   */
+  capBuyTouchAlloc?: number;
 
   // ── Idea 12: trailing stop on trend holds (needs `extra.peakRatio`) ───────
   /** Exit a trend hold when price has fallen this fraction from its peak since entry (e.g. 0.25). */
@@ -198,6 +218,12 @@ export interface SthCbState {
   lastSlicePx?: number;
   /** v2.2: signal price of the last full exit to cash (re-entry guard) */
   lastExitPx?: number;
+  /** idea 17: days the armed capitulation buy remains valid (0 = not armed) */
+  capArmDaysLeft?: number;
+  /** idea 17: capitulation tier that armed the buy */
+  capArmTier?: number;
+  /** idea 18: partial allocation held after an unconfirmed touch (undefined = full tier allocation) */
+  capTouchAlloc?: number;
 }
 
 export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
@@ -206,6 +232,8 @@ export type SthCbPosition = "cash" | "cap_hold" | "trend_hold";
 export interface SthCbExtraInputs {
   /** ROC over `exitRocLength` days (idea 1) */
   rocExit?: number;
+  /** ROC over `capBuyRocLength` days (idea 19) */
+  rocCap?: number;
   /** STH cost basis slope over `cbSlopeDays` (cb[t] / cb[t-N] − 1) (idea 3) */
   cbSlope?: number;
   /** LTH PVR band price levels keyed p050|p100|p150|p200|p250 (ideas 4, 10) */
@@ -297,6 +325,8 @@ function allocFor(s: SthCbState, config: SthCbConfig): number {
   const st = sellTiers(config);
   const sl = Math.min(s.sellTierLevel ?? 0, st.length);
   if (sl > 0) alloc = Math.min(alloc, st[sl - 1].alloc);
+  // idea 18: unconfirmed capitulation touch holds only the partial allocation
+  if (s.capLatch && !s.trendLatch && typeof s.capTouchAlloc === "number") alloc = Math.min(alloc, s.capTouchAlloc);
   // v2: LTH scale-out (restored to 1 by a dip re-buy via scaledAlloc)
   if (typeof s.scaledAlloc === "number") alloc = Math.min(alloc, s.scaledAlloc);
   return Math.max(0, Math.min(1, alloc));
@@ -353,6 +383,9 @@ export function decideSthCb(
     lastBuyPx: prev?.lastBuyPx,
     lastSlicePx: prev?.lastSlicePx,
     lastExitPx: prev?.lastExitPx,
+    capArmDaysLeft: prev?.capArmDaysLeft ?? 0,
+    capArmTier: prev?.capArmTier ?? 0,
+    capTouchAlloc: prev?.capTouchAlloc,
   };
   const wasInMarket = s.capLatch || s.trendLatch;
   if (wasInMarket) {
@@ -440,8 +473,9 @@ export function decideSthCb(
     s.dipRebuys = 0;
     s.lastExitPx = px;
     s.lastSlicePx = undefined;
+    s.capTouchAlloc = undefined;
   };
-  const markEntry = () => { s.holdDays = 0; s.peakPx = px; s.lthTierLevel = 0; s.scaledAlloc = undefined; s.postSellPeak = 0; s.dipRebuys = 0; s.sinceScaleEvent = 9999; s.lastBuyPx = px; s.lastSlicePx = undefined; };
+  const markEntry = () => { s.holdDays = 0; s.peakPx = px; s.lthTierLevel = 0; s.scaledAlloc = undefined; s.postSellPeak = 0; s.dipRebuys = 0; s.sinceScaleEvent = 9999; s.lastBuyPx = px; s.lastSlicePx = undefined; s.capTouchAlloc = undefined; };
   const cooldownOk = !config.scaleCooldownDays || (s.sinceScaleEvent ?? 9999) >= Math.trunc(config.scaleCooldownDays);
   // v2.2 no-loss rules (all opt-in). Prices compared are signal closes.
   const gainOk = (ref: number | undefined, pct: number | undefined) => typeof pct !== "number" || !(typeof ref === "number" && ref > 0) || px >= ref * (1 + pct);
@@ -454,7 +488,21 @@ export function decideSthCb(
     // idea 14: LTH lower band counts as hitting the first tier (full alloc when there is only one tier)
     const viaLth = hit === 0 && lthCapHit && !s.capLatch && !s.trendLatch;
     if (viaLth) hit = 1;
-    const rocOk = typeof config.capBuyRocThreshold !== "number" || roc >= config.capBuyRocThreshold; // idea 11
+    // idea 17: a touch arms the buy for N days; an armed close counts as the touched tier while price ≤ the ceiling
+    const armDays = config.capBuyArmDays ? Math.trunc(config.capBuyArmDays) : 0;
+    let armed = false;
+    if (armDays > 0) {
+      if (hit > (s.capTierLevel ?? 0)) { s.capArmTier = hit; s.capArmDaysLeft = armDays; }
+      else if ((s.capArmDaysLeft ?? 0) > 0) s.capArmDaysLeft = (s.capArmDaysLeft ?? 0) - 1;
+      const ceiling = config.capBuyArmCeilingRatio ?? capExitRatio;
+      if (hit <= (s.capTierLevel ?? 0) && (s.capArmDaysLeft ?? 0) > 0 && (s.capArmTier ?? 0) > (s.capTierLevel ?? 0) && ratio <= ceiling) {
+        hit = s.capArmTier ?? 0;
+        armed = true;
+      }
+    }
+    // idea 19: the capitulation gate may use its own (slower) ROC length
+    const rocCap = !!config.capBuyRocLength && fin(extra.rocCap) ? Number(extra.rocCap) : roc;
+    const rocOk = typeof config.capBuyRocThreshold !== "number" || rocCap >= config.capBuyRocThreshold; // idea 11
     if (hit > (s.capTierLevel ?? 0) && rocOk) {
       const first = !s.capLatch;
       if (first) markEntry();
@@ -465,11 +513,38 @@ export function decideSthCb(
       s.exitConfirmCount = 0;
       s.reentryArmed = false;
       s.distLatch = false;
-      rule = viaLth ? `R14 Capitulation buy (LTH ${lthCapKey})` : first ? "R1 Capitulation buy" : `R1 Capitulation tier ${hit}`;
-      note = viaLth ? `price ${px.toFixed(0)} ≤ LTH PVR ${lthCapKey} ${lthCapLevel.toFixed(0)}` : `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB`;
+      s.capArmDaysLeft = 0;
+      s.capArmTier = 0;
+      s.capTouchAlloc = undefined;
+      rule = viaLth ? `R14 Capitulation buy (LTH ${lthCapKey})` : armed ? (first ? "R17 Capitulation buy (armed)" : `R17 Capitulation tier ${hit} (armed)`) : first ? "R1 Capitulation buy" : `R1 Capitulation tier ${hit}`;
+      note = viaLth ? `price ${px.toFixed(0)} ≤ LTH PVR ${lthCapKey} ${lthCapLevel.toFixed(0)}`
+        : armed ? `armed at ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB; ROC ${(rocCap * 100).toFixed(1)}% ≥ thr at ${pct(ratio)}`
+        : `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB`;
+    } else if (hit > (s.capTierLevel ?? 0) && !rocOk && typeof config.capBuyTouchAlloc === "number" && config.capBuyTouchAlloc > 0 && config.capBuyTouchAlloc < 1) {
+      // idea 18: unconfirmed touch — take the partial now, complete on confirmation
+      const first = !s.capLatch;
+      if (first) markEntry();
+      s.capLatch = true;
+      s.trendLatch = false;
+      s.capTierLevel = hit;
+      s.sellTierLevel = 0;
+      s.exitConfirmCount = 0;
+      s.reentryArmed = false;
+      s.distLatch = false;
+      s.capArmDaysLeft = 0;
+      s.capArmTier = 0;
+      s.capTouchAlloc = config.capBuyTouchAlloc;
+      rule = `R18 Capitulation touch → ${pct(config.capBuyTouchAlloc)} BTC`;
+      note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB, ROC ${(rocCap * 100).toFixed(1)}% < thr — partial until confirmed`;
     } else if (hit > (s.capTierLevel ?? 0) && !rocOk) {
-      rule = "R1 waiting (ROC)";
-      note = `price ${pct(ratio)} ≤ ${pct(cTiers[hit - 1].ratio)} of STH CB but ROC ${(roc * 100).toFixed(1)}% < thr`;
+      rule = armed ? "R17 armed (ROC)" : "R1 waiting (ROC)";
+      note = `price ${pct(ratio)} ${armed ? "armed at" : "≤"} ${pct(cTiers[hit - 1].ratio)} of STH CB but ROC ${(rocCap * 100).toFixed(1)}% < thr`;
+    } else if (s.capLatch && !s.trendLatch && typeof s.capTouchAlloc === "number" && rocOk && ratio <= (config.capBuyArmCeilingRatio ?? capExitRatio)) {
+      // idea 18: momentum has turned while still below the ceiling — complete the capitulation entry
+      s.capTouchAlloc = undefined;
+      s.lastBuyPx = px;
+      rule = "R18 Capitulation confirm → 100% BTC";
+      note = `ROC ${(rocCap * 100).toFixed(1)}% ≥ thr at ${pct(ratio)} of STH CB`;
     } else if (s.capLatch && !s.trendLatch && ratio >= capExitRatio && !holdLocked) {
       const gated = config.momoEnabled && config.momoOnCapExit;
       if (inBuyZone || !exitGainOk) {

@@ -259,6 +259,7 @@ export const EXTRA_CONFIG_KEYS = [
   "lthSellTiers", "lthSellMomoGate", "dipRebuyPct", "dipRebuyAtCbRatio", "dipRebuyMax", "rebalanceDrift", "scaleCooldownDays",
   "exitBlockBelowLthSigma", "exitSkipAboveLowPct", "exitLowWindow", "lthFirstRungMomoThreshold",
   "rebuyBelowLastSellPct", "sliceAboveLastBuyPct", "reentryBelowLastExitPct", "exitMinGainPct",
+  "capBuyArmDays", "capBuyArmCeilingRatio", "capBuyTouchAlloc", "capBuyRocLength",
 ] as const;
 
 /** Base keys that `extras` may also override (so a lab config can be pasted verbatim). */
@@ -351,6 +352,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
   const cbAll = all.map((r) => r.cb);
   const rocSeries = computeRocSeries(pxAll, config.momoLength);
   const rocExitSeries = config.exitRocLength ? computeRocSeries(pxAll, Math.max(1, Math.trunc(config.exitRocLength))) : null;
+  const rocCapSeries = config.capBuyRocLength ? computeRocSeries(pxAll, Math.max(1, Math.trunc(config.capBuyRocLength))) : null;
   const cbSlopeSeries = config.cbSlopeDays ? computeRocSeries(cbAll, Math.max(1, Math.trunc(config.cbSlopeDays))) : null;
   const sigmaSeries = config.sigmaMode ? computeSigmaSeries(all, config.sigmaMode, config.sigmaWindow ?? 0) : null;
   // Idea ②: rolling N-day low of the close (inclusive)
@@ -361,6 +363,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
   }
   const extraAt = (i: number): SthCbExtraInputs => ({
     rocExit: rocExitSeries ? rocExitSeries[i] : undefined,
+    rocCap: rocCapSeries ? rocCapSeries[i] : undefined,
     cbSlope: cbSlopeSeries ? cbSlopeSeries[i] : undefined,
     bands: all[i].bands,
     sigma: sigmaSeries ? sigmaSeries[i] : undefined,

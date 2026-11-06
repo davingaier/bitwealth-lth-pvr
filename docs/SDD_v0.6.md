@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.195)
+**Last updated:** 2026-11-06 (v0.6.196)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.196 – STH_CB: why the Feb-2026 capitulation buy never fired, and the v2.3 candidate (4-day R1 gate)
+**Date:** 2026-11-06 · **Status:** ✅ Built, deployed as a *candidate* (v2.2 remains live default)
+
+**Finding.** Davin noticed the chart showed no buy on 2026-02-11 although the close was below the 75 % capitulation
+line. Tracker rows confirm 11 such closes between 02-05 and 03-08 (low 68 %), each logged as `R1 waiting (ROC)`.
+The v2.2 confirmation `capBuyRocThreshold 0` is evaluated on the **2-day** momentum ROC, so R1 needs a close that is
+both below the line and up on two days earlier — impossible in a V-shaped flush with ±10 % days. The first 2026 entry
+was therefore the R5 ladder at $81,447 (05-06), followed by a losing R3 exit at $76,752.
+
+**Engine changes** (`_shared/sth_cb_strategy_logic.ts`, all opt-in; baseline runs byte-identical; 45/45 unit tests):
+idea 17 `capBuyArmDays` / `capBuyArmCeilingRatio` (armed buy, rule `R17`), idea 18 `capBuyTouchAlloc` (split entry,
+own state `capTouchAlloc` so R16 cannot restore it, rules `R18 … touch` / `… confirm`), idea 19 `capBuyRocLength`
+(separate ROC length for the R1 gate via `extra.rocCap`, computed in `sth_cb_simulator.ts`). Keys registered in
+`EXTRA_CONFIG_KEYS`. `strategyEmail.sthCbReason`: fixed a pre-existing regex bug (`/R1|…/` matched R12/R15/R16, so
+trailing-stop / scale-out / re-buy emails carried the "went all in" copy) and added copy for the new rules.
+
+**Results** (UTC closes, $1k lump 2017→2026-11-05, full fees; v2.2 = $2.31M / 30.5× / DD 40 %): armed buy loses at
+every ceiling (swaps Feb-2026 for the May-2022 LUNA bounce); split entry halves NAV (path effect through `minHoldDays`);
+re-tuning the 2-day threshold is a knife-edge (−1 % → 39.9×, −2 % → 25.6×, off → 11.7×). **`capBuyRocLength 4`:
+$2.47M / 32.6× / DD 36 % / 66 trades / WF 7/10**, better from every start year 2017–2024 (+6…19 %), every fact-sheet
+horizon (+6…17 %), 10-y DD 35 % vs 39 %; table-basis WF 6/11 vs 7/11. In 2026 it buys $66,973 (02-28), exits $75,780
+(04-29) and skips the $81k round trip. Full write-up: `tools/sth_cb_lab/README.md` § "v2.3 candidate".
+
+**Surfaces.** Admin UI back-tester: preset *Hybrid v2.3 candidate* + field *…ROC measured over (days)*; v2.2 note now
+quotes the close-basis figures. Tracker: row `hybrid_v2_3` (migration `20261106_sth_cb_hybrid_v2_3_candidate.sql`,
+applied via PostgREST), rebuilt → $2,474,438 = lab. Deployed: `ef_sth_cb_tracker`, `ef_sth_cb_bt_execute`,
+`ef_sth_cb_generate_decisions`, `ef_switch_strategy`, `ef_approve_kyc`, `ef_deposit_scan`,
+`ef_sync_valr_transactions`, `ef_monthly_statement_generator`. Lab helpers `compare.ts`, `episodes.ts`.
+**Not changed:** live default `hybrid_v2_2`, website / fact sheet / OOS data — promotion is Davin's call after review.
 
 ### v0.6.195 – Strategy Setup: account-model selector routes non-Finova clients straight to the portal; Infisical wrapper
 **Date:** 2026-11-06 · **Status:** ✅ DONE
