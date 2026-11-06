@@ -58,3 +58,6 @@ rb_pvr_bands_output.json
 tools/sth_cb_lab/data/
 tools/sth_cb_lab/results/
 
+
+# Infisical project link (per machine)
+.infisical.json

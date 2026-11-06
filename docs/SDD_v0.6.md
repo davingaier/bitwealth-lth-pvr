@@ -3,11 +3,34 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.194)
+**Last updated:** 2026-11-06 (v0.6.195)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.195 – Strategy Setup: account-model selector routes non-Finova clients straight to the portal; Infisical wrapper
+**Date:** 2026-11-06 · **Status:** ✅ DONE
+
+**Problem.** The Admin UI Strategy Setup modal had no account-model control and `ef_confirm_strategy` always ran the
+Finova branch (invite URL + `kyc_invitation` email), so an API/subaccount client (customer 65) could not be confirmed
+without being pushed into Finova's KYC.
+
+**Change.** (1) Modal: new **Account model** fieldset (`#strategyModalAccountModel` — Finova omnibus / API /
+Subaccount), pre-selected from `customer_details.account_model` when the modal opens; the confirm dialog shows the
+model and the KYC route; the request body now carries `account_model`. (2) `ef_confirm_strategy`: `useFinova =
+account_model === 'finova_omnibus'`; Finova → unchanged (invite URL, `kyc_invitation`); api/subaccount → no Finova
+call, sends `kyc_portal_registration` immediately (`first_name, strategy_name, registration_url, website_url` —
+verified against the template) pointing at `register.html?customer_id&email`; response adds `kyc_path: 'finova' |
+'portal'`. Both paths set `registration_status='kyc'` (required by `ef_customer_register`). (3) UI success handling:
+Finova invite panel only when `kyc_path==='finova'`; message names the email actually sent and turns red if
+`email_sent=false`. Deployed `ef_confirm_strategy` (`verify_jwt=false`, `requireOrgAdmin`).
+
+**Infisical (runbook §5) verification.** CLI logged in, project env `dev`, 23 secrets across 10 folders, no `.env`
+on disk. Gap found: `infisical run` injects the root folder only → `tools/with-secrets.ps1` wraps it with
+`--recursive` (`.\tools\with-secrets.ps1 <exe> <args…>`; `.infisical.json` is git-ignored). Note for ad-hoc REST
+checks: PostgREST rejects `sb_secret` keys sent with a browser-like User-Agent (PowerShell's default) — use
+`curl.exe -A bitwealth-ops`.
 
 ### v0.6.194 – Server-side VALR signing stage 2: every function now signs via Vault; VALR_API_SECRET removed
 **Date:** 2026-11-06 · **Status:** ✅ DONE

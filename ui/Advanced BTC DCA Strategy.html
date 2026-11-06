@@ -1858,7 +1858,17 @@
             <p style="margin:.6rem 0 0;font-size:.78rem;color:#6c757d;">USDPC yield is enabled by default for STH Cost Basis clients (the strategy holds cash for long stretches).</p>
           </fieldset>
 
-          <!-- Fee Configuration -->
+          <!-- Account model (custody) — decides the KYC route -->
+        <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+          <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Account model</legend>
+          <select id="strategyModalAccountModel" style="width:100%;padding:.4rem;border:1px solid #dee2e6;border-radius:4px;">
+            <option value="finova_omnibus">Finova omnibus — partner custody, KYC via Finova/KYCDD</option>
+            <option value="api">API — client's own VALR account, in-house KYC (portal upload)</option>
+            <option value="subaccount">Subaccount — BitWealth VALR subaccount, in-house KYC (portal upload)</option>
+          </select>
+          <p id="strategyModalAccountModelHint" style="margin:.6rem 0 0;font-size:.78rem;color:#6c757d;">Finova clients are invited into KYCDD; the portal registration email follows once Finova reports a pass. API / subaccount clients receive the portal registration email immediately and upload their ID and proof of address in the portal for admin approval.</p>
+        </fieldset>
+        <!-- Fee Configuration -->
           <fieldset style="border:1px solid #dee2e6;border-radius:6px;padding:1rem;margin-bottom:1rem;" data-feeplan-scope>
             <legend style="font-weight:600;font-size:.95rem;padding:0 .5rem;">Fee Configuration</legend>
             <div style="margin-bottom:.75rem;">
@@ -14720,6 +14730,13 @@
       document.getElementById('strategyModalCustomerName').textContent = customerName;
       document.getElementById('strategyModalCustomerId').textContent = customerId;
 
+      // Preselect the account model if the prospect already has one (else Finova, the historical default)
+      try {
+        const { data: cdRow } = await supabaseClient.from('customer_details').select('account_model').eq('customer_id', customerId).maybeSingle();
+        const amSel = document.getElementById('strategyModalAccountModel');
+        if (amSel) amSel.value = ['finova_omnibus','api','subaccount'].includes(cdRow?.account_model) ? cdRow.account_model : 'finova_omnibus';
+      } catch (_) { /* keep default */ }
+
       // Load data
       if (allStrategies.length === 0) await loadStrategies();
       await loadVariations();
@@ -14887,17 +14904,20 @@
       const isSthCb = strategyCode === 'STH_CB';
       const joinPolicy = isSthCb ? (document.getElementById('strategyModalJoinPolicy')?.value || 'immediate') : undefined;
       const configKey  = isSthCb ? (document.getElementById('strategyModalConfigKey')?.value || 'hybrid_v2_2') : undefined;
+      const accountModel = document.getElementById('strategyModalAccountModel')?.value || 'finova_omnibus';
+      const kycPathText = accountModel === 'finova_omnibus' ? 'Finova/KYCDD invite' : 'in-house (portal registration email now, documents uploaded in the portal)';
 
       const confirmMsg = `Confirm strategy setup for customer ${modalCustomerId}?\n\n` +
         `Strategy: ${strategyName}\n` +
         (variationName ? `Variation: ${variationName}\n` : '') +
         (isSthCb ? `Configuration: ${configKey}\nJoining rule: ${joinPolicy === 'next_signal' ? 'wait for next entry signal' : 'immediate (adopt current state)'}\nUSDPC yield: on\n` : '') +
+        `Account model: ${accountModel}\nKYC route: ${kycPathText}\n` +
         `Fee Plan: ${feePlan === 'management' ? `Management (${(managementFeeRate * 100).toFixed(2)}% p.a. on NAV)` : 'Platform (on contributions)'}\n` +
         (feePlan === 'management'
           ? `Management Fee: ${(managementFeeRate * 100).toFixed(2)}% p.a. (${managementFeeSchedule})\n`
           : `Platform Fee: ${(platformFeeRate * 100).toFixed(2)}% (${platformFeeSchedule})\n`) +
         `Performance Fee: ${(performanceFeeRate * 100).toFixed(2)}% (${performanceFeeSchedule})\n\n` +
-        `This will:\n• Create strategy entry\n• Change status to 'kyc'\n• Send KYC invitation email\n• Show the Finova invite details`;
+        `This will:\n• Create strategy entry\n• Set account model + change status to 'kyc'\n• ` + (accountModel === 'finova_omnibus' ? 'Send the KYC invitation email\n• Show the Finova invite details' : 'Send the portal registration email (no Finova)');
 
       if (!confirm(confirmMsg)) return;
 
@@ -14929,6 +14949,7 @@
             management_fee_schedule: managementFeeSchedule,
             join_policy: joinPolicy,
             config_key: configKey,
+            account_model: accountModel,
             admin_email: adminEmail
           })
         });
@@ -14937,9 +14958,10 @@
 
         if (response.ok && result.success) {
           closeModal();
-          showMessage(`Strategy confirmed for customer ${modalCustomerId}. KYC invitation email ${result.email_sent ? 'sent' : 'queued'} to ${result.email}`, 'success');
+          const viaFinova = (result.kyc_path || 'finova') === 'finova';
+          showMessage(`Strategy confirmed for customer ${modalCustomerId}. ${viaFinova ? 'KYC invitation' : 'Portal registration'} email ${result.email_sent ? 'sent' : 'NOT sent'} to ${result.email}`, result.email_sent ? 'success' : 'error');
           await loadProspects();
-          showFinovaInvitePanel(result);
+          if (viaFinova) showFinovaInvitePanel(result);
         } else {
           showMessage(`Failed to confirm strategy: ${result.error || 'Unknown error'}`, 'error');
         }

@@ -303,30 +303,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Finova KYC flow: record the invite intent and send a heads-up email. An
-    // admin invites the client into Finova/KYCDD manually (their form does not
-    // accept automated input); the portal registration email is sent later by
-    // ef_finova_webhook once Finova reports the client has passed.
+    // KYC routing (2026-11-06). Two paths, chosen by custody model:
+    //   • finova_omnibus (partner custody) → Finova/KYCDD: record the invite intent, send the heads-up email; the
+    //     portal registration link follows from ef_finova_webhook once Finova reports 'passed'.
+    //   • api / subaccount (BitWealth-direct) → in-house KYC: send the portal registration link now; the client
+    //     registers, uploads ID/proof-of-address in the portal, and an admin approves (ef_approve_kyc).
     const websiteUrl = Deno.env.get("WEBSITE_URL") || "https://bitwealth.co.za";
-    // Base invite URL for the admin "Invite to KYC" panel (overridable via env).
-    const finovaInviteUrl = Deno.env.get("FINOVA_INVITE_URL") ||
-      "https://app.kycdd.co.za/client/-/insert/subscription_id/9c60cc9e-d6a1-4059-975f-e77d89e35809/workflow_id/9c60ccf1-f56b-4e78-8fa3-707aa7ed6bdb/status_type_id/939e7c63-2570-44f2-8a6e-327bdc4d67f0";
+    const useFinova = (account_model ?? "finova_omnibus") === "finova_omnibus";
+    // Base invite URL for the admin "Invite to KYC" panel (overridable via env). Null when Finova is not used.
+    const finovaInviteUrl = useFinova
+      ? (Deno.env.get("FINOVA_INVITE_URL") ||
+        "https://app.kycdd.co.za/client/-/insert/subscription_id/9c60cc9e-d6a1-4059-975f-e77d89e35809/workflow_id/9c60ccf1-f56b-4e78-8fa3-707aa7ed6bdb/status_type_id/939e7c63-2570-44f2-8a6e-327bdc4d67f0")
+      : null;
 
-    // Upsert the Finova tracking row (one per customer).
-    const { error: finovaErr } = await supabase
-      .from("kyc_finova")
-      .upsert(
-        {
-          customer_id: customer_id,
-          org_id: customer.org_id,
-          finova_status: "invited",
-          invited_at: new Date().toISOString(),
-        },
-        { onConflict: "customer_id" }
-      );
-    if (finovaErr) console.error("kyc_finova upsert failed:", finovaErr.message);
+    if (useFinova) {
+      const { error: finovaErr } = await supabase
+        .from("kyc_finova")
+        .upsert(
+          { customer_id: customer_id, org_id: customer.org_id, finova_status: "invited", invited_at: new Date().toISOString() },
+          { onConflict: "customer_id" }
+        );
+      if (finovaErr) console.error("kyc_finova upsert failed:", finovaErr.message);
+    }
 
-    // Send the KYC-invite heads-up email.
+    const firstName = customer.first_names || customer.entity_name || customer.display_name;
+    const registrationUrl = `${websiteUrl}/register.html?customer_id=${customer_id}&email=${encodeURIComponent(customer.email ?? "")}`;
+    const emailPayload = useFinova
+      ? { template_key: "kyc_finova_invite", to_email: customer.email, data: { first_name: firstName, website_url: websiteUrl } }
+      : { template_key: "kyc_portal_registration", to_email: customer.email,
+          data: { first_name: firstName, strategy_name: strategy.name, registration_url: registrationUrl, website_url: websiteUrl } };
+
+    // Send the KYC email for the chosen path.
     let emailSent = false;
     let emailError = null;
     try {
@@ -336,16 +343,12 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${supabaseKey}`,
         },
-        body: JSON.stringify({
-          template_key: "kyc_finova_invite",
-          to_email: customer.email,
-          data: { first_name: customer.first_names || customer.entity_name || customer.display_name, website_url: "https://bitwealth.co.za" },
-        }),
+        body: JSON.stringify(emailPayload),
       });
 
       if (emailResponse.ok) {
         emailSent = true;
-        console.log(`KYC invite email sent to ${customer.email}`);
+        console.log(`KYC email (${useFinova ? "finova invite" : "portal registration"}) sent to ${customer.email}`);
       } else {
         const errorData = await emailResponse.json();
         emailError = errorData.error || "Unknown email error";
@@ -366,6 +369,8 @@ Deno.serve(async (req) => {
         strategy_name: strategy.name,
         email: customer.email,
         customer_name: `${customer.first_names} ${customer.last_name}`,
+        account_model: account_model ?? "finova_omnibus",
+        kyc_path: useFinova ? "finova" : "portal",
         finova_invite_url: finovaInviteUrl,
         email_sent: emailSent,
         email_error: emailError,
