@@ -117,6 +117,73 @@ async function rbFetchRange(
   throw new Error(`RB fetch failed after 4 attempts: ${category}/${dataField} – ${String(lastErr)}`);
 }
 
+
+// ---------------------------------------------------------------------------
+// BTC daily CLOSE (2026-11-06). RB's `price/price` at d1 is a daily AVERAGE (matches Binance VWAP to ±0.3 %), not a
+// close — the strategy's thresholds were silently benefiting from that smoothing (fact-sheet 52.7× → 30.5× on true
+// closes). Signals must live in the same world as fills, so the price column is now the UTC close:
+//   • Binance BTCUSDT 1d close from 2017-08-17 (first Binance day)
+//   • RB price/price at h1, 23:00Z bar, before that (validated vs Binance over 3 355 overlapping days: median 0.33 %)
+// The RB daily average is still stored (btc_price_avg_usd) for audit / comparison.
+// ---------------------------------------------------------------------------
+const BINANCE_START = "2017-08-17";
+
+async function binanceDailyCloses(fromDate: string, toExclusive: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  let start = Date.parse(fromDate + "T00:00:00Z");
+  const endMs = Date.parse(toExclusive + "T00:00:00Z");
+  while (start < endMs) {
+    const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=${start}&endTime=${endMs - 1}&limit=1000`;
+    let rows: unknown[][] = [];
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const res = await fetch(url);
+      if (res.ok) { rows = (await res.json()) as unknown[][]; break; }
+      if (attempt === 3) throw new Error(`Binance klines HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      await sleep(1500 * (attempt + 1));
+    }
+    if (!rows.length) break;
+    for (const r of rows) {
+      const closeTime = Number(r[6]);
+      if (closeTime > Date.now()) continue;                      // candle still open
+      out.set(new Date(Number(r[0])).toISOString().slice(0, 10), Number(r[4]));
+    }
+    if (rows.length < 1000) break;
+    start = Number(rows[rows.length - 1][0]) + 86_400_000;
+  }
+  return out;
+}
+
+async function rbHourlyCloses(rbToken: string, fromDate: string, toExclusive: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  let cur = new Date(fromDate + "T00:00:00Z");
+  const end = new Date(toExclusive + "T00:00:00Z");
+  while (cur < end) {
+    const next = new Date(Math.min(cur.getTime() + 180 * 86_400_000, end.getTime()));
+    const params = new URLSearchParams({ resolution: "h1", from_time: cur.toISOString().slice(0, 10), to_time: next.toISOString().slice(0, 10) });
+    const res = await fetch(`${RB_BASE}/v2/price/price?${params}`, { headers: { "X-API-Token": rbToken, Accept: "text/csv" } });
+    if (!res.ok) throw new Error(`RB h1 HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    for (const l of (await res.text()).trim().split("\n").slice(1)) {
+      const [ts, v] = l.split(",");
+      if (ts?.slice(11, 13) === "23") { const n = parseFloat(v); if (Number.isFinite(n)) out.set(ts.slice(0, 10), n); }
+    }
+    cur = next;
+  }
+  return out;
+}
+
+/** UTC close per day: Binance where available, RB 23:00 bar before Binance existed. */
+async function dailyCloses(rbToken: string, fromDate: string, toExclusive: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (fromDate < BINANCE_START) {
+    const rbEnd = toExclusive < BINANCE_START ? toExclusive : BINANCE_START;
+    for (const [d, v] of await rbHourlyCloses(rbToken, fromDate, rbEnd)) out.set(d, v);
+  }
+  if (toExclusive > BINANCE_START) {
+    const binFrom = fromDate > BINANCE_START ? fromDate : BINANCE_START;
+    for (const [d, v] of await binanceDailyCloses(binFrom, toExclusive)) out.set(d, v);
+  }
+  return out;
+}
 // ---------------------------------------------------------------------------
 // Alert helper
 // ---------------------------------------------------------------------------
@@ -147,7 +214,8 @@ async function logAlert(
 interface PvrRow {
   org_id: string;
   date: string;
-  btc_price: number;
+  btc_price: number;            // UTC close (2026-11-06; was RB daily average)
+  btc_price_avg_usd: number | null; // RB daily average, kept for audit
   sth_supply: number;
   sth_realized_price: number;
   lth_supply: number;
@@ -178,6 +246,7 @@ function computeRows(
   org_id: string,
   dates: string[],
   price: Map<string, number>,
+  priceAvg: Map<string, number>,
   sthSupply: Map<string, number>,
   sthRp: Map<string, number>,
   lthSupply: Map<string, number>,
@@ -234,6 +303,7 @@ function computeRows(
       org_id,
       date: d,
       btc_price: p,
+      btc_price_avg_usd: priceAvg.get(d) ?? null,
       sth_supply: ss,
       sth_realized_price: sr,
       lth_supply: ls,
@@ -366,13 +436,15 @@ Deno.serve(async (req: Request) => {
 
   // ---- Fetch all five RB series in parallel ---------------------------------
   let price: Map<string, number>;
+  let priceAvg: Map<string, number>;
   let sthSupply: Map<string, number>;
   let sthRp: Map<string, number>;
   let lthSupply: Map<string, number>;
   let lthRp: Map<string, number>;
   let coinblockValueCumDestroyed: Map<string, number>;
   try {
-    [price, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed] = await Promise.all([
+    [price, priceAvg, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed] = await Promise.all([
+      dailyCloses(rbToken, fromDate, toTime),
       rbFetchRange(rbToken, "price", "price", fromDate, toTime),
       rbFetchRange(rbToken, "supply_distribution", "supply_sth", fromDate, toTime),
       rbFetchRange(rbToken, "realizedprice", "realized_price_sth", fromDate, toTime),
@@ -381,18 +453,28 @@ Deno.serve(async (req: Request) => {
       rbFetchRange(rbToken, "cointime_statistics", "coinblock_value_cum_destroyed", fromDate, toTime),
     ]);
   } catch (e) {
-    await logAlert(sb, "error", "RB API fetch failed in ef_fetch_onchain_pvr",
+    await logAlert(sb, "error", "Price/RB fetch failed in ef_fetch_onchain_pvr",
       { org_id, from: fromDate, to: yesterday, error: String((e as Error)?.message ?? e) }, org_id);
     return new Response("RB fetch failed", { status: 502 });
   }
 
   // ---- Build ordered date list (only <= yesterday) --------------------------
-  const dates = Array.from(price.keys())
+  // Date spine = RB's daily series (complete). A missing close (exchange outage / RB hourly gap) is forward-filled
+  // from the previous day so the on-chain row is never dropped; 2026-11-06 build saw 8 such days in 15 years.
+  const dates = Array.from(priceAvg.keys())
     .filter((d) => d <= yesterday && d >= fromDate)
     .sort();
+  let prevClose: number | undefined;
+  let filled = 0;
+  for (const d of dates) {
+    const c = price.get(d);
+    if (c && Number.isFinite(c) && c > 0) prevClose = c;
+    else if (prevClose) { price.set(d, prevClose); filled++; }
+  }
+  if (filled) console.warn(`ef_fetch_onchain_pvr: forward-filled ${filled} missing close(s)`);
 
   const { rows, sthW: sthWFinal, lthW: lthWFinal } = computeRows(
-    org_id, dates, price, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed, sthW, lthW,
+    org_id, dates, price, priceAvg, sthSupply, sthRp, lthSupply, lthRp, coinblockValueCumDestroyed, sthW, lthW,
   );
 
   if (rows.length === 0) {

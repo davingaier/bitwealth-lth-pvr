@@ -21,13 +21,18 @@ export const REPO_ROOT = `${LAB_DIR}../../`;
 // ---------------------------------------------------------------------------
 export async function loadEnv(): Promise<{ url: string; key: string; orgId: string }> {
   const env: Record<string, string> = {};
-  try {
-    const txt = await Deno.readTextFile(`${REPO_ROOT}.env`);
-    for (const line of txt.split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-    }
-  } catch { /* fall back to process env */ }
+  // .env lives OUTSIDE the Dropbox-synced repo since 2026-11-05; point BW_ENV_FILE at it (default: repo root, then ~/Desktop/.env).
+  const candidates = [Deno.env.get("BW_ENV_FILE"), `${REPO_ROOT}.env`, `${Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME") ?? ""}/Desktop/.env`].filter(Boolean) as string[];
+  for (const file of candidates) {
+    try {
+      const txt = await Deno.readTextFile(file);
+      for (const line of txt.split(/\r?\n/)) {
+        const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+        if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+      break;
+    } catch { /* try next */ }
+  }
   const url = Deno.env.get("SUPABASE_URL") ?? env.SUPABASE_URL;
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? env.SUPABASE_SERVICE_ROLE_KEY;
   const orgId = Deno.env.get("ORG_ID") ?? env.ORG_ID;
@@ -46,10 +51,15 @@ export interface SeriesFile {
 }
 
 export async function loadSeries(): Promise<SeriesFile> {
+  // --series close (or SERIES=close) switches every lab script to data/series_close.json (true UTC closes, 2026-11-06).
+  const pick = (Deno.args.find((a) => a.startsWith("--series="))?.slice(9)) ??
+    (Deno.args.includes("--series") ? Deno.args[Deno.args.indexOf("--series") + 1] : undefined) ??
+    Deno.env.get("SERIES") ?? "rb";
+  const file = pick === "close" ? `${LAB_DIR}data/series_close.json` : DATA_FILE;
   try {
-    return JSON.parse(await Deno.readTextFile(DATA_FILE)) as SeriesFile;
+    return JSON.parse(await Deno.readTextFile(file)) as SeriesFile;
   } catch {
-    throw new Error(`No cached series at ${DATA_FILE}. Run: deno run -A tools/sth_cb_lab/fetch.ts`);
+    throw new Error(`No cached series at ${file}. Run: deno run -A tools/sth_cb_lab/${pick === "close" ? "fetch_closes" : "fetch"}.ts`);
   }
 }
 

@@ -15,6 +15,15 @@ minute and only send the winners to the Admin UI for the charts.
 
 ---
 
+> ### ⚠️ 2026-11-06 — price basis changed to UTC closes; every figure below this line is on the OLD (averaged) basis
+> Research Bitcoin's `price/price` at `d1` is a **daily average** (≈ Binance VWAP), not a close. All multiples quoted in
+> this README up to Part 3 (52.7×, 439 825 %, 48.3×, 45.6×, …) were computed on that smoothed series. On Binance UTC
+> closes the same v2.2 rules give **$2 312 985 · 30.5× HODL · 73 trades · DD 40 % · WF 7/10** ($1k lump 2017→2026-11-05),
+> and a 20 000-config re-fit of the full design space cannot beat that — the smoothing was ~40 % of the published edge.
+> Production, the trackers, the fact sheets, the one-pager and the website now all run on closes.
+> Tools: `fetch_closes.ts` → `data/series_close.json`; add `--series close` (or `SERIES=close`) to any script;
+> `compare_price_source.ts` prints avg-vs-close for a config; `review_diff.ts` diffs published vs staged generator output
+> (`STHCB_OUT_DIR=…/_review_close/`). Historical rows below are kept as a record of the research path, not as current results.
 ## What is in this folder
 
 | File | What it is | Do you run it? |

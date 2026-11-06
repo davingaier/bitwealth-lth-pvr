@@ -3,12 +3,43 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.192)
+**Last updated:** 2026-11-06 (v0.6.193)
 
 ---
 
 ## 0. Change Log
 
+### v0.6.193 – BTC price source: RB daily AVERAGE → UTC CLOSE (Binance). Published figures halve; live engine switched; publication pending review
+**Date:** 2026-11-06 · **Status:** ✅ DONE — live engine switched 08:32 UTC, new figures published 09:10 UTC (Davin approved)
+
+**Finding.** Davin spotted RB's 2026-11-05 "close" of $78,573 vs TradingView's $75,996. RB's `price/price` at `d1` is
+a **daily average** (matches Binance daily VWAP to ±0.1–0.4 % on every day checked; RB's own `h1` series for the day
+runs 80,428 → 75,594 and averages 78,762), not a close. RB has no close field. Every STH_CB signal, band, tracker row,
+back-test, fact sheet and website figure had been computed on this smoothed series while live fills happen at real
+prices.
+
+**Impact (v2.2 unchanged, same fees/windows; `tools/sth_cb_lab/compare_price_source.ts`).** Fact-sheet basis $1k 2017→:
+$4.19M / **52.7×** HODL → $2.31M / **30.5×** (−45 %); 10y website table 7.56× → 4.32×; 7y 3.74× → 1.90×; 5y 4.22× →
+2.46×; **3y 1.23× → 0.76× (loses to HODL)**; 1y 1.88× → 1.33×; DD ≈ unchanged; trades 61 → 73; WF 8/10 → 7/10. Uniform
+across eras (−40…−57 % from every start 2017–2024, incl. pure-Binance windows) and across 12 % of daily target
+allocations. **Re-fit cannot recover it**: 20 000 configs of the full v2.2 design space on closes top out at 26.7×
+(WF 8/10) — below unchanged v2.2 — so ≈40 % of the published multiple was the smoothing, not the rules. True OOS
+(forward split) 3.53× top-1 / 2.11× median on closes; plan rows: 1y OOS 1.37×, 3y 0.62×, 5y 2.16×.
+
+**Decision (Davin): switch to Binance UTC closes, keep v2.2.** Rationale: fills happen at market prices, so the
+close-based numbers are the honest forecast; averaged numbers would quietly under-deliver live.
+
+**Implementation.** `20261106_btc_price_utc_close.sql`: `onchain_pvr_daily.btc_price` = UTC close; new
+`btc_price_avg_usd` keeps the RB average for audit; pre-switch snapshot `onchain_pvr_daily_avg_snapshot_20261106`.
+`ef_fetch_onchain_pvr`: Binance BTCUSDT 1d close from 2017-08-17, RB `h1` 23:00Z bar before (validated vs Binance on
+3 355 overlapping days: median 0.33 %, p95 1.8 %); date spine = RB daily; missing closes forward-filled (8 in 15 y).
+Full `{backfill:true}` re-ran 5 801 rows → PVR z-scores, `sth_cb_bands_daily` and all four trackers recomputed on
+closes; tracker v2.2 = $2,312,985 / 30.5×, identical to the lab. **Live state unchanged: trend_hold, 100.3 % of CB,
+Hold — no client position changes.** Lab: `fetch_closes.ts` (data/series_close.json), `--series close` / `SERIES=close`
+for every script, `BW_ENV_FILE` env override (`.env` is outside the repo), generators accept `STHCB_OUT_DIR`,
+`review_diff.ts` prints the before/after. Staged review set in `_review_close/` (fact sheet v2.2, one-pager,
+fee-model chart data, OOS); **docs/ and website/ untouched** pending approval. Also removed a stale legacy service-role
+key from the Windows user environment that was shadowing the new key for local tools.
 ### v0.6.192 – Credential-read alarm: false positives fixed with a burst-span baseline
 **Date:** 2026-11-06 · **Status:** ✅ DONE
 

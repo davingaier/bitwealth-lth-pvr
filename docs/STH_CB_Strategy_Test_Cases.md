@@ -367,3 +367,17 @@ Observations for refinement discussion:
 | SEC-19 | Credential alarm backtest on 15 h of real cron traffic (95 windows) with span rule | 0 alerts | 0 (max 14 customers / 13 s) | PASS |
 | SEC-20 | Attacker replay: 8 customers over 455 s | alert | 1 critical alert | PASS |
 | SEC-21 | Cron-burst replay: 14 customers in 12 s | silent | 0 alerts | PASS |
+
+## Price basis: RB daily average → Binance UTC close (2026-11-06)
+
+| ID | Test | Expected | Actual | Status |
+|----|------|----------|--------|--------|
+| PX-01 | RB d1 `price/price` vs Binance daily VWAP, 9 days | ≈ VWAP | within 0.1–0.4 % on 8/9 days; vs close up to 3.3 % off | PASS (confirms it is an average) |
+| PX-02 | RB h1 bars for 2026-11-05: mean vs d1 value; 23:00 bar vs TradingView close | mean ≈ d1; 23:00 ≈ close | 78,762 vs 78,573; 75,594 vs 75,996 | PASS |
+| PX-03 | RB 23:00 bar vs Binance close over 3,355 overlapping days | usable pre-2017 proxy | median 0.33 %, p95 1.8 %, max 8.5 % | PASS |
+| PX-04 | `compare_price_source.ts` v2.2 unchanged, $1k 2017→ | measure impact | $4.24M/52.7× → $2.31M/30.5× (−45 %); 12 % of daily targets differ | DONE |
+| PX-05 | Era breakdown (starts 2017…2024, exchange-only fees) | consistent, not a pre-2017 artefact | −40…−57 % in every era | DONE |
+| PX-06 | Re-fit on closes (`--idea oos`, 20k random + climb + WF, 2017→) | can it recover? | best 26.7× (WF 8/10) < unchanged v2.2 30.5× | DONE |
+| PX-07 | `ef_fetch_onchain_pvr {backfill:true}` after switch | 5,801 rows, bands, trackers rebuilt | rows_written 5801, bands 5801, 4 trackers; v2.2 tracker $2,312,985 = lab | PASS |
+| PX-08 | Live state after switch | no position change | trend_hold, 100.3 % of CB, Hold | PASS |
+| PX-09 | Published surfaces after regen (sth-cb strip, OOS panel, index hero, fact sheet, marketing chart) | all on closes, mutually consistent | 30.5×/120%/40%/7/10 · 2.1× OOS (1.1–3.6×, 20/20) · 5y chart $44,790 = one-pager | PASS |
