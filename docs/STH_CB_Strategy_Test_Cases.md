@@ -364,3 +364,6 @@ Observations for refinement discussion:
 | SEC-16 | `ef_sweep_usdt_to_usdpc` live via cron path after redeploy | 200, credentials resolved + logged | 200, 4 credential reads logged | PASS |
 | SEC-17 | Critical security alert → immediate email | notified_at set within seconds | 8 s | PASS |
 | SEC-18 | Trigger functions no longer anon/authenticated-executable | 33 revoked | 33 | PASS |
+| SEC-19 | Credential alarm backtest on 15 h of real cron traffic (95 windows) with span rule | 0 alerts | 0 (max 14 customers / 13 s) | PASS |
+| SEC-20 | Attacker replay: 8 customers over 455 s | alert | 1 critical alert | PASS |
+| SEC-21 | Cron-burst replay: 14 customers in 12 s | silent | 0 alerts | PASS |

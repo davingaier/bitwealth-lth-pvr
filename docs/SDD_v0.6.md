@@ -3,12 +3,28 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-05 (v0.6.191)
+**Last updated:** 2026-11-06 (v0.6.192)
 
 ---
 
 ## 0. Change Log
 
+### v0.6.192 – Credential-read alarm: false positives fixed with a burst-span baseline
+**Date:** 2026-11-06 · **Status:** ✅ DONE
+
+Overnight the v0.6.190 alarm ("≥ 8 distinct customers in 10 min") fired 7 critical `valr_credential_access` alerts.
+Investigation: **not a breach** — `sync-valr-transactions-every-30-min` and `deposit-scan-hourly` legitimately read all
+14 active exchange accounts in one burst at :00/:30 (audit log: `db_user=postgres`, 14 customers, ≤ 13 s span, every
+half hour; API logs show no foreign client, no withdrawal rows, no new users/cron jobs). The 8 `error` alerts are VALR
+401s because Davin's VALR account is still blocked (expected; the 02:20 UTC trading run could not execute).
+
+Fix (`20261106_valr_cred_alarm_baseline.sql`): detector factored into `lth_pvr.valr_cred_anomaly_check()` and shared
+by `get_customer_valr_credentials` and `valr_sign`. Rules: **A** distinct customers in the window > active exchange
+accounts + `valr_cred_alert_slack` (5); **B** ≥ `valr_cred_alert_threshold` (8) distinct customers whose *first* reads
+span > `valr_cred_burst_max_sec` (90 s). Clock-position heuristics (half-hour / 10-min grid) were tried and rejected —
+jobs fire at :00/:05/:10/:15/:20/:30/:35/:45/:55 and the pipeline at 00:20. Validation: 95 ten-minute windows of real
+overnight traffic → 0 alerts (max span 13 s); replay of the attacker pattern (8 customers over 455 s) → 1 alert; replay
+of a 14-customer cron burst → 0. Alerts now carry a per-10-min `dedup_key`. The 7 false positives were resolved.
 ### v0.6.191 – Hardening phase 2: server-side VALR signing, real-time security alerts, rotation reminders, runbook
 **Date:** 2026-11-05 · **Status:** ✅ DONE (code) · operator steps in `docs/SECURITY_RUNBOOK.md`
 
