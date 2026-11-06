@@ -58,7 +58,10 @@ export async function requireOrgAdmin(
     return { ok: false, status: 401, error: "Unauthenticated — invalid or expired session" };
   }
 
+  // Always resolve the membership in `public`, whatever default schema the caller's client was built with
+  // (ef_bt_execute passes an lth_pvr_bt client, several pipeline functions an lth_pvr one — 2026-11-06 403s).
   const { data: member } = await sb
+    .schema("public")
     .from("org_members")
     .select("role")
     .eq("user_id", data.user.id)

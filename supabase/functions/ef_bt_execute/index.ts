@@ -90,7 +90,7 @@ Deno.serve(async (req)=>{
   const sb = getServiceClient();
   // 2026-11-05: platform JWT verification is off (sb_secret keys cannot be verified by the gateway) — authorise here.
   const caller = await requireOrgAdmin(sb as any, req, getServiceKey() ?? "");
-  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { "Content-Type": "application/json" } });
+  if (!caller.ok) return new Response(JSON.stringify({ error: caller.error }), { status: caller.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 // use lth_pvr_bt schema explicitly for all BT tables/views
   const sbBt = sb.schema ? sb.schema("lth_pvr_bt") : sb;
   let bt_run_id;
