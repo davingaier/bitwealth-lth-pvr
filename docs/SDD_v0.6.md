@@ -3,11 +3,26 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.198)
+**Last updated:** 2026-11-06 (v0.6.199)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.199 – Admin UI back-tester 403: requireOrgAdmin looked up org_members in the caller's default schema
+**Date:** 2026-11-06 · **Status:** ✅ DONE — 60 functions redeployed
+
+LTH PVR back-test from the Admin UI failed with 403 `Forbidden — administrator access required`. `requireOrgAdmin` ran
+`sb.from("org_members")` on the client it was handed; `ef_bt_execute` passes an `lth_pvr_bt`-schema client (and`n`ef_run_lth_pvr_simulator`, `ef_customer_valr_balances`, `ef_fee_invoice_email`, `ef_link_bank_account`, `ef_std_dca_roll` an
+`lth_pvr` one), so the membership query hit a non-existent table and every human admin was refused. Cron / service callers
+short-circuit on the secret key before that lookup, which is why the pipeline never tripped it. Fix in the shared guard:
+`.schema("public")` on the membership query; `ef_bt_execute` auth errors now carry CORS headers so the browser shows the
+real message instead of a CORS complaint. Verified with a fresh admin session (`ef_bt_execute` → run lookup, simulator 200).
+
+**Self-inflicted follow-up:** the verification session was closed with `/auth/v1/logout` (global scope by default), which
+also signed out Davin's browser → guarded functions returned 401 `invalid or expired session` while PostgREST kept working on
+the unexpired JWT. Resolution: sign out / in. Rule added to copilot-instructions (never probe with a real admin identity;
+`scope=local` if unavoidable).
 
 ### v0.6.198 – Customer 999 reconciled to VALR (post-incident + out-of-strategy MSTRX purchase)
 **Date:** 2026-11-06 · **Status:** ✅ DONE — ledger and `balances_daily` equal VALR to the cent

@@ -319,6 +319,8 @@ curl -X POST https://wqnmxpooabmedvtackji.supabase.co/functions/v1/ef_resume_pip
 
 0. **Windows PowerShell 5.1 strips embedded double quotes from native-exe arguments:** `curl.exe -d '{"a":1}'` arrives as `{a:1}` (invalid JSON) and every edge function silently falls back to defaults (tracker ran ALL configs, marketing refresh did both charts, `from_date` ignored — 2026-11-06). Scripts launched via `tools\with-secrets.ps1 powershell …` run under 5.1. Always send JSON bodies with `--data-binary "@file.json"` or run under `pwsh` (7.x).
 
+0b. **Never probe with a real admin's identity.** `POST /auth/v1/logout` defaults to *global* scope and kills every session of that user (2026-11-06: the Admin UI then got 401 `invalid or expired session` from guarded functions while PostgREST still worked, because the browser's JWT was unexpired but `auth.getUser` found no session). If a test session is unavoidable use `/auth/v1/logout?scope=local`. Diagnostic: `select count(*) from auth.sessions where user_id=…`.
+
 1. **JWT Verification:** Pipeline functions fail with 401 if JWT verification enabled. Always deploy with `--no-verify-jwt` for cron/internal functions.
 
 2. **Schema Switching:** Forgetting `.schema("lth_pvr")` causes "relation does not exist" errors. Default schema is `public`.
