@@ -132,7 +132,28 @@ Deno.serve(async (req) => {
     }
 
     let written = 0;
+    // Prior decisions: today's row (so a re-run cannot re-notify) and the most recent earlier BUY/SELL per customer
+    // (so a daily re-plan of an order that never executed is recognised as a retry, not news for the client).
+    const priorToday = new Map<number, Record<string, unknown>>();
+    const priorEarlier = new Map<number, Record<string, unknown>>();
+    {
+      const ids = customers.map((c) => Number(c.customer_id));
+      const { data: prev } = await sb.schema("sth_cb").from("decisions_daily")
+        .select("customer_id, trade_date, action, rule, target_alloc, current_alloc, notified_at")
+        .eq("org_id", org_id).in("customer_id", ids).lte("trade_date", tradeDate).gte("trade_date", addDays(tradeDate, -14))
+        .order("trade_date", { ascending: false });
+      for (const r of prev ?? []) {
+        const cid = Number(r.customer_id);
+        if (String(r.trade_date) === tradeDate) priorToday.set(cid, r);
+        else if (!priorEarlier.has(cid) && r.action !== "HOLD") priorEarlier.set(cid, r);
+      }
+    }
     if (!dryRun && decisions.length) {
+      // keep an existing notification stamp across re-runs of the same trade_date
+      for (const d of decisions) {
+        const t = priorToday.get(Number(d.customer_id));
+        if (t?.notified_at) d.notified_at = t.notified_at;
+      }
       const { error: upErr } = await sb.schema("sth_cb").from("decisions_daily").upsert(decisions, { onConflict: "org_id,customer_id,trade_date" });
       if (upErr) throw new Error(`sth_cb.decisions_daily upsert failed: ${upErr.message}`);
       written = decisions.length;
@@ -165,23 +186,54 @@ Deno.serve(async (req) => {
 
     const summary = { ok: true, trade_date: tradeDate, signal_date: signalDate, dry_run: dryRun, customers: customers.length, decisions_written: written, buys: planned.filter((p) => p.action === "BUY").length, sells: planned.filter((p) => p.action === "SELL").length, holds: planned.filter((p) => p.action === "HOLD").length, signals: Object.fromEntries(signals), planned, chained, emails: [] as string[] };
 
-    // ── Client notifications: one "position change" email per BUY/SELL (not on dry runs, not when the intent
-    //    step failed). The order outcome is read back so the email can say "filled" vs "being executed".
+    // ── Client notifications: ONE "position change" email per customer per trade_date, and only when the decision is
+    //    genuinely new for the client. Suppressed (ops alert instead) when: it was already sent for this trade_date
+    //    (re-run), it repeats the last notified BUY/SELL with the customer's allocation unchanged (= an order that never
+    //    executed is being retried), or the order ended in `error`. 2026-11-06: customers 49/999 had received the same
+    //    "Moved into Bitcoin — order status: error" email 7× in two days before these rules existed.
     if (!dryRun && actionable.length && body?.notify !== false) {
       const WEBSITE_URL = Deno.env.get("WEBSITE_URL") ?? "https://bitwealth.co.za";
       const intentsOk = chained.length === 0 || chained[0]?.ok === true;
+      const near = (a: unknown, b: unknown) => Math.abs(num(a) - num(b)) < 0.005;
+      const markDecision = async (cid: number, patch: Record<string, unknown>) => {
+        await sb.schema("sth_cb").from("decisions_daily").update(patch).eq("org_id", org_id).eq("customer_id", cid).eq("trade_date", tradeDate);
+      };
       for (const cid of actionable) {
         try {
           const p = planned.find((x) => x.customerId === cid) as Record<string, unknown> | undefined;
           if (!p || !intentsOk) continue;
+          const today = priorToday.get(cid);
+          if (today?.notified_at) { summary.emails.push(`#${cid}: already notified`); await markDecision(cid, { notify_skipped: "already_notified" }); continue; }
           const { data: cust } = await sb.schema("public").from("customer_details").select("first_names, email").eq("customer_id", cid).maybeSingle();
-          if (!cust?.email) continue;
+          if (!cust?.email) { await markDecision(cid, { notify_skipped: "no_email" }); continue; }
           const { data: ord } = await sb.schema("lth_pvr").from("exchange_orders")
             .select("status, price, qty, pair, order_intents!inner(customer_id, trade_date, pair)")
             .eq("order_intents.customer_id", cid).eq("order_intents.trade_date", tradeDate).neq("pair", "USDPC/USDT")
             .order("submitted_at", { ascending: false }).limit(1);
           const o = ord?.[0];
-          const st = String(o?.status ?? "").toLowerCase();
+          let st = String(o?.status ?? "").toLowerCase();
+          if (!st) {
+            // no exchange order row (e.g. the USDPC conversion or the intent itself failed) — read the intent status
+            const { data: it } = await sb.schema("lth_pvr").from("order_intents").select("status, reason")
+              .eq("org_id", org_id).eq("customer_id", cid).eq("trade_date", tradeDate).order("created_at", { ascending: false }).limit(1);
+            if (String(it?.[0]?.status ?? "").toLowerCase() === "error") st = "error";
+          }
+          if (st === "error" || st === "cancelled" || st === "rejected") {
+            summary.emails.push(`#${cid}: order ${st} — client not emailed`);
+            await markDecision(cid, { notify_skipped: "order_error" });
+            await logAlert(sb, COMPONENT, "error", `Customer ${cid}: ${p.action} order ${st} — position change NOT executed; client not emailed`, { trade_date: tradeDate, rule: p.rule, target_alloc: p.targetAlloc }, org_id, cid);
+            continue;
+          }
+          // A repeat of the last notified decision whose order still has not executed is a retry, not news for the client.
+          const last = priorEarlier.get(cid);
+          const isRetry = !!last && last.action === p.action && String(last.rule ?? "") === String(p.rule ?? "")
+            && near(last.target_alloc, p.targetAlloc) && near(last.current_alloc, p.currentAlloc) && !!last.notified_at;
+          if (isRetry && st !== "filled" && st !== "submitted") {
+            summary.emails.push(`#${cid}: retry — not re-notified`);
+            await markDecision(cid, { notify_skipped: "retry" });
+            await logAlert(sb, COMPONENT, "warn", `Customer ${cid}: ${p.action} (${p.rule}) re-planned — the ${last!.trade_date} order never executed; client not re-emailed`, { trade_date: tradeDate, previous_trade_date: last!.trade_date, order_status: st || null, target_alloc: p.targetAlloc, current_alloc: p.currentAlloc }, org_id, cid);
+            continue;
+          }
           const orderStatusText = st === "filled" ? `Filled on VALR at about $${Number(o?.price ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} per BTC`
             : st === "submitted" ? "Your order is being executed on VALR and normally fills within minutes"
             : st ? `Order status: ${st} — our team is monitoring it` : "Your order is being placed on VALR";
@@ -196,6 +248,7 @@ Deno.serve(async (req) => {
             },
           });
           summary.emails.push(`#${cid}: ${r.ok ? "sent" : `failed ${r.status}`}`);
+          if (r.ok) await markDecision(cid, { notified_at: new Date().toISOString(), notify_skipped: null });
           if (!r.ok) await logAlert(sb, COMPONENT, "warn", `Position-change email failed for customer ${cid}`, { status: r.status, error: r.error }, org_id, cid);
         } catch (e) {
           summary.emails.push(`#${cid}: error ${String((e as Error)?.message ?? e)}`);

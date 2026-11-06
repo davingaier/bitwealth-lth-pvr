@@ -401,3 +401,13 @@ Observations for refinement discussion:
 | CG-10 | `sthCbReason` routing for R1/R12/R14/R15/R16/R17/R18/R2 | each rule → its own copy | pre-existing `/R1\|…/` matched R12/R15/R16 — fixed with word boundaries; 9/9 | PASS (bug fixed) |
 | CG-11 | Promotion: UPDATE `tracker_config.hybrid_v2_2` + rebuild | tracker = lab; live signal unchanged | $2,474,438 / 32.6× / 66 trades; trend_hold, Hold, target 1; no new intents | PASS |
 | CG-12 | Re-published surfaces (hero/strip, fact sheet, one-pager, OOS, marketing chart) | mutually consistent | 32.6× / $2.47M / 121 % / 36 % / 7/10 · OOS unchanged 2.1× · `sth_cb_5yr` $52,594 = one-pager 5-y | PASS |
+
+## Position-change email duplicates (2026-11-06)
+
+| ID | Test | Expected | Actual | Status |
+|----|------|----------|--------|--------|
+| NE-01 | `email_logs` for `sth_cb_position_change` | one per real position change | 7 per customer (49, 999) in 2 days, all 'order status: error' | BUG |
+| NE-02 | Re-run `ef_sth_cb_generate_decisions` same trade_date after fix | no email, decision marked | `already notified` ×2, 0 rows in `email_logs` (2 runs) | PASS |
+| NE-03 | Past BUY/SELL rows back-filled as notified | next run cannot re-send for old dates | 5/5 rows `notified_at` set | PASS |
+| NE-04 | Order `error` outcome | ops alert, no client email, `notify_skipped=order_error` | code path; exercised by tomorrow's run if 49's order fails again | PENDING |
+| NE-05 | Same decision re-planned next day, order not executed | `retry` alert, no client email | code path; expected for 49 on 2026-11-07 | PENDING |

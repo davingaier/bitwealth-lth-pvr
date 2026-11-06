@@ -3,11 +3,35 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.196)
+**Last updated:** 2026-11-06 (v0.6.197)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.197 – STH_CB position-change emails sent 7× to the same clients: notify-once + retry/error suppression
+**Date:** 2026-11-06 · **Status:** ✅ DONE (migration applied, function deployed, re-run verified: 0 emails)
+
+**Incident.** Davin (999) and Tremyne (49) each received "Moved into Bitcoin — Order status: error" seven times in two
+days (`email_logs`: 11-04 13:58; 11-05 14:23 ×2, 14:49; 11-06 00:20, 08:33, 14:27, 14:49). Two causes: (1)
+`ef_sth_cb_generate_decisions` emailed on **every** run that planned a BUY/SELL — the 00:20 cron *and* every manual
+`ef_sth_cb_tracker` / `ef_fetch_onchain_pvr {backfill}` run, both of which chain the live step; (2) the decision itself
+repeated daily because the orders failed (VALR 401 while the account was blocked; for 49 also the phantom 130k USDPC
+ledger balance vs ≈0 on VALR), so the balance never changed and `Join: adopt current state` was re-planned each morning.
+
+**Fix.** `20261106_sth_cb_notify_once.sql`: `sth_cb.decisions_daily` + `notified_at timestamptz`, `notify_skipped text`
+(back-filled all 5 past BUY/SELL rows as notified; applied with psycopg over `DATABASE_URL` because the Supabase MCP was
+signed out and CLI 2.67 has no `db query`). Function: reads today's row and the latest earlier BUY/SELL per customer
+(14-day window) before the upsert and preserves `notified_at` across re-runs; then, per actionable customer:
+**already notified today → skip**; **order `error`/`cancelled`/`rejected` → ops alert (`error`), no client email**
+(intent status is consulted when no exchange order exists, e.g. the USDPC conversion failed); **same action / rule /
+target / current allocation as the last notified decision and the order has not filled/submitted → `retry`, ops alert
+(`warn`), no client email** — but a retry that *does* fill is emailed, because the client was last told "error".
+`notified_at` is stamped only after a successful send. Verified: two re-runs after deploy → `already notified`, 0 emails.
+
+**Follow-ups (Davin):** a personal note to Tremyne about the duplicate emails; customer 49's ledger reconciliation
+(130,539 USDPC / −30,272 USDT vs VALR ≈ 0 since 2 July) must be resolved before the engine's next attempt — until then
+it will alert daily as `order_error`. Tomorrow's 00:20 run with the new VALR trading key is expected to execute 999's join.
 
 ### v0.6.196 – STH_CB: why the Feb-2026 capitulation buy never fired; 4-day R1 gate promoted INTO v2.2 (in place)
 **Date:** 2026-11-06 · **Status:** ✅ DONE — Davin: "replace v2.2 with the v2.3 parameters, no new key". Live + published 16:50 UTC+2
