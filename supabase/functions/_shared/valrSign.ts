@@ -60,8 +60,9 @@ let _selfChecked = false;
 export async function signValrRequest(input: SignInput): Promise<SignedHeaders> {
   const verb = input.verb.toUpperCase();
   const body = input.body ?? "";
-  const localKey = input.localApiKey ?? Deno.env.get("VALR_API_KEY") ?? null;
-  const localSecret = input.localApiSecret ?? Deno.env.get("VALR_API_SECRET") ?? null;
+  const localSecret = input.localApiSecret || Deno.env.get("VALR_API_SECRET") || null;
+  // An env API key is only meaningful alongside an env secret (true legacy mode); otherwise the Vault key wins.
+  const localKey = input.localApiKey || (localSecret ? Deno.env.get("VALR_API_KEY") : null) || null;
 
   const local = async (): Promise<SignedHeaders> => {
     if (!localKey || !localSecret) throw new Error("VALR signing: no server-side key in Vault and no local secret available");

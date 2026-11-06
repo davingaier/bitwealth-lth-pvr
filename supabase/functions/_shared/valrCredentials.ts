@@ -12,6 +12,7 @@
 // IMPORTANT: Only callable from service-role edge functions — never exposed to JWT callers.
 
 import { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { masterApiKey } from "./valr.ts";
 
 export type ValrAccountModel = "subaccount" | "api" | "finova_omnibus";
 
@@ -85,15 +86,12 @@ export async function resolveCustomerCredentials(
     );
   }
 
-  // Subaccount model — credentials come from environment (master key)
-  const apiKey = Deno.env.get("VALR_API_KEY");
-  const apiSecret = Deno.env.get("VALR_API_SECRET");
-
-  if (!apiKey || !apiSecret) {
-    throw new Error(
-      "resolveCustomerCredentials: VALR_API_KEY / VALR_API_SECRET env vars not configured",
-    );
-  }
+  // Subaccount model — the BitWealth master key. Since 2026-11-06 it lives ONLY in Vault and lth_pvr.valr_sign()
+  // signs with it server-side (valrSign.ts passes customerId / subaccountId). The env vars are an optional legacy
+  // fallback and may be absent; never fail here just because they are.
+  const apiSecret = Deno.env.get("VALR_API_SECRET") ?? "";
+  // X-VALR-API-KEY is not secret; read it from Vault so legacy callers (ef_deposit_scan, …) can build headers.
+  const apiKey = (await masterApiKey()) || Deno.env.get("VALR_API_KEY");
 
   return {
     apiKey,

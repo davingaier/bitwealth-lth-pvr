@@ -54,7 +54,7 @@ where accessed_at > now() - interval '1 day' group by 1,2;
 You want rows with `purpose = sign`. If you see a critical alert titled *"Server-side VALR signature differs…"*, stop and tell me.
 
 **1d. Remove the old secrets from the functions** (only after 1c looks good):
-Dashboard → **Edge Functions → Secrets** → delete `VALR_API_SECRET` (keep `VALR_API_KEY` for now; it is harmless without the secret, and a few legacy functions still read it — see §7).
+Dashboard → **Edge Functions → Secrets** → delete **both** `VALR_API_SECRET` and `VALR_API_KEY`. (Since 2026-11-06 every function takes the API key from Vault too; a leftover env `VALR_API_KEY` that no longer matches the Vault secret produced "invalid signature" errors on the legacy path until the code was changed to prefer Vault.)
 
 **1e. Tell customers 9, 49 and 56** (API-model clients) to delete their BitWealth API key on VALR and create a new one;
 re-enter it via Admin UI → Customer Management → Edit Client → VALR API key. Their old keys were read by the attacker.
@@ -156,12 +156,7 @@ The `.env.example` in the repo lists the variable names you need.
 
 ## 7. Follow-ups still open (developer work)
 
-- **Stage 2 of server-side signing**: 19 legacy functions still sign VALR requests locally
-  (`valr-*`, `real-txs-*`, `ef_deposit_scan`, `ef_sync_valr_transactions`, `ef_valr_*`, `ef_link_bank_account`,
-  `ef_store_customer_api_keys`, `ef_market_fallback`, `ef_auto_convert_btc_to_usdt`, `ef_convert_platform_fee_btc`,
-  `ef_partner_submit_subaccount`, `ef_valr_ws_monitor`). They work today via the local fallback; once converted,
-  `VALR_API_KEY/SECRET` can be deleted from Edge Function secrets and `get_customer_valr_credentials` can stop
-  returning `api_secret`.
+- ~~Stage 2 of server-side signing~~ **done 2026-11-06**: every live-path function signs via Vault; `VALR_API_SECRET` removed from Edge Function secrets. Remaining: stop `get_customer_valr_credentials` returning `api_secret` once the api-model customers are re-keyed (their secrets are needed only by the signer now).
 - Advisor backlog: 21 public tables without RLS, 38 SECURITY DEFINER views, ~120 functions with mutable search_path —
   needs a per-object review (some are intentionally public for the website).
 - Admin UI panel for the withdrawal allow-list and held requests (today: SQL in §3).

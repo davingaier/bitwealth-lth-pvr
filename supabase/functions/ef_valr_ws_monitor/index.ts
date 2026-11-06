@@ -1,3 +1,4 @@
+import { masterApiKey, serverSignWithTimestamp } from "../_shared/valr.ts";
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_valr_ws_monitor/index.ts
 // Real-time WebSocket monitor for VALR order updates
@@ -132,11 +133,18 @@ Deno.serve(async (req: Request) => {
     // WebSocket authentication headers (sent during handshake)
     const timestamp = Date.now().toString();
     const path = "/ws/trade";
-    const payloadToSign = timestamp + "GET" + path + (subaccount_id ?? "");
-    const signature = await signRequest(VALR_API_SECRET!, payloadToSign);
+    // 2026-11-06: master key lives in Vault; sign server-side unless a legacy env secret is present.
+    let wsApiKey = VALR_API_KEY ?? "";
+    let signature: string;
+    if (VALR_API_SECRET && wsApiKey) {
+      signature = await signRequest(VALR_API_SECRET, timestamp + "GET" + path + (subaccount_id ?? ""));
+    } else {
+      const s = await serverSignWithTimestamp(timestamp, "GET", path, "", subaccount_id ?? null, null);
+      wsApiKey = s.apiKey; signature = s.signature;
+    }
 
     const wsUrl = new URL(VALR_WS_URL);
-    wsUrl.searchParams.set("X-VALR-API-KEY", VALR_API_KEY!);
+    wsUrl.searchParams.set("X-VALR-API-KEY", wsApiKey);
     wsUrl.searchParams.set("X-VALR-SIGNATURE", signature);
     wsUrl.searchParams.set("X-VALR-TIMESTAMP", timestamp);
     if (subaccount_id) {

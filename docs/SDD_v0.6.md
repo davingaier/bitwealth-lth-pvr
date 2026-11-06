@@ -3,12 +3,46 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.193)
+**Last updated:** 2026-11-06 (v0.6.194)
 
 ---
 
 ## 0. Change Log
 
+### v0.6.194 – Server-side VALR signing stage 2: every function now signs via Vault; VALR_API_SECRET removed
+**Date:** 2026-11-06 · **Status:** ✅ DONE
+
+Davin's VALR account was unblocked; old keys deleted; new **BitWealth Trading** key (no withdraw permission) loaded
+into Vault (`valr_master_api_key/secret`); `VALR_API_SECRET` deleted from Edge Function secrets (withdraw key pending
+VALR's 24 h withdrawal freeze). The first balance check exposed what stage 1 had left behind: api-model customers
+(49, 56) signed server-side fine, but subaccount customers failed *before* reaching the signer —
+`resolveCustomerCredentials` still demanded `VALR_API_KEY/SECRET` from env, and the 19 legacy functions that call
+`_shared/valr.ts signVALR()` (or their own inline HMAC) crashed with "Key length is zero".
+
+Fix, all in shared code so no per-function rewrite was needed: (1) `lth_pvr.valr_sign_ts(ts, verb, path, body,
+subaccount_id, customer_id)` — same key resolution/audit/alerts as `valr_sign` but signs a caller-supplied timestamp
+(legacy callers set their own `X-VALR-TIMESTAMP`); `lth_pvr.valr_master_api_key()` exposes the master API **key**
+(never the secret) for `X-VALR-API-KEY`. (2) `_shared/valr.ts`: `signVALR()` routes to `valr_sign_ts` when the secret
+is empty; new `serverSignWithTimestamp()` / `masterApiKey()`. (3) `resolveCustomerCredentials`: subaccount model no
+longer requires env secrets; api key from Vault. (4) `valrSign.ts` treats `""` credentials as absent. (5) Four
+functions with inline HMAC on the live path converted: `ef_market_fallback` (local copy deleted → shared),
+`ef_valr_create_subaccount`, `ef_valr_subaccounts`, `ef_valr_ws_monitor`; `ef_convert_platform_fee_btc` and
+`valrTransfer.ts` master path read the key from Vault. Remaining local HMACs are the pre-pipeline `valr-*` /
+`real-txs-*` functions (not on the live path) and the Finova webhook (unrelated).
+
+Side finding during the balance check: **customer 49 (api-model, active STH_CB) ledger = 130 539 USDPC / −30 272 USDT
+(NAV ≈ $126.5k) while VALR reports ≈ 0** — alerts since 2 July; a long-standing reconciliation problem, not today's
+incident. Needs a ledger review before the next fee run.
+**Follow-up (10:00–10:30 UTC).** (a) The credential alarm fired once more — a manual balance-check test at 09:53 plus the
+10:00 cron tick in one window read as "14 customers over 388 s". Rule refined (`20261106_valr_cred_alarm_burst_clustering`):
+reads are clustered into bursts (gap > `valr_cred_burst_gap_sec` = 240 s) and the span test is per burst; validated —
+attacker pace fires, this morning's window / cron bursts / 20 h of real traffic silent. (b) Balance checks: modern path
+(`ef_customer_valr_balances` → shared client → `valr_sign`) returned customer 999's subaccount balances and
+`ef_valr_subaccounts` listed all subaccounts — **server-side signing confirmed against VALR**. Legacy path
+(`ef_deposit_scan`) still returned *invalid signature* because `resolveCustomerCredentials` preferred the stale env
+`VALR_API_KEY` (old, deleted key) over the Vault key while the signature used the new secret; precedence flipped to Vault
+in `valrCredentials.ts`, `valrTransfer.ts`, `valrSign.ts`, `ef_market_fallback`, `ef_valr_create_subaccount`,
+`ef_convert_platform_fee_btc`. Runbook §1d now says delete `VALR_API_KEY` as well.
 ### v0.6.193 – BTC price source: RB daily AVERAGE → UTC CLOSE (Binance). Published figures halve; live engine switched; publication pending review
 **Date:** 2026-11-06 · **Status:** ✅ DONE — live engine switched 08:32 UTC, new figures published 09:10 UTC (Davin approved)
 

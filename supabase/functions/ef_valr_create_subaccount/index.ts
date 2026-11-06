@@ -1,3 +1,4 @@
+import { masterApiKey, serverSignWithTimestamp } from "../_shared/valr.ts";
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_valr_create_subaccount
 // Purpose: Milestone 4 - Auto-create VALR subaccount when customer reaches 'setup' status
@@ -12,15 +13,16 @@ import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
-const valrApiKey = Deno.env.get("VALR_API_KEY");
-const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+// 2026-11-06: master key lives in Vault; api KEY from there, signing server-side when the secret is absent.
+const valrApiKey = (await masterApiKey()) || Deno.env.get("VALR_API_KEY");
+const valrApiSecret = Deno.env.get("VALR_API_SECRET") ?? "";
 const testMode = Deno.env.get("VALR_TEST_MODE") === "true"; // For testing without real VALR API
 
 if (!supabaseUrl || !supabaseKey || !orgId) {
   throw new Error("Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID");
 }
 
-if (!testMode && (!valrApiKey || !valrApiSecret)) {
+if (!testMode && !valrApiKey) {
   throw new Error("Missing VALR credentials. Set VALR_TEST_MODE=true to test without real API calls.");
 }
 
@@ -41,6 +43,8 @@ interface CreateSubaccountRequest {
 
 // VALR API: Sign request with HMAC SHA-512
 async function signVALR(timestamp: string, method: string, path: string, body: string) {
+  // 2026-11-06: master secret lives in Vault — sign server-side unless a legacy env secret is present.
+  if (!valrApiSecret) return (await serverSignWithTimestamp(timestamp, method, path, body, null, null)).signature;
   const message = timestamp + method.toUpperCase() + path + body;
   const key = await crypto.subtle.importKey(
     "raw",

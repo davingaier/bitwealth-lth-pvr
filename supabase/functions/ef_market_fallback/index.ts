@@ -1,3 +1,4 @@
+import { masterApiKey, signVALR } from "../_shared/valr.ts";
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { logAlert } from "../_shared/alerting.ts";
@@ -5,36 +6,13 @@ import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.
 
 // VALR signature helper (inline to avoid import issues)
 // IMPORTANT: Must include subaccountId in signature payload per VALR spec
-async function signVALR(
-  timestamp: string,
-  method: string,
-  path: string,
-  body: string,
-  secret: string,
-  subaccountId?: string,
-): Promise<string> {
-  const payload = timestamp + method.toUpperCase() + path + body + (subaccountId ?? "");
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(payload);
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-512" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  return Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+// 2026-11-06: local HMAC removed — shared signVALR signs server-side (Vault) when no secret is present.
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "";
 const supabaseServiceRoleKey = getServiceKey() ?? "";
 const org_id = Deno.env.get("ORG_ID");
 
-const VALR_API_KEY = Deno.env.get("VALR_API_KEY") ?? "";
+const VALR_API_KEY = (await masterApiKey()) || Deno.env.get("VALR_API_KEY"); // 2026-11-06: key from Vault; secret stays server-side
 const VALR_API_SECRET = Deno.env.get("VALR_API_SECRET") ?? "";
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {

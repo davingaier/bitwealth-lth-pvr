@@ -161,3 +161,14 @@ GRANT EXECUTE ON FUNCTION lth_pvr.valr_sign(bigint, text, text, text, text, text
 UPDATE public.alert_events
    SET resolved_at = now(), resolved_by = 'migration 20261106', resolution_note = 'False positive: cron batch (sync-valr-transactions / deposit-scan) tripped the first-cut baseline. Rule replaced.'
  WHERE component = 'valr_credential_access' AND resolved_at IS NULL AND created_at < now();
+
+-- ---------------------------------------------------------------------------
+-- 2026-11-06 (later): second false positive — a manual balance-check test at 09:53 plus the 10:00 cron tick landed in
+-- one 10-min window and read as "14 customers over 388 s". Reads are now clustered into bursts (a gap longer than
+-- valr_cred_burst_gap_sec = 240 s starts a new burst) and the span test applies PER BURST. 240 s sits between an
+-- attacker's inter-read pace (yesterday ≈ 75 s) and the spacing of legitimate events (cron ticks ≥ 5 min apart).
+-- Validated: attacker replay (8 reads @ 65 s) fires; this morning's window, a 14-in-12-s cron burst and 20 h of real
+-- traffic (42 windows) stay silent. Applied as migration 20261106_valr_cred_alarm_burst_clustering (function body
+-- supersedes the one above) + `update lth_pvr.settings set val='240' where key='valr_cred_burst_gap_sec'`.
+-- ---------------------------------------------------------------------------
+INSERT INTO lth_pvr.settings(key, val) VALUES ('valr_cred_burst_gap_sec', '240') ON CONFLICT (key) DO UPDATE SET val = EXCLUDED.val;

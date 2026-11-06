@@ -6,6 +6,7 @@
 
 import { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { signValrRequest } from "./valrSign.ts";
+import { masterApiKey } from "./valr.ts";
 
 export interface TransferRequest {
   fromSubaccountId: string;
@@ -43,8 +44,8 @@ export async function transferToMainAccount(
   ledgerId?: string
 ): Promise<TransferResult> {
   const orgId = Deno.env.get("ORG_ID");
-  const valrApiKey = Deno.env.get("VALR_API_KEY");
-  const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+  const valrApiKey = (await masterApiKey()) || Deno.env.get("VALR_API_KEY");   // key (not secret) from Vault
+  const valrApiSecret = Deno.env.get("VALR_API_SECRET") ?? "";
   const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
 
   // 2026-11-05: master secret lives in Vault (lth_pvr.valr_sign); env values are only a rollout fallback.

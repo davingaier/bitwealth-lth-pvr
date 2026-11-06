@@ -381,3 +381,6 @@ Observations for refinement discussion:
 | PX-07 | `ef_fetch_onchain_pvr {backfill:true}` after switch | 5,801 rows, bands, trackers rebuilt | rows_written 5801, bands 5801, 4 trackers; v2.2 tracker $2,312,985 = lab | PASS |
 | PX-08 | Live state after switch | no position change | trend_hold, 100.3 % of CB, Hold | PASS |
 | PX-09 | Published surfaces after regen (sth-cb strip, OOS panel, index hero, fact sheet, marketing chart) | all on closes, mutually consistent | 30.5×/120%/40%/7/10 · 2.1× OOS (1.1–3.6×, 20/20) · 5y chart $44,790 = one-pager | PASS |
+| SEC-22 | 10:00 UTC alert "14 customers over 388 s": audit log | manual test 09:53 (3 custs) + cron tick 10:00 (14 custs, 8 s) — benign | confirmed, no foreign client | FALSE POSITIVE |
+| SEC-23 | Burst-clustered rule (gap 240 s): attacker replay 8 @ 65 s | fires | 1 critical | PASS |
+| SEC-24 | Same rule: this morning's window / 14-in-12-s cron burst / 20 h real traffic (42 windows) | silent | 0 / 0 / 0 | PASS |

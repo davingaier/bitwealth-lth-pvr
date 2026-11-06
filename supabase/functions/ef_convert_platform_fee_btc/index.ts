@@ -1,3 +1,4 @@
+import { masterApiKey } from "../_shared/valr.ts";
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_convert_platform_fee_btc
 // Purpose: Auto-convert BitWealth's collected BTC platform fees to USDT
@@ -13,11 +14,12 @@ import { requireOrgAdmin } from "../_shared/adminAuth.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 const supabaseKey = getServiceKey();
 const orgId = Deno.env.get("ORG_ID");
-const valrApiKey = Deno.env.get("VALR_API_KEY");
-const valrApiSecret = Deno.env.get("VALR_API_SECRET");
+// 2026-11-06: master key lives in Vault; the api KEY is fetched from there (not secret), signing is server-side when the secret is absent.
+const valrApiKey = (await masterApiKey()) || Deno.env.get("VALR_API_KEY");
+const valrApiSecret = Deno.env.get("VALR_API_SECRET") ?? "";
 const mainAccountId = Deno.env.get("VALR_MAIN_ACCOUNT_ID") || "";
 
-if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey || !valrApiSecret) {
+if (!supabaseUrl || !supabaseKey || !orgId || !valrApiKey) {
   throw new Error("Missing required environment variables");
 }
 

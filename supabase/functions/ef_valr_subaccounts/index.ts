@@ -1,3 +1,4 @@
+import { masterApiKey, serverSignWithTimestamp } from "../_shared/valr.ts";
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // ef_valr_subaccounts / index.ts
 // Lists your VALR sub-accounts so you can see subaccountId / label / etc.
@@ -28,17 +29,18 @@ async function valrPrivateRequest(
   path: string,
   body?: unknown,
 ): Promise<unknown> {
-  const apiKey = Deno.env.get("VALR_API_KEY");
-  const apiSecret = Deno.env.get("VALR_API_SECRET");
-
-  if (!apiKey || !apiSecret) {
-    throw new Error("VALR_API_KEY or VALR_API_SECRET missing");
-  }
-
+  // 2026-11-06: master key lives in Vault; sign server-side unless a legacy env secret is present.
+  const apiSecret = Deno.env.get("VALR_API_SECRET") ?? "";
   const timestamp = Date.now().toString();
   const json = body ? JSON.stringify(body) : "";
-  const payloadToSign = timestamp + method.toUpperCase() + path + json;
-  const signature = await hmacSha512Hex(apiSecret, payloadToSign);
+  let apiKey = Deno.env.get("VALR_API_KEY") ?? "";
+  let signature: string;
+  if (apiSecret && apiKey) {
+    signature = await hmacSha512Hex(apiSecret, timestamp + method.toUpperCase() + path + json);
+  } else {
+    const s = await serverSignWithTimestamp(timestamp, method, path, json, null, null);
+    apiKey = s.apiKey; signature = s.signature;
+  }
 
   const resp = await fetch(API_BASE + path, {
     method,
