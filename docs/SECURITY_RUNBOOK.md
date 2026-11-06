@@ -140,6 +140,19 @@ You have ~10 secrets across three places: Supabase Vault (runtime, already encry
 Whichever you choose: put MFA on it, and **never** paste a secret into chat, Slack, WhatsApp or a Git commit again.
 The `.env.example` in the repo lists the variable names you need.
 
+### 5a. ✅ Done (2026-11-06) — Infisical is set up. What it means day to day
+
+- **The live system does not use Infisical.** Edge Functions, cron, the Admin UI and the website read their secrets
+  from Supabase (Edge Function secrets + Vault), exactly as before. Nothing about trading depends on your PC.
+- **Infisical only matters for scripts run on your PC** (the back-test lab, email-template tools, `valr_probe.ps1`).
+  Those are almost always run by the AI assistant during a session, using the shortcut
+  `.\tools\with-secrets.ps1 <program> <args>` (= `infisical run --env dev --recursive -- <program> <args>`;
+  `--recursive` is needed because your secrets are organised in folders). **You do not need to run this yourself.**
+- **The only thing you do in Infisical:** when a secret changes (e.g. a VALR key rotation), update it in the Infisical
+  web UI *and* in the matching Supabase place (Vault for VALR keys, Edge Function secrets for the rest). Infisical is
+  the backup copy for your PC; Supabase is what the system actually runs on.
+- Keep the folders — moving secrets to root would only drop the word `--recursive`, nothing else.
+
 ---
 
 ## 6. If it happens again — 10-minute containment checklist
