@@ -12156,7 +12156,11 @@
       if (signInBtn && !signInBtn._bound){ signInBtn.addEventListener('click', doLogin); signInBtn._bound = true; }
       if (signOutBtn && !signOutBtn._bound){
         signOutBtn.addEventListener('click', async ()=>{
-          await window.supabaseClient.auth.signOut({ scope: 'local' });
+          // If the server session is already gone (revoked elsewhere), /logout answers 401/403 and supabase-js may
+          // leave the stale token in localStorage — which then poisons every guarded Edge Function call. Always
+          // clear local auth state so the next sign-in is a real one.
+          try { await window.supabaseClient.auth.signOut({ scope: 'local' }); } catch (e) { console.warn('[ADMIN] signOut:', e?.message || e); }
+          try { Object.keys(localStorage).filter(k => k.startsWith('sb-') && k.endsWith('-auth-token')).forEach(k => localStorage.removeItem(k)); } catch (_) {}
           flipUI(null);
         });
         signOutBtn._bound = true;
