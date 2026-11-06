@@ -3,11 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.197)
+**Last updated:** 2026-11-06 (v0.6.198)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.198 – Customer 999 reconciled to VALR (post-incident + out-of-strategy MSTRX purchase)
+**Date:** 2026-11-06 · **Status:** ✅ DONE — ledger and `balances_daily` equal VALR to the cent
+
+Portal showed USDT −5.09 / USDPC 35,805.55; VALR held USDT 0.107 / USDPC 32,102.905 / **32.98 MSTRX**. VALR history
+(pulled via the Vault `valr_sign` RPC from PowerShell — no local VALR secrets) explained the whole gap: 10-30 client
+USDPC→USDT conversion (3,582.64 → 4,288.43, outside the pipeline); 11-05 attacker sends 2 + 28,038.56 USDPC (+1 +1
+fees) with VALR returning 27,922.56 → **117.00 USDPC not recovered**; a double-counted 5.03 USDT fee on our own 11-05
+conversion line (`amount_usdt` already net, `fee_usdt` also set); 11-06 three MSTRX LIMIT_BUYs for 4,288.27 USDT.
+Five `RECON 2026-11-06:` ledger lines posted (convert / 3 × adjustment / **withdrawal** for the MSTRX purchase, so it is
+an external flow: cost basis −4,288, TWR unaffected, MSTRX untracked); `balances_daily` 10-30 … 11-06 rebuilt
+(first attempt via `ef_post_ledger_and_balances` appeared to ignore `from_date/to_date` — **investigated: not a function
+bug.** Windows PowerShell 5.1 strips embedded double quotes from native-exe arguments, so `curl.exe -d '{"from_date":…}'`
+arrived as invalid JSON and the function fell back to today; the same mangling made the tracker run all configs and the
+marketing refresh do both charts earlier in the day. Proven with a throw-away probe function (since deleted); re-run with
+`--data-binary @file` honoured the range, re-rolled 9 rows and reproduced the hand-patched values exactly. Gotcha
+recorded in `.github/copilot-instructions.md` and `tools/with-secrets.ps1`). Result: 11-06 USDT 0.10733795 / USDPC 32,102.90547 = VALR; NAV $38,561. The STH_CB engine will
+now see ≈ 32.1k USDPC as deployable cash for 999's pending join.
 
 ### v0.6.197 – STH_CB position-change emails sent 7× to the same clients: notify-once + retry/error suppression
 **Date:** 2026-11-06 · **Status:** ✅ DONE (migration applied, function deployed, re-run verified: 0 emails)
