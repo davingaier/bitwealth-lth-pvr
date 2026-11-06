@@ -55,7 +55,7 @@ reCAPTCHA shows "Invalid domain for site key" on `file://` / localhost — expec
 ## 📄 Pages (details)
 
 ### Homepage (index.html)
-- **Hero**: "Intelligent Bitcoin Accumulation" + four **back-tested** STH CB facts (30.5× HODL in-sample · 2.1× out-of-sample · 54 % OOS max DD · 20/20 OOS fits beat holding — on Binance UTC closes since 2026-11-06) with an explicit "research results, not live trading" note
+- **Hero**: "Intelligent Bitcoin Accumulation" + four **back-tested** STH CB facts (32.6× HODL in-sample · 2.1× out-of-sample · 54 % OOS max DD · 20/20 OOS fits beat holding — Binance UTC closes; v2.2 with the 4-day capitulation gate since 2026-11-06) with an explicit "research results, not live trading" note
 - **Our Approach**: six SVG-icon cards (on-chain intelligence, rules not opinions, buy fear/sell greed, guard-rails, own exchange sub-account, transparency)
 - **How It Works**: four-step timeline (interest → onboard & fund → automate → track)
 - **Product Pipeline**: flagship STH Cost Basis Strategy card → `sth-cb.html`, plus five "coming soon" cards

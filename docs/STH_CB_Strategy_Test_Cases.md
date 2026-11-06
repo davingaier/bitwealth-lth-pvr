@@ -384,3 +384,20 @@ Observations for refinement discussion:
 | SEC-22 | 10:00 UTC alert "14 customers over 388 s": audit log | manual test 09:53 (3 custs) + cron tick 10:00 (14 custs, 8 s) — benign | confirmed, no foreign client | FALSE POSITIVE |
 | SEC-23 | Burst-clustered rule (gap 240 s): attacker replay 8 @ 65 s | fires | 1 critical | PASS |
 | SEC-24 | Same rule: this morning's window / 14-in-12-s cron burst / 20 h real traffic (42 windows) | silent | 0 / 0 / 0 | PASS |
+
+## Capitulation gate: Feb-2026 miss → 4-day ROC promoted into v2.2 (2026-11-06)
+
+| ID | Test | Expected | Actual | Status |
+|----|------|----------|--------|--------|
+| CG-01 | Tracker rows 2026-02-05…03-08 for hybrid_v2_2 | explain the missing buy | 11 closes ≤ 75 % of CB, each `R1 waiting (ROC)` (2-day ROC < 0); first entry R5 at $81,447 on 05-06 | ROOT CAUSE |
+| CG-02 | Idea 17 armed buy, ceilings 0.755–0.95, arm 3–40 d ($1k 2017→, closes) | fix 2026 without hurting history | fixes 2026 (buys $70,330) but $1.04–1.79M vs $2.31M; swaps May-2022 low ($20.4k) for the LUNA bounce ($30.1k) | REJECTED |
+| CG-03 | Idea 18 split entry 25/50/75 % × ceiling 0.8/0.85/0.95 | hedge the touch | $0.89–1.01M — `minHoldDays` window shifts 2 days, R2 fires on a different day, ladder path diverges | REJECTED |
+| CG-04 | Re-tune 2-day threshold (−0.01 / −0.02 / off) | stable? | 39.9× / 25.6× / 11.7× — knife-edge | REJECTED |
+| CG-05 | Idea 19 `capBuyRocLength` 3/4/5/7/10/14 | plateau + fixes 2026 | 32.0× / **32.6×** / 31.6× / 16.6× / 17.6× / 19.8×; DD 36 % for all; len 4 buys $66,973 on 02-28 | PASS (len 4) |
+| CG-06 | Len 4 per episode (`episodes.ts`) | better or equal in most episodes | better Feb-18, Apr-18, Nov-18, Jan-22, Feb-26; worse COVID ($5,313 vs $4,800) | PASS |
+| CG-07 | Len 4 from every start year 2017/19/20/21/22/23/24 | ≥ v2.2 | +7 / +10 / +9 / +19 / +18 / +17 / +19 %; DD ≤; trades fewer | PASS |
+| CG-08 | Fact-sheet basis ($2.4k + $200/mo) 1/3/5/7/10 y | ≥ v2.2 | +16 / +17 / +17 / +11 / +6 %; 10-y DD 35 % vs 39 %; table WF 6/11 vs 7/11 | PASS (one WF year flips) |
+| CG-09 | Baseline regression with new keys absent | byte-identical | $2,312,985 in every run; 45/45 engine tests, 15/15 live tests | PASS |
+| CG-10 | `sthCbReason` routing for R1/R12/R14/R15/R16/R17/R18/R2 | each rule → its own copy | pre-existing `/R1\|…/` matched R12/R15/R16 — fixed with word boundaries; 9/9 | PASS (bug fixed) |
+| CG-11 | Promotion: UPDATE `tracker_config.hybrid_v2_2` + rebuild | tracker = lab; live signal unchanged | $2,474,438 / 32.6× / 66 trades; trend_hold, Hold, target 1; no new intents | PASS |
+| CG-12 | Re-published surfaces (hero/strip, fact sheet, one-pager, OOS, marketing chart) | mutually consistent | 32.6× / $2.47M / 121 % / 36 % / 7/10 · OOS unchanged 2.1× · `sth_cb_5yr` $52,594 = one-pager 5-y | PASS |

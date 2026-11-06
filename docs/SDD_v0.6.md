@@ -9,8 +9,8 @@
 
 ## 0. Change Log
 
-### v0.6.196 – STH_CB: why the Feb-2026 capitulation buy never fired, and the v2.3 candidate (4-day R1 gate)
-**Date:** 2026-11-06 · **Status:** ✅ Built, deployed as a *candidate* (v2.2 remains live default)
+### v0.6.196 – STH_CB: why the Feb-2026 capitulation buy never fired; 4-day R1 gate promoted INTO v2.2 (in place)
+**Date:** 2026-11-06 · **Status:** ✅ DONE — Davin: "replace v2.2 with the v2.3 parameters, no new key". Live + published 16:50 UTC+2
 
 **Finding.** Davin noticed the chart showed no buy on 2026-02-11 although the close was below the 75 % capitulation
 line. Tracker rows confirm 11 such closes between 02-05 and 03-08 (low 68 %), each logged as `R1 waiting (ROC)`.
@@ -32,12 +32,23 @@ $2.47M / 32.6× / DD 36 % / 66 trades / WF 7/10**, better from every start year 
 horizon (+6…17 %), 10-y DD 35 % vs 39 %; table-basis WF 6/11 vs 7/11. In 2026 it buys $66,973 (02-28), exits $75,780
 (04-29) and skips the $81k round trip. Full write-up: `tools/sth_cb_lab/README.md` § "v2.3 candidate".
 
-**Surfaces.** Admin UI back-tester: preset *Hybrid v2.3 candidate* + field *…ROC measured over (days)*; v2.2 note now
-quotes the close-basis figures. Tracker: row `hybrid_v2_3` (migration `20261106_sth_cb_hybrid_v2_3_candidate.sql`,
-applied via PostgREST), rebuilt → $2,474,438 = lab. Deployed: `ef_sth_cb_tracker`, `ef_sth_cb_bt_execute`,
-`ef_sth_cb_generate_decisions`, `ef_switch_strategy`, `ef_approve_kyc`, `ef_deposit_scan`,
-`ef_sync_valr_transactions`, `ef_monthly_statement_generator`. Lab helpers `compare.ts`, `episodes.ts`.
-**Not changed:** live default `hybrid_v2_2`, website / fact sheet / OOS data — promotion is Davin's call after review.
+**Promotion (in place).** `sth_cb.tracker_config.hybrid_v2_2.extras` += `{"capBuyRocLength": 4}`, label updated; the interim
+`hybrid_v2_3` row and its `tracker_daily` rows deleted (`20261106_sth_cb_hybrid_v2_2_caproc4.sql`, applied via PostgREST
+because the Supabase CLI 2.67 has no `db query`). Because `customer_strategies.config_key` → `hybrid_v2_2`,
+`create_public_sth_cb_backtest_run` copies that row's extras and `ef_sth_cb_tracker` reads it, **live clients, the public
+back-tester and the tracker all switched with the one UPDATE**. Tracker rebuilt → $2,474,438 / 32.6× / 66 trades = lab;
+**live signal unchanged on promotion day (trend_hold, Hold, target 100 %) — no client orders.** `HYBRID_V2_2` in
+`tools/sth_cb_lab/factsheet_data_configs.ts` mirrors the row. Admin UI: v2.2 preset carries the new field *…ROC measured
+over (days)* = 4; no v2.3 preset.
+
+**Re-published (SERIES=close):** `docs/sth_cb_factsheet_data_v2_2.js`, `docs/sth_cb_one_pager_data.js`,
+`docs/chart-data-daily-sth-cb.js`, `docs/sth_cb_oos_data.js` + `website/js/sth_cb_oos_data.js` (OOS splits unchanged:
+3.53× top-1 / 2.11× median / 54 % DD / 20/20; production reference now 6.55× fwd / 4.72× rev); website hero + strip
+**32.6× · $1,000 → $2.47M · 121 % CAGR · 36 % max DD** (`index.html`, `sth-cb.html`, `website/README.md`); fact-sheet R1
+card (4-day ROC) and every "Fired:" list regenerated from the close-basis trail; marketing chart `sth_cb_5yr` refreshed
+($52,594 5-y = one-pager row). Deployed: `ef_sth_cb_tracker`, `ef_sth_cb_bt_execute`, `ef_sth_cb_generate_decisions`,
+`ef_switch_strategy`, `ef_approve_kyc`, `ef_deposit_scan`, `ef_sync_valr_transactions`, `ef_monthly_statement_generator`.
+Lab helpers `compare.ts`, `episodes.ts`; full write-up in `tools/sth_cb_lab/README.md`.
 
 ### v0.6.195 – Strategy Setup: account-model selector routes non-Finova clients straight to the portal; Infisical wrapper
 **Date:** 2026-11-06 · **Status:** ✅ DONE

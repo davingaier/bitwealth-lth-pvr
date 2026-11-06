@@ -32,12 +32,16 @@ export const HYBRID_V2_1 = {
 // price) which replaces the cooldown, plus an earlier first rung found by ladder_optimize.ts on that base (2026-11-03):
 // 50/20/10/0 % at +0.5/1/1.5/2.5σ. Table basis ($2.4k + $200/mo to 2026-06-09) +9–12 % vs v2.1 on every horizon,
 // walk-forward 8/10 standard / 7/11 table (v2.1: 6/11).
+// 2026-11-06 (promoted in place, Davin): + capBuyRocLength 4 — the capitulation-buy confirmation reads a 4-day ROC
+// instead of the 2-day momentum ROC, which could never confirm inside a V-shaped flush (Feb-2026: 11 closes ≤ 75 % of
+// CB, no buy). UTC closes $1k 2017→2026-11-05: $2.47M / 32.6× HODL / DD 36 % (was $2.31M / 30.5× / 40 %).
 export const HYBRID_V2_2 = (() => {
   const { scaleCooldownDays: _cd, ...rest } = HYBRID_V2_1;
   return {
     ...rest,
     lthSellTiers: [{ sigma: 0.5, alloc: 0.5 }, { sigma: 1, alloc: 0.2 }, { sigma: 1.5, alloc: 0.1 }, { sigma: 2.5, alloc: 0 }],
     sliceAboveLastBuyPct: 0,
+    capBuyRocLength: 4,
   };
 })();
 

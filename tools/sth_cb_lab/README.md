@@ -535,10 +535,14 @@ lower DD and fewer trades throughout. Fact-sheet basis ($2.4k + $200/mo): 1y +16
 the full history visible (in-sample like everything else here); the consistency across sub-windows and the plain
 mechanism (de-noising, not a new threshold) are the evidence, not the headline.
 
-Status: Admin UI preset **"Hybrid v2.3 candidate"** and form field *…ROC measured over (days)*; tracker row `hybrid_v2_3`
-(selector on the On-Chain Charts card); **`hybrid_v2_2` remains the live default and the website source of truth**
-until Davin validates. New helpers: `compare.ts --file cands.json` (NAV / ×HODL / DD / trades / WF / first 2026 entry per
-config) and `episodes.ts --file cands.json --pick 0,2` (every capitulation entry side by side, grouped into episodes).
+**Promoted (Davin, 2026-11-06 16:45): folded into `hybrid_v2_2` in place — no v2.3 key.** `tracker_config.hybrid_v2_2.extras`
++ `capBuyRocLength: 4` (migration `20261106_sth_cb_hybrid_v2_2_caproc4.sql`; live customers, the public back-tester and the
+tracker all read that row), `HYBRID_V2_2` in `factsheet_data_configs.ts`, Admin UI preset v2.2 (new field *…ROC measured
+over (days)* = 4). Re-published: fact-sheet / one-pager / fee-model / OOS data files, website hero & strip (32.6× · $2.47M ·
+121 % CAGR · 36 % DD), fact-sheet rule cards and fired lists, marketing chart `sth_cb_5yr` ($52,594 5-y = one-pager).
+Live signal on promotion day unchanged (trend_hold, Hold). New helpers: `compare.ts --file cands.json` (NAV / ×HODL / DD /
+trades / WF / first 2026 entry per config) and `episodes.ts --file cands.json --pick 0,2` (every capitulation entry side
+by side, grouped into episodes).
 
 ### Client one-pager & commercial fee model data: `one_pager_data.ts` (2026-11-03)
 
