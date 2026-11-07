@@ -1,6 +1,6 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
 import { getServiceClient } from "./client.ts";
-import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId } from "./valrClient.ts";
+import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId, getMarketPrice } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
 import { USDPC_PAIR } from "../_shared/usdpc.ts";
@@ -54,6 +54,58 @@ Deno.serve(async ()=>{
     status: 500
   });
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  // ── USDPC/USDT liquidity model (2026-11-07) ──────────────────────────────────────────────────────────────
+  // The pair is a thin market-maker quote (bid ≈ mark − 0.3 %, a few k deep) with a 1.5 % slippage band and a
+  // 46 000-base per-order cap. One big MARKET sell is partially filled (IOC) or rejected ("would have matched
+  // outside of slippage price band"). Davin's tests: LIMIT sells do not fill. So: MARKET in chunks no larger than
+  // the bid depth within USDPC_MAX_SLIPPAGE of the mark, looping while the maker replenishes; whatever is left stays
+  // `pending` and is retried by the next run (pipeline guard every 30 min). The dependent BTC buy is sized to the
+  // USDT actually raised and likewise stays pending until the conversion completes.
+  const USDPC_MAX_SLIPPAGE = Number(Deno.env.get("USDPC_MAX_SLIPPAGE") ?? "0.01");   // vs mark price
+  const USDPC_MAX_BASE_PER_ORDER = 46_000;                                            // VALR pair limit
+  const USDPC_MIN_CHUNK = 1;                                                          // VALR min base
+  const USDPC_MAX_CHUNKS_PER_RUN = 10;
+  const BTC_MIN_BUY_USDT = 10;
+  const usdpcPairCode = USDPC_PAIR.replace("/", "");
+  async function usdpcMarkPrice(): Promise<number> {
+    const r = await fetch(`https://api.valr.com/v1/public/${usdpcPairCode}/marketsummary`);
+    if (!r.ok) throw new Error(`marketsummary ${r.status}`);
+    const j = await r.json();
+    const mark = Number(j?.markPrice ?? j?.lastTradedPrice ?? 0);
+    if (!(mark > 0)) throw new Error("no mark price");
+    return mark;
+  }
+  /** Bid depth (base units) at or above mark × (1 − slippage). */
+  async function usdpcSellDepth(): Promise<{ depth: number; mark: number; floor: number; bestBid: number }> {
+    const mark = await usdpcMarkPrice();
+    const floor = mark * (1 - USDPC_MAX_SLIPPAGE);
+    const book = await getOrderBook(USDPC_PAIR);
+    let depth = 0;
+    for (const b of book.Bids ?? []) { if (Number(b.price) >= floor) depth += Number(b.quantity); }
+    return { depth, mark, floor, bestBid: Number(book.Bids?.[0]?.price ?? 0) };
+  }
+  /** Poll one order (by customerOrderId) to a final state; returns the VALR summary (executed qty derived). */
+  async function waitFinal(customerOrderId: string, subaccountId: string | null, credentials: { apiKey: string; apiSecret: string } | null, maxMs = 15000) {
+    const deadline = Date.now() + maxMs;
+    await new Promise((r) => setTimeout(r, 400));
+    // deno-lint-ignore no-explicit-any
+    let last: any = null;
+    while (Date.now() < deadline) {
+      try {
+        const s = await getOrderSummaryByCustomerOrderId(customerOrderId, USDPC_PAIR, subaccountId, credentials);
+        last = Array.isArray(s) ? s[0] : s;
+        const st = String(last?.orderStatusType ?? last?.orderStatus ?? last?.status ?? "");
+        if (st === "Filled" || st === "Cancelled" || st === "Failed") break;
+      } catch (_e) { /* 400 while working */ }
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    const orig = Number(last?.originalQuantity ?? 0);
+    const rem = Number(last?.remainingQuantity ?? orig);
+    return { summary: last, status: String(last?.orderStatusType ?? ""), executed: Math.max(0, orig - rem) };
+  }
+  // customers whose USDPC→USDT conversion is still incomplete after this run (BTC buy must not be finalised)
+  const conversionIncomplete = new Set<number>();
   // pending intents for today
   const { data: intents, error } = await sb.from("order_intents").select("*").eq("org_id", org_id).eq("status", "pending").eq("trade_date", todayDate);
   if (error) {
@@ -132,21 +184,62 @@ Deno.serve(async ()=>{
       if (isUsdpcConversion(i)) {
         try {
           const convSide = i.side.toUpperCase() === "BUY" ? "BUY" : "SELL";
-          let amountStr = String(i.amount);
-          let useQuote = false;
           if (convSide === "SELL") {
-            // Selling USDPC -> cap baseAmount at the live settled USDPC balance.
+            // ── Chunked USDPC → USDT (see liquidity model above) ──────────────────────────────────
+            let remaining = Number(i.amount);
             try {
               const bals = await getBalances(subaccountId, credentials);
               const liveUsdpc = Number(bals["USDPC"] ?? 0);
-              if (liveUsdpc > 0 && Number(i.amount) > liveUsdpc) {
-                amountStr = String(+liveUsdpc.toFixed(8));
-              }
+              if (liveUsdpc >= 0 && remaining > liveUsdpc) remaining = +liveUsdpc.toFixed(8);
             } catch (_balErr) { /* fall back to sized amount */ }
-          } else {
-            // Buying USDPC with an exact USDT (quote) amount.
-            useQuote = true;
+            const { count: priorChunks } = await sb.from("exchange_orders").select("exchange_order_id", { count: "exact", head: true }).eq("intent_id", i.intent_id);
+            let n = Number(priorChunks ?? 0);
+            let soldThisRun = 0, raisedThisRun = 0, placed = 0;
+            let lastDepth = 0, lastMark = 0, lastBestBid = 0;
+            await new Promise((r) => setTimeout(r, 1500)); // let the public book reflect the previous intent's fills
+            while (remaining >= USDPC_MIN_CHUNK && placed < USDPC_MAX_CHUNKS_PER_RUN) {
+              const d = await usdpcSellDepth();
+              lastDepth = d.depth; lastMark = d.mark; lastBestBid = d.bestBid;
+              const chunk = Math.floor(Math.min(remaining, d.depth, USDPC_MAX_BASE_PER_ORDER) * 100) / 100;
+              if (chunk < USDPC_MIN_CHUNK) break;                        // no acceptable depth right now
+              n++; placed++;
+              const coid = n === 1 ? i.intent_id : `${i.intent_id}-c${n}`;
+              const convResp = await placeMarketOrder(USDPC_PAIR, "SELL", String(chunk), coid, subaccountId, credentials, false);
+              const convExtId = convResp?.orderId ?? convResp?.id;
+              const fin = await waitFinal(coid, subaccountId, credentials);
+              await sb.from("exchange_orders").insert({
+                org_id, exchange_account_id, intent_id: i.intent_id, ext_order_id: convExtId,
+                pair: USDPC_PAIR, side: "SELL", price: 0, qty: chunk,
+                status: "submitted",  // ef_poll_orders finalises (books partial-cancelled chunks as fills)
+                raw: { valr: convResp, subaccountId, order_type: "MARKET", usdpc_conversion: true, reason: i.reason,
+                       chunk: n, customer_order_id: coid, depth_at_place: d.depth, mark_at_place: d.mark, first_status: fin.status, first_executed: fin.executed },
+              });
+              soldThisRun += fin.executed;
+              raisedThisRun += fin.executed * Number(fin.summary?.averagePrice ?? d.bestBid ?? d.mark);
+              remaining = +(remaining - fin.executed).toFixed(8);
+              if (fin.executed < chunk * 0.5) break;                     // book pulled away — stop hammering it
+              await new Promise((r) => setTimeout(r, 800));              // let the maker replenish
+            }
+            const done = remaining < USDPC_MIN_CHUNK;
+            const summaryTxt = `sold ${soldThisRun.toFixed(2)} USDPC (≈${raisedThisRun.toFixed(2)} USDT) in ${placed} chunk(s); remaining ${remaining.toFixed(2)}; depth≤${USDPC_MAX_SLIPPAGE * 100}% of mark ${lastMark.toFixed(5)} was ${lastDepth.toFixed(2)} (best bid ${lastBestBid})`;
+            if (done) {
+              await sb.from("order_intents").update({ status: "executed", note: `${i.note ?? ""} | ${summaryTxt}`.slice(0, 500) }).eq("intent_id", i.intent_id);
+              successCount++;
+            } else {
+              // keep the intent pending with the remaining amount so the next run (pipeline guard, 30 min) continues
+              await sb.from("order_intents").update({ amount: remaining, note: `${i.note ?? ""} | ${summaryTxt}`.slice(0, 500) }).eq("intent_id", i.intent_id);
+              conversionIncomplete.add(Number(i.customer_id));
+              await logAlert(sb, "ef_execute_orders", placed ? "info" : "warn",
+                `USDPC conversion for customer ${i.customer_id} incomplete — ${summaryTxt}; will retry`,
+                { customer_id: i.customer_id, intent_id: i.intent_id, remaining, sold: soldThisRun, raised_usdt: raisedThisRun, depth: lastDepth, mark: lastMark, best_bid: lastBestBid }, org_id, i.customer_id);
+              if (placed) successCount++;
+            }
+            if (soldThisRun > 0) { convertedThisRun = true; }
+            continue;
           }
+          // ── BUY USDPC with an exact USDT (quote) amount (sweep) ──
+          const amountStr = String(i.amount);
+          const useQuote = true;
           const convResp = await placeMarketOrder(
             USDPC_PAIR,
             convSide,
@@ -202,8 +295,46 @@ Deno.serve(async ()=>{
       // --- DETERMINE ORDER TYPE & EXECUTE ---
       const side = i.side.toUpperCase() === "SELL" ? "SELL" : "BUY";
       const pair = "BTCUSDT"; // VALR pair code (vs "BTC/USDT" internal) 
-      const qtyStr = String(i.amount);
       const isMarketOrder = i.limit_price === null || i.limit_price === undefined;
+      // ── Budget a BUY to the USDT actually on the account (2026-11-07) ─────────────────────────────────────
+      // When the funding conversion only partly filled, buy what the raised USDT covers, keep the intent pending
+      // for the remainder, and never place a buy VALR will reject for insufficient balance.
+      let effQty = Number(i.amount);
+      let btcPartial = false;
+      if (side === "BUY") {
+        let liveUsdt = NaN;
+        try { const bals = await getBalances(subaccountId, credentials); liveUsdt = Number(bals["USDT"] ?? 0); } catch (_e) { /* unknown → no cap */ }
+        if (Number.isFinite(liveUsdt)) {
+          const budget = Math.max(0, liveUsdt * 0.999);
+          const incomplete = conversionIncomplete.has(Number(i.customer_id));
+          if (budget < BTC_MIN_BUY_USDT && incomplete) {
+            console.log(`BUY ${i.intent_id}: only ${liveUsdt.toFixed(2)} USDT available and USDPC conversion incomplete — leaving pending`);
+            await sb.from("order_intents").update({ note: `${i.note ?? ""} | waiting for USDPC liquidity (USDT ${liveUsdt.toFixed(2)})`.slice(0, 500) }).eq("intent_id", i.intent_id);
+            continue;
+          }
+          let refPx = Number(i.limit_price) > 0 ? Number(i.limit_price) : 0;
+          if (!(refPx > 0)) { try { refPx = Number(await getMarketPrice(pair)); } catch (_e) { refPx = 0; } }
+          if (refPx > 0) {
+            const maxQty = Math.floor((budget / refPx) * 1e8) / 1e8;
+            if (maxQty < effQty) {
+              console.log(`BUY ${i.intent_id}: qty capped to live USDT budget ${budget.toFixed(2)}: ${effQty} → ${maxQty} BTC`);
+              effQty = maxQty;
+              btcPartial = incomplete;
+            }
+          }
+        }
+      }
+      const qtyStr = effQty.toFixed(8);
+      // one VALR customerOrderId per attempt (an intent may need several buys across runs)
+      const { count: priorBtcOrders } = await sb.from("exchange_orders").select("exchange_order_id", { count: "exact", head: true }).eq("intent_id", i.intent_id);
+      if (side === "BUY" && Number(priorBtcOrders ?? 0) > 0) {
+        // never stack buys: wait while an earlier order for this intent is still open, and don't chase dust
+        const { count: openForIntent } = await sb.from("exchange_orders").select("exchange_order_id", { count: "exact", head: true }).eq("intent_id", i.intent_id).eq("status", "submitted");
+        if (Number(openForIntent ?? 0) > 0) { console.log(`BUY ${i.intent_id}: earlier order still open — skipping this run`); continue; }
+        const topUpUsdt = effQty * (Number(i.limit_price) > 0 ? Number(i.limit_price) : 0);
+        if (topUpUsdt > 0 && topUpUsdt < 500) { console.log(`BUY ${i.intent_id}: top-up ${topUpUsdt.toFixed(2)} USDT below 500 — waiting for more liquidity`); continue; }
+      }
+      const btcCoid = Number(priorBtcOrders ?? 0) === 0 ? i.intent_id : `${i.intent_id}-r${Number(priorBtcOrders) + 1}`;
       
       let orderBookPrice: string | null = null;
       let valrResp;
@@ -218,7 +349,7 @@ Deno.serve(async ()=>{
             pair,
             side,
             qtyStr,
-            i.intent_id,
+            btcCoid,
             subaccountId,
             credentials
           );
@@ -250,7 +381,7 @@ Deno.serve(async ()=>{
             pair: "BTC/USDT",
             side,
             price: 0,
-            qty: i.amount,
+            qty: effQty,
             status: "error",
             raw: {
               error: errMsg,
@@ -325,9 +456,9 @@ Deno.serve(async ()=>{
           // balance (all-in buys have no slack), so shrink the quantity to budget / bid instead.
           let limitQtyStr = qtyStr;
           if (side === "BUY" && Number(i.limit_price) > 0 && Number(orderBookPrice) > Number(i.limit_price)) {
-            const budgetUsdt = Number(i.amount) * Number(i.limit_price);
+            const budgetUsdt = effQty * Number(i.limit_price);
             const capped = Math.floor((budgetUsdt / Number(orderBookPrice)) * 1e8) / 1e8;
-            if (capped > 0 && capped < Number(i.amount)) {
+            if (capped > 0 && capped < effQty) {
               console.log(`BUY qty capped to budget: ${qtyStr} → ${capped} BTC (bid ${orderBookPrice} > intent ${i.limit_price})`);
               limitQtyStr = capped.toFixed(8);
             }
@@ -337,7 +468,7 @@ Deno.serve(async ()=>{
             pair,
             price: orderBookPrice,
             quantity: limitQtyStr,
-            customerOrderId: i.intent_id,
+            customerOrderId: btcCoid,
             timeInForce: "GTC",
             postOnly: true,
           }, subaccountId, credentials);
@@ -375,7 +506,7 @@ Deno.serve(async ()=>{
               pair: "BTC/USDT",
               side,
               price: Number(orderBookPrice),
-              qty: i.amount,
+              qty: effQty,
               status: "error",
               raw: { error: errMsg, order_type: "LIMIT", rate_limited: true },
             });
@@ -412,7 +543,7 @@ Deno.serve(async ()=>{
               pair,
               side,
               qtyStr,
-              i.intent_id,
+              btcCoid,
               subaccountId,
               credentials
             );
@@ -443,7 +574,7 @@ Deno.serve(async ()=>{
               pair: "BTC/USDT",
               side,
               price: 0,
-              qty: i.amount,
+              qty: effQty,
               status: "error",
               raw: {
                 error: mktErrMsg,
@@ -479,7 +610,7 @@ Deno.serve(async ()=>{
         pair: "BTC/USDT",
         side,
         price: effIsMarket ? 0 : Number(orderBookPrice),
-        qty: i.amount,
+        qty: effQty,
         status: "submitted",
         raw: {
           valr: valrResp,
@@ -510,10 +641,13 @@ Deno.serve(async ()=>{
         errorCount++;
         continue;
       }
-      // Mark intent as executed (handed off to exchange)
-      await sb.from("order_intents").update({
-        status: "executed"
-      }).eq("intent_id", i.intent_id);
+      // Mark intent as executed (handed off to exchange) — or keep it pending for the un-funded remainder
+      if (btcPartial && effQty < Number(i.amount)) {
+        const rest = +(Number(i.amount) - effQty).toFixed(8);
+        await sb.from("order_intents").update({ amount: rest, note: `${i.note ?? ""} | partial: ${effQty.toFixed(8)} BTC placed, ${rest.toFixed(8)} BTC awaiting USDPC liquidity`.slice(0, 500) }).eq("intent_id", i.intent_id);
+      } else {
+        await sb.from("order_intents").update({ status: "executed" }).eq("intent_id", i.intent_id);
+      }
       successCount++;
     } catch (err) {
       console.error(`Order execution failed for intent ${i.intent_id}:`, err);

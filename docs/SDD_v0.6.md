@@ -3,11 +3,75 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-06 (v0.6.199)
+**Last updated:** 2026-11-07 (v0.6.201)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.201 – USDPC→USDT funding conversions: depth-sized MARKET chunks, budgeted BTC buys, retry cron, sweep guard
+**Date:** 2026-11-07 · **Status:** ✅ Live — first chunk filled (49: 30,000 USDPC → 35,946 USDT → 0.473 BTC)
+
+**Decision (Davin): option (b).** MARKET only — his multi-hour tests showed LIMIT sells on USDPC/USDT never fill. Pair
+limits (VALR UI): market/limit slippage 1.5 %, max quote 10,000 USDT, max base 46,000 USDPC, min 1.
+
+**`ef_execute_orders` (SELL conversion path rewritten).** Per intent: cap to live USDPC; loop ≤ 10 chunks: read
+`marketsummary.markPrice` + public order book, `depth` = Σ bid qty priced ≥ mark × (1 − `USDPC_MAX_SLIPPAGE`, env,
+default 1 %); chunk = min(remaining, depth, 46,000); place MARKET (customerOrderId `intent` then `intent-cN`); poll to
+final; executed = original − remaining; stop when a chunk fills < 50 % (maker pulled); 1.5 s pause before each intent's
+first read (stale book caused three rejected chunks on the first pass). Done → `executed`; otherwise the intent **stays
+`pending` with `amount` = remainder** (+ note, info alert) so the next run continues. **BTC BUY path:** effective qty =
+min(intent, 0.999 × live USDT ÷ reference price); with the conversion incomplete and < 10 USDT it skips and stays
+pending; a partial buy reduces `amount` and stays pending; one customerOrderId per attempt (`intent-rN`); no new buy
+while an earlier order for the intent is open, and no top-up < 500 USDT (a $36 dust order slipped through before this).
+**`ef_poll_orders`:** a `Cancelled` IOC conversion with executed > 0 is booked as `filled` for the executed qty (ledger
+posts it — closes the 103.21 gap); rejected conversion chunks no longer flip the intent to `error` nor raise the
+"rejected" alert (the executor owns and retries them). **`ef_sweep_usdt_to_usdpc`:** skips any customer with a pending
+BTC BUY or `usdpc_prebuy_convert` intent today. **Cron** `usdpc_conversion_retry` (`*/10 3-16 UTC`,
+`lth_pvr.retry_pending_usdpc_conversions()`, `20261107_usdpc_conversion_retry_cron.sql`) calls `ef_execute_orders`
+while such intents are pending — neither existing guard re-drives execution once decisions exist.
+
+**Today's run.** Intents reset to pending with recon-correct amounts (999: 32,102.47; 49: 46,000 + 46,000 + 13,355.27;
+BTC buys unchanged — they self-cap). 10:21 SAST the maker showed 30,000 @ 1.19821: 49 sold 30,000 (≈35,946 USDT) and a
+0.473 BTC maker LIMIT was placed; the other intents hit the emptied book and wait. Book at 10:24: 50 @ 1.088 — the maker
+quotes intermittently; the retry cron keeps trying until 16:00 UTC, and tomorrow's engine re-plans whatever remains.
+
+### v0.6.200 – Recon of 999 and 49 to VALR after the incident; why the STH_CB joins did not execute (USDPC book depth)
+**Date:** 2026-11-07 · **Status:** ✅ Ledgers reconciled · ⚠️ execution design decision pending (see end)
+
+**999 (Davin).** The 11-06 recon was right as of last night; the 00:20 UTC pipeline run then added one un-booked event:
+the join's IOC market sell of 32,102.9 USDPC filled only **103.21** (order ended `cancelled`, so the fill poster, which
+only looks at `filled` orders, skipped it), the BTC buy was rejected (Insufficient Balance), and at 03:00 the hourly
+sweep bought the 123.58 USDT back into USDPC — that leg *was* booked. One `convert` line added (−103.21 USDPC /
++123.4797 USDT net, ref the fill). Now USDT 0.0096 / USDPC 32,102.47 = VALR.
+
+**49 (Tremyne).** New trading-only API key stored 07:39 UTC (`valr_sign` works). His VALR history explains the
+"phantom" 130,539 USDPC / −30,272 USDT: on 11-05 the attacker (stolen customer key) sent 2 + 105,355.28 USDPC out; at
+10:27 the attacker's wallet **returned 133,397.84 USDPC into 49's account** = 49's 105,357.28 + **999's 28,040.56**; a
+USDPC→USDT→USDPC round trip (25,300 → 30,271.75 → 25,179.01) lost ≈121 USDPC in fees; at 12:45 an internal transfer
+moved 27,922.56 USDPC to 999. The sync had booked only the USDT→USDPC buys (hence −30,272 USDT / +25,179 USDPC). Four
+lines added (incident out −105,359.28 · returned +133,397.84 · convert −25,300/+30,271.75 · transfer −27,922.56).
+Now USDT 0.03 / USDPC 105,355.28 = VALR; pre-incident ledger (105,360.28) equalled VALR to the cent.
+**Cross-customer residue: 118.00 USDPC belonging to 999 still sit in 49's account** (28,040.56 returned − 27,922.56
+transferred). Action for Davin: VALR internal transfer 118 USDPC 49 → 999; I will then book `transfer` lines both sides
+and reverse 999's 117 "incident loss" adjustment (true loss for 999 = the 2 on-chain fees only; 49 lost 2 fees + ≈121
+round-trip).
+
+**Why no BTC was bought (both customers).** 49: 401 at 00:20 — the new key arrived at 07:39. 999: the USDPC/USDT book
+on VALR is a thin market-maker quote, not a real book — at 08:04 UTC Saturday the bids were 50 @ 1.088, 1 @ 1.00 and
+28,000 @ **0.0001**; asks 413 @ 1.2012; 24 h volume 206 USDPC. A 32k (or 49's 46k-chunk) market sell either partially
+fills (IOC, 103.21) or is rejected by VALR's slippage band ("would have matched outside of slippage price band", 03:00).
+Every conversion that ever worked was ≤ 25k against the MM quote at ≈1.197 and in weekday hours. Second defect: the
+03:00 `ef_sweep_usdt_to_usdpc` swept the USDT the join had just raised back into USDPC, i.e. it undid a pending buy.
+
+**Pending decision (Davin):** conversion strategy for large USDPC balances — (a) LIMIT sell GTC at/just below the MM
+quote (mark price) and let the buy execute when filled, (b) MARKET in depth-sized chunks (≤ top-of-book quantity within
+1 % of mark) with a daily cap, carrying the remainder to the next day as a partial join, or (c) ask VALR whether USDPC
+has a dedicated redeem/convert endpoint. In all cases the sweep must skip a customer with a same-day BUY intent.
+Weekend books are empty — no retry before Monday.
+
+**Fill-poster gap (backlog):** partial fills on `cancelled` IOC orders are never posted to the ledger; the poster
+should book `order_fills` regardless of the parent order's final status.
 
 ### v0.6.199 – Admin UI back-tester 403: requireOrgAdmin looked up org_members in the caller's default schema
 **Date:** 2026-11-06 · **Status:** ✅ DONE — 60 functions redeployed

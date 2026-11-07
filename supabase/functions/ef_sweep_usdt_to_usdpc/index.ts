@@ -225,6 +225,21 @@ Deno.serve(async (req: Request) => {
         skipped++;
         continue;
       }
+      // 2026-11-07: never sweep USDT that a still-pending BTC buy (or its USDPC→USDT funding conversion) is waiting
+      // for — the 03:00 sweep bought back the 123 USDT the join had just raised for customer 999.
+      const { data: buyPending } = await sb
+        .from("order_intents")
+        .select("intent_id, pair, side, reason")
+        .eq("customer_id", customer_id)
+        .eq("trade_date", todayStr)
+        .eq("status", "pending")
+        .or("and(pair.eq.BTC/USDT,side.eq.BUY),reason.eq.usdpc_prebuy_convert")
+        .limit(1);
+      if (buyPending?.length) {
+        console.log(`sweep: customer ${customer_id} has a pending BUY / funding conversion today — not sweeping ${effectiveUsdt.toFixed(2)} USDT`);
+        skipped++;
+        continue;
+      }
       const runTag = `|${force ? "FORCE" : "RUN"}|${Date.now()}`;
       let chunkErr = false;
       for (let ci = 0; ci < chunks.length; ci++) {

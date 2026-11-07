@@ -198,8 +198,15 @@ Deno.serve(async (req: Request)=>{
     }
 
     const valrStatus = last.orderStatusType || last.orderStatus || last.status || "";
+    // USDPC conversions are IOC market orders: a chunk that exceeds the market-maker's depth comes back
+    // "Cancelled" with part of it executed. Book the executed part as a fill (2026-11-07: a 103.21 USDPC partial
+    // on a cancelled 32k sell was never posted to the ledger).
+    const isConversion = Boolean(o.raw?.usdpc_conversion);
+    const executedTotal = Number(last.totalExecutedQuantity ?? (Number(last.originalQuantity ?? 0) - Number(last.remainingQuantity ?? last.originalQuantity ?? 0)));
+    const partialCancelled = isConversion && valrStatus === "Cancelled" && executedTotal > 0;
+    if (partialCancelled && !(Number(last.totalExecutedQuantity) > 0)) last = { ...last, totalExecutedQuantity: executedTotal };
     let newStatus = o.status ?? "submitted";
-    if (valrStatus === "Cancelled") newStatus = "cancelled";
+    if (valrStatus === "Cancelled") newStatus = partialCancelled ? "filled" : "cancelled";
     else if (valrStatus === "Filled") newStatus = "filled";
     else if (valrStatus === "Failed") newStatus = "rejected";
     else newStatus = "submitted";
@@ -218,7 +225,8 @@ Deno.serve(async (req: Request)=>{
     };
 
     // Generate alert if order was rejected by VALR
-    if (newStatus === "rejected" && o.status !== "rejected") {
+    // A rejected USDPC conversion chunk (no depth / slippage band) is expected; ef_execute_orders owns that intent and retries.
+    if (newStatus === "rejected" && o.status !== "rejected" && !isConversion) {
       const failedReason = last.failedReason || "Unknown reason";
       await logAlert(
         supabase,
@@ -485,11 +493,12 @@ Deno.serve(async (req: Request)=>{
       
       const { error: updateError } = await supabase.from("exchange_orders").update({
         status: newStatus,
+        ...(partialCancelled ? { qty: executedTotal } : {}),
         updated_at: new Date().toISOString(),
         last_polled_at: new Date().toISOString(),
         poll_count: (o.poll_count ?? 0) + 1,
         requires_polling: requiresMorePolling,
-        raw: mergedRaw
+        raw: partialCancelled ? { ...mergedRaw, partial_cancelled: true, original_qty: o.qty, executed_qty: executedTotal } : mergedRaw
       }).eq("exchange_order_id", o.exchange_order_id);
       if (updateError) {
         console.error(`ef_poll_orders: failed to update exchange_order_id=${o.exchange_order_id}`, updateError);
@@ -497,7 +506,7 @@ Deno.serve(async (req: Request)=>{
       }
       
       // Update intent status when order is rejected
-      if (newStatus === "rejected") {
+      if (newStatus === "rejected" && !isConversion) {
         const { error: intentError } = await supabase.from("order_intents").update({
           status: "error"
         }).eq("intent_id", o.intent_id);
