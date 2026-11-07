@@ -41,7 +41,11 @@ export const HYBRID_V2_2 = (() => {
     ...rest,
     lthSellTiers: [{ sigma: 0.5, alloc: 0.5 }, { sigma: 1, alloc: 0.2 }, { sigma: 1.5, alloc: 0.1 }, { sigma: 2.5, alloc: 0 }],
     sliceAboveLastBuyPct: 0,
-    capBuyRocLength: 4,
+    // 2026-11-07 (promoted in place, autonomous optimisation sprint): exit momentum gate −3 % (was −2 %, the edge of a
+    // cliff: −1.5 % loses 21 %, −1 % halves) and 3-day capitulation ROC (was 4). Smooth hill in the 2-D map, wins
+    // every start year 2017–2024, 2020→ test window 6.55× → 9.58×; 2015–19 slightly weaker (4.72× → 4.23×).
+    momoThreshold: -0.03,
+    capBuyRocLength: 3,
   };
 })();
 

@@ -3,12 +3,29 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-07 (v0.6.203)
+**Last updated:** 2026-11-07 (v0.6.204)
 
 ---
 
 ## 0. Change Log
 
+### v0.6.204 – Autonomous optimisation sprint: v2.2 exit momentum gate −3 % + 3-day capitulation ROC (promoted in place)
+**Date:** 2026-11-07 · **Status:** ✅ Live (tracker 50.9×, position unchanged) · published figures regenerated
+
+Pre-committed protocol: beat live v2.2 on the full sample AND keep WF ≥ 7/10 AND win ≥ 6/8 start years AND win on the
+fact-sheet basis AND not worsen true OOS. A 2,500-config random search + climb around live v2.2 produced a 61.7× /
+WF 8/10 compound candidate that was **rejected** — refitted on 2015–19 only it scores a median 3.68× on 2020–26 vs
+6.55× for the v2.2 structure (overfit). Ablation isolated one knob: the 2-day exit momentum gate `momoThreshold`
+−0.02 → −0.03 (alone 32.6× → 42.0×). Sensitivity mapping shows −0.02 sits at the edge of a cliff (−0.015 → 25.7×,
+−0.01 → 13.9×) while −0.04…−0.025 is a plateau ≥ 30×; a 2-D map with `capBuyRocLength` is a smooth hill peaking at
+(−0.03, 3) from every start window. **C2 = (−0.03, 3): $3.87M / 50.9× / CAGR 131 % / DD 36 % / 65 trades / WF 7/10
+(table 7/11, was 6/11)**, better from every start year 2017–2024, every fact-sheet horizon (+1…32 %), test window
+2020–26 6.55× → 9.58×. Caveat recorded: the 2015–19 window is flat across thresholds (4.2–4.8×) and slightly weaker
+for C2 — a robustness move with a post-2017 pay-off, not train-selected alpha. Promoted in place (`tracker_config`
+extras, `HYBRID_V2_2`, Admin UI preset); data files, website (50.9× · $3.87M · 131 % · 36 %), fact-sheet rule cards /
+fired lists and marketing chart regenerated; OOS strip unchanged (2.1× median). Live state after rebuild:
+`trend_hold`, in market — no client trades. Lab helpers: `ablate.ts`, `sens.ts`, `knobscan.ts`, `pairmap.ts`,
+`oos_knob.ts`, `run_opt.ps1`. Full write-up: lab README § "Autonomous optimisation sprint".
 ### v0.6.203 – Alert review: 68 open alerts triaged and resolved; detector trimmed-span rule; sweep scope; mop-up
 **Date:** 2026-11-07 · **Status:** ✅ 0 open alerts
 

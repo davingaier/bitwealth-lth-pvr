@@ -251,7 +251,7 @@
         <li>A hold <em>entered</em> above a rung starts there; nothing is sold on day one</li>
       </ul></div>
       <div class="card new"><h3><span class="pill filter">GATE</span> Momentum gate</h3><ul>
-        <li>A rung is <b>armed</b> when price crosses the band, but the slice is only <b>sold once the 2-day rate of change is ≤ −2 %</b> — the strategy sells the first sign of weakness at height, never into strength</li>
+        <li>A rung is <b>armed</b> when price crosses the band, but the slice is only <b>sold once the 2-day rate of change is ≤ −3 %</b> — the strategy sells the first sign of weakness at height, never into strength</li>
         
         <li>Without this gate a ladder <em>under</em>-performs the single all-out — tested, not assumed</li>
       </ul></div>
@@ -270,36 +270,36 @@
       <div class="rung full"><div class="s">LTH PVR +2.5σ</div><div class="a">0<small>% BTC</small></div><div class="d">final exit → cash</div></div>
     </div>
 
-    <div class="sh">Entry rules — when cash becomes bitcoin (v1 rules; R1 confirmation on a 4-day ROC since 2026-11-06)</div>
+    <div class="sh">Entry rules — when cash becomes bitcoin (v1 rules; R1 confirmation on a 3-day ROC and a −3 % exit gate since 2026-11-07)</div>
     <div class="three">
       <div class="card"><h3><span class="pill buy">BUY</span> R1 · Capitulation</h3><ul>
-        <li>Price closes at or below <b>75 % of the STH cost basis</b> and the <b>4-day</b> rate of change is <b>≥ 0</b> — the knife has stopped falling (4-day since 2026-11-06: the 2-day reading could never confirm inside a V-shaped flush such as Feb-2026)</li>
+        <li>Price closes at or below <b>75 % of the STH cost basis</b> and the <b>3-day</b> rate of change is <b>≥ 0</b> — the knife has stopped falling (3-day since 2026-11-07; the 2-day reading could never confirm inside a V-shaped flush such as Feb-2026)</li>
         <li>Deploy <b>100 %</b> of cash</li>
-        <li>Fired: Apr-18 $6.8k · Nov-18 $4.3k · Mar-20 $5.3k · Jul-21 $34.2k · Jan-22 $36.8k · Jun-22 $20.7k · Feb-26 $67.0k</li>
+        <li>Fired: Feb-18 $8.7k · Apr-18 $7.4k · Nov-18 $4.3k · Mar-20 $5.0k · Jun-21 $31.6k · Jan-22 $37.0k · Jun-22 $20.6k · Feb-26 $67.0k</li>
       </ul></div>
       <div class="card"><h3><span class="pill buy">BUY</span> R14 · LTH −0.5σ</h3><ul>
         <li>Price closes at or below the <b>Long-Term-Holder PVR −0.5σ band</b> — catches bottoms where STH capitulation is shallow but long-term holders are under water</li>
-        <li>Fired: Nov-19 $7.4k · <b>Nov-22 $16.6k</b> · Sep-23 $26–27k · Jun-26 $58.6k</li>
+        <li>Fired: Nov-19 $7.4k · <b>Nov-22 $16.3k</b> · Sep-23 $25.8k · Jun-26 $58.6k</li>
       </ul></div>
       <div class="card"><h3><span class="pill buy">BUY</span> R3 / R5 / R8 · Trend</h3><ul>
         <li><b>R3</b> fresh trend: price ≥ <b>112 %</b> of the cost basis · <b>R5</b> after a trend exit, re-enter at <b>102 %</b> · <b>R8</b> or as soon as 2-day momentum ≥ <b>+10 %</b> above the line</li>
-        <li>Fired: Jan-20 $9.4k · Sep-21 $42.8k / $49.9k · Sep-24 $63.3k · May-25 $96.9k · Aug-26 $77.1k</li>
+        <li>Fired: Jan-20 $9.4k · Sep-21 $42.8k / $49.9k · Sep-24 $63.3k · May-25 $96.9k</li>
       </ul></div>
     </div>
 
     <div class="sh">Exit rules — when bitcoin becomes cash</div>
     <div class="three">
       <div class="card"><h3><span class="pill sell">SELL</span> R2 · Capitulation exit</h3><ul>
-        <li>From a capitulation hold, price recovers to <b>95 %</b> of the cost basis; sell only once 2-day momentum ≤ <b>−2 %</b></li>
-        <li>Fired: Jul-18 $8.2k · Jan-20 $8.6k · Aug-21 $47.8k · Apr-22 $46.3k · Nov-22 $18.5k · Sep-23 $26.6k · Apr-26 $75.8k · Jul-26 $64.1k</li>
+        <li>From a capitulation hold, price recovers to <b>95 %</b> of the cost basis; sell only once 2-day momentum ≤ <b>−3 %</b></li>
+        <li>Fired: Mar-18 $9.9k · Jul-18 $8.2k · Jan-20 $8.7k · Aug-21 $44.7k · Apr-22 $46.3k · Nov-22 $18.5k · May-26 $77.5k</li>
       </ul></div>
       <div class="card"><h3><span class="pill sell">SELL</span> R3 / R12 · Trend exit</h3><ul>
-        <li><b>R3</b> price ≤ <b>97 %</b> of the cost basis, momentum ≤ −2 % <em>and</em> the cost basis flat or falling over 21 days · <b>R12</b> trailing stop <b>35 %</b> below the peak since entry</li>
+        <li><b>R3</b> price ≤ <b>97 %</b> of the cost basis, momentum ≤ −3 % <em>and</em> the cost basis flat or falling over 21 days · <b>R12</b> trailing stop <b>35 %</b> below the peak since entry</li>
         <li>Fired: R3 Mar-20 $7.9k · Sep-21 $43.5k · Sep-23 $25.8k · Aug-24 $59.3k · Mar-25 $90.6k · Oct-25 $109.6k · R12 Sep-19 $8.4k</li>
       </ul></div>
       <div class="card"><h3><span class="pill sell">SELL</span> R15 · Final rung (+2.5σ)</h3><ul>
         <li>The last rung of the ladder is the v1 euphoria exit: price ≥ the <b>LTH PVR +2.5σ</b> band, momentum turned → <b>sell everything</b>. Replaces v1's "2× cost basis" rule</li>
-        <li>Fired: <b>Dec-17 $14.9k</b> · <b>Apr-21 $60.0k</b> · <b>Oct-21 $60.7k</b></li>
+        <li>Fired: <b>Dec-17 $14.9k</b> · <b>Apr-21 $56.2k</b> · <b>Oct-21 $60.7k</b></li>
       </ul></div>
     </div>
 

@@ -544,6 +544,41 @@ Live signal on promotion day unchanged (trend_hold, Hold). New helpers: `compare
 trades / WF / first 2026 entry per config) and `episodes.ts --file cands.json --pick 0,2` (every capitulation entry side
 by side, grouped into episodes).
 
+### Autonomous optimisation sprint (2026-11-07, 2 h): exit gate −3 % + 3-day capitulation ROC — promoted into v2.2
+
+**Protocol (pre-committed):** promotable only if it beats live v2.2 on the full sample, keeps WF ≥ 7/10, wins ≥ 6/8
+start years, wins on the fact-sheet contribution basis, and does not worsen true OOS (fit 2015–19 → test 2020–26).
+
+**Search.** `optimize.ts` random 2,500 + climb over 17 knobs around live v2.2 (`data/gridA.json`, `run_opt.ps1`
+wrapper — Start-Process strips JSON quotes). Top result 61.7× / WF 8/10 — **rejected as overfit**: the same grid fitted
+on 2015–19 only (train-best 5.90×) scores a median 3.68× on 2020–26, below the v2.2 structure's 6.55× there
+(`oos_score.ts`). Ablation (`ablate.ts`) showed one knob carried most of it: `momoThreshold −0.02 → −0.03` alone =
+42.0×. Sensitivity map (`sens.ts`): the band −0.04…−0.025 is all ≥ 30×, while −0.02 sits at the edge of a cliff
+(−0.015 → 25.7×, −0.01 → 13.9×). Single-knob scan on that base (`knobscan.ts`, 8 start years each) found one
+interaction: `capBuyRocLength 3` wins 7/8 years on the −0.03 base (4 was better on the −0.02 base). 2-D map
+(`pairmap.ts`) from 2017 / 2020 / 2022: a smooth hill peaking at (−0.03, 3), every neighbour above live (−0.02, 4).
+
+| $1k lump 2017→2026-11-05 | live v2.2 (−0.02, 4) | **C2 (−0.03, 3)** |
+|---|---|---|
+| NAV / ×HODL / CAGR / DD | $2.47M / 32.6× / 121 % / 36 % | **$3.87M / 50.9× / 131 % / 36 %** |
+| trades / WF std / WF table | 66 / 7/10 / 6/11 | 65 / 7/10 / **7/11** |
+| start 2018 / 2020 / 2022 / 2024 | 37.4× / 6.6× / 4.5× / 1.6× | 57.7× / 9.6× / 5.8× / 2.0× |
+| fact-sheet 1/3/5/7/10 y | $5,411 / 22,648 / 66,052 / 431,636 / 17.3M | $5,489 / 23,766 / 73,843 / 524,307 / 22.9M |
+| OOS split: train 2015–19 → test 2020–26 | 4.72× → 6.55× | 4.23× → **9.58×** |
+
+**Honest caveats.** The 2015–19 training window does not itself prefer −0.03 (thresholds are flat there, 4.2–4.8×),
+so this is a *robustness* move (to the centre of the plateau, away from the cliff) with a post-2017 pay-off, not a
+train-selected alpha; the early data is the RB-h1 proxy close series. Episodes (`episodes.ts`): entries equal or
+better in every episode except an extra Feb-18 buy at $8.7k; the Jul-26 exit / Aug-26 re-entry round trip disappears
+(in market since 30 Jun 2026 → promotion changed no live position). Also rejected in the scan: `exitRocLength` 3–5
+(−25…−80 %), `trendExitConfirmDays` 3, `capBuyAtLthSigma` −0.25/−0.75, `cbSlopeDays` 14/30, `momoLength` 3,
+`minHoldDays` 20 — all lose in every start year.
+
+**Promoted in place** (Davin's standing preference): `tracker_config.hybrid_v2_2.extras` += `{"momoThreshold":-0.03,
+"capBuyRocLength":3}`; `HYBRID_V2_2`; Admin UI preset; data files, website hero/strip (50.9× · $3.87M · 131 % · 36 %),
+fact-sheet rule cards and fired lists, marketing chart regenerated. Published OOS strip unchanged (2.1× median — the
+honest number).
+
 ### USDPC execution realism: staging band vs USDT floor vs accepting the delay (2026-11-07)
 
 **Why.** VALR's USDPC/USDT market is a single intermittent market-maker quote (≤ ~30–90k when present, absent for

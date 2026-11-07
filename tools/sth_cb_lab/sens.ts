@@ -1,0 +1,21 @@
+import { simulateSthCb } from "../../supabase/functions/_shared/sth_cb_simulator.ts";
+import { annualFolds, evaluate, labArgsFrom, loadSeries, parseArgs, simParams } from "./lab_core.ts";
+const args = parseArgs(Deno.args);
+const series = await loadSeries();
+const lab0 = labArgsFrom(args, series.to);
+const rows = series.rows.filter((r) => r.close_date <= lab0.end);
+const base = JSON.parse(await Deno.readTextFile(String(args.base)));
+const run = (cfg: Record<string, unknown>, start = lab0.start) => {
+  const lab = { ...lab0, start, config: { ...lab0.config, ...cfg } as typeof lab0.config };
+  const sim = simulateSthCb(rows, simParams(lab), { ledger: false, daily: false });
+  return sim.summary.sth_cb.nav_vs_hodl;
+};
+const thr = [-0.05, -0.045, -0.04, -0.035, -0.03, -0.025, -0.02, -0.015, -0.01, -0.005, 0];
+const cap = [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97];
+console.log("×HODL, rows = momoThreshold, cols = capExitRatio (v2.2 live otherwise, $1k 2017→)");
+console.log("thr\\cap  " + cap.map((c) => c.toFixed(2).padStart(7)).join(""));
+for (const t of thr) console.log(String(t).padEnd(9) + cap.map((c) => run({ ...base, momoThreshold: t, capExitRatio: c }).toFixed(1).padStart(7)).join(""));
+console.log("\nmomoThreshold alone, by start year (×HODL):");
+const starts = ["2017-01-01","2018-01-01","2019-01-01","2020-01-01","2021-01-01","2022-01-01","2023-01-01","2024-01-01"];
+console.log("thr      " + starts.map((s) => s.slice(0,4).padStart(7)).join(""));
+for (const t of [-0.04, -0.035, -0.03, -0.025, -0.02, -0.015, -0.01]) console.log(String(t).padEnd(9) + starts.map((s) => run({ ...base, momoThreshold: t }, s).toFixed(1).padStart(7)).join(""));
