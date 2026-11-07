@@ -76,6 +76,8 @@ export interface LabArgs {
   tradeBps: number;
   contribBps: number;
   config: SthCbConfig;
+  /** false = cash parked as plain USDT, no USDPC yield (--no-usdpc) */
+  usdpc?: boolean;
 }
 
 export function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -105,6 +107,7 @@ export function labArgsFrom(a: Record<string, string | boolean>, seriesTo: strin
     tradeBps: num("trade-bps", 8),
     contribBps: num("contrib-bps", 18),
     config: { ...DEFAULT_STH_CB_CONFIG, ...base, ...extras },
+    usdpc: a["no-usdpc"] !== true,   // --no-usdpc: park cash in plain USDT (no yield)
   };
 }
 
@@ -121,7 +124,7 @@ export function simParams(l: LabArgs, config: SthCbConfig = l.config): SthCbSimP
     platformFeeRate: 0.0075,
     managementFeeRate: full ? 0.01 : 0,
     performanceFeeRate: full ? 0.10 : 0,
-    usdpcEnabled: full,
+    usdpcEnabled: full && l.usdpc !== false,
     usdpcApy: 0.10,
     usdpcConvFee: 0.001,
     executionLag: l.sameDay ? 0 : 1,

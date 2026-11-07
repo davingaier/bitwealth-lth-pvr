@@ -226,12 +226,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
       // 2026-11-07: never sweep USDT that a still-pending BTC buy (or its USDPC→USDT funding conversion) is waiting
-      // for — the 03:00 sweep bought back the 123 USDT the join had just raised for customer 999.
+      // for — the 03:00 sweep bought back the 123 USDT the join had just raised for customer 999. Any trade_date: a
+      // conversion that completes late in the day must not be swept by the next run after midnight UTC.
       const { data: buyPending } = await sb
         .from("order_intents")
-        .select("intent_id, pair, side, reason")
+        .select("intent_id, pair, side, reason, trade_date")
         .eq("customer_id", customer_id)
-        .eq("trade_date", todayStr)
         .eq("status", "pending")
         .or("and(pair.eq.BTC/USDT,side.eq.BUY),reason.eq.usdpc_prebuy_convert")
         .limit(1);
