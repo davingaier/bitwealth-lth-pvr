@@ -3,11 +3,34 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-07 (v0.6.202)
+**Last updated:** 2026-11-07 (v0.6.203)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.203 – Alert review: 68 open alerts triaged and resolved; detector trimmed-span rule; sweep scope; mop-up
+**Date:** 2026-11-07 · **Status:** ✅ 0 open alerts
+
+**Two criticals (10:00 / 10:30 SAST `valr_credential_access`) — false positives.** Audit log: operator recon reads for
+999/49 at 07:54–07:57Z, and the chunked executor + poller for customer 49 from 08:22Z, were gap-chained (240 s) into the
+:00/:30 cron bursts (14 customers in 13 s) → "15 distinct customers over 327 / 492 s". Attackers enumerate MANY customers
+at human pace; legitimate pre-tick activity touches 1–2 customers many times. `20261107_valr_cred_alarm_trimmed_span.sql`:
+rule B now measures the first-read span after dropping the `valr_cred_burst_trim` (2) earliest customers, and NULL-customer
+(master-key) signs no longer count as distinct. Replay of all 47 ten-minute windows today → 0 alerts; the attacker
+pattern (8 customers, 65 s apart) → 325 s, still alerts.
+
+**Everything else (66)** was historical and explained — VALR 401s during the account block and the stage-1 signing
+transition, the 00:20 partial-conversion/insufficient-balance chain, slippage-band chunk rejections, informational
+"conversion incomplete" notices, the 49/999 ledger mismatches (reconciled today), my own back-tester probe, and
+prospects 64/65 raising hourly "no exchange account" sweep warnings. Each resolved with a specific `resolution_note`.
+Code: `ef_sweep_usdt_to_usdpc` now considers only `live_enabled` strategies with an exchange account. **Mop-up**
+(Davin's option 3): `ef_poll_orders` spends the executor's 0.1 % USDT residue after an all-in STH_CB buy with one
+MARKET order by quote amount (≥ $20, ≤ 5 % of the fill, no pending buy / open order; `getBalances` added to the poll
+VALR client); 999's $38.33 mopped → 0.50420273 BTC = VALR.
+
+**For Davin:** customer 49's key is trading-only (by his design) — client withdrawals for 49 will need a separate
+withdraw-scoped key when the time comes (runbook §1).
 
 ### v0.6.202 – Afternoon fills (999 fully deployed), partial-chunk booking, placement-rejection fix; USDPC staging simulated and REJECTED
 **Date:** 2026-11-07 · **Status:** ✅ Ledgers = VALR · lab verdict delivered (no promotion)

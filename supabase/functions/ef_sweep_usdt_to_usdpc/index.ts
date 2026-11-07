@@ -81,14 +81,17 @@ Deno.serve(async (req: Request) => {
   const todayStr = yyyymmdd(new Date());
   const cfg = await loadUsdpcConfig(sb);
 
-  // Enabled customers (LTH_PVR or STH_CB).
+  // Enabled customers (LTH_PVR or STH_CB). 2026-11-07: only LIVE strategies that already have an exchange account —
+  // prospects still in KYC/setup (e.g. 64, 65) have nothing to sweep and were raising "No exchange account" warnings hourly.
   let csQuery = sb
     .schema("public")
     .from("customer_strategies")
     .select("customer_id")
     .eq("org_id", org_id)
     .in("strategy_code", ["LTH_PVR", "STH_CB"])
-    .eq("usdpc_enabled", true);
+    .eq("usdpc_enabled", true)
+    .eq("live_enabled", true)
+    .not("exchange_account_id", "is", null);
   if (targetCustomerId != null) csQuery = csQuery.eq("customer_id", targetCustomerId);
   const { data: csRows, error: csErr } = await csQuery;
 
