@@ -3,11 +3,21 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-07 (v0.6.204)
+**Last updated:** 2026-11-07 (v0.6.205)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.205 – USDPC conversion retry runs 24 h (Davin: keep converting 49's 57k past 18:00)
+**Date:** 2026-11-07 · **Status:** ✅ Live
+
+`usdpc_conversion_retry` rescheduled `*/10 3-16` → `*/10 * * * *` (`20261107_usdpc_conversion_retry_24h.sql`). The function is a
+no-op with nothing pending. Outside the `lth_poll_orders_*` hours (03–16 UTC) it also calls `ef_poll_orders` while any
+exchange order is `submitted`, so an evening fill still gets the 5-minute LIMIT→MARKET fallback and its ledger posting.
+Neither function has a trade-window gate. Counter now matches pending USDPC SELL intents by pair as well as by reason
+(two intents had lost their `reason` when re-pended). State at 16:32 UTC: 49 pending 46,000 + 11,457.74 USDPC and
+0.904 BTC buy; book 50 @ 1.088 (maker absent; weekend).
 
 ### v0.6.204 – Autonomous optimisation sprint: v2.2 exit momentum gate −3 % + 3-day capitulation ROC (promoted in place)
 **Date:** 2026-11-07 · **Status:** ✅ Live (tracker 50.9×, position unchanged) · published figures regenerated
