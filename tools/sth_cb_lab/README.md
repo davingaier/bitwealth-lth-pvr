@@ -544,6 +544,36 @@ Live signal on promotion day unchanged (trend_hold, Hold). New helpers: `compare
 trades / WF / first 2026 entry per config) and `episodes.ts --file cands.json --pick 0,2` (every capitulation entry side
 by side, grouped into episodes).
 
+### USDPC execution realism: staging band vs USDT floor vs accepting the delay (2026-11-07)
+
+**Why.** VALR's USDPC/USDT market is a single intermittent market-maker quote (≤ ~30–90k when present, absent for
+hours, dead at weekends; LIMIT sells never fill; the instant desk refuses USDPC). The simulator had assumed instant,
+unlimited conversion at the published price. Three execution-realism params were added to `simulateSthCb`
+(`usdpcStagingBandPct`/`usdpcUnstageDays`, `usdpcUsdtFloorFrac`, `usdpcUnstagedFillFrac`/`usdpcUnstagedDelayDays`) and
+lab flags `--stage-band --unstage-days --usdt-floor --unstaged-frac --unstaged-delay --no-usdpc`; grid in
+`staging_grid.ts` (`--bands 0,0.02 --floors 0,0.3 --extrasFile data/v22_live.json`).
+
+| $1k lump 2017→2026-11-05, v2.2 live config | frictionless | 25 % now, rest +1d | 25 % now, rest +2d | 0 % now, all +3d |
+|---|---|---|---|---|
+| **USDPC, no mitigation** | **32.6×** | **30.3×** | 24.6× | 22.9× |
+| USDPC + 2 % staging band | 26.9× | 27.2× | 25.2× | 24.2× |
+| USDPC + 30 % USDT floor | 29.9× | 27.8× | 22.5× | 21.1× |
+| **Plain USDT (no yield, no risk)** | **24.2×** | 24.2× | 24.2× | 24.2× |
+
+Fact-sheet basis ($2.4k + $200/mo, 10 y): 4.6× / 4.3× / 3.5× / 3.2× for the no-mitigation row vs 3.46× plain USDT.
+
+**Findings.** (1) **Staging cannot be cheap for this strategy**: 87 % of its cash days are within 2 % of some live
+trigger (it exits near the cost basis and re-enters near it, and partial-ladder periods sit near the dip re-buy level),
+so any band ≈ switching the yield off; 46–53 staging episodes also double the conversion fees. (2) A **USDT floor**
+loses in every column — the yield it forgoes exceeds the delay it avoids. (3) The only lever that matters is the
+**conversion delay itself**: ≤ 1 day keeps USDPC clearly ahead of plain USDT (30.3× vs 24.2×); at 2 days the advantage
+is gone (24.6×); at 3 days USDPC is worse than holding USDT. (4) Delay is a function of order size ÷ maker capacity
+(≈ $100–200k per weekday, zero at weekends), i.e. **of AUM**. Weekend signals (2/7 of entry days) face ≥ 2-day delays
+regardless. **Recommendation:** do not promote staging or a floor. Keep USDPC on while aggregate STH_CB USDPC can be
+turned in about a day (≈ $100k), switch new STH_CB cash to plain USDT beyond that, disclose the 24.2× (USDT) figure
+alongside the 32.6×, and pursue a liquidity arrangement with VALR/the issuer as the real fix. Model caveat: the
+penalty is applied to the whole buy including any USDT already on hand (slightly pessimistic for the floor rows).
+
 ### Client one-pager & commercial fee model data: `one_pager_data.ts` (2026-11-03)
 
 ```powershell

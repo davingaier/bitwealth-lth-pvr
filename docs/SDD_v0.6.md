@@ -3,11 +3,39 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-07 (v0.6.201)
+**Last updated:** 2026-11-07 (v0.6.202)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.202 – Afternoon fills (999 fully deployed), partial-chunk booking, placement-rejection fix; USDPC staging simulated and REJECTED
+**Date:** 2026-11-07 · **Status:** ✅ Ledgers = VALR · lab verdict delivered (no promotion)
+
+**Execution.** Maker returned 13:40 SAST with ≈50k: 999 sold 32,102.47 USDPC → 38,419 USDT → **0.5042 BTC (join
+complete)**; 49 sold 16,000 + 1,897.53 (partial, "Cancelled Due To Slippage") → 0.2814 BTC; 49 remaining 57,457.75
+USDPC / 0.904 BTC pending, retried every 10 min. Portal showed 49 USDT −2,245: the partial chunk's fill had been written
+with price 0 by the WebSocket monitor and the order marked `cancelled` before `ef_poll_orders` could apply the partial-
+cancelled rule, so its 2,268.50 USDT was never posted. Fixed from VALR's summary (avg 1.1955, fee 2.04); note the poster
+first valued it at 1,897.53 × 1.20 = 2,277.04 because the fill price it read was 1.20 — corrected to VALR's `total`.
+Both accounts now equal VALR (49: 0.7524 BTC / 57,457.75 USDPC / 21.41 USDT; 999: 0.5037 BTC / 38.38 USDT). Executor:
+a synchronous VALR rejection at placement (book moved) now ends the run and leaves the intent pending instead of
+`error` (49's 11,457.74 chunk had been marked error). Sweep guard made date-agnostic. Backlog: `ef_valr_ws_monitor`
+writes price-0 fills for partial IOC cancels — should defer to the summary route like the poller.
+
+**USDPC yield is ¼ of the published result.** v2.2 on closes with plain USDT: $1.83M / 24.2× (vs $2.47M / 32.6×);
+fact-sheet 5 y $46.0k vs $52.6k. VALR's instant desk refuses USDPC (tested). `--no-usdpc` lab flag added.
+
+**Staging simulation (Davin's request) — verdict: do not promote.** Execution-realism layer in `sth_cb_simulator.ts`
+(staging band with hysteresis, USDT floor, un-staged-buy penalty = fraction now + remainder N days later; lab
+`staging_grid.ts`). Results ($1k 2017→): no mitigation 32.6× frictionless → 30.3× (+1 d) → 24.6× (+2 d) → 22.9× (+3 d);
+2 % staging band 26.9× / 27.2× / 25.2× / 24.2×; 30 % floor 29.9× / 27.8× / 22.5× / 21.1×; plain USDT 24.2× in every
+column. Same ordering on the $2.4k + $200/mo basis. Reason: 87 % of the strategy's cash days are within 2 % of a live
+trigger, so staging ≈ no yield, and the floor forgoes more yield than the delay costs. The only lever is the delay
+itself, which is order size ÷ maker capacity (≈ $100–200k/weekday, 0 at weekends) — an AUM problem. Recommendation:
+keep USDPC while aggregate STH_CB USDPC turns in ≈ 1 day (≈ $100k), plain USDT for new STH_CB cash above that,
+publish 24.2× beside 32.6×, pursue a liquidity arrangement with VALR/the issuer. Full table: lab README
+§ "USDPC execution realism".
 
 ### v0.6.201 – USDPC→USDT funding conversions: depth-sized MARKET chunks, budgeted BTC buys, retry cron, sweep guard
 **Date:** 2026-11-07 · **Status:** ✅ Live — first chunk filled (49: 30,000 USDPC → 35,946 USDT → 0.473 BTC)

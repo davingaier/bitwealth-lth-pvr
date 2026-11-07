@@ -209,3 +209,16 @@ export async function getMarketPrice(pair: string) {
   }
   return price;
 }
+
+// Balances (available per currency). Mirrors ef_execute_orders/valrClient.ts — keep in sync.
+export async function getBalances(
+  subaccountId?: string | null,
+  credentials?: ValrRequestCredentials | null,
+): Promise<Record<string, number>> {
+  const rows = await valrPrivateRequest("GET", "/v1/account/balances", undefined, subaccountId, credentials);
+  const out: Record<string, number> = {};
+  for (const r of (rows ?? []) as Array<{ currency: string; available: string }>) {
+    out[String(r.currency).toUpperCase()] = Number(r.available ?? 0);
+  }
+  return out;
+}

@@ -5,7 +5,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // 2) If a LIMIT order is older than 5 minutes OR price moved > 0.25%
 //    then cancel it and place a fallback MARKET order for the remaining qty.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { getOrderSummaryByCustomerOrderId, getOrderStatusByCustomerOrderId, getOrderStatusById, getOrderSummaryById, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
+import { getBalances, getOrderSummaryByCustomerOrderId, getOrderStatusByCustomerOrderId, getOrderStatusById, getOrderSummaryById, cancelOrderById, placeMarketOrder, getMarketPrice } from "./valrClient.ts";
 import type { ValrRequestCredentials } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
 import { resolveCustomerCredentials, toRequestCredentials } from "../_shared/valrCredentials.ts";
@@ -28,6 +28,46 @@ const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
 
 // Cache resolved credentials per exchange_account_id to avoid repeated vault lookups.
 const credentialCache = new Map<string, { subaccountId: string | null; credentials: ValrRequestCredentials | null }>();
+
+// --- Mop-up config (2026-11-07) ---
+const MOPUP_MIN_USDT = 20;      // below this the residue is left for the sweep
+const MOPUP_MAX_FRACTION = 0.05; // never spend more than 5 % of the just-filled notional (anything bigger is not residue)
+
+async function valrAvailableUsdt(subaccountId: string | null, credentials: ValrRequestCredentials | null): Promise<number> {
+  const res = await getBalances(subaccountId, credentials);
+  return Number(res["USDT"] ?? 0);
+}
+
+/**
+ * After a BTC BUY fill: if the customer's STH_CB decision for that trade_date targets 100 % BTC and no buy intent is
+ * still pending, spend the leftover USDT (the executor's 0.999 safety haircut) with one MARKET order by quote amount.
+ */
+// deno-lint-ignore no-explicit-any
+async function mopUpResidualUsdt(o: any, subaccountId: string | null, credentials: ValrRequestCredentials | null): Promise<void> {
+  const { data: intent } = await supabase.from("order_intents").select("customer_id, trade_date, status, org_id, exchange_account_id").eq("intent_id", o.intent_id).maybeSingle();
+  if (!intent || intent.status === "pending") return;
+  const { data: dec } = await supabase.schema("sth_cb").from("decisions_daily").select("target_alloc, action")
+    .eq("customer_id", intent.customer_id).eq("trade_date", intent.trade_date).maybeSingle();
+  if (!dec || dec.action !== "BUY" || Number(dec.target_alloc) < 0.999) return;   // only all-in STH_CB targets
+  const { count: pendingBuys } = await supabase.from("order_intents").select("intent_id", { count: "exact", head: true })
+    .eq("customer_id", intent.customer_id).eq("status", "pending").or("and(pair.eq.BTC/USDT,side.eq.BUY),reason.eq.usdpc_prebuy_convert");
+  if (Number(pendingBuys ?? 0) > 0) return;                                          // the executor still has work for this customer
+  const { count: openOrders } = await supabase.from("exchange_orders").select("exchange_order_id", { count: "exact", head: true })
+    .eq("intent_id", o.intent_id).eq("status", "submitted");
+  if (Number(openOrders ?? 0) > 0) return;
+  const available = await valrAvailableUsdt(subaccountId, credentials);
+  const notional = Number(o.qty ?? 0) * Number(o.price ?? 0);
+  const spend = Math.floor(Math.min(available - 0.05, notional > 0 ? notional * MOPUP_MAX_FRACTION : available) * 100) / 100;
+  if (spend < MOPUP_MIN_USDT) return;
+  const coid = `${o.intent_id}-m`;
+  const resp = await placeMarketOrder("BTCUSDT", "BUY", String(spend), coid, subaccountId, credentials); // BUY → quoteAmount in this client
+  await supabase.from("exchange_orders").insert({
+    org_id: o.org_id, exchange_account_id: o.exchange_account_id, intent_id: o.intent_id,
+    ext_order_id: resp?.orderId ?? resp?.id, pair: "BTC/USDT", side: "BUY", price: 0, qty: 0,
+    status: "submitted", raw: { valr: resp, subaccountId, order_type: "MARKET", mop_up: true, quote_usdt: spend, customer_order_id: coid },
+  });
+  console.log(`ef_poll_orders: mop-up MARKET BUY ${spend} USDT for customer ${intent.customer_id} (intent ${o.intent_id})`);
+}
 
 Deno.serve(async (req: Request)=>{
   // 2026-11-05 hardening: deployed --no-verify-jwt, so authorise every caller here (secret key or org admin).
@@ -568,6 +608,12 @@ Deno.serve(async (req: Request)=>{
           );
         } else {
           console.log(`ef_poll_orders: created fill record for order ${o.exchange_order_id} (qty=${fillQty}, price=${fillPrice})`);
+          // ── Mop-up (2026-11-07): the executor sizes buys at 0.999 × USDT so a MARKET fallback can never be rejected
+          //    for insufficient balance; the 0.1 % residue is spent here with one small MARKET order (quote amount, so it
+          //    cannot exceed the balance) — only for all-in STH_CB targets, only once the intent has no buy pending.
+          if (side === "BUY" && String(pair).replace("/", "").toUpperCase() === "BTCUSDT" && !o.raw?.mop_up && !isConversion) {
+            try { await mopUpResidualUsdt(o, subaccountId, credentials); } catch (muErr) { console.warn(`ef_poll_orders: mop-up skipped for intent ${o.intent_id}:`, muErr instanceof Error ? muErr.message : String(muErr)); }
+          }
         }
       }
     }

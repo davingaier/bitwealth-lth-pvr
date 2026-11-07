@@ -18,6 +18,7 @@ import {
   computeRocSeries,
   decideSthCb,
   INITIAL_STH_CB_STATE,
+  sigmaKey,
   SthCbConfig,
   SthCbExtraInputs,
   SthCbSignal,
@@ -60,6 +61,25 @@ export interface SthCbSimParams {
   usdpcConvFee: number;          // e.g. 0.001
   executionLag: 0 | 1;
   config: SthCbConfig;
+  // ── USDPC execution-realism layer (2026-11-07, lab research; all optional, default = frictionless legacy) ──
+  /** Hold cash as USDT (no yield) while price is within this fraction of any live entry trigger (e.g. 0.05). */
+  usdpcStagingBandPct?: number;
+  /** Un-stage only after this many consecutive days outside 1.6 × band (hysteresis, default 3). */
+  usdpcUnstageDays?: number;
+  /** Always keep at least this fraction of cash as USDT (e.g. 0.3). */
+  usdpcUsdtFloorFrac?: number;
+  /** Buys that still need a USDPC→USDT conversion on the day fill only this fraction immediately … (default 1 = ideal) */
+  usdpcUnstagedFillFrac?: number;
+  /** … and the remainder this many trading days later at that day's price (default 0). */
+  usdpcUnstagedDelayDays?: number;
+}
+
+export interface SthCbStagingStats {
+  staged_days: number;
+  staging_episodes: number;
+  buys_needing_conversion: number;
+  buys_delayed: number;
+  delayed_usdt: number;
 }
 
 export interface SthCbSimOptions {
@@ -174,6 +194,8 @@ export interface SthCbMetrics {
     performance_usdt: number;
     usdpc_conversion_usdt: number;
   };
+  /** execution-realism layer (only meaningful when staging / penalty params are set) */
+  staging?: SthCbStagingStats;
 }
 
 export interface SthCbSimResult {
@@ -443,15 +465,57 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
 
   const sweepUsdt = (tradeDate: string) => {
     if (!p.usdpcEnabled || usdtBal < USDT_DUST) return;
-    const r = sizeUsdtToUsdpc(usdtBal, usdpcPriceToday, p.usdpcConvFee);
+    // Execution-realism layer: while staged (an entry trigger is near) cash stays as USDT; a USDT floor keeps part of
+    // the cash un-swept at all times; and USDT earmarked for a delayed buy is never swept (mirrors the live sweep guard).
+    if (stagedNow) return;
+    const reserved = pendingBuys.reduce((s, b) => s + b.usdt, 0);
+    let sweepable = usdtBal - reserved;
+    if (typeof p.usdpcUsdtFloorFrac === "number" && p.usdpcUsdtFloorFrac > 0) {
+      const cash = usdtBal + usdpcBal * usdpcPriceToday;
+      sweepable = Math.min(sweepable, usdtBal - p.usdpcUsdtFloorFrac * cash);
+    }
+    if (sweepable < USDT_DUST) return;
+    const r = sizeUsdtToUsdpc(sweepable, usdpcPriceToday, p.usdpcConvFee);
     if (r.usdpcReceived <= 0) return;
-    const swept = usdtBal;
+    const swept = sweepable;
     const feeUsdtEquiv = r.feeUsdpc * usdpcPriceToday;
     usdpcBal += r.usdpcReceived;
-    usdtBal = 0;
+    usdtBal -= swept;
     usdpcConvFeeCum += feeUsdtEquiv;
     usdpcConvFeeToday += feeUsdtEquiv;
     ledger(tradeDate, "convert", { amount_usdt: -swept, amount_usdpc: r.usdpcReceived, fee_usdpc: r.feeUsdpc, note: "USDT->USDPC sweep (idle cash to yield)" });
+  };
+
+  // ── Execution-realism state ────────────────────────────────────────────────────────────────────────────────────
+  let stagedNow = false;            // cash is being held as USDT because an entry trigger is near
+  let outsideBandDays = 0;
+  const pendingBuys: { dayIdx: number; usdt: number; rule: string }[] = [];
+  const stagingStats: SthCbStagingStats = { staged_days: 0, staging_episodes: 0, buys_needing_conversion: 0, buys_delayed: 0, delayed_usdt: 0 };
+  const stagingBand = typeof p.usdpcStagingBandPct === "number" && p.usdpcStagingBandPct > 0 ? p.usdpcStagingBandPct : 0;
+  const unstageDays = Math.max(1, Math.trunc(p.usdpcUnstageDays ?? 3));
+  const fillFrac = typeof p.usdpcUnstagedFillFrac === "number" ? Math.max(0, Math.min(1, p.usdpcUnstagedFillFrac)) : 1;
+  const delayDays = Math.max(0, Math.trunc(p.usdpcUnstagedDelayDays ?? 0));
+  const penaltyOn = fillFrac < 1 && delayDays > 0;
+  /** True when price is within `band` of a trigger that could put cash to work (approached from either side). */
+  const nearEntry = (px: number, cb: number, s: SthCbState, bands: Record<string, number | null | undefined> | undefined, band: number): boolean => {
+    const belowLevels: number[] = [];   // buy fires when price falls to/below these
+    const aboveLevels: number[] = [];   // buy fires when price rises to/above these
+    const inMarket = s.capLatch || s.trendLatch;
+    if (!inMarket) {
+      belowLevels.push(cb * config.capBuyRatio);
+      for (const t of config.capBuyTiers ?? []) belowLevels.push(cb * t.ratio);
+      if (typeof config.capBuyAtLthSigma === "number") { const k = sigmaKey(config.capBuyAtLthSigma); const lv = k ? Number(bands?.[k]) : NaN; if (lv > 0) belowLevels.push(lv); }
+      aboveLevels.push(cb * config.trendEnterRatio);
+      if (s.reentryArmed && typeof config.trendReentryRatio === "number") aboveLevels.push(cb * config.trendReentryRatio);
+    } else if (typeof s.scaledAlloc === "number" && s.scaledAlloc < 1) {
+      if (typeof config.dipRebuyPct === "number" && (s.postSellPeak ?? 0) > 0) belowLevels.push((s.postSellPeak ?? 0) * (1 - config.dipRebuyPct));
+      if (typeof config.dipRebuyAtCbRatio === "number") belowLevels.push(cb * config.dipRebuyAtCbRatio);
+    } else {
+      return false; // fully invested: nothing to stage
+    }
+    for (const lv of belowLevels) if (lv > 0 && px <= lv * (1 + band)) return true;
+    for (const lv of aboveLevels) if (lv > 0 && px >= lv * (1 - band)) return true;
+    return false;
   };
 
   const navNow = (px: number) => usdtBal + btcBal * px + usdpcBal * usdpcPriceToday;
@@ -519,6 +583,18 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
     ledger(tradeDate, "buy", { amount_btc: btcGross - feeBtc, amount_usdt: tradeUsdt, note: rule });
     if (feeBtc > 0) ledger(tradeDate, "fee", { fee_btc: feeBtc, note: "VALR BTC/USDT trade fee (BUY)" });
     return btcGross - feeBtc;
+  };
+  /**
+   * Buy with the execution-realism penalty: when the USDT had to come from a USDPC conversion today (i.e. the cash
+   * was NOT already staged as USDT) only `fillFrac` executes now and the remainder is queued for `delayDays` later.
+   */
+  const buyBtcRealistic = (tradeUsdt: number, px: number, tradeDate: string, rule: string, dayIdx: number, neededConversion: boolean) => {
+    if (neededConversion) stagingStats.buys_needing_conversion++;
+    if (!penaltyOn || !neededConversion) return buyBtc(tradeUsdt, px, tradeDate, rule);
+    const now = tradeUsdt * fillFrac;
+    const later = tradeUsdt - now;
+    if (later > USDT_DUST) { pendingBuys.push({ dayIdx: dayIdx + delayDays, usdt: later, rule: `${rule} (delayed fill)` }); stagingStats.buys_delayed++; stagingStats.delayed_usdt += later; }
+    return now > USDT_DUST ? buyBtc(now, px, tradeDate, rule) : 0;
   };
 
   const sellBtc = (btcGross: number, px: number, tradeDate: string, rule: string) => {
@@ -614,10 +690,12 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
         note = `join_policy=next_signal — strategy in market (${Math.round(target * 100)}% BTC) but no new entry today; cash held`;
       } else if (target >= 1) {
         // All-in: deploy every unit of cash (identical to the MVP behaviour)
-        const buyingPower = usdtBal + (p.usdpcEnabled ? usdpcBal * usdpcPriceToday : 0);
+        const reservedUsdt = pendingBuys.reduce((s, b) => s + b.usdt, 0);   // earmarked for delayed fills
+        const buyingPower = Math.max(0, usdtBal - reservedUsdt) + (p.usdpcEnabled ? usdpcBal * usdpcPriceToday : 0);
         if (buyingPower >= USDT_DUST) {
-          ensureUsdt(buyingPower, tradeDate);
-          const tradeUsdt = Math.max(0, usdtBal);
+          const neededConversion = p.usdpcEnabled && usdpcBal * usdpcPriceToday > Math.max(USDT_DUST, 0.02 * buyingPower);
+          ensureUsdt(buyingPower + reservedUsdt, tradeDate);
+          const tradeUsdt = Math.max(0, usdtBal - reservedUsdt);
           if (tradeUsdt > 0) {
             action = "BUY";
             amountPct = 1;
@@ -626,7 +704,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
               tradesCount++;
               if (exec.rule === "Hold") { rule = `Initial deploy (${exec.position} from warm-up)`; note = exec.note; }
             }
-            buyBtc(tradeUsdt, px, tradeDate, rule);
+            buyBtcRealistic(tradeUsdt, px, tradeDate, rule, i, neededConversion);
             everBought = true;
           }
         } else if (!wasInMarket) {
@@ -658,15 +736,17 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
         // materially below target. (A constant-mix drift rebalance remains opt-in via config.rebalanceDrift.)
         const contribTopUp = contribNetToday > 0 && delta > USDT_DUST;
         if (delta > driftBand || ((allocChanged || contribTopUp) && delta > USDT_DUST)) {
-          ensureUsdt(delta, tradeDate);
-          const tradeUsdt = Math.min(delta, Math.max(0, usdtBal));
+          const reservedUsdt2 = pendingBuys.reduce((s, b) => s + b.usdt, 0);
+          const neededConversion = p.usdpcEnabled && usdtBal - reservedUsdt2 < delta - USDT_DUST && usdpcBal > 0;
+          ensureUsdt(delta + reservedUsdt2, tradeDate);
+          const tradeUsdt = Math.min(delta, Math.max(0, usdtBal - reservedUsdt2));
           if (tradeUsdt > USDT_DUST) {
             action = "BUY";
             amountPct = (usdtBal + usdpcBal * usdpcPriceToday + tradeUsdt) > 0 ? tradeUsdt / (usdtBal + usdpcBal * usdpcPriceToday + tradeUsdt) : 1;
             if (!allocChanged && contribTopUp) { rule = "Deploy contribution"; note = `At ${Math.round(target * 100)}% BTC target — new cash deployed to target`; }
             else if (!allocChanged) { rule = `Rebalance to ${Math.round(target * 100)}% BTC`; note = `drift ${(delta / nav * 100).toFixed(1)}% of NAV`; }
             else tradesCount++;
-            buyBtc(tradeUsdt, px, tradeDate, rule);
+            buyBtcRealistic(tradeUsdt, px, tradeDate, rule, i, neededConversion);
             everBought = true;
           }
         } else if (delta < -driftBand || (allocChanged && delta < -USDT_DUST)) {
@@ -720,6 +800,26 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
     if (i === 0) {
       highWaterMark = navNow(px);
       hwmContribNetCum = contribNetCum;
+    }
+
+    // 4b) Execution-realism layer: deferred (un-staged) buys land today; then decide whether cash should be staged
+    //     as USDT for tomorrow (an entry trigger is within the band). Staging converts USDPC → USDT now (fee, no
+    //     more yield); un-staging (after `unstageDays` outside 1.6 × band) lets the nightly sweep return it to USDPC.
+    if (pendingBuys.length) {
+      for (let k = pendingBuys.length - 1; k >= 0; k--) {
+        const b = pendingBuys[k];
+        if (b.dayIdx > i) continue;
+        const amt = Math.min(b.usdt, Math.max(0, usdtBal));
+        if (amt > USDT_DUST && px > 0) buyBtc(amt, px, tradeDate, b.rule);
+        pendingBuys.splice(k, 1);
+      }
+    }
+    if (stagingBand > 0 && p.usdpcEnabled) {
+      const near = nearEntry(px, cb, state, extraAt(gi).bands, stagingBand);
+      const farOut = !nearEntry(px, cb, state, extraAt(gi).bands, stagingBand * 1.6);
+      if (near) { if (!stagedNow) stagingStats.staging_episodes++; stagedNow = true; outsideBandDays = 0; }
+      else if (stagedNow) { outsideBandDays = farOut ? outsideBandDays + 1 : 0; if (outsideBandDays >= unstageDays) { stagedNow = false; outsideBandDays = 0; } }
+      if (stagedNow) { stagingStats.staged_days++; if (usdpcBal > 0) ensureUsdt(Number.POSITIVE_INFINITY, tradeDate); }
     }
 
     // 5) Park idle cash
@@ -822,6 +922,7 @@ export function simulateSthCb(rows: SthCbSeriesRow[], p: SthCbSimParams, opts: S
       platform_or_mgmt_usdt: platformFeesCum, performance_usdt: performanceFeesCum,
       usdpc_conversion_usdt: usdpcConvFeeCum,
     },
+    staging: stagingStats,
   };
 
   return {

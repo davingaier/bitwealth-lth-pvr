@@ -204,7 +204,18 @@ Deno.serve(async ()=>{
               if (chunk < USDPC_MIN_CHUNK) break;                        // no acceptable depth right now
               n++; placed++;
               const coid = n === 1 ? i.intent_id : `${i.intent_id}-c${n}`;
-              const convResp = await placeMarketOrder(USDPC_PAIR, "SELL", String(chunk), coid, subaccountId, credentials, false);
+              // deno-lint-ignore no-explicit-any
+              let convResp: any;
+              try {
+                convResp = await placeMarketOrder(USDPC_PAIR, "SELL", String(chunk), coid, subaccountId, credentials, false);
+              } catch (placeErr) {
+                // VALR rejects synchronously when the book moved under us ("slippage price band") — that is "no depth
+                // right now", not a failure of the intent: stop this run and let the retry cron try again.
+                const pm = placeErr instanceof Error ? placeErr.message : String(placeErr);
+                console.warn(`USDPC chunk ${n} for intent ${i.intent_id} rejected at placement: ${pm}`);
+                n--; placed--;
+                break;
+              }
               const convExtId = convResp?.orderId ?? convResp?.id;
               const fin = await waitFinal(coid, subaccountId, credentials);
               await sb.from("exchange_orders").insert({

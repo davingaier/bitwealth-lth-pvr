@@ -78,6 +78,7 @@ export interface LabArgs {
   config: SthCbConfig;
   /** false = cash parked as plain USDT, no USDPC yield (--no-usdpc) */
   usdpc?: boolean;
+  stageBand?: number; unstageDays?: number; usdtFloor?: number; unstagedFrac?: number; unstagedDelay?: number;
 }
 
 export function parseArgs(argv: string[]): Record<string, string | boolean> {
@@ -108,6 +109,11 @@ export function labArgsFrom(a: Record<string, string | boolean>, seriesTo: strin
     contribBps: num("contrib-bps", 18),
     config: { ...DEFAULT_STH_CB_CONFIG, ...base, ...extras },
     usdpc: a["no-usdpc"] !== true,   // --no-usdpc: park cash in plain USDT (no yield)
+    stageBand: Number(a["stage-band"]) || 0,          // --stage-band 0.05 : hold USDT while an entry trigger is within 5 %
+    unstageDays: Number(a["unstage-days"]) || 3,
+    usdtFloor: Number(a["usdt-floor"]) || 0,          // --usdt-floor 0.3 : always keep 30 % of cash as USDT
+    unstagedFrac: a["unstaged-frac"] !== undefined ? Number(a["unstaged-frac"]) : 1,   // --unstaged-frac 0.25 --unstaged-delay 2
+    unstagedDelay: Number(a["unstaged-delay"]) || 0,
   };
 }
 
@@ -125,6 +131,11 @@ export function simParams(l: LabArgs, config: SthCbConfig = l.config): SthCbSimP
     managementFeeRate: full ? 0.01 : 0,
     performanceFeeRate: full ? 0.10 : 0,
     usdpcEnabled: full && l.usdpc !== false,
+    usdpcStagingBandPct: l.stageBand || undefined,
+    usdpcUnstageDays: l.unstageDays || undefined,
+    usdpcUsdtFloorFrac: l.usdtFloor || undefined,
+    usdpcUnstagedFillFrac: typeof l.unstagedFrac === "number" ? l.unstagedFrac : undefined,
+    usdpcUnstagedDelayDays: l.unstagedDelay || undefined,
     usdpcApy: 0.10,
     usdpcConvFee: 0.001,
     executionLag: l.sameDay ? 0 : 1,
