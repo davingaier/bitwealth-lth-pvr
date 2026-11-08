@@ -116,6 +116,21 @@ Deno.serve(async ()=>{
   }
   const count = intents?.length ?? 0;
   console.log(`ef_execute_orders: found ${count} pending intents for org ${org_id} and trade_date ${todayDate}`);
+  // 2026-11-08: close prior-day STH_CB funding/buy intents that today's engine has re-planned. The engine sizes today's
+  // intents from the live balance, so yesterday's remainder is already included; leaving them pending blocked the mop-up
+  // ("executor still has work") and would double-execute if depth appeared for both.
+  if (count > 0) {
+    const todaysCustomers = [...new Set((intents ?? []).map((i: any) => Number(i.customer_id)))];
+    for (const cid of todaysCustomers) {
+      const { data: stale } = await sb.from("order_intents").select("intent_id, pair, side, amount, trade_date")
+        .eq("org_id", org_id).eq("customer_id", cid).eq("status", "pending").lt("trade_date", todayDate)
+        .or("reason.eq.usdpc_prebuy_convert,and(pair.eq.BTC/USDT,side.eq.BUY)");
+      for (const s of stale ?? []) {
+        await sb.from("order_intents").update({ status: "executed", note: `superseded by ${todayDate} re-plan (closed by ef_execute_orders)` }).eq("intent_id", s.intent_id);
+        console.log(`ef_execute_orders: closed superseded ${s.trade_date} intent ${s.intent_id} (${s.pair} ${s.side} ${s.amount}) for customer ${cid}`);
+      }
+    }
+  }
   if (!intents || intents.length === 0) {
     return new Response(`no pending intents for org ${org_id} and trade_date ${todayDate}`, {
       status: 200

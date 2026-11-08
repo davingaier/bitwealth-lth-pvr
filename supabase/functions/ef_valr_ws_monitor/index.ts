@@ -193,11 +193,20 @@ Deno.serve(async (req: Request) => {
         );
 
         // Update exchange_orders table
+        // 2026-11-08: an IOC conversion chunk that VALR reports "Cancelled" after a partial execution must NOT be
+        // written as cancelled — the poller's partial-cancelled rule (which books the executed part) never gets to run
+        // once the row has left 'submitted'. Treat it as filled for the executed quantity.
+        // deno-lint-ignore no-explicit-any
+        const d: any = msg.data;
+        const execQty = Number(d?.executedQuantity ?? d?.totalExecutedQuantity ?? 0)
+          || (Array.isArray(msg.data?.fills) ? msg.data.fills.reduce((s: number, f: { quantity?: string }) => s + Number(f?.quantity ?? 0), 0) : 0);
+        const partialCancelled = msg.data.status === "Cancelled" && execQty > 0;
         const { error: updateErr } = await supabase
           .from("exchange_orders")
           .update({
-            status: mapValrStatus(msg.data.status),
-            raw: msg.data,
+            status: partialCancelled ? "filled" : mapValrStatus(msg.data.status),
+            ...(partialCancelled ? { qty: execQty } : {}),
+            raw: partialCancelled ? { ...msg.data, partial_cancelled: true, executed_qty: execQty } : msg.data,
             updated_at: new Date().toISOString(),
           })
           .or(`ext_order_id.eq.${valrOrderId},intent_id.eq.${customerOrderId}`);
@@ -229,6 +238,12 @@ Deno.serve(async (req: Request) => {
 
           if (orderData) {
             for (const fill of msg.data.fills) {
+              // A fill without a usable price (IOC conversion partials arrive with price "0") would be booked at $0 and
+              // poison the ledger; leave it for ef_poll_orders, which prices from VALR's order summary.
+              if (!(Number(fill?.price) > 0) || !(Number(fill?.quantity) > 0)) {
+                console.warn(`ef_valr_ws_monitor: skipping fill without price/qty for ${customerOrderId ?? valrOrderId}`);
+                continue;
+              }
               const { error: fillErr } = await supabase
                 .from("order_fills")
                 .insert({

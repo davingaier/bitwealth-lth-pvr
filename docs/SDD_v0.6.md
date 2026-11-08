@@ -3,11 +3,24 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-07 (v0.6.205)
+**Last updated:** 2026-11-08 (v0.6.206)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.206 – Customer 49 fully deployed (1.654 BTC); WS-monitor partial-cancel fix; stale-intent auto-close
+**Date:** 2026-11-08 · **Status:** ✅ Ledger = VALR
+
+The maker returned 06:50–07:25 UTC; the chunked executor sold all 57,457 USDPC in 14 depth-sized chunks (1.5k–9k)
+and bought 0.90 BTC in five sized buys at ≈ $75,850 → **1.654087 BTC, USDT 0.05, USDPC 0.009** after the mop-up.
+Portal showed USDT −17,292: the 07:00 chunk (21,000 → 14,542.26 filled, "Partially Filled and Cancelled Due To
+Slippage") was written by `ef_valr_ws_monitor` as `cancelled` with a price-0 fill before the poller's partial-cancelled
+rule could run — the same race as 07 Nov. Fixed from VALR's summary (avg 1.19247, total 17,341.19, fee 15.61) and
+the monitor patched: a Cancelled update with executed qty > 0 is written as `filled` for that qty, and fills without a
+usable price are skipped (left to the poller, which prices from the summary). The mop-up had been blocked by three
+still-pending 07 Nov intents ("executor still has work"); closed, and `ef_execute_orders` now auto-closes prior-day
+funding/buy intents for any customer it re-plans today. `usdpc_conversion_retry` stays on 24 h (no-op when idle).
 
 ### v0.6.205 – USDPC conversion retry runs 24 h (Davin: keep converting 49's 57k past 18:00)
 **Date:** 2026-11-07 · **Status:** ✅ Live
