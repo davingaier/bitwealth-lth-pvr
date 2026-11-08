@@ -169,7 +169,10 @@ Deno.serve(async (req: Request) => {
           heldFeeUsdt = (held ?? []).reduce((s: number, r: { amount: number }) => s + Number(r.amount), 0);
         }
         const liveUsdt  = Math.max(0, pickAvailable(liveBalances as any, "USDT") - heldFeeUsdt);
-        const liveUsdpc = pickAvailable(liveBalances as any, "USDPC");
+        // Reconciliation compares TOTAL USDPC (available + reserved): while the chunked executor is selling, the whole
+        // balance is reserved by an in-flight IOC order and `available` reads 0 for a few seconds (false alarm 08 Nov 02:20Z).
+        const usdpcRow = (liveBalances as any[]).find((b) => String(b?.currency ?? "").toUpperCase() === "USDPC");
+        const liveUsdpc = Number(usdpcRow?.total ?? usdpcRow?.available ?? 0) || 0;
         const deltaUsdt  = +(liveUsdt  - dbUsdt).toFixed(8);
         const deltaUsdpc = +(liveUsdpc - dbUsdpc).toFixed(8);
 

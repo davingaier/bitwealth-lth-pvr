@@ -255,9 +255,23 @@ Deno.serve(async ()=>{
               // keep the intent pending with the remaining amount so the next run (pipeline guard, 30 min) continues
               await sb.from("order_intents").update({ amount: remaining, note: `${i.note ?? ""} | ${summaryTxt}`.slice(0, 500) }).eq("intent_id", i.intent_id);
               conversionIncomplete.add(Number(i.customer_id));
-              await logAlert(sb, "ef_execute_orders", placed ? "info" : "warn",
-                `USDPC conversion for customer ${i.customer_id} incomplete — ${summaryTxt}; will retry`,
-                { customer_id: i.customer_id, intent_id: i.intent_id, remaining, sold: soldThisRun, raised_usdt: raisedThisRun, depth: lastDepth, mark: lastMark, best_bid: lastBestBid }, org_id, i.customer_id);
+              // Alert only on progress (info) or once per intent when nothing could be sold (warn, deduped); zero-progress
+              // repeats every 10 min while the maker is absent go to the function log only (the retry cron owns them).
+              if (soldThisRun > 0) {
+                await logAlert(sb, "ef_execute_orders", "info",
+                  `USDPC conversion for customer ${i.customer_id} progressed — ${summaryTxt}; will retry`,
+                  { customer_id: i.customer_id, intent_id: i.intent_id, remaining, sold: soldThisRun, raised_usdt: raisedThisRun, depth: lastDepth, mark: lastMark, best_bid: lastBestBid }, org_id, i.customer_id);
+              } else {
+                const { count: already } = await sb.schema("public").from("alert_events").select("alert_id", { count: "exact", head: true })
+                  .eq("component", "ef_execute_orders").eq("customer_id", i.customer_id).is("resolved_at", null).like("message", `%no USDPC depth%intent ${i.intent_id}%`);
+                if (Number(already ?? 0) === 0) {
+                  await logAlert(sb, "ef_execute_orders", "warn",
+                    `USDPC conversion for customer ${i.customer_id}: no USDPC depth within ${USDPC_MAX_SLIPPAGE * 100}% of mark — intent ${i.intent_id} (${remaining.toFixed(2)} USDPC) stays pending; the 10-min retry continues`,
+                    { customer_id: i.customer_id, intent_id: i.intent_id, remaining, depth: lastDepth, mark: lastMark, best_bid: lastBestBid }, org_id, i.customer_id);
+                } else {
+                  console.log(`USDPC conversion ${i.intent_id}: ${summaryTxt}`);
+                }
+              }
               if (placed) successCount++;
             }
             if (soldThisRun > 0) { convertedThisRun = true; }

@@ -3,11 +3,22 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-08 (v0.6.206)
+**Last updated:** 2026-11-08 (v0.6.207)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.207 – Alert review (12 → 0): sweep reconciliation uses TOTAL USDPC; zero-progress conversion alerts deduped
+**Date:** 2026-11-08 · **Status:** ✅ 0 open alerts
+
+All 12 were last night's conversion narrative or benign: 6 `info/warn` "conversion incomplete" progress notices (the
+chunked executor working through 49's 57k), the 00:20 buy's normal LIMIT→MARKET fallback, a transient RB first-attempt
+null (bands/on-chain/tracker/decisions all current for 11-07), 1–2 c dust on 31, and two sweep mismatches for 49. One
+of those was a real false alarm worth fixing: at 02:20Z the sweep read VALR *available* USDPC = 0 because the executor's
+in-flight IOC chunk had the entire balance reserved — `ef_sweep_usdt_to_usdpc` now reconciles against **total** USDPC.
+Noise control: `ef_execute_orders` raises `info` only when a chunk actually sold and a single deduped `warn` per
+intent when no depth exists; zero-progress repeats every 10 min go to the function log (the retry cron owns them).
 
 ### v0.6.206 – Customer 49 fully deployed (1.654 BTC); WS-monitor partial-cancel fix; stale-intent auto-close
 **Date:** 2026-11-08 · **Status:** ✅ Ledger = VALR
