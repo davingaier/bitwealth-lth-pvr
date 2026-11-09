@@ -3,11 +3,22 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-08 (v0.6.207)
+**Last updated:** 2026-11-09 (v0.6.208)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.208 – Strategy Setup on an already-confirmed client: 400 explained, modal now locks itself
+**Date:** 2026-11-09 · **Status:** ✅ UI only
+
+Davin tried to switch customer 65 to the subaccount model via Strategy Setup → `ef_confirm_strategy` 400. Correct
+refusal: 65 was confirmed on 06 Nov (model api, STH_CB row, portal email) and has since registered (status `setup`);
+the function only confirms `prospect` customers. The server message was shown behind the modal and read as a
+generic failure. Fix: `openStrategySetup` reads `registration_status` and, for non-prospects, shows an amber note
+("already confirmed — use Edit Client → Save Changes for account model / fees / USDPC, Switch strategy for the
+strategy") and disables Confirm; server errors are also rendered inside the modal. The Edit Client form already writes
+`customer_details.account_model` (`CM_MODAL_FIELDS.strategyOnDetails`) — 65 is `subaccount` as of this session.
 
 ### v0.6.207 – Alert review (12 → 0): sweep reconciliation uses TOTAL USDPC; zero-progress conversion alerts deduped
 **Date:** 2026-11-08 · **Status:** ✅ 0 open alerts

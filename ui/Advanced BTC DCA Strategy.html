@@ -14740,11 +14740,23 @@
       document.getElementById('strategyModalCustomerName').textContent = customerName;
       document.getElementById('strategyModalCustomerId').textContent = customerId;
 
-      // Preselect the account model if the prospect already has one (else Finova, the historical default)
+      // Preselect the account model if the prospect already has one (else Finova, the historical default), and make it
+      // obvious when this client is past 'prospect' — Confirm would be refused by ef_confirm_strategy (400), and the right
+      // tool for changing the account model / fees of an existing client is the Edit Client form or Switch strategy.
+      let strategyModalLocked = false;
       try {
-        const { data: cdRow } = await supabaseClient.from('customer_details').select('account_model').eq('customer_id', customerId).maybeSingle();
+        const { data: cdRow } = await supabaseClient.from('customer_details').select('account_model, registration_status').eq('customer_id', customerId).maybeSingle();
         const amSel = document.getElementById('strategyModalAccountModel');
         if (amSel) amSel.value = ['finova_omnibus','api','subaccount'].includes(cdRow?.account_model) ? cdRow.account_model : 'finova_omnibus';
+        const st = cdRow?.registration_status || 'prospect';
+        strategyModalLocked = st !== 'prospect';
+        let note = document.getElementById('strategyModalStatusNote');
+        if (!note) { note = document.createElement('div'); note.id = 'strategyModalStatusNote'; note.style.cssText = 'margin:.5rem 0 .75rem;padding:.6rem .8rem;border-radius:6px;font-size:.9rem;'; document.getElementById('strategyModalCustomerId')?.closest('p, div')?.insertAdjacentElement('afterend', note); }
+        if (strategyModalLocked) {
+          note.style.display = ''; note.style.background = '#fff3cd'; note.style.border = '1px solid #ffe69c'; note.style.color = '#664d03';
+          note.innerHTML = `This client's strategy was already confirmed (status <b>${escapeHtml(st)}</b>). Strategy Setup only applies to prospects. To change the <b>account model</b>, fees or USDPC, use <b>Edit Client → Save Changes</b>; to change the strategy use <b>Switch strategy</b> in the same form.`;
+        } else { note.style.display = 'none'; }
+        if (modalConfirmBtn) { modalConfirmBtn.disabled = strategyModalLocked; modalConfirmBtn.title = strategyModalLocked ? 'Already confirmed — use Edit Client' : ''; }
       } catch (_) { /* keep default */ }
 
       // Load data
@@ -14973,7 +14985,10 @@
           await loadProspects();
           if (viaFinova) showFinovaInvitePanel(result);
         } else {
-          showMessage(`Failed to confirm strategy: ${result.error || 'Unknown error'}`, 'error');
+          const msg = `Failed to confirm strategy: ${result.error || `HTTP ${response.status}`}`;
+          showMessage(msg, 'error');
+          const note = document.getElementById('strategyModalStatusNote');
+          if (note) { note.style.display = ''; note.style.background = '#f8d7da'; note.style.border = '1px solid #f1aeb5'; note.style.color = '#58151c'; note.textContent = msg; }
         }
       } catch (err) {
         console.error('Error confirming strategy:', err);
