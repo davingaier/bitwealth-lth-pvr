@@ -271,10 +271,12 @@ Deno.serve(async (req) => {
         if (hasBalance) {
           console.log(`✓ Balance detected for customer ${customer.customer_id}`);
 
-          // Update customer status to 'active'
+          // Update customer status to 'active'. `customer_status` is the legacy flag the Admin UI shows ("Active" /
+          // "Inactive") and that several older functions filter on; ef_prospect_submit seeds it as "Inactive" and nothing
+          // flipped it at activation (customer 65 showed Inactive after her first deposit, 2026-11-11).
           const { error: updateCustomerError } = await supabase
             .from("customer_details")
-            .update({ registration_status: "active" })
+            .update({ registration_status: "active", customer_status: "Active" })
             .eq("customer_id", customer.customer_id);
 
           if (updateCustomerError) {

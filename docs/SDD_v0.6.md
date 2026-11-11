@@ -3,11 +3,23 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-09 (v0.6.208)
+**Last updated:** 2026-11-11 (v0.6.209)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.209 – Customer 65 first deposit: activation never set the legacy `customer_status` flag
+**Date:** 2026-11-11 · **Status:** ✅ Fixed + back-filled
+
+65 deposited R10,000 (17:52Z); `ef_deposit_scan` activated her correctly — `registration_status=active`,
+`customer_strategies` `status=active` / `live_enabled=true` / `effective_from` today, ZAR funding event + ledger topup,
+`pending_zar_conversions` row with the USDT/ZAR LIMIT placed 20:44Z (1-min poller) — but the Admin UI label reads
+`customer_details.customer_status`, which `ef_prospect_submit` seeds as `Inactive` and nothing flipped. Cosmetic for
+the STH_CB pipeline (`ef_sth_cb_generate_decisions` gates on `registration_status` + `live_enabled`), but several
+legacy functions filter on `customer_status='Active'` (fee harvester, balance finalizer, deposit e-mails in
+`ef_sync_valr_transactions`), so it matters. `ef_deposit_scan` now sets both fields; back-filled 65 and 31. 64 stays
+Inactive (still in KYC). Expected tomorrow for 65: ZAR→USDT fills → 02:20Z join (all-in, strategy in `trend_hold`).
 
 ### v0.6.208 – Strategy Setup on an already-confirmed client: 400 explained, modal now locks itself
 **Date:** 2026-11-09 · **Status:** ✅ UI only
