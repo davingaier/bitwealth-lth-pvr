@@ -155,6 +155,56 @@ The `.env.example` in the repo lists the variable names you need.
 
 ---
 
+## 6a. Incident #2 — 2026-11-11 15:35–16:04 UTC (secret key read through an anonymous RPC)
+
+**What happened (plain language).** Someone connecting through a VPN in Barcelona (`130.195.250.94`, Python script)
+first tried the old public keys from the GitHub history (rejected), then the *current* public key (accepted — it is on
+the website). With nothing more than that public key they called the database function `get_secret('service_jwt')`,
+which handed back the **edge-function secret key**. From there they:
+read the VALR API keys of API-model customers 9/49/56, listed every login (emails/phones), **generated a password-reset
+link for your admin account and for customer 49 and logged in as both**, read settings / allow-list / withdrawal
+requests / dashboard metrics, had `valr_sign` sign BTC & USDT *withdrawal* requests for master, 49 and 56, and tried to
+insert their own address into the allow-list (blocked, 403). The same actor sprayed keys again at 00:57 UTC on 12 Nov
+from France.
+
+**Why nothing was lost.** VALR master and customer keys are trade-only and no withdraw keys exist (§1), so every signed
+withdrawal was rejected by VALR — 0 transactions on master, 49, 56, 999 and 65 in the window. The allow-list insert
+was refused by RLS. No table was modified (verified by scanning every `updated_at/created_at` in the window).
+
+**Root cause.** `public.get_secret(text)` (SECURITY DEFINER, pre-dating the 5 Nov hardening) was executable by `anon`
+and returned raw values from `private.app_secrets`, where `service_jwt` held the secret key. The function names are in
+the public repo's migrations. The 5 Nov rotation did not catch it because the key was re-stored there afterwards.
+
+**What was done (12 Nov 06:00–07:00 UTC).**
+1. Attacker sessions deleted; `get_secret` restricted to `service_role`; withdrawal kill-switch set to `false`.
+2. New secret key created by Davin → Infisical → pushed to Vault (`SUPABASE_SERVICE_ROLE_KEY`, `Secret Key`,
+   `service_jwt`, `ef_auth_header`), `private.app_secrets.service_jwt`, edge secret `SB_SECRET_KEY`; old key deleted in
+   the dashboard (platform-injected `SUPABASE_SECRET_KEYS` updated itself). Verified PostgREST, direct function calls
+   and the pg_cron `call_edge` path all work on the new key.
+3. All 18 auth sessions / 176 refresh tokens revoked (everyone signs in again).
+4. Migration `20261112_incident_get_secret_lockdown.sql`: `anon` EXECUTE revoked on **124** SECURITY DEFINER functions
+   that have no identity check (allow-list: the 6 RPCs the public website calls anonymously); `authenticated` also
+   revoked on pure plumbing (`call_edge`, `upsert_cron`, pipeline/fee/finalizer helpers).
+
+**Still to do (you).** ~~VALR API keys of customers 9, 49, 56~~ master/49/9 re-issued 12 Nov 06:21–07:40Z; **56 still
+on its May-2026 key** (empty account — rotate when convenient). ~~Supabase MFA~~ done. Revoke personal access tokens at
+<https://supabase.com/dashboard/account/tokens>; confirm you are the only member at
+<https://supabase.com/dashboard/org/_/team>. ~~`withdrawals_enabled`~~ back to `true` 12 Nov 07:46Z. Breach
+notification: decided not required.
+
+**Developer follow-ups — done 12 Nov (SDD v0.6.212).** 64 `authenticated`-callable RPCs guarded via
+`tools/audit_rpc_guards.py` (`assert_org_admin` / `assert_customer_access` / `assert_partner`); `app_secrets` and
+`get_secret` dropped; `call_edge` reads Vault and no longer logs bearer tokens; 2,114 `invoker_logs` rows scrubbed.
+Re-run `.\tools\with-secrets.ps1 python tools\audit_rpc_guards.py` after any migration that adds functions — it must
+report only the 6 public-website RPCs.
+
+**New rules.** Never store a key in a table a SECURITY DEFINER function can read for `anon`/`authenticated`. Every new
+SECURITY DEFINER function gets `revoke execute … from public, anon` in the same migration unless the website needs it.
+Check the Dashboard → Logs → API for `Python-urllib` / non-Deno user-agents using an `sb_secret_*` prefix — that is
+never legitimate.
+
+---
+
 ## 6. If it happens again — 10-minute containment checklist
 
 1. VALR → Profile → Security → **Block account** (or phone VALR). Cancel pending withdrawals.

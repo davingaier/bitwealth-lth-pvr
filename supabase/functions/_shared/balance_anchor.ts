@@ -49,9 +49,8 @@ export async function computeAnchoredBalance(
   if (!anchor) {
     // Seed from the latest CLOSED day (date < dateStr) so same-day activity is
     // always captured by the delta window (trade_date > anchor_date). An anchor
-    // dated ON dateStr would exclude that day's own ledger lines. Fall back to
-    // the earliest row only for brand-new customers whose sole history is the
-    // current date.
+    // dated ON dateStr would exclude that day's own ledger lines. Brand-new
+    // customers (no closed day yet) get a zero anchor the day before inception.
     let seedRow: SeedRow | null = null;
     {
       const { data } = await sb
@@ -66,17 +65,36 @@ export async function computeAnchoredBalance(
       seedRow = (data as SeedRow) ?? null;
     }
     if (!seedRow) {
-      const { data } = await sb
+      // Brand-new customer: their ledger is complete from inception, so anchor at
+      // ZERO on the day BEFORE their first ledger/balance row. Seeding from the
+      // first balance row ON that date excluded every later same-day line
+      // (customer 65, 2026-11-11: the 21:00Z ZAR→USDT conversion never reached
+      // balances_daily, so the STH_CB join saw no cash).
+      const { data: firstLine } = await sb
+        .from("ledger_lines")
+        .select("trade_date")
+        .eq("org_id", org_id)
+        .eq("customer_id", customer_id)
+        .order("trade_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const { data: firstBal } = await sb
         .from("balances_daily")
-        .select("date, btc_balance, usdt_balance, usdpc_balance, zar_balance, cost_basis_usd")
+        .select("date")
         .eq("org_id", org_id)
         .eq("customer_id", customer_id)
         .order("date", { ascending: true })
         .limit(1)
         .maybeSingle();
-      seedRow = (data as SeedRow) ?? null;
+      const firstDate = [firstLine?.trade_date, firstBal?.date].filter((d): d is string => typeof d === "string").sort()[0];
+      if (!firstDate) return null; // nothing to anchor to yet
+      const dayBefore = new Date(`${firstDate}T00:00:00Z`);
+      dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+      seedRow = {
+        date: dayBefore.toISOString().slice(0, 10),
+        btc_balance: 0, usdt_balance: 0, usdpc_balance: 0, zar_balance: 0, cost_basis_usd: 0,
+      };
     }
-    if (!seedRow) return null; // nothing to anchor to yet
 
     const seed = {
       org_id,

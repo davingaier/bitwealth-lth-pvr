@@ -411,3 +411,14 @@ Observations for refinement discussion:
 | NE-03 | Past BUY/SELL rows back-filled as notified | next run cannot re-send for old dates | 5/5 rows `notified_at` set | PASS |
 | NE-04 | Order `error` outcome | ops alert, no client email, `notify_skipped=order_error` | code path; exercised by tomorrow's run if 49's order fails again | PENDING |
 | NE-05 | Same decision re-planned next day, order not executed | `retry` alert, no client email | code path; expected for 49 on 2026-11-07 | PENDING |
+
+### First-deposit join (customer 65, 2026-11-12) — SDD v0.6.210
+
+| ID | Scenario | Expected | Actual | Status |
+|----|----------|----------|--------|--------|
+| FD-01 | New customer: ZAR deposit 18:00Z, ZAR→USDT fill 21:00Z same day | `balances_daily` for that day shows USDT credit | USDT 0 / ZAR 10,000 — anchor seeded ON the first day excluded same-day lines | ROOT CAUSE → fixed (`balance_anchor.ts` zero anchor day before inception) |
+| FD-02 | Sweep runs before the STH_CB decision for a customer with fresh USDT | USDT left for the join | 596 USDT swept into USDPC 11 s before the BUY decision | ROOT CAUSE → fixed (sweep skips STH_CB customers without today's decision / BUY without intent) |
+| FD-03 | Re-anchor 65 at 2026-11-10 zero + re-roll 11-11..12 | USDT 0.01 / USDPC 494.91 = VALR | USDT 0.0115 / USDPC 494.914 / ZAR 0 | PASS |
+| FD-04 | `ef_sth_cb_generate_decisions {customer_ids:[65]}` after re-roll | BUY join → USDPC→USDT → BTC; one email only | 1 conversion chunk (494.91 → 593.32 USDT), LIMIT 0.001 + MARKET 0.00696307 BTC; `already_notified` | PASS |
+| FD-05 | LIMIT partially filled then cancelled by 5-min fallback | partial fill booked | 0.001 BTC unbooked (poster filtered `order_status='filled'`) → fixed, re-posted; ledger 0.0079568 BTC vs VALR 0.0079561 (maker fee dust) | PASS |
+| FD-06 | Re-run `ef_sth_cb_generate_decisions` same day | no second email | `#65: already notified` | PASS |

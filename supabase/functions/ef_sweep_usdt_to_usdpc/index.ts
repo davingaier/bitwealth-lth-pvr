@@ -86,7 +86,7 @@ Deno.serve(async (req: Request) => {
   let csQuery = sb
     .schema("public")
     .from("customer_strategies")
-    .select("customer_id")
+    .select("customer_id, strategy_code")
     .eq("org_id", org_id)
     .in("strategy_code", ["LTH_PVR", "STH_CB"])
     .eq("usdpc_enabled", true)
@@ -100,6 +100,23 @@ Deno.serve(async (req: Request) => {
     return new Response(csErr.message, { status: 500, headers: CORS });
   }
   const enabledIds = Array.from(new Set((csRows ?? []).map((r: any) => Number(r.customer_id))));
+  const sthCbIds = new Set((csRows ?? []).filter((r: any) => r.strategy_code === "STH_CB").map((r: any) => Number(r.customer_id)));
+
+  // 2026-11-12: the sweep runs as the tail of the LTH PVR pipeline (~00:20Z), i.e. BEFORE the STH_CB decision run.
+  // An STH_CB customer whose decision for today does not exist yet may be about to deploy that USDT (customer 65's
+  // first deposit was swept into USDPC 11 s before her all-in join decision). Sweep STH_CB cash only once today's
+  // decision exists, and never when that decision is a BUY that produced no BTC buy intent (e.g. intent sizing failed).
+  const sthCbDecisionToday = new Map<number, string>();
+  if (sthCbIds.size > 0 && !force) {
+    const { data: decRows } = await sb
+      .schema("sth_cb")
+      .from("decisions_daily")
+      .select("customer_id, action")
+      .eq("org_id", org_id)
+      .eq("trade_date", todayStr)
+      .in("customer_id", Array.from(sthCbIds));
+    for (const r of (decRows ?? []) as any[]) sthCbDecisionToday.set(Number(r.customer_id), String(r.action ?? ""));
+  }
   if (enabledIds.length === 0) {
     return new Response(JSON.stringify({ success: true, created: 0, skipped: 0, target_customer_id: targetCustomerId, force }), {
       headers: { "Content-Type": "application/json", ...CORS },
@@ -207,6 +224,29 @@ Deno.serve(async (req: Request) => {
       if (effectiveUsdt < cfg.minOrderUsdt) {
         skipped++;
         continue;
+      }
+
+      if (sthCbIds.has(customer_id) && !force) {
+        const action = sthCbDecisionToday.get(customer_id);
+        let holdOff: string | null = null;
+        if (action === undefined) {
+          holdOff = "no STH_CB decision for today yet";
+        } else if (action === "BUY") {
+          const { data: btcBuy } = await sb
+            .from("order_intents")
+            .select("intent_id")
+            .eq("customer_id", customer_id)
+            .eq("trade_date", todayStr)
+            .eq("pair", "BTC/USDT")
+            .eq("side", "BUY")
+            .limit(1);
+          if (!btcBuy?.length) holdOff = "today's STH_CB decision is BUY but no BTC buy intent exists";
+        }
+        if (holdOff) {
+          console.log(`sweep: customer ${customer_id} — ${holdOff}; not sweeping ${effectiveUsdt.toFixed(2)} USDT`);
+          skipped++;
+          continue;
+        }
       }
 
       const sweepUsdt = Math.floor(effectiveUsdt * 100) / 100;

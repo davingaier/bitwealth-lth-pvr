@@ -3,11 +3,69 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-11 (v0.6.209)
+**Last updated:** 2026-11-12 (v0.6.212)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.212 – Post-incident hardening: 64 RPCs guarded, `app_secrets`/`get_secret` retired, `call_edge` on Vault
+**Date:** 2026-11-12 · **Status:** ✅ Applied + verified · Tool: `tools/audit_rpc_guards.py`
+
+Follow-ups from v0.6.211. (1) **RPC guards** — `tools/audit_rpc_guards.py` lists every SECURITY DEFINER function
+callable by `authenticated` whose body has no identity check and, with `--apply`, guards it and writes
+`20261112_guard_authenticated_rpcs.sql`. Three reusable guards: `public.assert_org_admin()` (admin/owner, or
+service/cron caller), `public.assert_customer_access(cust_id)` (the customer themself — JWT **email** ↔
+`customer_details.email` or `app_metadata.customer_id`; `user_metadata.customer_id` is deliberately NOT trusted because a
+user can rewrite it — or admin/service), `public.assert_partner()`. plpgsql bodies get `PERFORM <guard>;` after their
+first BEGIN; SQL-language functions are renamed `<name>__core` (browser EXECUTE revoked) behind a plpgsql wrapper with
+the identical signature (+ explicit `GRANT … TO authenticated, service_role`). 64 guarded (38 patched, 26 wrapped);
+only the 6 public-website RPCs remain open. Verified with a dev customer session (54): own data 200, customer 49's data
+403, admin/partner RPCs 403; service role 200. (2) **Secrets out of tables** — `lth_pvr.call_edge` read its bearer from
+`lth_pvr.settings.ef_auth_header` (the attacker read `settings` 8×) and logged the full Authorization header into
+`lth_pvr.invoker_logs` (2,114 rows held live tokens). It now reads Vault (`ef_auth_header`, `ef_base_url`), sends the
+key in `apikey` too, logs redacted headers; the settings row is deleted, historical log headers scrubbed, browser roles
+revoked on `invoker_logs`. Cron `real-txs-sync-valr-daily` moved from `public.get_secret()` to `call_edge`;
+`public.get_secret(text)` and `private.app_secrets` dropped (`20261112_retire_app_secrets_vault_call_edge.sql`).
+(3) Withdrawals re-enabled after VALR keys for master/49/9 were re-issued (06:21–07:40Z); customer 56's key is still the
+May-2026 one (empty account) — rotate when convenient.
+
+### v0.6.211 – 🔴 Security incident #2 (2026-11-11 15:35–16:04Z): secret key read via anon-callable `get_secret`
+**Date:** 2026-11-12 · **Status:** ✅ Contained, key rotated, lockdown migration applied · Runbook §6a
+
+A Python client behind a Barcelona VPN exit (`130.195.250.94`) called `public.get_secret('service_jwt')` with only the
+publishable key and received the edge-function secret key (`get_secret` was SECURITY DEFINER with EXECUTE for `anon`;
+`private.app_secrets.service_jwt` held the key). It then read VALR credentials for API-model customers 9/49/56
+(`get_customer_valr_credentials` ×3), listed `auth/v1/admin/users`, **generated recovery links and logged in as the org
+owner and as customer 49**, read settings/allow-list/withdrawal requests/dashboard metrics, had `valr_sign` produce 39
+signatures (incl. BTC & USDT `/withdraw` for master, 49, 56; address-book; api-keys/current), ran the VALR balance
+finalizer, and attempted `POST withdrawal_allowlist` (RLS 403). Same actor key-sprayed from France at 00:57Z 12 Nov.
+Nothing moved: master/49/56/999/65 show 0 VALR transactions in the window (trade-only keys, no withdraw keys); no
+table rows changed. Attribution ruled out the operator and Copilot (local Python is 3.13; no session activity 00–20Z).
+
+Response: attacker sessions deleted; `get_secret` → service_role only; withdrawals kill-switch off; new secret key
+(Infisical → Vault ×4 + `app_secrets.service_jwt` + edge `SB_SECRET_KEY`; stale `SB_SERVICE_ROLE_KEY` removed; old key
+deleted — platform `SUPABASE_SECRET_KEYS` updated itself); all 18 sessions / 176 refresh tokens revoked;
+`20261112_incident_get_secret_lockdown.sql` revoked `anon` EXECUTE on 124 unguarded SECURITY DEFINER functions
+(website allow-list of 6 kept) and `authenticated` on plumbing (`lth_pvr.call_edge` etc. — the attacker tried
+`rpc/call_edge` and only missed the schema profile). Open for the operator: re-issue VALR keys 9/49/56, Supabase MFA /
+PAT revoke, re-enable withdrawals, breach-notification decision. Open for dev: `authenticated` callers of admin RPCs
+without `is_org_admin()` checks; retire `app_secrets`/`get_secret`.
+
+### v0.6.210 – Customer 65 not all-in after first deposit: anchor-on-first-day bug + sweep-before-decision race
+**Date:** 2026-11-12 · **Status:** ✅ Fixed, deployed, 65 fully invested (0.0079568 BTC = VALR)
+
+Three defects lined up. (1) `_shared/balance_anchor.ts` seeded a brand-new customer's anchor **on** their first
+balance day (ZAR 10,000 / USDT 0 at 18:00Z), and the anchor formula only applies lines with `trade_date > anchor_date`,
+so the 21:00Z ZAR→USDT credit never reached `balances_daily` — the 00:20Z join saw cash −$2.84 → "below minimum".
+Fixed: new customers get a zero anchor dated the day before inception. (2) The USDPC sweep runs as the tail of the LTH
+pipeline (`ef_resume_pipeline`), 11 s before the STH_CB decision chain, and swept the 596 USDT into USDPC. Fixed:
+`ef_sweep_usdt_to_usdpc` skips STH_CB customers until today's `sth_cb.decisions_daily` row exists, and when that
+decision is BUY with no BTC buy intent. (3) `ef_post_ledger_and_balances` booked fills only for `order_status='filled'`;
+the join's LIMIT partially filled 0.001 BTC before the 5-min MARKET fallback cancelled it → unbooked. Fixed: fills on
+`cancelled` orders are booked too (price-0 ghosts still skipped). Data: 65's anchor re-seeded to 2026-11-10/zero,
+11-11..12 re-rolled, join re-run (`ef_sth_cb_generate_decisions {customer_ids:[65]}`) → USDPC→USDT 1 chunk, LIMIT
+0.001 + MARKET 0.00696307 BTC; no duplicate e-mail (`already_notified`).
 
 ### v0.6.209 – Customer 65 first deposit: activation never set the legacy `customer_status` flag
 **Date:** 2026-11-11 · **Status:** ✅ Fixed + back-filled

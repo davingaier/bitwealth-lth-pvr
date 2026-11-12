@@ -129,7 +129,9 @@ Deno.serve(async (req: Request) => {
         "fee_asset, fee_qty, intent_id, base_asset, quote_asset",
       )
       .eq("org_id", org_id)
-      .eq("order_status", "filled")
+      // 2026-11-12: a LIMIT that partially fills before the 5-minute MARKET fallback cancels it is left `cancelled`
+      // but its fills are real trades (customer 65's 0.001 BTC went unbooked). Price-0 ghosts are skipped below.
+      .in("order_status", ["filled", "cancelled"])
       .gte("trade_date", fromDate)
       .lte("trade_date", toDate);
 
