@@ -28,7 +28,14 @@ key in `apikey` too, logs redacted headers; the settings row is deleted, histori
 revoked on `invoker_logs`. Cron `real-txs-sync-valr-daily` moved from `public.get_secret()` to `call_edge`;
 `public.get_secret(text)` and `private.app_secrets` dropped (`20261112_retire_app_secrets_vault_call_edge.sql`).
 (3) Withdrawals re-enabled after VALR keys for master/49/9 were re-issued (06:21–07:40Z); customer 56's key is still the
-May-2026 one (empty account) — rotate when convenient.
+May-2026 one (empty account) — rotate when convenient. (4) **Regression found by the portal (08:22Z):** the lockdown's
+`REVOKE … FROM PUBLIC` also removed the *implicit* `authenticated` grant on functions that had never been granted
+explicitly; 59 lost it, 4 of them browser-facing (`lth_pvr.get_withdrawable_balance`, `lth_pvr.get_customer_performance_data`,
+`lth_pvr.get_annual_fee_accruals`, `sth_cb.get_customer_pipeline_status`) → portal 403s in Admin Preview.
+`20261112_regrant_browser_rpcs.sql` re-grants them, `20261112_guard_authenticated_rpcs_2.sql` guards them; the other 55
+are cron/trigger/service plumbing and stay service-only. Sweep of all 79 RPC names referenced by the portal, website
+and Admin UI: every one is executable by `authenticated` again. Lesson folded into `tools/audit_rpc_guards.py`
+(wrappers now `GRANT … TO authenticated, service_role` explicitly; migration files are never overwritten).
 
 ### v0.6.211 – 🔴 Security incident #2 (2026-11-11 15:35–16:04Z): secret key read via anon-callable `get_secret`
 **Date:** 2026-11-12 · **Status:** ✅ Contained, key rotated, lockdown migration applied · Runbook §6a
