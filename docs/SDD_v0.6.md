@@ -3,11 +3,41 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-12 (v0.6.212)
+**Last updated:** 2026-11-12 (v0.6.213)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.213 – Security-advisor sweep: 61 errors → 0; anon stripped from all tables; views → security_invoker; 42 open RLS policies closed
+**Date:** 2026-11-12 · **Status:** ✅ Applied + regression-tested (admin / anon / customer sessions) · Migration `20261112_advisor_hardening_phase3.sql`
+
+Davin re-ran the Supabase security advisor after the incident fixes: 61 errors / 300 warnings / 45 info. Triage by real
+exposure found several holes worse than the RPC ones: **`public.wallet_config` (our BTC/USDT destination addresses),
+`ai_agent_config`, `alert_triage_*`, `customer_fee_plan_history` were fully writable by `anon`** (no RLS, ALL grants);
+17 `public.*` SECURITY DEFINER views (customer performance, KYC completeness, exchange balances) were anon-readable;
+the `lth_pvr.exchange_accounts` compatibility view was anon-updatable; `lth_pvr.rb_api_token` was readable by any
+logged-in customer; every `lth_pvr.v_*` view let any customer read every customer's decisions/fills/portfolios; and —
+invisible to the advisor — **42 RLS policies for `authenticated` were `USING (true)`**, so any customer could read *and
+update* `lth_pvr.settings` (incl. `ef_base_url`, i.e. redirect `call_edge` and its bearer to a hostile host),
+`alert_events`, `exchange_daily_balances`, `real_exchange_txs`, `strategies`, …
+
+Fix (all data-driven so it covers objects added later): (A) `anon` loses every table/view/sequence privilege in
+`public/lth_pvr/sth_cb/lth_pvr_bt/sth_cb_bt/fic` + default privileges for future objects + EXECUTE on all but the 6
+public-website RPCs — the website only uses edge functions and those 6; (B) RLS enabled on the 22 unprotected tables
+with an `admin_all` policy (`is_any_org_admin()`), `rb_api_token` with no browser policy at all; (C) all 38 views
+`security_invoker = true`, with an additive `admin_read_all` SELECT policy (+ grant) on each of the 44 base relations
+so the Admin UI keeps working while customers/anon now see nothing through them; (D) `search_path` pinned to
+`<own schema>, public, extensions` on every postgres-owned function (19 `http`-extension helpers owned by
+`supabase_admin` cannot be altered); (E) the 42 unconditional policies rewritten to `is_any_org_admin()` per command
+type. Tests: temp admin session (dev user given a temporary `org_members` row, removed afterwards) reads all Admin UI
+views/tables + dashboard RPC = 200; anon on tables/views = 401, marketing-chart RPC = 200; customer sees only own
+`customer_details`, empty `settings`/views, `PATCH settings` = 403, token table = 403; 13 cron SQL functions, the VALR
+signer, `call_edge`, and the main edge functions all pass. Advisor after: **0 errors**; remaining warnings = 117
+"authenticated can execute SECURITY DEFINER" (all now carry identity checks), the 6 intended anon RPCs, 19 extension
+functions, `http` extension in `public`, and *leaked-password protection* (dashboard toggle for Davin). Side fix:
+`get_customer_strategy_state` raised 55000 for LTH_PVR customers (unassigned `v_sig`) —
+`20261112_fix_get_customer_strategy_state_lth.sql`.
 
 ### v0.6.212 – Post-incident hardening: 64 RPCs guarded, `app_secrets`/`get_secret` retired, `call_edge` on Vault
 **Date:** 2026-11-12 · **Status:** ✅ Applied + verified · Tool: `tools/audit_rpc_guards.py`

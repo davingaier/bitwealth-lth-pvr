@@ -198,6 +198,14 @@ notification: decided not required.
 Re-run `.\tools\with-secrets.ps1 python tools\audit_rpc_guards.py` after any migration that adds functions — it must
 report only the 6 public-website RPCs.
 
+**Advisor sweep — done 12 Nov (SDD v0.6.213).** `20261112_advisor_hardening_phase3.sql`: anon stripped from every
+table/view/sequence (and future ones), RLS on all tables, all views `security_invoker`, `search_path` pinned, 42
+`USING (true)` policies closed to admins. Advisor: 0 errors. **One toggle left for you:** Dashboard → Authentication →
+Providers → Email → enable *"Prevent use of leaked passwords"* (HaveIBeenPwned check). Rules going forward: new
+tables get RLS + an explicit policy in the same migration; views are created `with (security_invoker = true)`; never
+write a policy with `USING (true)` for `authenticated` — use `public.is_any_org_admin()` or an identity predicate; the
+public website gets nothing but edge functions and the 6 allow-listed RPCs.
+
 **New rules.** Never store a key in a table a SECURITY DEFINER function can read for `anon`/`authenticated`. Every new
 SECURITY DEFINER function gets `revoke execute … from public, anon` in the same migration unless the website needs it.
 Check the Dashboard → Logs → API for `Python-urllib` / non-Deno user-agents using an `sb_secret_*` prefix — that is
