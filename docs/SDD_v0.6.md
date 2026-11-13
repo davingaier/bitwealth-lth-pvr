@@ -28,6 +28,9 @@ BUY/SELL decisions that were skipped as `order_error` once the order has actuall
 Outcome: 999 35,849.84 USDT · 49 113,236.01 USDT (avg ≈ 68,513 vs 71,103 at 01:00 — the ~3.6 % delay cost of the
 rejection) · 65 551.02 USDT; all = VALR. Note for large accounts: a single MARKET order above roughly 1 BTC trips the
 slippage band; the re-queue loop now handles it, but a chunked MARKET sell (like the USDPC path) would be cleaner.
+UI: the On-Chain Charts tracker card derived "tomorrow" from `target_alloc` (allocation *after* the day's fill) and
+therefore read "Hold" on the very day a signal fired; it now uses `signal_target_alloc`, leads with **"Pending signal
+→ next trading day: SELL ALL at next open"** (red/green), and shows "Position held … as of <date> close" second.
 
 ### v0.6.213 – Security-advisor sweep: 61 errors → 0; anon stripped from all tables; views → security_invoker; 42 open RLS policies closed
 **Date:** 2026-11-12 · **Status:** ✅ Applied + regression-tested (admin / anon / customer sessions) · Migration `20261112_advisor_hardening_phase3.sql`

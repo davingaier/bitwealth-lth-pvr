@@ -6592,11 +6592,16 @@
         const inMkt = last.position_state !== 'cash';
         // v2 ladders hold a partial BTC allocation inside a trend/cap hold — compare held vs target allocation
         const heldAlloc = Number(last.nav_usd) > 0 ? Number(last.btc_balance) * price / Number(last.nav_usd) : (inMkt ? 1 : 0);
-        const targetAlloc = last.target_alloc == null ? (last.signal_in_market ? 1 : 0) : Number(last.target_alloc);
+        // The instruction for the NEXT trading day is signal_target_alloc (target_alloc is the allocation AFTER the
+        // fill on `last.date`, so comparing it to heldAlloc always reads "Hold" on the day a signal fires — 2026-11-13
+        // the card said "Hold" while every live client was executing the R3 trend-exit sell).
+        const targetAlloc = last.signal_target_alloc != null ? Number(last.signal_target_alloc)
+          : last.target_alloc != null ? Number(last.target_alloc) : (last.signal_in_market ? 1 : 0);
         const allocDiff = targetAlloc - heldAlloc;
-        const tomorrow = Math.abs(allocDiff) < 0.02 ? 'Hold'
-          : targetAlloc === 0 ? 'SELL at next close'
-          : heldAlloc < 0.02 ? 'BUY at next close'
+        const pending = Math.abs(allocDiff) >= 0.02;
+        const tomorrow = !pending ? 'Hold'
+          : targetAlloc === 0 ? 'SELL ALL at next open'
+          : heldAlloc < 0.02 ? 'BUY ALL at next open'
           : allocDiff < 0 ? `SCALE OUT to ${Math.round(targetAlloc * 100)}% BTC` : `RE-BUY to ${Math.round(targetAlloc * 100)}% BTC`;
         const ladder = Array.isArray(x.lthSellTiers) && x.lthSellTiers.length ? x.lthSellTiers : null;
         const ladderTxt = ladder ? ladder.map(t => `+${t.sigma}σ→${Math.round(t.alloc * 100)}%`).join(' · ') : null;
@@ -6605,8 +6610,11 @@
           : [[`Capitulation buy (${Math.round((x.capBuyRatio ?? .7) * 100)}%)`, cbv * (x.capBuyRatio ?? .7), true], ['LTH −0.5σ buy', Number(last.lth_m050), true], [`Trend entry (${Math.round((x.trendEnterRatio ?? 1.05) * 100)}%)`, cbv * (x.trendEnterRatio ?? 1.05), true]];
         const tile = (l, v, sub, color) => `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;"><div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">${l}</div><div style="font-size:1.05rem;font-weight:700;color:${color || 'var(--ink)'};">${v}</div>${sub ? `<div style="font-size:.72rem;color:var(--muted);">${sub}</div>` : ''}</div>`;
         statusEl.innerHTML = [
-          tile('Position held', held[0] + (inMkt && heldAlloc < 0.98 ? ` · ${Math.round(heldAlloc * 100)}% BTC` : ''), `${daysInPos != null ? daysInPos + ' days' : ''}${sinceEntry != null ? ' · ' + pct(sinceEntry) + ' since entry' : ''}`, held[1]),
-          tile('Latest close → tomorrow', tomorrow, `${last.date} · signal: ${last.signal_rule || '–'}`, tomorrow === 'Hold' ? 'var(--ink)' : '#FFB400'),
+          tile(pending ? 'Pending signal → next trading day' : 'Signal at latest close',
+               tomorrow,
+               `${last.date} close · ${last.signal_rule || '–'}${pending ? ' · executes on the next pipeline run' : ''}`,
+               pending ? (targetAlloc < heldAlloc ? '#ef4444' : '#22c55e') : 'var(--ink)'),
+          tile('Position held', held[0] + (inMkt && heldAlloc < 0.98 ? ` · ${Math.round(heldAlloc * 100)}% BTC` : ''), `${daysInPos != null ? daysInPos + ' days' : ''}${sinceEntry != null ? ' · ' + pct(sinceEntry) + ' since entry' : ''}${pending ? ' · as of ' + last.date + ' close' : ''}`, held[1]),
           tile('BTC vs STH cost basis', `${Math.round(ratio * 100)}%`, `${usd(price)} vs ${usd(cbv)}`),
           ...(ladderTxt && inMkt ? [tile('Scale-out ladder (LTH PVR σ)', ladderTxt, `${x.lthSellMomoGate ? 'momentum-gated · ' : ''}re-buy ${x.dipRebuyPct ? '−' + Math.round(x.dipRebuyPct * 100) + '% dip' : ''}${x.dipRebuyAtCbRatio ? ' or ≤' + Math.round(x.dipRebuyAtCbRatio * 100) + '% CB' : ''}${x.scaleCooldownDays ? ' · ' + x.scaleCooldownDays + 'd cooldown' : ''}`)] : []),
           ...nextLevels.filter(n => n[2] && Number.isFinite(n[1])).map(n => tile(n[0], usd(n[1]), `${pct(n[1] / price - 1)} from here`)),
