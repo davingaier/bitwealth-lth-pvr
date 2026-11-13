@@ -431,7 +431,7 @@ export async function ensureIdleUsdt(
   sb: SupabaseClient,
   customerId: number,
   requiredUsdt: number,
-  creds: { apiKey: string; apiSecret: string; subaccountId: string | null },
+  creds: { apiKey: string; apiSecret: string; subaccountId: string | null; customerId?: number },
 ): Promise<{ ok: boolean; converted: boolean; usdtReceived?: number; error?: string }> {
   const orgId = Deno.env.get("ORG_ID");
   const testMode = Deno.env.get("VALR_TEST_MODE") === "true";
@@ -448,7 +448,8 @@ export async function ensureIdleUsdt(
   if (!stratRow?.usdpc_enabled) return { ok: true, converted: false };
   if (testMode) return { ok: true, converted: false };
 
-  const requestCreds = { apiKey: creds.apiKey, apiSecret: creds.apiSecret };
+  // customerId must reach the signer so API-model customers sign with their own key (not the master's).
+  const requestCreds = { apiKey: creds.apiKey, apiSecret: creds.apiSecret, customerId: creds.customerId ?? customerId };
   const subId = creds.subaccountId;
 
   // Current idle balances.

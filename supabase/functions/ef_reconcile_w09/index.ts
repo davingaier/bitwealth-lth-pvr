@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       AMOUNT_ZAR,
       false, // fast = false -> standard EFT
       creds.subaccountId,
-      { apiKey: creds.apiKey, apiSecret: creds.apiSecret },
+      { apiKey: creds.apiKey, apiSecret: creds.apiSecret, customerId: creds.customerId ?? CUSTOMER_ID },
     );
 
     const valrWithdrawalId = wdRes?.id ?? wdRes?.withdrawalId ?? wdRes?.transactionId ?? null;

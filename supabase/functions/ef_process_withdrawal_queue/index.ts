@@ -94,7 +94,7 @@ type CustomerCtx = {
   firstName: string;
   bankValrId: string | null;
   withdrawalType: "normal" | "fast";
-  creds: { apiKey: string; apiSecret: string };
+  creds: { apiKey: string; apiSecret: string; customerId?: number };
   subaccountId: string | null;
   partnerCustody: boolean;
 };
@@ -125,11 +125,11 @@ async function loadCustomerCtx(row: Row): Promise<CustomerCtx | null> {
         .single()
     : { data: null };
 
-  let creds: { apiKey: string; apiSecret: string };
+  let creds: { apiKey: string; apiSecret: string; customerId?: number };
   let subaccountId: string | null;
   try {
     const r = await resolveCustomerCredentials(sbLthPvr, row.customer_id);
-    creds = { apiKey: r.apiKey, apiSecret: r.apiSecret };
+    creds = { apiKey: r.apiKey, apiSecret: r.apiSecret, customerId: r.customerId ?? Number(row.customer_id) };
     subaccountId = r.subaccountId;
   } catch (e) {
     await logAlert(sbLthPvr, "ef_process_withdrawal_queue", "error",

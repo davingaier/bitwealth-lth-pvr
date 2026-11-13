@@ -64,6 +64,10 @@ Deno.serve(async (req: Request) => {
   //   with an explicit customer_id to keep the daily run fully idempotent.
   let targetCustomerId: number | null = null;
   let force = false;
+  // chain: run execute → poll → post_ledger after creating intents (used by the hourly cron `usdpc_sweep_hourly`,
+  // 2026-11-13: the only sweep ran at 03:00Z while the USDPC maker was absent, every chunk was rejected and nobody
+  // retried — three clients sat in USDT all day after the trend-exit sells).
+  let chain = false;
   try {
     if (req.headers.get("content-type")?.includes("application/json")) {
       const body = await req.json().catch(() => null);
@@ -72,6 +76,7 @@ Deno.serve(async (req: Request) => {
           targetCustomerId = Number(body.customer_id);
         }
         if (body.force === true) force = true;
+        if (body.chain === true) chain = true;
       }
     }
   } catch (_e) { /* ignore — treat as the default daily run */ }
@@ -169,9 +174,12 @@ Deno.serve(async (req: Request) => {
       let effectiveUsdt = dbUsdt; // default: conservative, ledger-derived basis
       try {
         const creds = await resolveCustomerCredentials(sb, customer_id);
+        // customerId MUST travel with the credentials: the server-side signer picks the customer's own key from it.
+        // Without it the master key is used and an API-model customer's balance reads as the master's (49, 13 Nov).
         const liveBalances = await getAccountBalances(creds.subaccountId, {
           apiKey: creds.apiKey,
           apiSecret: creds.apiSecret,
+          customerId: creds.customerId ?? customer_id,
         });
         // Partner-custody fees awaiting Finova's manual transfer are already charged
         // in the ledger but still physically in the subaccount — never sweep them.
@@ -336,7 +344,7 @@ Deno.serve(async (req: Request) => {
   // no CORS) so the browser only ever calls this one function. The daily pipeline
   // run (no force) skips this — the orchestrator handles the sequence itself.
   let pipeline: Array<{ step: string; ok: boolean; status: number }> | undefined;
-  if (force && created > 0) {
+  if ((force || chain) && created > 0) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = getServiceKey();
     const callEf = async (name: string) => {
@@ -364,7 +372,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force, pipeline }), {
+  return new Response(JSON.stringify({ success: true, created, skipped, target_customer_id: targetCustomerId, force, chain, pipeline }), {
     headers: { "Content-Type": "application/json", ...CORS },
   });
 });

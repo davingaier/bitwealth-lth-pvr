@@ -227,7 +227,7 @@ Deno.serve(async (req: Request)=>{
       continue;
     }
     // Status route says the order is finished → the summary route (fees, executed qty) now works; prefer it.
-    if (last._fromStatusRoute && (/cancel|filled|failed/i.test(String(last.orderStatusType)))) {
+    if (last._fromStatusRoute && (/cancel|expired|filled|failed/i.test(String(last.orderStatusType)))) {
       try {
         const s2 = o.ext_order_id
           ? await getOrderSummaryById(o.ext_order_id, pair, subaccountId, credentials)
@@ -243,7 +243,7 @@ Deno.serve(async (req: Request)=>{
     // trend-exit sell on 2026-11-13 filled 1.0037 and cancelled 0.6504). Book the executed part as a fill; for BTC
     // orders re-open the intent with the remainder so ef_execute_orders places the next order.
     const isConversion = Boolean(o.raw?.usdpc_conversion);
-    const isCancelledStatus = /cancel/i.test(String(valrStatus));
+    const isCancelledStatus = /cancel|expired/i.test(String(valrStatus));   // IOC chunks that outran the book come back "Expired"
     const executedTotal = Number(last.totalExecutedQuantity ?? (Number(last.originalQuantity ?? 0) - Number(last.remainingQuantity ?? last.originalQuantity ?? 0)));
     const partialCancelled = isCancelledStatus && executedTotal > 0;
     if (partialCancelled && !(Number(last.totalExecutedQuantity) > 0)) last = { ...last, totalExecutedQuantity: executedTotal };
@@ -547,10 +547,12 @@ Deno.serve(async (req: Request)=>{
         continue;
       }
       
-      // Update intent status when order is rejected
-      if (newStatus === "rejected" && !isConversion) {
+      // Update intent status when order is rejected (a rejected USDPC *sweep* is also closed as error so it is
+      // visible and the next hourly sweep creates a fresh intent; pre-buy conversions stay owned by the executor)
+      if (newStatus === "rejected" && (!isConversion || o.raw?.reason === "usdpc_sweep")) {
         const { error: intentError } = await supabase.from("order_intents").update({
-          status: "error"
+          status: "error",
+          ...(isConversion ? { note: `sweep rejected by VALR: ${last.failedReason || "unknown"}` } : {}),
         }).eq("intent_id", o.intent_id);
         if (intentError) {
           console.error(`ef_poll_orders: failed to update intent ${o.intent_id} to error`, intentError);

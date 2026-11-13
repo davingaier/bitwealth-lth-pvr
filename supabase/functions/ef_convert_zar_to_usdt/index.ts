@@ -83,11 +83,11 @@ Deno.serve(async (req) => {
   const customerId: number = conv.customer_id;
 
   // ── 2. Resolve customer VALR credentials ───────────────────────────────────
-  let creds: { apiKey: string; apiSecret: string } | null = null;
+  let creds: { apiKey: string; apiSecret: string; customerId?: number } | null = null;
   let subaccountId: string | null = null;
   try {
     const resolved = await resolveCustomerCredentials(sb, customerId);
-    creds = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret };
+    creds = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret, customerId: resolved.customerId ?? customerId };
     subaccountId = resolved.subaccountId;
   } catch (e) {
     await logAlert(sb, "ef_convert_zar_to_usdt", "error", `Credential failure: ${e.message}`, { conversion_id, customerId }, ORG_ID, customerId);

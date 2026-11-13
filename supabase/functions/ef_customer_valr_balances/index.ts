@@ -63,6 +63,7 @@ Deno.serve(async (req: Request) => {
     const raw = await getAccountBalances(creds.subaccountId, {
       apiKey: creds.apiKey,
       apiSecret: creds.apiSecret,
+      customerId: creds.customerId ?? customerId,
     });
 
     // Index by upper-cased currency code.

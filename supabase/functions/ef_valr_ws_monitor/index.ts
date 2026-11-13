@@ -200,7 +200,7 @@ Deno.serve(async (req: Request) => {
         const d: any = msg.data;
         const execQty = Number(d?.executedQuantity ?? d?.totalExecutedQuantity ?? 0)
           || (Array.isArray(msg.data?.fills) ? msg.data.fills.reduce((s: number, f: { quantity?: string }) => s + Number(f?.quantity ?? 0), 0) : 0);
-        const partialCancelled = msg.data.status === "Cancelled" && execQty > 0;
+        const partialCancelled = /cancel|expired/i.test(String(msg.data.status)) && execQty > 0;
         const { error: updateErr } = await supabase
           .from("exchange_orders")
           .update({
@@ -384,10 +384,13 @@ function mapValrStatus(valrStatus: string): string {
     case "Partially Filled":
       return "submitted"; // Keep as submitted until fully filled
     case "Cancelled":
+    case "Expired":
       return "cancelled";
     case "Failed":
       return "failed";
     default:
-      return "submitted";
+      // e.g. "Partially Filled and Cancelled Due To Slippage" — a final state; leave it to the poller's
+      // partial-cancel rule when executed qty > 0 (handled before this map), otherwise it is cancelled.
+      return /cancel|expired/i.test(valrStatus) ? "cancelled" : "submitted";
   }
 }

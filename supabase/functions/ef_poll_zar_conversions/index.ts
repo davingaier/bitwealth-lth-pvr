@@ -47,7 +47,7 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-type Creds = { apiKey: string; apiSecret: string };
+type Creds = { apiKey: string; apiSecret: string; customerId?: number };
 
 interface Conversion {
   id: string;
@@ -336,7 +336,7 @@ Deno.serve(async (req) => {
   for (const conv of (rows ?? []) as Conversion[]) {
     try {
       const resolved = await resolveCustomerCredentials(sb, conv.customer_id);
-      const creds: Creds = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret };
+      const creds: Creds = { apiKey: resolved.apiKey, apiSecret: resolved.apiSecret, customerId: resolved.customerId ?? Number(conv.customer_id) };
       const subaccountId = resolved.subaccountId;
 
       if (conv.status === "limit_placed") {

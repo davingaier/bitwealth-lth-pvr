@@ -3,11 +3,35 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-13 (v0.6.214)
+**Last updated:** 2026-11-13 (v0.6.215)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.215 – USDPC sweep never retried after the trend exit; API-model customers were being read with the MASTER key
+**Date:** 2026-11-13 · **Status:** ✅ Fixed, deployed; 65 and 999 fully in USDPC, 49 ≈ 29k USDPC + 78k USDT (hourly sweep continues)
+
+Davin: "why have the three customers that sold today not been converted to USDPC?" Three causes. (1) **No sweep
+schedule.** `ef_sweep_usdt_to_usdpc` only ran as the tail of the LTH PVR pipeline (00:20Z / 03:00Z resume guard). At
+03:00Z the USDPC maker was absent — all five chunks (999 ×4, 65) were rejected "outside slippage price band" — and the
+intents were marked `executed`, so nothing retried; 49's 113k USDT only arrived at 05:1xZ after the last run. Fix:
+`{"chain":true}` mode (sweep → execute → poll → post_ledger in one call) and cron **`usdpc_sweep_hourly`** (`35 * * * *`,
+`20261113_usdpc_sweep_hourly_cron.sql`); `ef_poll_orders` closes a rejected *sweep* intent as `error` so it is visible.
+(2) **Wrong account for API-model customers.** The sweep (and 7 other call sites: `ef_customer_valr_balances`,
+`ef_convert_zar_to_usdt`, `ef_poll_zar_conversions`, `ef_process_withdrawal_queue`, `ef_revert_withdrawal`,
+`ef_reconcile_w09`, `_shared/valrTransfer.ts ensureIdleUsdt`) rebuilt the credentials object as `{apiKey, apiSecret}`,
+dropping `customerId`; `_shared/valrClient.ts` passes `credentials.customerId` to `lth_pvr.valr_sign`, so a null meant
+**the master key** — harmless for subaccount customers (the sub-account header routes the request) but for 49 the sweep
+read the master's 0.02 USDT and skipped as dust. Explains the 10 Nov "DB 0.04 vs VALR 0.02" warning too. Fixed: every
+site carries `customerId` through. **Rule:** credentials handed to `valrClient`/`valrTransfer` must include
+`customerId` (spread the resolved object; never rebuild it). (3) VALR status **"Expired"** (IOC chunk that outran the
+book after executing) was unmapped → `ef_poll_orders` and `ef_valr_ws_monitor` now treat `/cancel|expired/i` with
+executed qty as a partial fill. Run: 65 551 → 457.05 USDPC; 999 35,849 → 29,748.67 USDPC; 49 12 chunks → 3 filled +
+1 expired-partial = 29,248.30 USDPC for 35,293 USDT, 8 rejected "Unable to fulfill" (ask book exhausted at ~60k) —
+hourly cron takes the remaining 77,943 USDT as the maker refills. Ledger = VALR for all three. Side note: the
+`valr_credential_access` "possible key compromise" alarm at 14:00Z was this manual run (15 customers enumerated by
+the sweep + portal reads, all Deno runtime) — resolved; the detector should learn the sweep's signature.
 
 ### v0.6.214 – First live R3 trend-exit (13 Nov): 49/65 sells rejected for satoshi dust; slippage-band partial on a $114k market sell
 **Date:** 2026-11-13 · **Status:** ✅ Fixed, deployed, all three clients fully in cash, ledger = VALR

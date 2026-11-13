@@ -133,11 +133,11 @@ Deno.serve(async (req) => {
   // a partial sale). On a clean zero-fill state we cancel the VALR order(s)
   // before reverting the HWM snapshot.
   if (wd.status === "converting") {
-    let creds: { apiKey: string; apiSecret: string };
+    let creds: { apiKey: string; apiSecret: string; customerId?: number };
     let subaccountId: string | null;
     try {
       const r = await resolveCustomerCredentials(sb, customerId);
-      creds = { apiKey: r.apiKey, apiSecret: r.apiSecret };
+      creds = { apiKey: r.apiKey, apiSecret: r.apiSecret, customerId: r.customerId ?? customerId };
       subaccountId = r.subaccountId;
     } catch (e) {
       return json({ error: `Could not resolve VALR credentials to verify cancellation: ${(e as Error).message}` }, 500);
