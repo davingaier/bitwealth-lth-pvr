@@ -48,7 +48,10 @@ Deno.serve(async (req) => {
   const tradeDate: string = typeof body?.trade_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.trade_date) ? body.trade_date : isoDate(new Date());
   const signalDate = addDays(tradeDate, -1);
   const dryRun = body?.dry_run === true;
-  const chain = body?.chain !== false && !dryRun;
+  // notify_only: send the position-change email for today's BUY/SELL decisions that were never notified (e.g. the
+  // order was rejected at 01:00 and re-driven manually later). No planning, writing or chaining.
+  const notifyOnly = body?.notify_only === true;
+  const chain = body?.chain !== false && !dryRun && !notifyOnly;
   const onlyCustomers: Set<number> | null = Array.isArray(body?.customer_ids) ? new Set(body.customer_ids.map(Number)) : null;
 
   try {
@@ -92,6 +95,7 @@ Deno.serve(async (req) => {
     const planned: Record<string, unknown>[] = [];
     const actionable: number[] = [];
     for (const c of customers) {
+      if (notifyOnly) break;
       const cid = Number(c.customer_id);
       const key = String(c.config_key ?? DEFAULT_CONFIG_KEY);
       const sig = signals.get(key);
@@ -146,6 +150,17 @@ Deno.serve(async (req) => {
         const cid = Number(r.customer_id);
         if (String(r.trade_date) === tradeDate) priorToday.set(cid, r);
         else if (!priorEarlier.has(cid) && r.action !== "HOLD") priorEarlier.set(cid, r);
+      }
+    }
+    if (notifyOnly) {
+      const { data: rows } = await sb.schema("sth_cb").from("decisions_daily")
+        .select("customer_id, action, rule, amount_pct, current_alloc, target_alloc, notified_at")
+        .eq("org_id", org_id).eq("trade_date", tradeDate).in("customer_id", customers.map((c) => Number(c.customer_id)))
+        .neq("action", "HOLD").is("notified_at", null);
+      for (const r of rows ?? []) {
+        const cid = Number(r.customer_id);
+        planned.push({ customerId: cid, action: r.action, rule: r.rule, amountPct: num(r.amount_pct), currentAlloc: num(r.current_alloc), targetAlloc: num(r.target_alloc) });
+        actionable.push(cid);
       }
     }
     if (!dryRun && decisions.length) {

@@ -227,7 +227,7 @@ Deno.serve(async (req: Request)=>{
       continue;
     }
     // Status route says the order is finished → the summary route (fees, executed qty) now works; prefer it.
-    if (last._fromStatusRoute && ["Filled", "Cancelled", "Failed"].includes(String(last.orderStatusType))) {
+    if (last._fromStatusRoute && (/cancel|filled|failed/i.test(String(last.orderStatusType)))) {
       try {
         const s2 = o.ext_order_id
           ? await getOrderSummaryById(o.ext_order_id, pair, subaccountId, credentials)
@@ -238,15 +238,17 @@ Deno.serve(async (req: Request)=>{
     }
 
     const valrStatus = last.orderStatusType || last.orderStatus || last.status || "";
-    // USDPC conversions are IOC market orders: a chunk that exceeds the market-maker's depth comes back
-    // "Cancelled" with part of it executed. Book the executed part as a fill (2026-11-07: a 103.21 USDPC partial
-    // on a cancelled 32k sell was never posted to the ledger).
+    // Any cancelled-with-executed-qty outcome: IOC USDPC chunks exceeding maker depth ("Cancelled"), and BTC MARKET
+    // orders that hit VALR's slippage band ("Partially Filled and Cancelled Due To Slippage" — customer 49's 1.654 BTC
+    // trend-exit sell on 2026-11-13 filled 1.0037 and cancelled 0.6504). Book the executed part as a fill; for BTC
+    // orders re-open the intent with the remainder so ef_execute_orders places the next order.
     const isConversion = Boolean(o.raw?.usdpc_conversion);
+    const isCancelledStatus = /cancel/i.test(String(valrStatus));
     const executedTotal = Number(last.totalExecutedQuantity ?? (Number(last.originalQuantity ?? 0) - Number(last.remainingQuantity ?? last.originalQuantity ?? 0)));
-    const partialCancelled = isConversion && valrStatus === "Cancelled" && executedTotal > 0;
+    const partialCancelled = isCancelledStatus && executedTotal > 0;
     if (partialCancelled && !(Number(last.totalExecutedQuantity) > 0)) last = { ...last, totalExecutedQuantity: executedTotal };
     let newStatus = o.status ?? "submitted";
-    if (valrStatus === "Cancelled") newStatus = partialCancelled ? "filled" : "cancelled";
+    if (isCancelledStatus) newStatus = partialCancelled ? "filled" : "cancelled";
     else if (valrStatus === "Filled") newStatus = "filled";
     else if (valrStatus === "Failed") newStatus = "rejected";
     else newStatus = "submitted";
@@ -608,6 +610,20 @@ Deno.serve(async (req: Request)=>{
           );
         } else {
           console.log(`ef_poll_orders: created fill record for order ${o.exchange_order_id} (qty=${fillQty}, price=${fillPrice})`);
+          // BTC order partially cancelled (slippage band): hand the unfilled remainder back to the executor as a
+          // pending intent; it re-sizes to the live balance and places the next order with a fresh customerOrderId.
+          if (partialCancelled && !isConversion && String(pair).replace("/", "").toUpperCase() === "BTCUSDT") {
+            const remaining = Math.floor((Number(o.raw?.original_qty ?? o.qty ?? 0) - fillQty) * 1e8) / 1e8;
+            if (remaining > 0.00001) {
+              const { data: intentRow } = await supabase.from("order_intents").select("note").eq("intent_id", o.intent_id).maybeSingle();
+              await supabase.from("order_intents").update({
+                status: "pending",
+                amount: remaining,
+                note: `${intentRow?.note ?? ""} | ${fillQty} filled, ${remaining} re-queued after slippage cancel`.slice(0, 500),
+              }).eq("intent_id", o.intent_id);
+              console.log(`ef_poll_orders: intent ${o.intent_id} re-opened for remaining ${remaining} BTC`);
+            }
+          }
           // ── Mop-up (2026-11-07): the executor sizes buys at 0.999 × USDT so a MARKET fallback can never be rejected
           //    for insufficient balance; the 0.1 % residue is spent here with one small MARKET order (quote amount, so it
           //    cannot exceed the balance) — only for all-in STH_CB targets, only once the intent has no buy pending.

@@ -3,11 +3,31 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-12 (v0.6.213)
+**Last updated:** 2026-11-13 (v0.6.214)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.214 – First live R3 trend-exit (13 Nov): 49/65 sells rejected for satoshi dust; slippage-band partial on a $114k market sell
+**Date:** 2026-11-13 · **Status:** ✅ Fixed, deployed, all three clients fully in cash, ledger = VALR
+
+12 Nov close $71,460 = 94.8 % of STH CB ($75,354) with 2-day ROC −3.17 % ≤ −3 % and CB slope ≤ 0 → **R3 Trend exit**
+(tracker `signal_target_alloc 0`, position still `trend_hold`/`action HOLD` on the 12th because the card shows the
+action already taken that day; the sell executes on the 13th). 01:00Z: 999 sold 0.5045 BTC @ 71,103 (LIMIT filled);
+**49 and 65 were rejected "Insufficient Balance"** — the ledger carried 9 sat (49) and 70 sat (65) more BTC than VALR
+(fee-rounding dust), and VALR rejects a sell for even 1 sat over; 999's ledger had been reconciled to the satoshi on
+8 Nov so hers passed. Fixes: (1) `ef_execute_orders` caps every SELL at the live VALR available BTC (floored 8 dp;
+skips the intent if nothing is there). (2) Re-driving 49 at 04:59Z, the MARKET fallback for 1.654 BTC (~$114k) came
+back **"Partially Filled and Cancelled Due To Slippage"** (1.0037 filled, 0.6504 cancelled by VALR's BTC/USDT slippage
+band) and the poller did not recognise the status. `ef_poll_orders` now treats any `/cancel/i` status with executed
+qty as a partial fill for every pair (not just USDPC conversions), books it, and for BTC re-opens the intent with the
+remainder so the executor places the next order (`-rN` customerOrderId); the remainder filled 0.6504 @ 68,456.
+(3) `ef_sth_cb_generate_decisions {notify_only:true, customer_ids}` sends the position-change e-mail for today's
+BUY/SELL decisions that were skipped as `order_error` once the order has actually executed (49 and 65 e-mailed 05:14Z).
+Outcome: 999 35,849.84 USDT · 49 113,236.01 USDT (avg ≈ 68,513 vs 71,103 at 01:00 — the ~3.6 % delay cost of the
+rejection) · 65 551.02 USDT; all = VALR. Note for large accounts: a single MARKET order above roughly 1 BTC trips the
+slippage band; the re-queue loop now handles it, but a chunked MARKET sell (like the USDPC path) would be cleaner.
 
 ### v0.6.213 – Security-advisor sweep: 61 errors → 0; anon stripped from all tables; views → security_invoker; 42 open RLS policies closed
 **Date:** 2026-11-12 · **Status:** ✅ Applied + regression-tested (admin / anon / customer sessions) · Migration `20261112_advisor_hardening_phase3.sql`

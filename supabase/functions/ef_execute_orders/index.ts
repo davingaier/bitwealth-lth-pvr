@@ -364,6 +364,25 @@ Deno.serve(async ()=>{
           }
         }
       }
+      // ── Cap a SELL to the BTC actually on the account (2026-11-13) ──────────────────────────────────────
+      // The ledger carries a few satoshi more than VALR after fee rounding (49: +9 sat, 65: +70 sat), and VALR
+      // rejects a sell for even 1 sat over "Insufficient Balance" — the R3 trend-exit sells for 49 and 65 failed
+      // while 999 (ledger == VALR) filled. Sell min(ledger qty, live available), floored to 8 dp.
+      if (side === "SELL") {
+        let liveBtc = NaN;
+        try { const bals = await getBalances(subaccountId, credentials); liveBtc = Number(bals["BTC"] ?? 0); } catch (_e) { /* unknown → no cap */ }
+        if (Number.isFinite(liveBtc)) {
+          const maxQty = Math.floor(liveBtc * 1e8) / 1e8;
+          if (maxQty < effQty) {
+            console.log(`SELL ${i.intent_id}: qty capped to live BTC balance: ${effQty} → ${maxQty} BTC`);
+            effQty = maxQty;
+          }
+          if (!(effQty > 0)) {
+            await sb.from("order_intents").update({ status: "skipped", note: `${i.note ?? ""} | no BTC on account to sell`.slice(0, 500) }).eq("intent_id", i.intent_id);
+            continue;
+          }
+        }
+      }
       const qtyStr = effQty.toFixed(8);
       // one VALR customerOrderId per attempt (an intent may need several buys across runs)
       const { count: priorBtcOrders } = await sb.from("exchange_orders").select("exchange_order_id", { count: "exact", head: true }).eq("intent_id", i.intent_id);

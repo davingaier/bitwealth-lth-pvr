@@ -422,3 +422,15 @@ Observations for refinement discussion:
 | FD-04 | `ef_sth_cb_generate_decisions {customer_ids:[65]}` after re-roll | BUY join → USDPC→USDT → BTC; one email only | 1 conversion chunk (494.91 → 593.32 USDT), LIMIT 0.001 + MARKET 0.00696307 BTC; `already_notified` | PASS |
 | FD-05 | LIMIT partially filled then cancelled by 5-min fallback | partial fill booked | 0.001 BTC unbooked (poster filtered `order_status='filled'`) → fixed, re-posted; ledger 0.0079568 BTC vs VALR 0.0079561 (maker fee dust) | PASS |
 | FD-06 | Re-run `ef_sth_cb_generate_decisions` same day | no second email | `#65: already notified` | PASS |
+
+### First live R3 trend exit (2026-11-13) — SDD v0.6.214
+
+| ID | Scenario | Expected | Actual | Status |
+|----|----------|----------|--------|--------|
+| TX-01 | 12 Nov close 94.8 % of CB, ROC2 −3.17 %, CB slope ≤ 0 | R3 Trend exit → SELL 100 % for all live clients on the 13th | 3 SELL decisions written 01:00Z | PASS |
+| TX-02 | SELL qty = ledger BTC when ledger > VALR by satoshi dust | order accepted | 49 (+9 sat) and 65 (+70 sat) rejected "Insufficient Balance"; 999 (exact) filled | ROOT CAUSE → fixed (executor caps SELL to live balance) |
+| TX-03 | Re-driven SELL after fix | accepted for min(ledger, live) | 49 1.65408669, 65 0.00795610 accepted; 65 filled via MARKET fallback @ 68,583 | PASS |
+| TX-04 | MARKET sell of 1.654 BTC (~$114k) | fills | "Partially Filled and Cancelled Due To Slippage": 1.0037 filled, 0.6504 cancelled; poller left it `submitted` | ROOT CAUSE → fixed (any cancelled-with-executed status booked; remainder re-queued) |
+| TX-05 | Remainder re-queued | new order, fills | 0.65042493 LIMIT → MARKET @ 68,456; intent `executed` | PASS |
+| TX-06 | Ledger vs VALR after all fills | equal | 49 113,236.01 / 65 551.02 / 999 35,849.84 USDT, BTC 0 — equal | PASS |
+| TX-07 | Position-change e-mail after recovered order (`notify_only`) | one e-mail each, `notified_at` set | 49 and 65 sent 05:14Z; 999 already sent 01:00Z | PASS |
