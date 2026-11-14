@@ -36,7 +36,7 @@ All emails to Finova go to the nominated address (`bitwealth@finova.co.za`) with
 
 | ID | Who | Steps | Expected result | Result | Notes |
 |---|---|---|---|---|---|
-| PA-01 | BW | Admin → Partners → Partner Portal Logins: create a login for each Finova user (name, email, partner `finova`, role Both) | Each user listed as Active; Admin UI says "They have been emailed a link to set a password"; each user receives a BitWealth invitation email | | |
+| PA-01 | BW | Admin → Partners → Partner Portal Logins: create a login for each Finova user (name, email, partner `finova`, role Both) | Each user listed as Active; Admin UI says "They have been emailed a link to set a password"; each user receives a BitWealth invitation email. *If the person already has a BitWealth login (e.g. a Finova staff member who is also the test client), the Admin UI notes this and the email is a **password-reset** email instead — same link, same next steps; the password and 2FA they set apply to both the partner portal and their customer login* | | |
 | PA-02 | FN | Open the invitation email, click the link and set a password (minimum 12 characters) | Password accepted; user is taken straight to two-factor set-up (QR code) | | |
 | PA-03 | FN | Scan the QR code with the authenticator app and enter the 6-digit code | Enrolment succeeds; portal opens showing tabs Subaccount Requests, Withdrawals, Fee Invoices, Activity Log | | |
 | PA-04 | FN | Log out, log in again and enter a **wrong** 6-digit code | Access refused; a correct code then succeeds | | |

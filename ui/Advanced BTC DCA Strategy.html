@@ -21876,10 +21876,13 @@ self.onmessage = function(e) {
       });
       btn.disabled = false;
       if(!ok || !body.success){ msg(body.error || 'Could not create login.', 'error'); return; }
+      const shared = body.shared_with_customer_id
+        ? ` Note: this email is also BitWealth client #${body.shared_with_customer_id} — it is one login, so the password and 2FA they set here also apply to their customer portal access.`
+        : '';
       msg(body.invite_email_sent
-        ? `Login created for ${email}. They have been emailed a link to set a password.`
-        : `Login created for ${email}, but the invite email failed (${body.invite_error || 'unknown'}). Use "Reset password" to retry.`,
-        body.invite_email_sent ? 'ok' : 'warn');
+        ? `Login created for ${email}. They have been emailed a link to set a password.${shared}`
+        : `Login created for ${email}, but the invite email failed (${body.invite_error || 'unknown'}). Use "Reset password" to retry.${shared}`,
+        body.invite_email_sent ? (shared ? 'warn' : 'ok') : 'warn');
       $('pnNewName').value = ''; $('pnNewEmail').value = '';
       await loadUsers();
     }

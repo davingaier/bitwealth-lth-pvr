@@ -130,14 +130,15 @@ Deno.serve(async (req) => {
     if (orgMemberClash) {
       return json({ error: "This account is a BitWealth org member and cannot also be a partner user." }, 409);
     }
+    // A partner user may also be a BitWealth client (one Auth identity, two roles): partner data needs an
+    // active partner_users row on an aal2 session, client data needs the client's own email, so neither
+    // leaks into the other. We only surface it so the admin knows the password/2FA will be shared.
     const { data: customerClash } = await sb
       .from("customer_details")
       .select("customer_id")
       .ilike("email", email)
       .maybeSingle();
-    if (customerClash) {
-      return json({ error: "This email belongs to a BitWealth client and cannot also be a partner login." }, 409);
-    }
+    const sharedWithCustomerId: number | null = customerClash?.customer_id ?? null;
 
     const { error: upErr } = await sb.from("partner_users").upsert({
       user_id: newUserId,
@@ -163,6 +164,8 @@ Deno.serve(async (req) => {
       email,
       invite_email_sent: !inviteError,
       invite_error: inviteError,
+      existing_auth_user: !!inviteErr,
+      shared_with_customer_id: sharedWithCustomerId,
       message: "Partner user created. They must set a password and enrol two-factor authentication on first login.",
     });
   }
