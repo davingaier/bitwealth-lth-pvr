@@ -272,7 +272,9 @@ document.getElementById('forgotLink').addEventListener('click', async (e) => {
     const email = document.getElementById('email').value.trim().toLowerCase();
     if (!email) { msg('Enter your email address first, then click again.', 'error'); return; }
     const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
-    msg(error ? error.message : 'If that address has partner access, a reset link is on its way.', error ? 'error' : 'success');
+    msg(error
+        ? (/rate limit/i.test(error.message) ? 'Too many reset emails have been sent recently. Please wait an hour or ask BitWealth to send a reset from the admin console.' : error.message)
+        : 'If that address has partner access, a reset link is on its way.', error ? 'error' : 'success');
 });
 
 (async function init() {

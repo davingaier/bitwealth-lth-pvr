@@ -7,11 +7,14 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Deployed with: --no-verify-jwt (Bearer token validated here).
 //
 // Email delivery (2026-11-14): auth.admin.generateLink() only *generates* a link and never
-// sends mail, so invitations/resets silently went nowhere. We now use the Auth endpoints that
-// send through the project's SMTP: inviteUserByEmail() for brand-new users and
-// resetPasswordForEmail() for everyone else. redirectTo must be in Auth → URL Configuration.
+// sends mail, and Auth's own mailer (inviteUserByEmail / resetPasswordForEmail) is rate-limited
+// per project per hour — the third invite of the day failed with "email rate limit exceeded".
+// We therefore generate the recovery link with the admin API (not rate-limited) and send it
+// ourselves through BitWealth's SMTP with the partner email shell. The link still goes through
+// Auth's /verify endpoint, so redirectTo must be in Auth → URL Configuration.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { emailShell, escHtml, sendLoggedEmail } from "../_shared/partnerEmail.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = getServiceKey();
@@ -25,10 +28,45 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
-/** Sends the password-recovery email via Auth's own mailer (works for invited and existing users). */
-async function sendRecoveryEmail(email: string): Promise<string | null> {
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: PARTNER_PORTAL_URL });
-  return error?.message ?? null;
+/**
+ * Generate a one-time set-password link and email it via our own SMTP (bypasses Auth's
+ * per-hour mail quota). `kind` only changes the wording; both land on partner-login.html
+ * with #type=recovery, which runs the TOTP challenge first for enrolled users.
+ */
+async function sendSetPasswordEmail(
+  email: string,
+  fullName: string | null,
+  kind: "invite" | "reset",
+): Promise<string | null> {
+  const { data, error } = await sb.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: { redirectTo: PARTNER_PORTAL_URL },
+  });
+  const link = (data as { properties?: { action_link?: string } } | null)?.properties?.action_link;
+  if (error || !link) return error?.message ?? "Auth did not return a link";
+
+  const name = fullName?.trim() || email;
+  const html = emailShell({
+    title: kind === "invite" ? "Your BitWealth Partner Portal access" : "Reset your Partner Portal password",
+    intro: kind === "invite"
+      ? `Hello ${escHtml(name)}, BitWealth has created a Partner Portal login for you. Click the button below to choose a password; you will then be asked to set up two-factor authentication with an authenticator app (Microsoft/Google Authenticator, Authy).`
+      : `Hello ${escHtml(name)}, a password reset was requested for your BitWealth Partner Portal login. Click the button below, enter your authenticator code, then choose a new password.`,
+    ctaLabel: kind === "invite" ? "Set my password" : "Reset my password",
+    ctaUrl: link,
+    bodyHtml: `<p style="color:#6b7280;font-size:13px;">This link is for ${escHtml(email)} and can be used once. If the button does not work, copy this address into your browser:<br><span style="word-break:break-all;">${escHtml(link)}</span></p>`,
+    footer: kind === "invite"
+      ? "If you were not expecting this, please ignore it — no account is active until a password and two-factor authentication have been set."
+      : "If you did not request a reset, ignore this email; your password is unchanged.",
+  });
+  const sent = await sendLoggedEmail(sb, {
+    to: [email],
+    subject: kind === "invite" ? "BitWealth Partner Portal — set your password" : "BitWealth Partner Portal — password reset",
+    html,
+    templateKey: kind === "invite" ? "partner_user_invite" : "partner_user_password_reset",
+    data: { email },
+  });
+  return sent.success ? null : (sent.error ?? "send failed");
 }
 
 /**
@@ -106,20 +144,22 @@ Deno.serve(async (req) => {
     if (!partnerRow?.is_active) return json({ error: `Unknown or inactive partner '${body.partner_code ?? "finova"}'` }, 400);
     const partnerCode: string = partnerRow.partner_code;
 
-    // Brand-new user: inviteUserByEmail creates the auth user AND sends the invitation.
-    // Existing auth user (re-invite / previously disabled): fall back to a recovery email.
+    // Create the auth user without any email (no mail quota involved). An existing auth user
+    // (re-invite / previously disabled / also a BitWealth client) is simply reused.
     let newUserId: string | undefined;
-    let inviteError: string | null = null;
-    const { data: invited, error: inviteErr } = await sb.auth.admin.inviteUserByEmail(email, {
-      redirectTo: PARTNER_PORTAL_URL,
-      data: { full_name: body.full_name ?? null, partner_code: partnerCode },
+    let existingAuthUser = false;
+    const { data: created, error: createErr } = await sb.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: { full_name: body.full_name ?? null, partner_code: partnerCode },
     });
-    if (!inviteErr && invited?.user?.id) {
-      newUserId = invited.user.id;
+    if (!createErr && created?.user?.id) {
+      newUserId = created.user.id;
     } else {
       const { data: list } = await sb.auth.admin.listUsers({ perPage: 1000 });
       newUserId = list?.users?.find((u) => (u.email ?? "").toLowerCase() === email)?.id;
-      if (!newUserId) return json({ error: `Could not create user: ${inviteErr?.message ?? "unknown error"}` }, 400);
+      if (!newUserId) return json({ error: `Could not create user: ${createErr?.message ?? "unknown error"}` }, 400);
+      existingAuthUser = true;
     }
 
     const { data: orgMemberClash } = await sb
@@ -156,7 +196,7 @@ Deno.serve(async (req) => {
     // Re-enabled / re-invited users may have been banned by a previous "disable".
     await sb.auth.admin.updateUserById(newUserId, { ban_duration: "none" }).catch(() => {});
 
-    if (inviteErr) inviteError = await sendRecoveryEmail(email);
+    const inviteError = await sendSetPasswordEmail(email, body.full_name ?? null, "invite");
 
     return json({
       success: true,
@@ -164,7 +204,7 @@ Deno.serve(async (req) => {
       email,
       invite_email_sent: !inviteError,
       invite_error: inviteError,
-      existing_auth_user: !!inviteErr,
+      existing_auth_user: existingAuthUser,
       shared_with_customer_id: sharedWithCustomerId,
       message: "Partner user created. They must set a password and enrol two-factor authentication on first login.",
     });
@@ -197,7 +237,8 @@ Deno.serve(async (req) => {
 
   if (action === "reset_password") {
     if (!target!.is_active) return json({ error: "This login is disabled — enable it before resetting the password." }, 409);
-    const err = await sendRecoveryEmail(target!.email);
+    const { data: pu } = await sb.from("partner_users").select("full_name").eq("user_id", target!.user_id).maybeSingle();
+    const err = await sendSetPasswordEmail(target!.email, pu?.full_name ?? null, "reset");
     if (err) return json({ error: err }, 400);
     return json({ success: true, message: "Password reset email sent." });
   }
