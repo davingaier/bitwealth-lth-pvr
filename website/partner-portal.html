@@ -10,8 +10,10 @@
     <style>
         body { background:var(--bg-dark); color:var(--text-primary); }
         .pp-header { display:flex; align-items:center; justify-content:space-between; padding:16px 28px; background:var(--bg-card); border-bottom:1px solid rgba(255,255,255,.08); position:sticky; top:0; z-index:20; }
-        .pp-brand { font-size:20px; font-weight:700; background:var(--gradient-gold); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .pp-brand span { display:block; font-size:12px; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary); font-weight:400; }
+        .pp-brand { display:flex; align-items:center; gap:12px; text-decoration:none; }
+        .pp-brand img { height:40px; width:auto; display:block; }
+        .pp-brand-text { font-size:20px; font-weight:700; line-height:1.1; background:var(--gradient-gold); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .pp-brand-text span { display:block; font-size:12px; color:var(--text-secondary); -webkit-text-fill-color:var(--text-secondary); font-weight:400; }
         .pp-user { display:flex; align-items:center; gap:14px; font-size:14px; color:var(--text-secondary); }
         .pp-btn { padding:8px 14px; border-radius:7px; border:1px solid rgba(255,255,255,.15); background:transparent; color:var(--text-primary); cursor:pointer; font-size:13px; }
         .pp-btn:hover { background:rgba(255,255,255,.06); }
@@ -62,7 +64,10 @@
 </head>
 <body>
 <div class="pp-header">
-    <div class="pp-brand">BitWealth<span>Partner Portal</span></div>
+    <a class="pp-brand" href="partner-portal.html">
+        <img src="images/bitwealth_icon_ondark_cropped.png" alt="BitWealth">
+        <div class="pp-brand-text">BitWealth<span>Partner Portal</span></div>
+    </a>
     <div class="pp-user"><span id="ppWho">…</span><button class="pp-btn" id="ppLogout">Log out</button></div>
 </div>
 
