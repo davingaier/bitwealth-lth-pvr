@@ -301,7 +301,10 @@ document.getElementById('forgotLink').addEventListener('click', async (e) => {
     const linkType = hash.get('type');
     if (hash.get('error')) {
         show('loginStep');
-        msg(hash.get('error_description') || 'This link is invalid or has expired. Use "Forgot password?" to request a new one.', 'error');
+        const expired = /expired|invalid/i.test(hash.get('error_code') || hash.get('error_description') || '');
+        msg(expired
+            ? 'This link has expired or has already been used. Only the most recent reset email is valid — request a new one with "Forgot password?" below.'
+            : (hash.get('error_description') || 'This link is invalid or has expired. Use "Forgot password?" to request a new one.'), 'error');
         history.replaceState(null, '', window.location.pathname);
         return;
     }
