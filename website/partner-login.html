@@ -71,6 +71,9 @@
                     <input type="text" id="enrolCode" class="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
                 </div>
                 <button type="submit" id="enrolBtn" class="btn-login">Verify &amp; Continue</button>
+                <p class="hint" style="margin-top:16px;text-align:center;">
+                    <a href="#" class="switchAccount" style="color:var(--gold);">Not you? Use a different account</a>
+                </p>
             </form>
         </div>
 
@@ -83,6 +86,9 @@
                     <input type="text" id="challengeCode" class="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
                 </div>
                 <button type="submit" id="challengeBtn" class="btn-login">Verify</button>
+                <p class="hint" style="margin-top:16px;text-align:center;">
+                    <a href="#" class="switchAccount" style="color:var(--gold);">Not you? Use a different account</a>
+                </p>
             </form>
         </div>
 
@@ -266,6 +272,18 @@ document.getElementById('setPasswordForm').addEventListener('submit', async (e) 
     msg('Password saved.', 'success');
     await routeAfterAuth();
 });
+
+// A stale password-only session (e.g. a previous user on this machine) would otherwise trap
+// the visitor on the 2FA step with no way to the password form or "Forgot password?".
+document.querySelectorAll('.switchAccount').forEach(a => a.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await sb.auth.signOut({ scope: 'local' });
+    pendingPasswordSet = false;
+    enrolFactorId = null;
+    show('loginStep');
+    msg('Signed out. Log in with your own email address.', 'info');
+    document.getElementById('email').focus();
+}));
 
 document.getElementById('forgotLink').addEventListener('click', async (e) => {
     e.preventDefault();
