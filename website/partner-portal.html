@@ -229,6 +229,36 @@ function modalAlert(html, kind) {
     document.getElementById('ppModalAlert').innerHTML = html ? `<div class="alert ${kind||'err'}">${html}</div>` : '';
 }
 
+// A disabled login, a revoked session or a lapsed 2FA level all surface as 401/403 from the RPCs
+// and edge functions. Treat any of them as "access lost": drop the local session and go to login.
+let leaving = false;
+async function accessLost(reason) {
+    if (leaving) return;
+    leaving = true;
+    try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { /* session may already be gone */ }
+    window.location.href = `${LOGIN}#signed_out=${encodeURIComponent(reason || 'access_revoked')}`;
+}
+function isAccessError(err, httpStatus) {
+    if (httpStatus === 401 || httpStatus === 403) return true;
+    if (!err) return false;
+    return err.code === '42501' || err.status === 401 || err.status === 403 ||
+        /partner privileges|two-factor|not an active partner|Unauthenticated|JWT|invalid or expired/i.test(err.message || '');
+}
+// RPC wrapper: redirects on access errors, otherwise returns {data, error} as usual.
+async function partnerRpc(name, args) {
+    const res = await sb.rpc(name, args);
+    if (res.error && isAccessError(res.error)) { await accessLost('access_revoked'); return { data: null, error: res.error, redirected: true }; }
+    return res;
+}
+// Heartbeat: re-confirm the login is still active while the tab is open or when it regains focus.
+async function heartbeat() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return accessLost('session_expired');
+    const { data, error } = await sb.rpc('partner_whoami');
+    const me = Array.isArray(data) ? data[0] : data;
+    if (error || !me) return accessLost('access_revoked');
+}
+
 document.querySelectorAll('.pp-tab').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.pp-tab').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.pp-panel').forEach(p => p.classList.remove('active'));
@@ -246,7 +276,8 @@ document.getElementById('ppLogout').addEventListener('click', async () => {
 
 async function loadRequests() {
     const body = document.getElementById('ppReqBody');
-    const { data, error } = await sb.rpc('partner_list_requests', { p_include_closed: true });
+    const { data, error, redirected } = await partnerRpc('partner_list_requests', { p_include_closed: true });
+    if (redirected) return;
     if (error) { body.innerHTML = `<tr><td colspan="5" class="empty">Could not load requests: ${esc(error.message)}</td></tr>`; return; }
     if (!data || !data.length) { body.innerHTML = '<tr><td colspan="5" class="empty">No subaccount requests.</td></tr>'; return; }
 
@@ -279,9 +310,9 @@ async function loadRequests() {
         const r = data.find(x => x.request_id === b.dataset.relink);
         if (!confirm(`Confirm that ${r.client_name}'s new bank account has been linked to subaccount "${r.suggested_subaccount_name}" in VALR?`)) return;
         b.disabled = true;
-        const { data: res, error } = await sb.rpc('partner_confirm_bank_relink', { p_request_id: r.request_id });
+        const { data: res, error } = await partnerRpc('partner_confirm_bank_relink', { p_request_id: r.request_id });
         if (error || !res?.success) {
-            globalAlert(esc(error?.message || 'Could not confirm the re-link.'), 'err');
+            if (!error || !isAccessError(error)) globalAlert(esc(error?.message || 'Could not confirm the re-link.'), 'err');
             b.disabled = false;
             return;
         }
@@ -333,6 +364,7 @@ document.getElementById('ppSubmitForm').addEventListener('submit', async (e) => 
             }),
         });
         const result = await res.json();
+        if (isAccessError(null, res.status)) { await accessLost('access_revoked'); return; }
         if (!res.ok || !result.success) { modalAlert(esc(result.error || 'Submission failed.'), 'err'); return; }
 
         const warn = (result.warnings || []).length
@@ -352,7 +384,8 @@ const fmtZar = (n) => 'R ' + Number(n || 0).toLocaleString('en-ZA', { minimumFra
 
 async function loadWithdrawals() {
     const body = document.getElementById('ppWdBody');
-    const { data, error } = await sb.rpc('partner_list_withdrawals', { p_include_closed: true });
+    const { data, error, redirected } = await partnerRpc('partner_list_withdrawals', { p_include_closed: true });
+    if (redirected) return;
     if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
     if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No withdrawals awaiting payout.</td></tr>'; return; }
 
@@ -406,6 +439,7 @@ document.getElementById('ppWdForm').addEventListener('submit', async (e) => {
             }),
         });
         const result = await res.json();
+        if (isAccessError(null, res.status)) { await accessLost('access_revoked'); return; }
         if (!res.ok || !result.success) {
             document.getElementById('ppWdAlert').innerHTML = `<div class="alert err">${esc(result.error || 'Failed.')}</div>`;
             return;
@@ -423,7 +457,8 @@ document.getElementById('ppWdForm').addEventListener('submit', async (e) => {
 
 async function loadAudit() {
     const body = document.getElementById('ppAuditBody');
-    const { data, error } = await sb.rpc('partner_list_audit_log', { p_limit: 200 });
+    const { data, error, redirected } = await partnerRpc('partner_list_audit_log', { p_limit: 200 });
+    if (redirected) return;
     if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
     if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No activity recorded yet.</td></tr>'; return; }
     body.innerHTML = data.map(r => `<tr>
@@ -442,7 +477,8 @@ const fmtAmt = (cur, n) => cur === 'BTC'
 
 async function loadInvoices() {
     const body = document.getElementById('ppInvBody');
-    const { data, error } = await sb.rpc('partner_list_invoices');
+    const { data, error, redirected } = await partnerRpc('partner_list_invoices');
+    if (redirected) return;
     if (error) { body.innerHTML = `<tr><td colspan="6" class="empty">Could not load: ${esc(error.message)}</td></tr>`; return; }
     if (!data || !data.length) { body.innerHTML = '<tr><td colspan="6" class="empty">No invoices issued yet.</td></tr>'; return; }
 
@@ -482,9 +518,9 @@ async function loadInvoices() {
         const inv = data.find(x => x.invoice_id === b.dataset.invConfirm);
         if (!confirm(`Confirm that all ${inv.held_line_count} held fee(s) on ${inv.invoice_number} have been transferred from the client subaccounts to Finova's main account?`)) return;
         b.disabled = true;
-        const { data: res, error: e } = await sb.rpc('partner_confirm_invoice_fees', { p_invoice_id: inv.invoice_id });
+        const { data: res, error: e } = await partnerRpc('partner_confirm_invoice_fees', { p_invoice_id: inv.invoice_id });
         if (e || !res?.success) {
-            globalAlert(esc(e?.message || 'Could not confirm.'), 'err');
+            if (!e || !isAccessError(e)) globalAlert(esc(e?.message || 'Could not confirm.'), 'err');
             b.disabled = false;
             return;
         }
@@ -502,10 +538,17 @@ async function loadInvoices() {
 
     const { data: whoami } = await sb.rpc('partner_whoami');
     const me = Array.isArray(whoami) ? whoami[0] : whoami;
-    if (!me) { await sb.auth.signOut({ scope: 'local' }); window.location.href = LOGIN; return; }
+    if (!me) { await accessLost('access_revoked'); return; }
 
     document.getElementById('ppWho').textContent = `${me.full_name || me.email} · ${me.partner_code}`;
     await loadRequests();
+
+    // Re-check access every 60 s and whenever the tab regains focus, so a disabled login is
+    // signed out promptly even if the user is idle. Refresh tokens are already dead at that
+    // point (banned + sessions revoked), so TOKEN_REFRESHED failures also end the session.
+    setInterval(heartbeat, 60_000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
+    sb.auth.onAuthStateChange((event, s) => { if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !s)) accessLost('session_expired'); });
 })();
 </script>
 </body>

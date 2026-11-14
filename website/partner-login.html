@@ -308,6 +308,14 @@ document.getElementById('forgotLink').addEventListener('click', async (e) => {
         history.replaceState(null, '', window.location.pathname);
         return;
     }
+    if (hash.get('signed_out')) {
+        show('loginStep');
+        msg(hash.get('signed_out') === 'session_expired'
+            ? 'Your session has ended. Please log in again.'
+            : 'Your partner portal access has been disabled or your session was revoked. Contact BitWealth if you believe this is a mistake.', 'error');
+        history.replaceState(null, '', window.location.pathname);
+        return;
+    }
     if (linkType === 'recovery' || linkType === 'invite' || linkType === 'magiclink') {
         pendingPasswordSet = true;
         msg('Signing you in…', 'info');

@@ -43,7 +43,7 @@ All emails to Finova go to the nominated address (`bitwealth@finova.co.za`) with
 | PA-05 | FN | Browse to `bitwealth.co.za/partner` | Redirects to the partner login page | | |
 | PA-06 | BW | For one user (already enrolled in 2FA) click **Reset password** | User receives a reset email. On clicking the link they are asked for their **authenticator code first**, then choose a new password, then land in the portal. *Only the most recent reset email is valid — an earlier one shows "This link has expired or has already been used"* | | |
 | PA-07 | BW | For one user click **Reset 2FA** | User is signed out; at next login they must scan a new QR code | | |
-| PA-08 | BW | **Disable** one user while they are logged in, then ask them to click any tab / refresh | User is returned to the login page within seconds; attempting to log in is refused (banned / no partner access). **Enable** restores access and the user logs in normally | | |
+| PA-08 | BW | **Disable** one user while they are logged in, then ask them to click any tab / refresh (or simply wait up to a minute) | User is returned to the login page with "Your partner portal access has been disabled…"; attempting to log in is refused (banned / no partner access). **Enable** restores access and the user logs in normally | | |
 | PA-09 | FN | Review all tabs | Only Finova-custody clients appear. No other BitWealth clients are visible | | |
 | PA-10 | FN | Perform any action, then open **Activity Log** | Each action shows user email, time and IP address | | |
 | PA-11 | FN | On the login page enter your email and click **Forgot password?** | Reset email arrives; same flow as PA-06 (authenticator code, then new password) | | |
