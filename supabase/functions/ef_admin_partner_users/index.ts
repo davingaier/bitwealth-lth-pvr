@@ -96,9 +96,15 @@ Deno.serve(async (req) => {
       return json({ error: `Invalid role '${role}'` }, 400);
     }
 
-    const partnerCode = body.partner_code?.trim() || "finova";
-    const { data: partnerRow } = await sb.from("partners").select("partner_code, is_active").eq("partner_code", partnerCode).maybeSingle();
-    if (!partnerRow?.is_active) return json({ error: `Unknown or inactive partner '${partnerCode}'` }, 400);
+    // Accept the code in any case, or the display name ("Finova"), and normalise to the stored code.
+    const codeInput = (body.partner_code?.trim() || "finova").toLowerCase();
+    const { data: partnerRow } = await sb.from("partners")
+      .select("partner_code, is_active")
+      .or(`partner_code.ilike.${codeInput},display_name.ilike.${codeInput}`)
+      .limit(1)
+      .maybeSingle();
+    if (!partnerRow?.is_active) return json({ error: `Unknown or inactive partner '${body.partner_code ?? "finova"}'` }, 400);
+    const partnerCode: string = partnerRow.partner_code;
 
     // Brand-new user: inviteUserByEmail creates the auth user AND sends the invitation.
     // Existing auth user (re-invite / previously disabled): fall back to a recovery email.
