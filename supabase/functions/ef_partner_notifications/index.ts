@@ -7,9 +7,11 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 //   • Withdrawal handed off (awaiting_partner)     → one email per withdrawal
 //   • Request older than sla_provision_business_days  → one reminder + warn alert
 //   • Withdrawal older than sla_withdrawal_business_days → one reminder + warn alert
+//   • Trades filled in Finova subaccounts (2026-11-14) → ONE email per run listing every
+//     affected client with pair / side / quantity / price / value / fee / timestamp
 //
-// Idempotent: *_email_sent_at / *_reminder_sent_at are only stamped after a
-// successful send, so a failed send is retried on the next run.
+// Idempotent: *_email_sent_at / *_reminder_sent_at / order_fills.partner_notified_at are
+// only stamped after a successful send, so a failed send is retried on the next run.
 //
 // Trigger: pg_cron 'partner_notifications' every 10 minutes (service_jwt).
 // Auth: service role or BitWealth org admin (requireOrgAdmin).
@@ -58,9 +60,30 @@ export function businessDaysSince(fromIso: string, now = new Date()): number {
 
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Johannesburg" }) : "—";
+const fmtDateTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "medium", timeZone: "Africa/Johannesburg" }) + " SAST" : "—";
 const fmtZar = (n: number) =>
   "R " + n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const bd = (n: number) => `${n} business day${n === 1 ? "" : "s"}`;
+
+/** Quantity formatting per asset: BTC to 8 dp, stablecoins/fiat to 2 dp. */
+const fmtQty = (asset: string, n: number) =>
+  `${n.toLocaleString("en-ZA", asset === "BTC"
+    ? { minimumFractionDigits: 8, maximumFractionDigits: 8 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${escHtml(asset)}`;
+
+/** Order-intent reasons are internal shorthand; give Finova readable labels. */
+function describeReason(reason: string | null, pair: string): string {
+  const r = (reason ?? "").trim();
+  if (/^usdpc_sweep$/i.test(r)) return "Idle USDT moved into USDPC (yield)";
+  if (/^usdpc_prebuy_convert$/i.test(r)) return "USDPC converted to USDT to fund a BTC purchase";
+  if (/^market_fallback$/i.test(r)) return "Strategy order (market fallback after limit timeout)";
+  if (/^deploy contribution$/i.test(r)) return "New contribution deployed per strategy";
+  if (/trend exit/i.test(r)) return "Strategy sell signal (trend exit)";
+  if (/^base \d+$/i.test(r)) return "Strategy signal";
+  if (!r) return pair.startsWith("USDPC") ? "USDPC/USDT conversion" : "Strategy order";
+  return r.length > 60 ? r.slice(0, 57) + "…" : r;
+}
 
 type Cust = { customer_id: number; first_names: string | null; last_name: string | null; display_name: string | null; client_type: string | null; account_model: string | null };
 const clientName = (c?: Cust) =>
@@ -97,7 +120,7 @@ Deno.serve(async (req) => {
   if (!partner?.is_active) return json({ success: true, skipped: "partner inactive or not configured" });
 
   const to = partnerRecipients(partner);
-  const summary = { requests_notified: 0, request_reminders: 0, withdrawals_notified: 0, withdrawal_reminders: 0, failures: [] as string[] };
+  const summary = { requests_notified: 0, request_reminders: 0, withdrawals_notified: 0, withdrawal_reminders: 0, trades_notified: 0, trade_clients: 0, failures: [] as string[] };
 
   // ── 1. Subaccount / bank re-link requests ────────────────────────────────
   const { data: reqs, error: reqErr } = await sb.from("subaccount_requests")
@@ -263,6 +286,119 @@ Deno.serve(async (req) => {
         summary.failures.push(`withdrawal reminder ${w.request_id}: ${sent.error}`);
       }
     }
+  }
+
+  // ── 3. Trades executed in the partner's subaccounts ──────────────────────
+  // One email per run covering every un-notified fill for finova_omnibus clients.
+  try {
+    const { data: fills, error: fillErr } = await sb.schema("lth_pvr").from("order_fills")
+      .select("fill_id, exchange_order_id, trade_ts, price, qty, fee_asset, fee_qty, raw, created_at")
+      .is("partner_notified_at", null)
+      .order("trade_ts", { ascending: true })
+      .limit(500);
+    if (fillErr) throw new Error(`fills: ${fillErr.message}`);
+
+    type Fill = { fill_id: string; exchange_order_id: string; trade_ts: string; price: number; qty: number; fee_asset: string | null; fee_qty: number | null; raw: Record<string, unknown> | null; created_at: string };
+    const fillRows = (fills ?? []) as Fill[];
+
+    if (fillRows.length) {
+      const eoIds = [...new Set(fillRows.map((f) => f.exchange_order_id))];
+      const { data: eos } = await sb.schema("lth_pvr").from("exchange_orders")
+        .select("exchange_order_id, intent_id, pair, side, ext_order_id, status").in("exchange_order_id", eoIds);
+      type Eo = { exchange_order_id: string; intent_id: string | null; pair: string; side: string; ext_order_id: string | null; status: string };
+      const eoById = new Map((eos ?? []).map((e: Eo) => [e.exchange_order_id, e]));
+
+      const intentIds = [...new Set((eos ?? []).map((e: Eo) => e.intent_id).filter(Boolean))] as string[];
+      const { data: intents } = intentIds.length
+        ? await sb.schema("lth_pvr").from("order_intents").select("intent_id, customer_id, org_id, reason, trade_date, base_asset, quote_asset").in("intent_id", intentIds)
+        : { data: [] };
+      type Intent = { intent_id: string; customer_id: number; org_id: string; reason: string | null; trade_date: string; base_asset: string | null; quote_asset: string | null };
+      const intentById = new Map((intents ?? []).map((i: Intent) => [i.intent_id, i]));
+
+      const custIds = [...new Set((intents ?? []).map((i: Intent) => i.customer_id))];
+      const tradeCustomers = await loadCustomers(custIds);
+      const tradeLabels = await loadSubaccountLabels(custIds);
+
+      // Fills that cannot be attributed, or belong to non-partner clients, are stamped so they
+      // never re-enter the queue; only partner fills are emailed.
+      const skipIds: string[] = [];
+      const byCustomer = new Map<number, Array<{ f: Fill; eo: Eo; intent: Intent }>>();
+      for (const f of fillRows) {
+        const eo = eoById.get(f.exchange_order_id);
+        const intent = eo?.intent_id ? intentById.get(eo.intent_id) : undefined;
+        const cust = intent ? tradeCustomers.get(intent.customer_id) : undefined;
+        if (!eo || !intent || cust?.account_model !== "finova_omnibus") { skipIds.push(f.fill_id); continue; }
+        if (!byCustomer.has(intent.customer_id)) byCustomer.set(intent.customer_id, []);
+        byCustomer.get(intent.customer_id)!.push({ f, eo, intent });
+      }
+      if (skipIds.length) {
+        await sb.schema("lth_pvr").from("order_fills").update({ partner_notified_at: new Date().toISOString() }).in("fill_id", skipIds);
+      }
+
+      if (byCustomer.size) {
+        const sections: string[] = [];
+        const notifiedIds: string[] = [];
+        let tradeCount = 0;
+        for (const [customerId, items] of byCustomer) {
+          const cust = tradeCustomers.get(customerId);
+          const rows = items.map(({ f, eo, intent }) => {
+            const [base, quote] = eo.pair.includes("/") ? eo.pair.split("/") : [intent.base_asset ?? eo.pair, intent.quote_asset ?? ""];
+            const raw = f.raw ?? {};
+            const avgPrice = Number(raw.averagePrice ?? f.price) || Number(f.price);
+            const value = Number(raw.total) || Number(f.qty) * avgPrice;
+            const orderType = typeof raw.orderType === "string" ? raw.orderType.toUpperCase() : "";
+            notifiedIds.push(f.fill_id);
+            tradeCount++;
+            return `<tr>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;white-space:nowrap;">${fmtDateTime(f.trade_ts)}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;"><strong style="color:${eo.side === "BUY" ? "#059669" : "#dc2626"};">${escHtml(eo.side)}</strong> ${escHtml(eo.pair)}${orderType ? ` <span style="color:#6b7280;font-size:12px;">${escHtml(orderType)}</span>` : ""}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${fmtQty(base, Number(f.qty))}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${avgPrice.toLocaleString("en-ZA", { maximumFractionDigits: 4 })} ${escHtml(quote)}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${fmtQty(quote, value)}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${f.fee_qty != null && f.fee_asset ? fmtQty(f.fee_asset, Number(f.fee_qty)) : "—"}</td>
+              <td style="padding:7px 8px;border-bottom:1px solid #eee;color:#374151;">${escHtml(describeReason(intent.reason, eo.pair))}<div style="color:#9ca3af;font-size:11px;">VALR order ${escHtml((eo.ext_order_id ?? "").slice(0, 8))}…</div></td>
+            </tr>`;
+          }).join("");
+          sections.push(`
+            <h3 style="margin:22px 0 6px;color:#032C48;font-size:15px;">${escHtml(clientName(cust))}
+              <span style="color:#6b7280;font-weight:400;font-size:13px;">· BitWealth client #${customerId} · subaccount
+              <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;">${escHtml(tradeLabels.get(customerId) || "—")}</code></span></h3>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead><tr style="color:#6b7280;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;">
+                <th style="text-align:left;padding:6px 8px;">Executed</th><th style="text-align:left;padding:6px 8px;">Trade</th>
+                <th style="text-align:right;padding:6px 8px;">Quantity</th><th style="text-align:right;padding:6px 8px;">Avg price</th>
+                <th style="text-align:right;padding:6px 8px;">Value</th><th style="text-align:right;padding:6px 8px;">Fee</th>
+                <th style="text-align:left;padding:6px 8px;">Reason</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>`);
+        }
+
+        const clientCount = byCustomer.size;
+        const html = emailShell({
+          title: "Trades executed in Finova subaccounts",
+          intro: `BitWealth executed <strong>${tradeCount} trade${tradeCount === 1 ? "" : "s"}</strong> for <strong>${clientCount} client${clientCount === 1 ? "" : "s"}</strong> held in the Finova omnibus account. Every trade was placed inside the client's own subaccount using the subaccount-scoped API key. This is for your records — no action is required.`,
+          bodyHtml: sections.join(""),
+          footer: "Times are South African (SAST). Quantities and fees are as reported by VALR. Automated notification from BitWealth — no credentials or banking details are ever sent by email.",
+        });
+        const stamp = new Date().toLocaleDateString("en-ZA", { dateStyle: "medium", timeZone: "Africa/Johannesburg" });
+        const sent = await sendLoggedEmail(sb, {
+          to,
+          subject: `BitWealth: ${tradeCount} trade${tradeCount === 1 ? "" : "s"} executed in Finova subaccounts — ${clientCount} client${clientCount === 1 ? "" : "s"} — ${stamp}`,
+          html,
+          templateKey: "partner_trade_notification",
+          data: { fill_ids: notifiedIds, customer_ids: [...byCustomer.keys()], trade_count: tradeCount },
+        });
+        if (sent.success) {
+          await sb.schema("lth_pvr").from("order_fills").update({ partner_notified_at: new Date().toISOString() }).in("fill_id", notifiedIds);
+          summary.trades_notified = tradeCount;
+          summary.trade_clients = clientCount;
+        } else {
+          summary.failures.push(`trades: ${sent.error}`);
+        }
+      }
+    }
+  } catch (e) {
+    summary.failures.push(`trades: ${(e as Error).message}`);
   }
 
   if (summary.failures.length) {

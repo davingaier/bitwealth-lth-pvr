@@ -1,9 +1,11 @@
 # Finova Partner Portal — Joint Test Cases
 
-**Version 1.0 · 30 September 2026 · BitWealth & Finova**
+**Version 1.1 · 14 November 2026 · BitWealth & Finova**
 
 > Source file for `Finova_Partner_Portal_Test_Cases.docx`. Re-render with:
 > `.venv\Scripts\python.exe tools/render_finova_spec.py docs/Finova_Partner_Portal_Test_Cases.md docs/Finova_Partner_Portal_Test_Cases.docx --landscape`
+
+**What changed in v1.1 (since 30 Sep 2026).** BitWealth completed a security hardening programme in November 2026 (new API-key model, server-side exchange signing, every database function and edge function re-authorised). The partner portal was re-reviewed against it and this document updated: invitation / password-reset emails now come from BitWealth's authentication service; a user who already has two-factor enrolled must enter their authenticator code *before* choosing a new password (PA-06, PA-11); disabling a login now revokes live sessions immediately (PA-08); **new: Finova is emailed every time a trade executes in one of its subaccounts** (DT-05, DT-06); security checks SE-04 re-executed, SE-06 and SE-07 added.
 
 ## How to use this document
 
@@ -15,6 +17,8 @@ Each test lists **who** performs it, the **steps**, and the **expected result**.
 | **FN** | Finova user (Guy, Gavin or Robert) | Partner portal `bitwealth.co.za/partner` and Finova's VALR corporate account |
 | **CL** | Test client | BitWealth customer portal and their email inbox |
 
+All emails to Finova go to the nominated address (`bitwealth@finova.co.za`) with a copy to `support@bitwealth.co.za`. Times in emails are South African time (SAST).
+
 ## Before you start
 
 | # | Preparation | Owner | Done |
@@ -24,27 +28,31 @@ Each test lists **who** performs it, the **steps**, and the **expected result**.
 | P3 | Agree one **test client** (an individual — ideally a Finova staff member) who will deposit a small amount, e.g. R500, and later withdraw R100 | BW + FN | |
 | P4 | Test client completes BitWealth registration and Finova KYC as normal | CL | |
 | P5 | BitWealth confirms `bitwealth@finova.co.za` is set in Admin → Partners → Partner Settings | BW | |
+| P6 | BitWealth confirms the authentication mailer is live (send a test "Reset password" to `finova.test@bitwealth.co.za` and receive it) and that `https://bitwealth.co.za/partner-login.html` is in the Supabase Auth redirect allow-list | BW | |
+| P7 | BitWealth confirms the website deployment dated ≥ 14 Nov 2026 is live (`bitwealth.co.za/partner` shows the login page) | BW | |
+| P8 | Finova whitelists `noreply@bitwealth.co.za` and the Supabase Auth sender so invitation, reset and notification emails are not quarantined | FN | |
 
 ## A. Portal access and security
 
 | ID | Who | Steps | Expected result | Result | Notes |
 |---|---|---|---|---|---|
-| PA-01 | BW | Admin → Partners → Partner Portal Logins: create a login for each Finova user (name, email, partner `finova`, role Both) | Each user listed as Active; each receives an invitation email | | |
-| PA-02 | FN | Open the invitation email and set a password | Password accepted; user is taken to two-factor set-up | | |
+| PA-01 | BW | Admin → Partners → Partner Portal Logins: create a login for each Finova user (name, email, partner `finova`, role Both) | Each user listed as Active; Admin UI says "They have been emailed a link to set a password"; each user receives a BitWealth invitation email | | |
+| PA-02 | FN | Open the invitation email, click the link and set a password (minimum 12 characters) | Password accepted; user is taken straight to two-factor set-up (QR code) | | |
 | PA-03 | FN | Scan the QR code with the authenticator app and enter the 6-digit code | Enrolment succeeds; portal opens showing tabs Subaccount Requests, Withdrawals, Fee Invoices, Activity Log | | |
 | PA-04 | FN | Log out, log in again and enter a **wrong** 6-digit code | Access refused; a correct code then succeeds | | |
 | PA-05 | FN | Browse to `bitwealth.co.za/partner` | Redirects to the partner login page | | |
-| PA-06 | BW | For one user click **Reset password** | User receives a reset email and can set a new password | | |
-| PA-07 | BW | For one user click **Reset 2FA** | User must scan a new QR code at next login | | |
-| PA-08 | BW | **Disable** one user, then ask them to refresh the portal / log in | User is signed out and cannot log in. **Enable** restores access | | |
+| PA-06 | BW | For one user (already enrolled in 2FA) click **Reset password** | User receives a reset email. On clicking the link they are asked for their **authenticator code first**, then choose a new password, then land in the portal | | |
+| PA-07 | BW | For one user click **Reset 2FA** | User is signed out; at next login they must scan a new QR code | | |
+| PA-08 | BW | **Disable** one user while they are logged in, then ask them to click any tab / refresh | User is returned to the login page within seconds; attempting to log in is refused (banned / no partner access). **Enable** restores access and the user logs in normally | | |
 | PA-09 | FN | Review all tabs | Only Finova-custody clients appear. No other BitWealth clients are visible | | |
 | PA-10 | FN | Perform any action, then open **Activity Log** | Each action shows user email, time and IP address | | |
+| PA-11 | FN | On the login page enter your email and click **Forgot password?** | Reset email arrives; same flow as PA-06 (authenticator code, then new password) | | |
 
 ## B. New client — request raised
 
 | ID | Who | Steps | Expected result | Result | Notes |
 |---|---|---|---|---|---|
-| OB-01 | BW | Admin → Customer Maintenance: verify the test client's KYC and choose **🤝 Finova Omnibus** | Client moves to VALR Setup; message shows the subaccount name for Finova | | |
+| OB-01 | BW | Admin → Customer Maintenance → KYC: verify the test client's ID and choose **🤝 Finova Omnibus** as the account model, then **Verify** (if the client was set up via Strategy Setup with "Finova omnibus" already selected, the model is pre-selected) | Client moves to VALR Setup; message shows the subaccount name for Finova | | |
 | OB-02 | BW | Admin → Partners → Subaccount Requests | One **Provision** request, status *pending*, name `BW Surname Firstname` | | |
 | OB-03 | FN | Check `bitwealth@finova.co.za` (within 10 minutes) | Email "new client subaccount required" with client name, BitWealth reference, subaccount name, target of 1 business day, and steps A–C. **No credentials or bank details** | | |
 | OB-04 | FN | Portal → Subaccount Requests | Request listed with the exact name; **Copy** puts the name on the clipboard | | |
@@ -74,6 +82,8 @@ Each test lists **who** performs it, the **steps**, and the **expected result**.
 | DT-02 | BW | Within ~1 hour check Admin UI | Deposit detected and client becomes Active; ZAR converted to USDT **inside the subaccount** (automatically, or via Administration → Pending ZAR Conversions) | | |
 | DT-03 | FN | In VALR review the subaccount's trade history over the next trading days | BitWealth's orders appear in the client subaccount only — nothing in Finova's main account | | |
 | DT-04 | CL | Log in to the BitWealth customer portal | Balances match the VALR subaccount | | |
+| DT-05 | FN | Within ~10 minutes of any trade executing (DT-02 conversion, first strategy buy, or a later sell), check `bitwealth@finova.co.za` | Email **"Trades executed in Finova subaccounts"** listing, per client: client name, BitWealth reference, subaccount name, and for each trade the execution time (SAST), pair, BUY/SELL, quantity, average price, value, fee and reason. Every trade matches VALR's history for that subaccount; no trade is reported twice | | |
+| DT-06 | BW + FN | (Optional, if a second test client is onboarded) Let both clients trade on the same day | A **single** email lists both clients, each under their own heading, with all their trades | | |
 
 ## E. Client withdrawal
 
@@ -127,8 +137,10 @@ Each test lists **who** performs it, the **steps**, and the **expected result**.
 | SE-01 | FN | Try to sign in to the BitWealth customer portal or admin UI with the partner login | No client or admin data is shown | | |
 | SE-02 | CL | Try to open `bitwealth.co.za/partner-portal.html` with the client login | Access refused | | |
 | SE-03 | FN | Log in with password but close the browser before entering the 2FA code, then open the portal URL directly | Redirected to login / 2FA; no data shown | | |
-| SE-04 | BW | Call partner and admin functions with only the public website key | All refused (401 / permission denied). **Pre-executed 30 Sep 2026: PASS** | PASS | |
-| SE-05 | BW + FN | Review every email received during testing | None contains API keys, secrets or client bank details | | |
+| SE-04 | BW | Call partner and admin functions with only the public website key | All refused (401 / permission denied). **Pre-executed 30 Sep 2026: PASS. Re-executed 14 Nov 2026 after the security hardening (5 edge functions, 9 database functions): PASS** | PASS | |
+| SE-05 | BW + FN | Review every email received during testing (invitations, requests, withdrawals, trade notifications, invoices) | None contains API keys, secrets or client bank details | | |
+| SE-06 | BW | Using the `finova.test@bitwealth.co.za` login, enter the password but **not** the 2FA code; then call the partner data functions directly (browser console / REST) | Nothing is returned — every partner function requires a completed two-factor session, not just a password | | |
+| SE-07 | BW | From a page on any other website, attempt a browser call to the partner edge functions | Blocked by the browser (no cross-origin permission for non-bitwealth.co.za pages). **Pre-executed 14 Nov 2026: PASS** | PASS | |
 
 ## J. Existing BitWealth clients (regression)
 
@@ -142,15 +154,15 @@ Each test lists **who** performs it, the **steps**, and the **expected result**.
 
 | Section | Total | Pass | Fail | Skip |
 |---|---|---|---|---|
-| A. Portal access | 10 | | | |
+| A. Portal access | 11 | | | |
 | B. Request raised | 5 | | | |
 | C. Subaccount submission | 11 | | | |
-| D. Deposit and trading | 4 | | | |
+| D. Deposit and trading | 6 | | | |
 | E. Withdrawal | 9 | | | |
 | F. Bank change | 5 | | | |
 | G. Reminders and settings | 3 | | | |
 | H. Fees and invoice | 8 | | | |
-| I. Security | 5 | | | |
+| I. Security | 7 | 2 | | |
 | J. Regression | 3 | | | |
 
 ## Sign-off

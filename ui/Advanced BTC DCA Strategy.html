@@ -21860,7 +21860,7 @@ self.onmessage = function(e) {
       msgIn('pnReqMsg', 'Sending…');
       const { ok, body } = await callFn('ef_partner_notifications', {});
       if(!ok || !body.success){ msgIn('pnReqMsg', body.error || 'Failed.', 'error'); return; }
-      msgIn('pnReqMsg', `Requests notified: ${body.requests_notified}, request reminders: ${body.request_reminders}, withdrawals notified: ${body.withdrawals_notified}, withdrawal reminders: ${body.withdrawal_reminders}${body.failures?.length ? `\nFailures: ${body.failures.join('; ')}` : ''}`, body.failures?.length ? 'warn' : 'ok');
+      msgIn('pnReqMsg', `Requests notified: ${body.requests_notified}, request reminders: ${body.request_reminders}, withdrawals notified: ${body.withdrawals_notified}, withdrawal reminders: ${body.withdrawal_reminders}, trades emailed: ${body.trades_notified ?? 0} (${body.trade_clients ?? 0} client(s))${body.failures?.length ? `\nFailures: ${body.failures.join('; ')}` : ''}`, body.failures?.length ? 'warn' : 'ok');
     }
 
     async function createUser(){
@@ -21901,7 +21901,9 @@ self.onmessage = function(e) {
         const active = btn.dataset.active === 'true';
         if(active && !confirm('Disable this partner login?\n\nThey will be signed out immediately and lose portal access.')) return;
         const { ok, body } = await callAdminFn({ action: active ? 'disable' : 'enable', user_id: btn.dataset.pnToggle });
-        msg(ok && body.success ? (active ? 'Login disabled.' : 'Login enabled.') : (body.error || 'Failed.'), ok ? 'ok' : 'error');
+        msg(ok && body.success
+          ? (active ? `Login disabled and banned (${body.sessions_revoked ?? 0} live session(s) revoked).` : 'Login enabled.')
+          : (body.error || 'Failed.'), ok ? 'ok' : 'error');
         await loadUsers();
       }
     }

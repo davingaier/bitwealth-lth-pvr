@@ -1,4 +1,4 @@
-import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { getServiceKey, serviceHeaders } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_partner_complete_withdrawal
 // Purpose: The partner (Finova) declares that they have paid a client's ZAR
 //          withdrawal out of the client's VALR subaccount.
@@ -13,6 +13,7 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { logAlert } from "../_shared/alerting.ts";
+import { partnerCorsHeaders } from "../_shared/partnerCors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = getServiceKey();
@@ -22,17 +23,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
   throw new Error("Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID");
 }
 
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const CORS = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: CORS });
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 function jwtClaim(token: string, claim: string): string | null {
   try {
@@ -46,6 +37,9 @@ function jwtClaim(token: string, claim: string): string | null {
 }
 
 Deno.serve(async (req) => {
+  const CORS = partnerCorsHeaders(req);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
+
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -97,6 +91,17 @@ Deno.serve(async (req) => {
     return json({ error: "Forbidden — this client is not held in the partner's omnibus account" }, 403);
   }
 
+  // The client must belong to THIS partner (same scoping as partner_list_withdrawals).
+  const { data: ownership } = await sb
+    .from("subaccount_requests")
+    .select("request_id")
+    .eq("customer_id", wr.customer_id)
+    .eq("partner_code", partner.partner_code)
+    .limit(1);
+  if (!ownership?.length) {
+    return json({ error: "Forbidden — this client belongs to another partner" }, 403);
+  }
+
   const { data: openRelink } = await sb
     .from("subaccount_requests")
     .select("request_id")
@@ -138,7 +143,7 @@ Deno.serve(async (req) => {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_sync_valr_transactions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_KEY}` },
+      headers: serviceHeaders(),
       body: JSON.stringify({ customer_id: wr.customer_id }),
     });
     syncOk = res.ok;

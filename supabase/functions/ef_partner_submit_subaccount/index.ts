@@ -1,4 +1,4 @@
-import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { getServiceKey, serviceHeaders } from "../_shared/supabaseKeys.ts";
 // Edge Function: ef_partner_submit_subaccount
 // Purpose: Finova submits the VALR subaccount they created for a client, together
 //          with a subaccount-scoped API key. We validate the key against VALR,
@@ -7,11 +7,16 @@ import { getServiceKey } from "../_shared/supabaseKeys.ts";
 // Auth: JWT required. Caller must be an active partner_users row on an aal2 (MFA) session.
 // Deployed with: --no-verify-jwt (we validate the Bearer token ourselves so we can
 //                return precise 401/403 reasons to the portal).
+//
+// VALR signing: this is the ONE place local HMAC is legitimate — the key/secret being
+// validated are Finova's submission and are not in Vault yet. signVALR() with a non-empty
+// secret signs locally; the secret never leaves this isolate except into the vault RPC.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { signVALR } from "../_shared/valr.ts";
 import { logAlert } from "../_shared/alerting.ts";
 import { ADMIN_EMAIL, emailShell, escHtml, sendLoggedEmail } from "../_shared/partnerEmail.ts";
+import { partnerCorsHeaders } from "../_shared/partnerCors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL");
 const SUPABASE_KEY = getServiceKey();
@@ -22,17 +27,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY || !ORG_ID) {
   throw new Error("Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORG_ID");
 }
 
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const CORS = {
-  "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: CORS });
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 interface SubmitBody {
   request_id?: string;
@@ -139,6 +134,9 @@ async function notifyBitWealth(
 }
 
 Deno.serve(async (req) => {
+  const CORS = partnerCorsHeaders(req);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: CORS });
+
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -159,6 +157,7 @@ Deno.serve(async (req) => {
   if (!partner || !partner.is_active) return json({ error: "Forbidden — not an active partner user" }, 403);
 
   // MFA is mandatory: re-checked server-side so a tampered client cannot bypass it.
+  // The token was just validated by auth.getUser(), so reading its claims is safe.
   const aal = (user as unknown as { aal?: string }).aal ??
     (JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/") +
       "=".repeat((4 - (token.split(".")[1].length % 4)) % 4))) as { aal?: string }).aal;
@@ -313,7 +312,7 @@ Deno.serve(async (req) => {
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ef_send_email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SUPABASE_KEY}` },
+        headers: serviceHeaders(),
         body: JSON.stringify({
           template_key: "deposit_instructions_zar_only",
           to_email: cust.email,

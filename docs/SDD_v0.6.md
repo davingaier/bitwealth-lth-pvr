@@ -3,11 +3,66 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-13 (v0.6.215)
+**Last updated:** 2026-11-14 (v0.6.216)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.216 – Finova Partner Portal pre-test review: invite/reset emails never sent, MFA-blocked password reset, session revocation, partner trade notifications
+**Date:** 2026-11-14 · **Status:** ✅ Deployed (4 EFs) + migration applied · Test cases v1.1 rendered for Finova
+
+Re-review of every partner-portal component (`docs/Finova_Partner_Portal_Test_Cases.md`) after the November
+hardening, before handing the joint test to Finova. Posture confirmed good: all five partner tables RLS-on with
+**no** browser grants/policies (service-role via SECURITY DEFINER RPCs only); every partner RPC wrapped by
+`assert_partner()` (v0.6.212) **and** gated by `partner_session_ok()` (active row + `aal2`); both partner EFs
+re-check `aal2` server-side; vault-only credentials; the new crypto-withdrawal guard returns early for ZAR so the
+Finova payout path is unaffected; cron jobs on vault `service_jwt`; all partner EFs redeployed post-incident.
+
+**Bugs that would have failed the test (fixed):**
+1. `ef_admin_partner_users` used `auth.admin.generateLink()` for invitations and resets — that API only *returns*
+   a link and never sends mail (PA-01/PA-06 would fail silently while the Admin UI said "emailed"). Now
+   `inviteUserByEmail()` for new users (falls back to a recovery mail for an existing auth user) and
+   `resetPasswordForEmail()` for resets — both go through Auth's SMTP. `redirectTo` must stay in the Auth
+   redirect allow-list (new prep item P6).
+2. A recovery link yields an **aal1** session and GoTrue refuses `updateUser({password})` once a TOTP factor
+   exists ("AAL2 session is required"). `website/partner-login.html` now waits for the link session, runs the
+   TOTP challenge first when a verified factor exists, then shows the set-password step (`pendingPasswordSet`);
+   new users set the password first and enrol straight after. Handles `type=invite|recovery|magiclink` and
+   `#error=` hashes.
+3. `auth.admin.signOut(user_id)` was a no-op (it takes a JWT). Disable now **bans** the auth user
+   (`ban_duration` 100 y; Enable un-bans) and calls the new service-only RPC
+   `public.admin_revoke_user_sessions(uuid)` (deletes `auth.sessions`, revokes refresh tokens; partner users only).
+   Reset-2FA revokes sessions too. Target lookups are restricted to `partner_users` rows; `create` rejects a
+   partner email that belongs to a BitWealth client or org member and validates the partner code.
+
+**Hardening (defence in depth):** `partner_list_withdrawals__core` and `ef_partner_complete_withdrawal` now scope
+to the caller's `partner_code` (via `subaccount_requests`), not just `account_model`; partner EFs call
+`ef_send_email` / `ef_sync_valr_transactions` with `serviceHeaders()`; new `_shared/partnerCors.ts` restricts the
+two partner-facing EFs to `https://(www.)bitwealth.co.za` (+ `PARTNER_PORTAL_EXTRA_ORIGINS`), everything else
+gets no `Access-Control-Allow-Origin`. `ef_partner_submit_subaccount` keeps the one legitimate local HMAC: it
+validates Finova's *submitted* key before it is vaulted.
+
+**New — partner trade notifications (Davin's request).** `ef_partner_notifications` section 3: every run
+(cron */10) collects un-notified `lth_pvr.order_fills` → `exchange_orders` → `order_intents` for
+`finova_omnibus` customers and sends **one** email ("Trades executed in Finova subaccounts",
+`partner_trade_notification`) grouped per client: name, #id, subaccount, and per trade the SAST timestamp,
+pair, side, quantity, VALR average price, value, fee, readable reason, short VALR order id. New column
+`order_fills.partner_notified_at` (partial index; historical rows stamped so no backlog) is set only after a
+successful send; non-partner fills are stamped without mail. Admin UI "Send partner notifications now" reports
+`trades emailed`.
+
+**Verified:** `deno check` on all four EFs; SE-04 re-run with the publishable key → 401 on 5 EFs and `42501` on
+the partner/admin RPCs; CORS preflight from a foreign origin returns no ACAO header, from bitwealth.co.za echoes
+it; cron-path call of `ef_partner_notifications` → 200 `{trades_notified:0}`. Test cases **v1.1**: new prep P6–P8,
+PA-01/02/06/08 expectations corrected, PA-11 (forgot password), DT-05/06 (trade emails), SE-06/07, SE-04 marked
+re-executed; `.docx` re-rendered. Migration `20261114_partner_portal_pretest_hardening.sql`.
+
+**Suggested further hardening (not implemented):** restrict partner logins to `@finova.co.za` (or a
+`partners.email_domain`); optional IP allow-list per partner enforced in `partner_session_ok()`; enforce the
+existing `submitter/authoriser` roles as maker-checker for payouts above a threshold; portal idle-timeout (15 min
+local sign-out); Netlify CSP header for the partner pages; enable Supabase *leaked-password protection*
+(dashboard toggle, still pending); surface failed partner logins (`auth.audit_log_entries`) in the Activity Log.
 
 ### v0.6.215 – USDPC sweep never retried after the trend exit; API-model customers were being read with the MASTER key
 **Date:** 2026-11-13 · **Status:** ✅ Fixed, deployed; 65 and 999 fully in USDPC, 49 ≈ 29k USDPC + 78k USDT (hourly sweep continues)

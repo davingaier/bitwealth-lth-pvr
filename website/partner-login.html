@@ -113,6 +113,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const PORTAL = 'partner-portal.html';
 const msgEl = document.getElementById('formMessage');
 let enrolFactorId = null;
+// Set when the user arrived via a recovery/invite link: after any required MFA challenge
+// we show the "choose a password" step instead of going straight to the portal.
+let pendingPasswordSet = false;
 
 function show(step) {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
@@ -129,6 +132,17 @@ async function assuranceLevel() {
     return data || {};
 }
 
+// The recovery/invite link establishes the session asynchronously after page load.
+async function waitForSession(maxMs = 6000) {
+    const started = Date.now();
+    while (Date.now() - started < maxMs) {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) return session;
+        await new Promise(r => setTimeout(r, 200));
+    }
+    return null;
+}
+
 // Routes the user to enrolment, challenge or the portal based on their MFA state.
 async function routeAfterAuth() {
     const { data: whoami, error } = await sb.rpc('partner_whoami');
@@ -137,6 +151,22 @@ async function routeAfterAuth() {
     const { data: factorData } = await sb.auth.mfa.listFactors();
     const verified = (factorData?.totp || []).filter(f => f.status === 'verified');
     const aal = await assuranceLevel();
+
+    // Recovery/invite: Supabase refuses a password change on an aal1 session once a TOTP factor
+    // exists, so enrolled users must pass the challenge first; new users set the password first
+    // and enrol straight after.
+    if (pendingPasswordSet) {
+        if (verified.length > 0 && aal.currentLevel !== 'aal2') {
+            show('challengeStep');
+            msg('Enter your authenticator code before choosing a new password.', 'info');
+            document.getElementById('challengeCode').focus();
+            return;
+        }
+        show('setPasswordStep');
+        msg(verified.length ? 'Verified. Choose your new password.' : 'Welcome — choose a password for your account.', 'info');
+        document.getElementById('newPassword').focus();
+        return;
+    }
 
     if (verified.length === 0) {
         // partner_whoami is RLS-safe but returns nothing at aal1; check membership after MFA instead.
@@ -226,7 +256,13 @@ document.getElementById('setPasswordForm').addEventListener('submit', async (e) 
     btn.disabled = true; btn.textContent = 'Saving…';
     const { error } = await sb.auth.updateUser({ password: pw });
     btn.disabled = false; btn.textContent = 'Save password';
-    if (error) { msg(error.message, 'error'); return; }
+    if (error) {
+        msg(/aal2/i.test(error.message)
+            ? 'Two-factor verification is required before the password can be changed. Please log in again from the link in your email.'
+            : error.message, 'error');
+        return;
+    }
+    pendingPasswordSet = false;
     msg('Password saved.', 'success');
     await routeAfterAuth();
 });
@@ -235,15 +271,26 @@ document.getElementById('forgotLink').addEventListener('click', async (e) => {
     e.preventDefault();
     const email = document.getElementById('email').value.trim().toLowerCase();
     if (!email) { msg('Enter your email address first, then click again.', 'error'); return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
     msg(error ? error.message : 'If that address has partner access, a reset link is on its way.', error ? 'error' : 'success');
 });
 
 (async function init() {
-    // Recovery/invite links land here with a session but no password set yet.
+    // Recovery/invite links land here with a session but no (or an old) password.
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    if (hash.get('type') === 'recovery' || hash.get('type') === 'invite') {
-        show('setPasswordStep');
+    const linkType = hash.get('type');
+    if (hash.get('error')) {
+        show('loginStep');
+        msg(hash.get('error_description') || 'This link is invalid or has expired. Use "Forgot password?" to request a new one.', 'error');
+        history.replaceState(null, '', window.location.pathname);
+        return;
+    }
+    if (linkType === 'recovery' || linkType === 'invite' || linkType === 'magiclink') {
+        pendingPasswordSet = true;
+        msg('Signing you in…', 'info');
+        const session = await waitForSession();
+        if (!session) { msg('This link is invalid or has expired. Use "Forgot password?" to request a new one.', 'error'); show('loginStep'); return; }
+        await routeAfterAuth();
         return;
     }
     const { data: { session } } = await sb.auth.getSession();
