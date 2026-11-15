@@ -1,6 +1,7 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { guardPublicForm } from "../_shared/publicFormGuard.ts";
 // ef_customer_register/index.ts
-// Purpose: Create Supabase Auth account and link to customer_id
+// Purpose: Create Supabase Auth account and link to customer_id (reCAPTCHA + per-IP rate limit since 2026-11-15)
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -22,6 +23,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+    const guard = await guardPublicForm(req, body?.captcha_token);
+    if (!guard.ok) return new Response(JSON.stringify({ error: guard.error }), { status: guard.status, headers: CORS });
     const {
       customer_id,
       email,

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <style>
         .register-container {
             min-height: 100vh;
@@ -267,6 +268,8 @@
                 
                 <div id="formMessage" class="form-message"></div>
                 
+                <div class="g-recaptcha" data-sitekey="6LdIS0gsAAAAAJdcnk9-PE7MEHF8nrWMGprLQr31" data-theme="dark" style="margin: 16px 0;"></div>
+                
                 <button type="submit" class="btn-primary btn-register" id="submitBtn">
                     Create Account
                 </button>
@@ -424,6 +427,13 @@
                 formMessage.textContent = 'Please accept all agreements to continue.';
                 return;
             }
+
+            const captchaToken = (typeof grecaptcha !== 'undefined') ? grecaptcha.getResponse() : '';
+            if (!captchaToken) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = typeof grecaptcha === 'undefined' ? 'CAPTCHA not loaded. Please refresh the page.' : 'Please complete the CAPTCHA verification.';
+                return;
+            }
             
             // Disable submit
             submitBtn.disabled = true;
@@ -444,7 +454,8 @@
                         password: password,
                         accept_terms: acceptTerms,
                         accept_privacy: acceptPrivacy,
-                        sign_disclaimer: signDisclaimer
+                        sign_disclaimer: signDisclaimer,
+                        captcha_token: captchaToken
                     })
                 });
                 
@@ -516,12 +527,14 @@
                     formMessage.textContent = result.error || 'Failed to create account. Please try again.';
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Create Account';
+                    if (typeof grecaptcha !== 'undefined') grecaptcha.reset();
                 }
             } catch (error) {
                 formMessage.className = 'form-message error';
                 formMessage.textContent = 'Network error. Please check your connection and try again.';
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Create Account';
+                if (typeof grecaptcha !== 'undefined') grecaptcha.reset();
                 console.error('Registration error:', error);
             }
         });

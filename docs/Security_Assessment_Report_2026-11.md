@@ -21,9 +21,9 @@ A controlled authorization assessment was performed against the production appli
 |---|---------|----------|--------|
 | F-1 | Broken access control via a three-valued-logic ("NULL") flaw in four privileged database functions | **Critical** | ✅ Fixed & re-tested |
 | F-2 | Seven internal serverless functions callable without authentication | **High** | ✅ Fixed & re-tested |
-| F-3 | No CAPTCHA / rate limiting on two public submission endpoints | Low | Open (recommendation) |
-| F-4 | Content-Security-Policy header absent on the web front-end | Low | Open (recommendation) |
-| F-5 | Platform "leaked/compromised password" protection not enabled | Low | Open (one-click toggle) |
+| F-3 | No CAPTCHA / rate limiting on two public submission endpoints | Low | ✅ Fixed & re-tested (15 Nov) |
+| F-4 | Content-Security-Policy header absent on the web front-end | Low | ✅ Fixed (deploys with next site publish) |
+| F-5 | Platform "leaked/compromised password" protection not enabled | Low | Open (one-click platform toggle, operator action) |
 
 No customer funds were at risk from any finding, and no evidence of external exploitation was found. The test itself moved no funds and made no destructive changes; the single incidental data change it produced (a test-induced strategy setting on one account) was reverted within minutes.
 
@@ -90,17 +90,17 @@ The assessment confirmed the following controls are implemented and, after remed
 
 **Root-cause class.** CWE-306 (missing authentication for a critical function).
 
-### F-3 — No CAPTCHA / rate limiting on two public submission endpoints (Low, open)
+### F-3 — No CAPTCHA / rate limiting on two public submission endpoints (Low, fixed)
 
-Two genuinely public endpoints (prospect lead capture and customer self-registration) accept submissions without a CAPTCHA or rate limit, allowing automated spam or resource abuse. No data exposure. **Recommendation:** add the same CAPTCHA/verification already used on other public forms, and/or a per-IP rate limit.
+Two genuinely public endpoints (prospect lead capture and customer self-registration) accepted submissions without a CAPTCHA or rate limit, allowing automated spam or resource abuse. No data exposure. **Remediation (completed 15 Nov):** both endpoints now require a server-verified reCAPTCHA token (the same control already used on the contact form and public back-tester) and apply a per-source-address sliding-window rate limit (HTTP 429). Verified: submissions without a token → 400, with an invalid token → 400, a burst from one address → 429.
 
-### F-4 — Content-Security-Policy header absent (Low, open)
+### F-4 — Content-Security-Policy header absent (Low, fixed)
 
-The web front-end sets HSTS, `X-Frame-Options`, `X-Content-Type-Options`, and a referrer policy, but not a Content-Security-Policy (CSP). CSP is defence-in-depth against cross-site scripting. **Recommendation:** add a restrictive CSP at the CDN/hosting layer.
+The web front-end set HSTS, `X-Frame-Options`, `X-Content-Type-Options`, and a referrer policy, but not a Content-Security-Policy (CSP). **Remediation (completed 15 Nov):** a CSP is now served for every page that allow-lists only the specific third-party origins the site uses (script/style CDNs, CAPTCHA provider, font provider, the backend API, and a public price API), and locks down plugins (`object-src 'none'`), base URI, form targets, and framing (`frame-ancestors 'none'`); a `Permissions-Policy` disabling camera, microphone, geolocation and payment APIs was added at the same time. Because the pages are single-file HTML without a build step, inline scripts/styles remain permitted; the CSP therefore provides origin restriction and framing/plugin protection rather than full inline-XSS mitigation. Takes effect on the next site publish.
 
 ### F-5 — Platform compromised-password protection disabled (Low, open)
 
-The identity platform offers an optional check that rejects passwords known to be breached (HaveIBeenPwned). It is currently off. **Recommendation:** enable it (one setting; no code change).
+The identity platform offers an optional check that rejects passwords known to be breached (HaveIBeenPwned). It is currently off. **Recommendation:** enable it (one setting in the platform console; no code change). Scheduled as an operator action.
 
 ---
 
@@ -110,11 +110,11 @@ The identity platform offers an optional check that rejects passwords known to b
 |---------|----------|-------|---------------------|
 | F-1 NULL-logic authorization bypass | Critical | ✅ same day | ✅ customer denied, admin/service allowed, 0 residual patterns |
 | F-2 Unauthenticated internal functions | High | ✅ same day | ✅ anon/customer denied, scheduler/admin allowed |
-| F-3 Public form abuse | Low | Open | Recommendation |
-| F-4 Missing CSP header | Low | Open | Recommendation |
-| F-5 Compromised-password check | Low | Open | Recommendation |
+| F-3 Public form abuse | Low | ✅ same day | ✅ no/invalid token → 400, burst → 429 |
+| F-4 Missing CSP header | Low | ✅ same day | On next site publish |
+| F-5 Compromised-password check | Low | Open | Operator toggle |
 
-Both material findings (F-1, F-2) were remediated and re-verified on the day of discovery. The three low-severity items are hardening recommendations with no associated data exposure.
+Both material findings (F-1, F-2) and two of the three low-severity items were remediated and re-verified on the day of discovery. The remaining item (F-5) is a single platform-console setting with no code dependency.
 
 ---
 

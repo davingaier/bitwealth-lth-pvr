@@ -23,3 +23,13 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    # Content-Security-Policy (2026-11-15, pen-test F-4). Pages are single-file HTML with inline <script>/<style> and a
+    # handful of inline handlers, so 'unsafe-inline' is required for those two directives (no build step for nonces);
+    # every external origin is allow-listed and plugins / base / framing are locked down. Inventory of origins:
+    #   cdn.jsdelivr.net, cdnjs.cloudflare.com      → supabase-js, Chart.js and plugins
+    #   www.google.com, www.gstatic.com, recaptcha.google.com → reCAPTCHA v2 widget (script + iframe)
+    #   fonts.googleapis.com / fonts.gstatic.com    → Google Fonts
+    #   <project>.supabase.co (https + wss)         → PostgREST, Auth, Edge Functions, Storage (branding bucket, KYC signed URLs)
+    #   api.coingecko.com                           → live BTC price on the marketing pages
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.google.com https://www.gstatic.com https://recaptcha.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://wqnmxpooabmedvtackji.supabase.co https://www.gstatic.com; connect-src 'self' https://wqnmxpooabmedvtackji.supabase.co wss://wqnmxpooabmedvtackji.supabase.co https://api.coingecko.com https://www.google.com https://cdn.jsdelivr.net; frame-src https://www.google.com https://recaptcha.google.com https://wqnmxpooabmedvtackji.supabase.co blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"

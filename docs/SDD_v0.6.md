@@ -42,6 +42,19 @@ Also noted (lower priority, in the report): `ef_customer_register` / `ef_prospec
 present), Supabase "leaked password protection" toggle is off, and `valr-preview-orders` has a pre-existing broken
 query column (`customer_details.exchange_api_name`) — it 500s regardless of auth.
 
+**Low-severity follow-ups implemented the same afternoon (F-3, F-4):** new `_shared/publicFormGuard.ts`
+(`guardPublicForm(req, captcha_token)` = reCAPTCHA v2 siteverify + best-effort per-IP sliding window, 8 per 10 min per
+isolate → 429) wired into `ef_prospect_submit` and `ef_customer_register`; `website/index.html` switched to explicit
+reCAPTCHA rendering (`api.js?onload=onRecaptchaLoad&render=explicit`, `window.captchaIds.{prospect,contact}`) because the
+implicit widget-0 `getResponse()` the contact form relied on would have broken once a second widget appeared above it;
+`register.html` gained the widget. `netlify.toml` now sends a `Content-Security-Policy` allow-listing jsdelivr/cdnjs,
+google/gstatic/recaptcha, Google Fonts, the Supabase project (https + wss), api.coingecko.com, with
+`object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `'unsafe-inline'` is kept for
+script/style (single-file HTML, no nonce pipeline) and a `Permissions-Policy` was added. Note Netlify's build `ignore`
+only watches `website/`, so a `netlify.toml`-only change needs a website file change (or a manual deploy) to publish.
+Verified live: no token → 400, bogus token → 400, burst → 429. **F-5 remains a dashboard toggle** (`supabase config push`
+was rejected as a route — it would overwrite live auth settings with the local scaffold defaults).
+
 ### v0.6.216 – Finova Partner Portal pre-test review: invite/reset emails never sent, MFA-blocked password reset, session revocation, partner trade notifications
 **Date:** 2026-11-14 · **Status:** ✅ Deployed (4 EFs) + migration applied · Test cases v1.1 rendered for Finova
 

@@ -9,7 +9,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
+    <script>
+        // Two CAPTCHA widgets on this page (prospect + contact). Explicit rendering gives each a stable widget id;
+        // the implicit mode numbers widgets by DOM order and getResponse() without an id silently reads widget 0.
+        window.captchaIds = { prospect: null, contact: null };
+        window.onRecaptchaLoad = function () {
+            const key = '6LdIS0gsAAAAAJdcnk9-PE7MEHF8nrWMGprLQr31';
+            const p = document.getElementById('prospectCaptcha'); if (p) window.captchaIds.prospect = grecaptcha.render(p, { sitekey: key });
+            const c = document.getElementById('contactCaptcha'); if (c) window.captchaIds.contact = grecaptcha.render(c, { sitekey: key });
+        };
+    </script>
     <!-- deploy: 2026-11-03 -->
     <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
@@ -519,6 +529,8 @@
                     
                     <div id="formMessage" class="form-message"></div>
                     
+                    <div id="prospectCaptcha" style="margin: 16px 0;"></div>
+                    
                     <button type="submit" class="btn-primary btn-large" id="submitBtn">
                         Submit Interest
                     </button>
@@ -565,7 +577,7 @@
                     <textarea id="contactMessage" placeholder="Your Message" rows="5" required></textarea>
                     
                     <!-- Google reCAPTCHA -->
-                    <div class="g-recaptcha" data-sitekey="6LdIS0gsAAAAAJdcnk9-PE7MEHF8nrWMGprLQr31" style="margin: 16px 0;"></div>
+                    <div id="contactCaptcha" style="margin: 16px 0;"></div>
                     
                     <div id="contactFormMessage" class="form-message" style="display: none;"></div>
                     
@@ -683,6 +695,16 @@
                 formMessage.textContent = 'Please enter your cellphone number, including the country code.';
                 return;
             }
+
+            // reCAPTCHA (2026-11-15: public endpoint had no abuse control)
+            const prospectCaptcha = (typeof grecaptcha !== 'undefined' && window.captchaIds.prospect !== null)
+                ? grecaptcha.getResponse(window.captchaIds.prospect) : '';
+            if (!prospectCaptcha) {
+                formMessage.className = 'form-message error';
+                formMessage.textContent = typeof grecaptcha === 'undefined' ? 'CAPTCHA not loaded. Please refresh the page.' : 'Please complete the CAPTCHA verification.';
+                return;
+            }
+            formData.captcha_token = prospectCaptcha;
             
             // Disable submit button
             submitBtn.disabled = true;
@@ -711,10 +733,12 @@
                     formMessage.className = 'form-message error';
                     formMessage.textContent = result.error || 'Something went wrong. Please try again.';
                 }
+                if (typeof grecaptcha !== 'undefined' && window.captchaIds.prospect !== null) grecaptcha.reset(window.captchaIds.prospect);
             } catch (error) {
                 formMessage.className = 'form-message error';
                 formMessage.textContent = 'Network error. Please check your connection and try again.';
                 console.error('Prospect form error:', error);
+                if (typeof grecaptcha !== 'undefined' && window.captchaIds.prospect !== null) grecaptcha.reset(window.captchaIds.prospect);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Interest';
@@ -736,9 +760,8 @@
                 return;
             }
             
-            // Get reCAPTCHA response (widget ID 0 - this is the first/only reCAPTCHA on the page)
-            const captchaResponse = grecaptcha.getResponse();
-            console.log('reCAPTCHA response:', captchaResponse);
+            // Get reCAPTCHA response for the contact widget (explicit widget id — see onRecaptchaLoad)
+            const captchaResponse = window.captchaIds.contact !== null ? grecaptcha.getResponse(window.captchaIds.contact) : '';
             
             if (!captchaResponse || captchaResponse.length === 0) {
                 contactFormMessage.style.display = 'block';
@@ -776,19 +799,19 @@
                     contactFormMessage.className = 'form-message success';
                     contactFormMessage.textContent = result.message || 'Thank you! We\'ll get back to you within 24 hours.';
                     document.getElementById('contactForm').reset();
-                    grecaptcha.reset(); // Reset reCAPTCHA
+                    grecaptcha.reset(window.captchaIds.contact);
                 } else {
                     contactFormMessage.style.display = 'block';
                     contactFormMessage.className = 'form-message error';
                     contactFormMessage.textContent = result.error || 'Something went wrong. Please try again.';
-                    grecaptcha.reset();
+                    grecaptcha.reset(window.captchaIds.contact);
                 }
             } catch (error) {
                 contactFormMessage.style.display = 'block';
                 contactFormMessage.className = 'form-message error';
                 contactFormMessage.textContent = 'Network error. Please check your connection and try again.';
                 console.error('Contact form error:', error);
-                grecaptcha.reset();
+                grecaptcha.reset(window.captchaIds.contact);
             } finally {
                 contactSubmitBtn.disabled = false;
                 contactSubmitBtn.textContent = 'Send Message';
