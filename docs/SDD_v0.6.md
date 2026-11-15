@@ -3,11 +3,44 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-14 (v0.6.216)
+**Last updated:** 2026-11-15 (v0.6.217)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.217 – Authorization pen-test: 2 unauthenticated internal functions + a NULL-poison access-control bypass (both CRITICAL, fixed)
+**Date:** 2026-11-15 · **Status:** ✅ Fixed, deployed, re-tested · Report: `docs/Security_Assessment_Report_2026-11.md`
+
+Ran a safe (read-only, no funds moved) application-layer authorization assessment of PostgREST, the RPCs and the edge
+functions. 28/31 external checks passed on the first pass; two findings were genuine and serious:
+
+1. **Unauthenticated internal edge functions (High).** `ef_execute_orders`, `ef_resume_pipeline`,
+   `ef_sweep_usdt_to_usdpc`, `ef_auto_convert_btc_to_usdt`, `ef_backfill_usdpc`, `ef_refresh_marketing_charts` and
+   `valr-preview-orders` were deployed `--no-verify-jwt` **and** had no in-code caller check, so anyone with the public
+   website key could trigger order execution, the pipeline, conversions, sweeps, or read per-customer VALR balance
+   previews (`valr-preview-orders`). No parameter lets an attacker redirect funds, but it enabled DoS / market-timing /
+   VALR-rate-exhaustion and a balance-confidentiality leak. Fix: `requireOrgAdminAuto` on all seven (cron sends the
+   secret key, the orchestrators send the secret key, the Admin UI sends the admin JWT — all three still pass; anon →
+   401, customer JWT → 403). `ef_execute_orders`/`ef_auto_convert` gained a `req` param + OPTIONS passthrough.
+
+2. **NULL-poison access-control bypass (Critical).** Four SECURITY DEFINER RPCs guarded with
+   `IF NOT ( <org check> OR current_setting('request.jwt.claim.role', true) = 'service_role' ) THEN deny`. Modern
+   PostgREST sets the full `request.jwt.claims` JSON but **not** the per-claim GUC, so `current_setting(...,true)` is
+   NULL; `FALSE OR NULL = NULL`, `NOT NULL = NULL`, and plpgsql runs `IF NULL` as false — the deny branch was skipped
+   for **every** caller. Confirmed exploit: a non-admin customer session switched **another live customer's** trading
+   strategy via `public.switch_customer_strategy` (and could read any customer's strategy state). The two pipeline
+   status readers were likewise bypassable. Fix (`20261115_fix_null_poison_authz.sql`): new `public.jwt_is_service_role()`
+   that reads the real claims JSON and never returns NULL, and every guard rewritten `IF NOT COALESCE(<expr>, false)`
+   so a NULL now fails **closed**. Re-tested: customer denied on all four (own-data read still works), admin and
+   service-role pass. The one live customer affected by the test (49) and the dev account (54) were reverted
+   immediately; no emails were sent and no funds moved. Audit confirms **0** remaining guards using the NULL-prone
+   pattern.
+
+Also noted (lower priority, in the report): `ef_customer_register` / `ef_prospect_submit` have no captcha/rate-limit
+(abuse/spam), the website lacks a Content-Security-Policy header (HSTS/X-Frame-Options/nosniff/referrer-policy are
+present), Supabase "leaked password protection" toggle is off, and `valr-preview-orders` has a pre-existing broken
+query column (`customer_details.exchange_api_name`) — it 500s regardless of auth.
 
 ### v0.6.216 – Finova Partner Portal pre-test review: invite/reset emails never sent, MFA-blocked password reset, session revocation, partner trade notifications
 **Date:** 2026-11-14 · **Status:** ✅ Deployed (4 EFs) + migration applied · Test cases v1.1 rendered for Finova

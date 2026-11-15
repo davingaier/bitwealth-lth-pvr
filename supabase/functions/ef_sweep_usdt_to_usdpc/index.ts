@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 // ef_sweep_usdt_to_usdpc/index.ts
 //
 // Post-settlement step in the daily LTH PVR pipeline. After BTC sells have
@@ -45,6 +46,8 @@ const RECON_EPSILON_USDPC = 1.00;  // alert if live vs DB USDPC diverges by ≥ 
 Deno.serve(async (req: Request) => {
   // Allow the Admin UI to invoke the forced single-customer sweep from the browser.
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller, CORS);
 
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");

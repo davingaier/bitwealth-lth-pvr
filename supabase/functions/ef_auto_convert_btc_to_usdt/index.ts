@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 // Edge Function: ef_auto_convert_btc_to_usdt
 // Purpose: Auto-convert BTC to USDT when insufficient USDT for fees
 // Trigger: Called by ef_calculate_performance_fees or manually by Admin UI
@@ -123,6 +124,9 @@ async function getBestAskPrice(
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   try {
     const body = await req.json();
     const action = body.action; // "create_request" or "execute_conversion"

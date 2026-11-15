@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 import { getServiceClient } from "./client.ts";
 import { placeLimitOrder, placeMarketOrder, getOrderBook, getBalances, getOrderSummaryByCustomerOrderId, getMarketPrice } from "./valrClient.ts";
 import { logAlert } from "./alerting.ts";
@@ -46,7 +47,10 @@ async function waitForConversionsSettled(
   }
 }
 
-Deno.serve(async ()=>{
+Deno.serve(async (req: Request)=>{
+  if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller);
   const sb = getServiceClient();
   const org_id = Deno.env.get("ORG_ID");
   const todayDate = new Date().toISOString().slice(0, 10);

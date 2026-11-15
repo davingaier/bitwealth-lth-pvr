@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 // ef_resume_pipeline/index.ts
 // Edge function to resume the LTH_PVR daily pipeline
 // Provides REST API endpoint for UI and manual triggering
@@ -15,6 +16,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller, corsHeaders);
 
   let sb;
   try {

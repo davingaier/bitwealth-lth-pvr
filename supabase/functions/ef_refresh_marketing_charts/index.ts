@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 /**
  * ef_refresh_marketing_charts
  *
@@ -305,6 +306,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller, corsHeaders);
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { db: { schema: "public" } });
   const body = await req.json().catch(() => ({}));

@@ -1,4 +1,5 @@
 import { getServiceKey } from "../_shared/supabaseKeys.ts";
+import { requireOrgAdminAuto, unauthorizedResponse } from "../_shared/adminAuth.ts";
 // supabase/functions/valr-preview-orders/index.ts
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
@@ -75,6 +76,8 @@ serve(async (req)=>{
   if (req.method !== "POST") return json({
     error: "Method not allowed"
   }, 405);
+  const __caller = await requireOrgAdminAuto(req);
+  if (!__caller.ok) return unauthorizedResponse(__caller, CORS_HEADERS);
   // ---- read payload ----
   const body = await req.json().catch(()=>({}));
   const for_date = (body?.for_date || body?.date_closing || body?.as_of_date || "").toString().slice(0, 10) || new Date(Date.now() - 86_400_000) // UTC today - 1 day
