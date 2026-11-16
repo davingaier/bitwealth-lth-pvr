@@ -2,7 +2,7 @@
 
 **Prepared for:** Finova (partner cyber-risk assessment)
 **Platform:** BitWealth automated Bitcoin investment service
-**Assessment date:** 15 November 2026
+**Assessment date:** 15 November 2026 (report updated 16 November 2026 — all findings closed)
 **Assessment type:** Authenticated & unauthenticated application-layer authorization test (grey-box), plus a review of transport and platform security controls
 **Performed by:** BitWealth engineering (internal, authorised)
 **Environment:** Production
@@ -23,11 +23,11 @@ A controlled authorization assessment was performed against the production appli
 | F-2 | Seven internal serverless functions callable without authentication | **High** | ✅ Fixed & re-tested |
 | F-3 | No CAPTCHA / rate limiting on two public submission endpoints | Low | ✅ Fixed & re-tested (15 Nov) |
 | F-4 | Content-Security-Policy header absent on the web front-end | Low | ✅ Fixed (deploys with next site publish) |
-| F-5 | Platform "leaked/compromised password" protection not enabled | Low | Open (one-click platform toggle, operator action) |
+| F-5 | Platform "leaked/compromised password" protection not enabled | Low | ✅ Fixed (16 Nov) |
 
 No customer funds were at risk from any finding, and no evidence of external exploitation was found. The test itself moved no funds and made no destructive changes; the single incidental data change it produced (a test-induced strategy setting on one account) was reverted within minutes.
 
-Overall, the platform demonstrates a **mature, defence-in-depth security model** — row-level database security on every table, per-request identity checks on privileged operations, server-side signing of all exchange requests with secrets held in a dedicated vault, a withdrawal allow-list and kill-switch, and real-time security alerting. The two findings were implementation defects within that model rather than an absence of controls, and both were closed quickly.
+Overall, the platform demonstrates a **mature, defence-in-depth security model** — row-level database security on every table, per-request identity checks on privileged operations, server-side signing of all exchange requests with secrets held in a dedicated vault, a withdrawal allow-list and kill-switch, real-time security alerting, and automated daily encrypted database backups. The two findings were implementation defects within that model rather than an absence of controls, and both were closed quickly.
 
 ---
 
@@ -62,9 +62,10 @@ The assessment confirmed the following controls are implemented and, after remed
 4. **Server-side exchange request signing.** All requests to the custody exchange are cryptographically signed inside the trusted backend using secrets held in a managed secrets vault. Secrets are never exposed to the browser or to application tables.
 5. **Withdrawal controls.** Customer withdrawals are constrained by an address allow-list, a velocity cap, a manual-approval state for new destinations, and a global kill-switch, with an alert raised on every withdrawal request.
 6. **Secrets management.** Application and exchange secrets live only in a managed vault / platform secret store. A prior incident response (documented separately) removed all secrets from application-readable tables and rotated keys.
-7. **Transport security.** HTTPS is enforced on all web properties with HTTP Strict Transport Security (HSTS), clickjacking protection (`X-Frame-Options: DENY`), MIME-sniffing protection (`X-Content-Type-Options: nosniff`), and a referrer policy.
+7. **Transport security.** HTTPS is enforced on all web properties with HTTP Strict Transport Security (HSTS), clickjacking protection (`X-Frame-Options: DENY` and CSP `frame-ancestors 'none'`), MIME-sniffing protection (`X-Content-Type-Options: nosniff`), a referrer policy, a Content-Security-Policy and a Permissions-Policy.
 8. **Real-time security alerting.** Anomalous credential-access patterns and privileged actions raise immediate alerts to the operator.
 9. **Separation of custody.** BitWealth cannot transfer customer assets to any third-party destination; funds remain within each customer's own exchange account/sub-account, materially limiting the blast radius of any application compromise.
+10. **Automated database backups and recoverability.** The production database is hosted on a managed Postgres platform (Supabase, Pro tier) that takes an **automated full physical backup every day** with a **rolling 7-day retention**. Backups are produced by the platform (not by BitWealth code, so they cannot be disabled or deleted through an application compromise), are **encrypted at rest**, and are stored in the provider's managed object storage (AWS S3) in the **same region as the database — Asia-Pacific (Sydney, `ap-southeast-2`)**. Each daily backup can be restored to the project from the platform console by the account owner (protected by MFA). Backups cover all schemas, including the full trade, ledger, and balance history that underpins customer statements; customer identity documents are held in a separate object store and are not part of the database backup. Point-in-time (sub-daily) recovery is not currently enabled; the daily cadence is considered adequate because the trading pipeline executes once per day and all exchange activity is independently recorded by the custody exchange and can be re-reconciled from it. Exchange-signing and platform secrets live only in the encrypted vault, so a backup does not contain them in plaintext and a restored backup does not re-expose rotated credentials.
 
 ---
 
@@ -98,9 +99,9 @@ Two genuinely public endpoints (prospect lead capture and customer self-registra
 
 The web front-end set HSTS, `X-Frame-Options`, `X-Content-Type-Options`, and a referrer policy, but not a Content-Security-Policy (CSP). **Remediation (completed 15 Nov):** a CSP is now served for every page that allow-lists only the specific third-party origins the site uses (script/style CDNs, CAPTCHA provider, font provider, the backend API, and a public price API), and locks down plugins (`object-src 'none'`), base URI, form targets, and framing (`frame-ancestors 'none'`); a `Permissions-Policy` disabling camera, microphone, geolocation and payment APIs was added at the same time. Because the pages are single-file HTML without a build step, inline scripts/styles remain permitted; the CSP therefore provides origin restriction and framing/plugin protection rather than full inline-XSS mitigation. Takes effect on the next site publish.
 
-### F-5 — Platform compromised-password protection disabled (Low, open)
+### F-5 — Platform compromised-password protection disabled (Low, fixed)
 
-The identity platform offers an optional check that rejects passwords known to be breached (HaveIBeenPwned). It is currently off. **Recommendation:** enable it (one setting in the platform console; no code change). Scheduled as an operator action.
+The identity platform offers an optional check that rejects passwords known to be breached (HaveIBeenPwned). It was off at the time of the assessment. **Remediation (completed 16 Nov):** the setting has been enabled; new and changed passwords are now rejected if they appear in known breach corpora. No code change was required.
 
 ---
 
@@ -112,9 +113,9 @@ The identity platform offers an optional check that rejects passwords known to b
 | F-2 Unauthenticated internal functions | High | ✅ same day | ✅ anon/customer denied, scheduler/admin allowed |
 | F-3 Public form abuse | Low | ✅ same day | ✅ no/invalid token → 400, burst → 429 |
 | F-4 Missing CSP header | Low | ✅ same day | On next site publish |
-| F-5 Compromised-password check | Low | Open | Operator toggle |
+| F-5 Compromised-password check | Low | ✅ next day (16 Nov) | Platform setting confirmed enabled |
 
-Both material findings (F-1, F-2) and two of the three low-severity items were remediated and re-verified on the day of discovery. The remaining item (F-5) is a single platform-console setting with no code dependency.
+**All five findings are closed.** Both material findings (F-1, F-2) were remediated and re-verified on the day of discovery; the three low-severity hardening items were closed within 24 hours.
 
 ---
 
@@ -122,6 +123,7 @@ Both material findings (F-1, F-2) and two of the three low-severity items were r
 
 - **Custody model:** customer assets remain in customer-owned accounts at a regulated exchange; BitWealth has no capability to send customer assets to arbitrary external destinations.
 - **Secrets:** held in a managed vault; not present in application tables or the browser; rotated under a documented incident-response process.
+- **Backups and recovery:** automated daily encrypted database backups with 7-day retention, held by the hosting provider in the same region as the database (AWS Sydney); restorable from the MFA-protected platform console; exchange records provide an independent source for re-reconciliation.
 - **Monitoring:** privileged actions and anomalous credential access raise real-time alerts.
 - **Change control:** every database change is followed by an automated authorization-coverage check; security findings are tracked to closure in the solution design record.
 - **Testing cadence:** this authorization assessment is repeatable and is recommended to be re-run after significant backend changes and at least quarterly.

@@ -52,8 +52,12 @@ google/gstatic/recaptcha, Google Fonts, the Supabase project (https + wss), api.
 `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `'unsafe-inline'` is kept for
 script/style (single-file HTML, no nonce pipeline) and a `Permissions-Policy` was added. Note Netlify's build `ignore`
 only watches `website/`, so a `netlify.toml`-only change needs a website file change (or a manual deploy) to publish.
-Verified live: no token → 400, bogus token → 400, burst → 429. **F-5 remains a dashboard toggle** (`supabase config push`
-was rejected as a route — it would overwrite live auth settings with the local scaffold defaults).
+Verified live: no token → 400, bogus token → 400, burst → 429. **F-5 closed 2026-11-16** (Davin enabled the
+Supabase leaked-password toggle; `supabase config push` was rejected as a route — it would overwrite live auth settings
+with the local scaffold defaults). The Finova report now records all five findings closed and gained a "Backups and
+recoverability" control: Supabase Pro → automated daily physical backups (WAL-G snapshots), 7-day rolling retention,
+encrypted at rest in Supabase-managed S3 in the project region `ap-southeast-2` (Sydney); PITR add-on **not** enabled;
+no off-platform copies; Storage bucket objects (KYC docs) are not part of the DB backup.
 
 ### v0.6.216 – Finova Partner Portal pre-test review: invite/reset emails never sent, MFA-blocked password reset, session revocation, partner trade notifications
 **Date:** 2026-11-14 · **Status:** ✅ Deployed (4 EFs) + migration applied · Test cases v1.1 rendered for Finova
