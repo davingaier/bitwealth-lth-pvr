@@ -3,11 +3,52 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-15 (v0.6.217)
+**Last updated:** 2026-11-16 (v0.6.218)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.218 – Off-platform encrypted backups: weekly Storage-bucket export + weekly pg_dump to Dropbox, with alert heartbeat
+**Date:** 2026-11-16 · **Status:** ✅ Built, scheduled, first run verified · Runbook: `docs/BACKUP_AND_RESTORE.md`
+
+**Why.** Supabase Pro keeps daily physical DB backups for only 7 days, in the same account an attacker would own if the
+project were compromised, and they do **not** include Storage objects (the KYC documents and statements existed only in
+the live bucket). The Finova report (§3 control 10) said as much; this closes the gap at zero marginal cost.
+
+**What.** `tools/backup/backup.py` (Python: httpx + psycopg + pyzipper + pg_dump) and `tools/backup/run_backup.ps1`
+(credentials, scheduling, logging). Two Windows scheduled tasks under *Task Scheduler Library → BitWealth* on Davin's PC:
+*Backup Storage (weekly)* Mon 08:00 SAST → `Dropbox\BitWealth\Backups\storage\storage_<ts>.zip` (every object of
+every bucket + `manifest.json` with SHA-256s; keep 8) and *Backup Database (weekly)* Mon 08:30 →
+`Backups\db\db_<ts>.zip` (`pg_dump --format=custom` of all app schemas + `auth` + `storage` metadata, excluding 16
+platform schemas incl. `vault` and `cron`; plus `cron_jobs.csv`, `manifest.json` with 15 key-table row counts, and
+`RESTORE.txt`; keep 12). Archives are standard ZIP with WinZip-AES-256 entries (7-Zip opens them) under a 36-char
+random `BACKUP_PASSPHRASE`; every archive is re-opened and CRC-checked before success; `pg_restore --list` validates the
+dump TOC. Each run inserts a `public.alert_events` row (`component='backup_job'`, `info` on success / `error` on
+failure) so a silent PC-off week is visible in the Admin UI and the 05:00 digest.
+
+**Credentials.** Infisical CLI sessions expire (browser re-auth) so the task reads a DPAPI-encrypted file
+`%LOCALAPPDATA%\BitWealth\backup.cred` (DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, BACKUP_PASSPHRASE) seeded
+once by `.\tools\with-secrets.ps1 pwsh -File tools\backup\run_backup.ps1 -Action setup`. Re-run setup after any key
+rotation. `-Action passphrase` reveals the passphrase for the password manager / Infisical copy.
+
+**Gotchas found.** (1) PS 5.1 reads a BOM-less `.ps1` containing `—` as a smart quote → parse errors; the script is
+now ASCII-only + BOM. (2) Launching `powershell.exe` from `pwsh` inherits PS7's `PSModulePath` and
+`Microsoft.PowerShell.Security` fails to load → the tasks run `pwsh.exe` when present. (3) Storage downloads are ~1 s of
+round-trip each from SA to Sydney (even on Cloudflare cache hits): a serial export took 415 s, 8 parallel workers 50 s.
+(4) `pg_dump` 18.7 (scoop `postgresql`) against the PG 17 server is fine; `scoop install postgresql` also initialises
+a local cluster that is useful for restore drills (§5.1 of the runbook).
+
+**Costs.** $0 beyond existing plans: Pro's 250 GB/month egress covers ~2–6 GB of weekly dumps; Dropbox space ≈ 4–8 GB.
+PITR ($100/200/400 per month for 7/14/28 days) deliberately not enabled.
+
+**First restore drill — 2026-11-16 ✅.** `db_2026-11-16_140433Z.zip` (227 MB) fully restored into the local scoop
+PG 18 cluster in 169 s: 187 tables, all 10 manifest row counts matched exactly (incl. `auth.users` 20,
+`storage.objects` 101, max ledger 2026-11-14); the only errors were 10 Supabase-only extensions (`pg_cron`, `pg_net`,
+`http`, `supabase_vault`). The drill exposed two runbook mistakes now fixed: `pg_restore --schema=X` silently omits
+`CREATE SCHEMA X` (600 "schema does not exist" errors) — always restore the whole dump; and the local server is
+IPv4-only (`localhost` → `::1` fails). `tools/backup/restore_drill_prep.sql` creates the Supabase roles + `extensions`
+schema a vanilla Postgres lacks. Scratch DB dropped and extracted dump deleted afterwards (plaintext customer data).
 
 ### v0.6.217 – Authorization pen-test: 2 unauthenticated internal functions + a NULL-poison access-control bypass (both CRITICAL, fixed)
 **Date:** 2026-11-15 · **Status:** ✅ Fixed, deployed, re-tested · Report: `docs/Security_Assessment_Report_2026-11.md`
