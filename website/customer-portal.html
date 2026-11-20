@@ -1229,6 +1229,10 @@
                     </div>
                 `).join('');
 
+                // Strategy-aware chart/table labels (default stays "LTH PVR" for legacy customers)
+                const live = portfolios.find(p => String(p.status).toLowerCase() === 'active') || portfolios[0];
+                setPerfStrategyLabel(live?.strategy_code);
+
                 // STH Cost Basis Strategy: tell the client whether the strategy is in BTC or in cash right now,
                 // and what that means for their own money (joining rule).
                 try {
@@ -3144,6 +3148,14 @@
         // ═══════════════════════════════════════════════════════════════════
         let perfData = null;      // Raw data from RPC
         let perfChart = null;     // Chart.js instance
+        let PERF_STRATEGY_LABEL = 'LTH PVR';
+        const PERF_STRATEGY_LABELS = { LTH_PVR: 'LTH PVR', STH_CB: 'STH Cost Basis', ADV_DCA: 'Advanced DCA' };
+        function setPerfStrategyLabel(code) {
+            PERF_STRATEGY_LABEL = PERF_STRATEGY_LABELS[code] || PERF_STRATEGY_LABEL;
+            const opt = document.querySelector('#perfNavSubOption option[value="benchmarks"]');
+            if (opt) opt.textContent = `${PERF_STRATEGY_LABEL} vs Benchmarks (Cost Basis)`;
+            if (perfChart) { updatePerfChart(); updatePerfMetricsTable(); }
+        }
         const PERF_COLORS = {
             lthPvr: '#FFB400', stdDca: '#cbd5e1', hodl: '#a855f7',
             btcPrice: '#FF8C00', contributions: '#000000', navGreen: '#10b981',
@@ -3471,7 +3483,7 @@
                 const thrLabel = `Fee Threshold (HWM $${t.currentThreshold.toLocaleString('en-US', { maximumFractionDigits: 0 })})`;
 
                 datasets = [
-                    { label: 'LTH PVR NAV', data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
+                    { label: `${PERF_STRATEGY_LABEL} NAV`, data: daily.map(d => d.nav_usd), borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: daily.length <= 5 ? 5 : 0, tension: 0.3 },
                     { label: 'Standard DCA', data: daily.map(d => d.std_dca_nav), borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [5,3] },
                     { label: 'HODL (Buy & Hold)', data: daily.map(d => d.hodl_nav), borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [3,3] },
                     { label: 'Cost Basis', data: daily.map(d => d.cost_basis_usd ?? 0), borderColor: '#14b8a6', borderWidth: 2, pointRadius: daily.length <= 5 ? 4 : 0, tension: 0.3, borderDash: [2,2] },
@@ -3665,7 +3677,7 @@
             const hodlRoi = daily.map(d => calcRoi(d.hodl_nav,    todayCb));
 
             const datasets = [
-                { label: 'LTH PVR ROI', data: lthRoi, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 }
+                { label: `${PERF_STRATEGY_LABEL} ROI`, data: lthRoi, borderColor: PERF_COLORS.lthPvr, backgroundColor: 'rgba(255,180,0,0.08)', fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3 }
             ];
             if (showStd) datasets.push({ label: 'Std DCA ROI', data: stdRoi, borderColor: PERF_COLORS.stdDca, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [5,3] });
             if (showHodl) datasets.push({ label: 'HODL ROI', data: hodlRoi, borderColor: PERF_COLORS.hodl, borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [3,3] });
@@ -3736,7 +3748,7 @@
                     return `<tr><td style="${cellStyle}color:var(--text-primary);">${g.label}</td><td style="${valStyle}">$${fmtNum(startNav)}</td><td style="${valStyle}">$${fmtNum(endNav)}</td><td style="${valStyle}color:${changeColor};">${pctChange}%</td><td style="${valStyle}">$${fmtNum(stdNav)}</td><td style="${valStyle}">$${fmtNum(hodlNav)}</td></tr>`;
                 }).join('');
             } else if (chartType === 'roi') {
-                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">LTH PVR ROI</th><th style="${headStyle}text-align:right;">Std DCA ROI</th><th style="${headStyle}text-align:right;">HODL ROI</th><th style="${headStyle}text-align:right;">Alpha vs DCA</th></tr>`;
+                thead.innerHTML = `<tr><th style="${headStyle}">Period</th><th style="${headStyle}text-align:right;">${PERF_STRATEGY_LABEL} ROI</th><th style="${headStyle}text-align:right;">Std DCA ROI</th><th style="${headStyle}text-align:right;">HODL ROI</th><th style="${headStyle}text-align:right;">Alpha vs DCA</th></tr>`;
                 tbody.innerHTML = groups.map(g => {
                     const last = g.rows[g.rows.length-1];
                     // Match the chart: ROI is measured against Cost Basis, with

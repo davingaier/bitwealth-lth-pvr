@@ -3,11 +3,42 @@
 
 **Author:** Dav / GPT  
 **Status:** Production-ready design – supersedes SDD_v0.5  
-**Last updated:** 2026-11-16 (v0.6.218)
+**Last updated:** 2026-11-20 (v0.6.219)
 
 ---
 
 ## 0. Change Log
+
+### v0.6.219 – Std DCA / HODL benchmark series froze for every STH_CB customer; frozen CI price still read by two RPCs
+**Date:** 2026-11-20 · **Status:** ✅ Fixed, applied, recomputed · Migrations: `20261120_fix_benchmark_carry_forward_sth_cb.sql`, `20261120_rpc_btc_price_rb_not_frozen_ci.sql`
+
+**Symptom.** Customer 49's portal: Std DCA and HODL lines stop at 2026-11-15 while NAV continues; the Performance
+Metrics table shows `$0.00` for both in 2026-11 (it reads the period's last row, which had no benchmark value).
+All four live STH_CB customers were affected (31 → 11-09, 65/999 → 11-14, 49 → 11-15); the dates differ because
+the series only advanced on days `ef_post_ledger_and_balances` booked ledger activity for that customer.
+
+**Root cause.** `lth_pvr.customer_strategies` is a compatibility VIEW over `public.customer_strategies` with
+`WHERE strategy_code = 'LTH_PVR'`. The twice-daily cron `lth_pvr.carry_forward_daily_balances()` (03:00 / 17:00 UTC)
+joins that view to decide whose `hodl_balances_daily` / `std_dca_balances_daily` to rebuild — so since the STH_CB
+switch (2026-11-04) it processed zero live customers (the only LTH_PVR row, 54, is `registration_status='inactive'`).
+Classic "LTH_PVR-only gate" (see the Live-pipeline schema rule). An edge-function audit of all 39
+`.from("customer_strategies")` call sites confirmed every one already targets `public` explicitly — the view's only
+remaining consumer was this SQL function.
+
+**Fixes.**
+1. View widened to `strategy_code IN ('LTH_PVR','STH_CB')` (one row per customer, so no double counting) with a
+   comment forbidding a re-narrowing; `carry_forward_daily_balances()` now joins the base table with the explicit
+   two-strategy gate.
+2. Same function read gap-fill prices from `ci_bands_daily` (frozen at 77,031 since 2026-05-19) → `rb_bands_daily`.
+3. Sweep of all functions still reading `ci_bands_daily`: `public.list_customer_portfolios` (portal portfolio card
+   `btc_price`) and `public.list_accumulated_fees` (Admin fees USD total) were valuing at the frozen price →
+   switched to RB. The rest are intentional (historical chart source `'ci'`, RB-first fallbacks, legacy CI plumbing).
+4. Portal chart/table labels are now strategy-aware (`PERF_STRATEGY_LABEL` set from `list_customer_portfolios`):
+   an STH_CB client sees "STH Cost Basis NAV / ROI" instead of "LTH PVR".
+
+**Verified.** `carry_forward_daily_balances()` → `hodl_recomputed: 4, std_dca_recomputed: 4`; all four series now end
+2026-11-20; portal `btc_price` 77,031 → 63,052. The 15→19 Nov NAV dip on 49 (−$2.3k) is the VALR USDPC/USDT quote
+moving 1.225 → 1.200 on 93k USDPC — real pricing, not a chart defect (USDPC valuation basis is a separate question).
 
 ### v0.6.218 – Off-platform encrypted backups: weekly Storage-bucket export + weekly pg_dump to Dropbox, with alert heartbeat
 **Date:** 2026-11-16 · **Status:** ✅ Built, scheduled, first run verified · Runbook: `docs/BACKUP_AND_RESTORE.md`
